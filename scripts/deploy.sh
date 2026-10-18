@@ -116,7 +116,9 @@ else
   echo "==> Building images"
   # The frontend build needs the API address and the site name baked in, both of which
   # are build arguments rather than runtime variables. The api image only unpacks the binary.
-  compose build ${PULL:+--pull} api frontend
+  # One image at a time: the box has 4 GB and runs the site while it builds, and the Next.js build
+  # next to the api image's own work was enough to make it stop answering (the deploy of 0.1.17).
+  COMPOSE_PARALLEL_LIMIT=1 compose build ${PULL:+--pull} api frontend
 fi
 
 echo "==> Starting the stack"
