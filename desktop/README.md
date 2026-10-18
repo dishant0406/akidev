@@ -79,7 +79,6 @@ written to disk. Nothing is uploaded after a download completes: the torrent is 
 (`store.rs`) and the downloader (`download.rs`), tested with a seeder on this machine. The website has
 no downloads of its own; its "Download in the app" button opens `akidev://download?id=<media id>`,
 which opens that title in the app (nothing starts without a press), or the page that offers the app.
-The plan and the reasons are in [`../DOWNLOADS_PLAN.md`](../DOWNLOADS_PLAN.md).
 
 ## Layout
 
