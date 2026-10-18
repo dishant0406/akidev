@@ -4,6 +4,25 @@ use akidev_core::media_id;
 use akidev_core::model::Kind;
 use gpui_kit::{App, Global, WeakEntity};
 
+/// What the links from the website start with.
+const LINK: &str = "akidev://";
+
+/// Links the system handed to the app while it was running, until the window has opened them.
+static OPENED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Remembers links the system asks the app to open.
+pub fn opened(links: Vec<String>) {
+    OPENED.lock().unwrap().extend(links);
+}
+
+/// The screens the links remembered by `opened` lead to.
+pub fn take_opened() -> Vec<Route> {
+    std::mem::take(&mut *OPENED.lock().unwrap())
+        .iter()
+        .filter_map(|link| Route::from_link(link))
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Route {
     Home,
@@ -32,6 +51,8 @@ pub enum Route {
         id: String,
     },
     Settings,
+    /// What has been saved to watch offline.
+    Library,
 }
 
 impl Route {
@@ -43,6 +64,7 @@ impl Route {
         match args.first().map(String::as_str) {
             None | Some("home") => Route::Home,
             Some("settings") => Route::Settings,
+            Some("library") => Route::Library,
             Some("music-album") if args.len() > 1 => Route::MusicAlbum {
                 id: args[1].clone(),
             },
@@ -60,8 +82,18 @@ impl Route {
                 kind: Kind::parse(name),
                 term: String::new(),
             },
+            Some(url) if url.starts_with(LINK) => Route::from_link(url).unwrap_or(Route::Home),
             Some(id) => Route::for_media_id(id),
         }
+    }
+
+    /// Where a link from the website goes: `akidev://download?id=<media id>` opens that title's page,
+    /// where the viewer chooses to download. Nothing is ever started by a link.
+    pub fn from_link(link: &str) -> Option<Route> {
+        let query = link.strip_prefix(LINK)?.strip_prefix("download?")?;
+        let id = query.split('&').find_map(|pair| pair.strip_prefix("id="))?;
+        let parsed = media_id::parse(id)?;
+        Some(Route::Title { id: parsed.key() })
     }
 
     /// A place to start from rather than a step on the way: Home and the catalogue tabs.
@@ -141,6 +173,15 @@ mod tests {
     fn launch_arguments_pick_the_first_screen() {
         assert_eq!(route(&[]), Route::Home);
         assert_eq!(route(&["settings"]), Route::Settings);
+        assert_eq!(route(&["library"]), Route::Library);
+        // A link from the website opens the title, for the viewer to choose to download.
+        assert_eq!(
+            route(&["akidev://download?id=series-tt0903747-s1e5&release=abc"]),
+            Route::Title {
+                id: "series-tt0903747".into()
+            }
+        );
+        assert_eq!(route(&["akidev://nonsense"]), Route::Home);
         assert_eq!(
             route(&["anime"]),
             Route::Browse {

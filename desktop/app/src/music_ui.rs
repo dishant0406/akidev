@@ -172,7 +172,7 @@ pub fn track_list(tracks: &[Track], table: bool, key: &str, cx: &mut App) -> Div
         list = list.child(
             div()
                 .id(group.clone())
-                .group(group)
+                .group(group.clone())
                 .flex()
                 .items_center()
                 .gap_4()
@@ -228,6 +228,7 @@ pub fn track_list(tracks: &[Track], table: bool, key: &str, cx: &mut App) -> Div
                             ),
                     )
                 })
+                .child(save_button(track, &group))
                 .child(
                     div()
                         .w(px(48.))
@@ -239,6 +240,27 @@ pub fn track_list(tracks: &[Track], table: bool, key: &str, cx: &mut App) -> Div
         );
     }
     list
+}
+
+/// The download button of a track row, shown while the row is hovered.
+fn save_button(track: &Track, group: &SharedString) -> Stateful<Div> {
+    let track = track.clone();
+    div()
+        .id(SharedString::from(format!("save-{}", track.id)))
+        .invisible()
+        .group_hover(group.clone(), |style| style.visible())
+        .cursor_pointer()
+        .p_1()
+        .on_click(move |_, _, cx| {
+            // Not also a click on the row, which would start playing the track.
+            cx.stop_propagation();
+            crate::downloads::save_tracks(vec![track.clone()], cx);
+        })
+        .child(
+            Icon::new(IconName::ArrowDownToLine)
+                .small()
+                .text_color(color(TEXT_DIM)),
+        )
 }
 
 pub const CARD_WIDTH: f32 = 176.;
@@ -513,6 +535,7 @@ pub fn hero(tint: u32, art: Div, kind: &str, title: &str, details: impl IntoElem
 pub fn actions(tracks: &[Track]) -> Div {
     let all = Rc::new(tracks.to_vec());
     let shuffle = all.clone();
+    let save = all.clone();
     div()
         .flex()
         .items_center()
@@ -547,6 +570,19 @@ pub fn actions(tracks: &[Track]) -> Div {
                     crate::music_player::play_shuffled((*shuffle).clone(), cx)
                 })
                 .child(Icon::new(IconName::Shuffle).text_color(color(TEXT_DIM))),
+        )
+        .child(
+            div()
+                .id("music-save-all")
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(px(40.))
+                .rounded_full()
+                .cursor_pointer()
+                .hover(|style| style.bg(color(TEXT).opacity(WASH_2)))
+                .on_click(move |_, _, cx| crate::downloads::save_tracks((*save).clone(), cx))
+                .child(Icon::new(IconName::ArrowDownToLine).text_color(color(TEXT_DIM))),
         )
 }
 

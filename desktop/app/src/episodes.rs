@@ -1,10 +1,12 @@
 //! The episode list shared by the title page and the watch page.
 
-use crate::design::button::tab;
+use crate::backend::Backend;
+use crate::design::button::{secondary_button, tab};
 use crate::design::state::section_title;
 use crate::design::tokens::{
     ACCENT, CANVAS, GUTTER, LINE, TEXT, TEXT_DIM, TEXT_FAINT, WASH, WASH_3, color, radius,
 };
+use crate::downloads;
 use crate::route::{Route, navigate, replace};
 use akidev_core::media_id::{self, anime_episode_id};
 use akidev_core::model::{Detail, Episode, Kind};
@@ -56,6 +58,7 @@ impl EpisodeList {
 
 impl Render for EpisodeList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let saved = cx.global::<Backend>().library.saved_media_ids();
         if self.compact {
             return self.panel(cx).into_any_element();
         }
@@ -87,7 +90,14 @@ impl Render for EpisodeList {
                             .justify_between()
                             .gap_3()
                             .child(section_title("Episodes"))
-                            .child(self.season_tabs(&seasons, cx)),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_3()
+                                    .child(self.season_tabs(&seasons, cx))
+                                    .child(self.download_season(selected)),
+                            ),
                     )
                     .child(
                         div().flex().flex_col().children(
@@ -99,6 +109,7 @@ impl Render for EpisodeList {
                                         episode,
                                         self.current.as_deref() == Some(&episode.id),
                                         false,
+                                        saved.contains(&episode.id),
                                     )
                                 }),
                         ),
@@ -128,6 +139,22 @@ impl Render for EpisodeList {
 }
 
 impl EpisodeList {
+    /// The button that saves every episode of the season shown.
+    fn download_season(&self, season: u32) -> Stateful<Div> {
+        let ids: Vec<String> = self
+            .episodes
+            .iter()
+            .filter(|episode| episode.season == Some(season))
+            .map(|episode| episode.id.clone())
+            .collect();
+        secondary_button(
+            "download-season",
+            "Download season",
+            Some(IconName::ArrowDownToLine),
+            move |_, _, cx| downloads::save_all(ids.clone(), cx),
+        )
+    }
+
     fn seasons(&self) -> Vec<u32> {
         let mut seasons: Vec<u32> = self.episodes.iter().filter_map(|e| e.season).collect();
         seasons.sort_unstable();
@@ -258,6 +285,7 @@ impl EpisodeList {
                                     episode,
                                     self.current.as_deref() == Some(&episode.id),
                                     true,
+                                    false,
                                 )
                             })),
                     ),
@@ -291,7 +319,7 @@ impl EpisodeList {
     }
 }
 
-fn episode_row(episode: &Episode, current: bool, compact: bool) -> Stateful<Div> {
+fn episode_row(episode: &Episode, current: bool, compact: bool, saved: bool) -> Stateful<Div> {
     let id = episode.id.clone();
     let group = SharedString::from(format!("episode-row-{}", episode.id));
     // The panel is 400px wide: a smaller number and tighter row than the title page's.
@@ -352,11 +380,40 @@ fn episode_row(episode: &Episode, current: bool, compact: bool) -> Stateful<Div>
                         .child(date.chars().take(10).collect::<String>())
                 })),
         )
+        .when(!compact, |row| {
+            row.child(save_mark(&episode.id, saved, &group))
+        })
         .child(
             div()
                 .invisible()
                 .group_hover(group, |style| style.visible())
                 .child(Icon::new(IconName::Play).small().text_color(color(TEXT))),
+        )
+}
+
+/// A check when the episode is saved, else a download button that shows while the row is hovered.
+fn save_mark(id: &str, saved: bool, group: &SharedString) -> Stateful<Div> {
+    let id = id.to_string();
+    if saved {
+        return div()
+            .id(SharedString::from(format!("saved-{id}")))
+            .child(Icon::new(IconName::Check).small().text_color(color(ACCENT)));
+    }
+    div()
+        .id(SharedString::from(format!("save-{id}")))
+        .invisible()
+        .group_hover(group.clone(), |style| style.visible())
+        .cursor_pointer()
+        .p_1()
+        .on_click(move |_, _, cx| {
+            // Not also a click on the row, which would start playing it.
+            cx.stop_propagation();
+            downloads::choose(id.clone(), None, cx);
+        })
+        .child(
+            Icon::new(IconName::ArrowDownToLine)
+                .small()
+                .text_color(color(TEXT_DIM)),
         )
 }
 

@@ -179,6 +179,7 @@ impl Player {
             if mpv_initialize(handle) < 0 {
                 return Err("could not start the video player".into());
             }
+            crate::saved::register(handle);
             for (id, name, format) in [
                 (TIME_POS, "time-pos", mpv_format_MPV_FORMAT_DOUBLE),
                 (DURATION, "duration", mpv_format_MPV_FORMAT_DOUBLE),

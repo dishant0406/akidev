@@ -1,0 +1,25 @@
+[package]
+name = "akidev-library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+akidev-core = { path = "../core" }
+anyhow.workspace = true
+chacha20poly1305 = "0.10"
+fs2 = "0.4"
+getrandom = "0.3"
+librqbit = "9.0.1"
+reqwest.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+sha2 = "0.10"
+tokio.workspace = true
+tracing.workspace = true
+
+# The master key lives in the system's keychain where there is one.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", default-features = false, features = ["windows-native"] }

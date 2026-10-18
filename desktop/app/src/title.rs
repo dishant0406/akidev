@@ -143,6 +143,7 @@ impl Render for TitlePage {
             Some(id) => Some((id, "Resume")),
             None => first_playable(detail).map(|id| (id, "Play")),
         };
+        let film = media.kind == Kind::Movie;
         let trailer = detail
             .trailer
             .as_ref()
@@ -256,6 +257,15 @@ impl Render for TitlePage {
                                     label,
                                     Some(IconName::Play),
                                     move |_, _, cx| navigate(Route::Watch { id: id.clone() }, cx),
+                                )
+                            }))
+                            .children(film.then(|| {
+                                let id = media.id.clone();
+                                secondary_button(
+                                    "download",
+                                    "Download",
+                                    Some(IconName::ArrowDownToLine),
+                                    move |_, _, cx| crate::downloads::choose(id.clone(), None, cx),
                                 )
                             }))
                             .children(trailer.map(|id| {

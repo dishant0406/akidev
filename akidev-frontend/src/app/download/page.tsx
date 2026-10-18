@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { DownloadButton } from "@/components/download-button";
+import WhyHere from "@/components/why-here";
 import { Page, Section } from "@/components/prose";
 import { REPO_URL } from "@/constants/site";
 import { latestDownloads, type Download } from "@/lib/desktop-release";
@@ -23,8 +25,11 @@ export default async function DownloadPage() {
   return (
     <Page
       title="Akidev for desktop."
-      lead="The same catalogue as the site, with a native player. Free and open source, and it keeps nothing but your settings and where you stopped."
+      lead="The same catalogue as the site, with a native player, and downloads you can watch offline. Free and open source, and it keeps your settings, where you stopped, and what you choose to download."
     >
+      <Suspense>
+        <WhyHere />
+      </Suspense>
       <Platform
         name="Windows"
         detail="Windows 10 or later, 64-bit. An installer for your account; no administrator rights."

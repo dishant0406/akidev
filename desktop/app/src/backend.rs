@@ -48,8 +48,14 @@ impl LazyStreamer {
     }
 }
 
+/// How much a download may upload to the peers it fetches from, a second. A download is not for
+/// sharing: this is only what the peers' own fairness asks for.
+const LIBRARY_UPLOAD_BPS: u32 = 64 * 1024;
+
 pub struct Backend {
     pub streamer: LazyStreamer,
+    /// What the viewer has saved to watch offline.
+    pub library: crate::library::LazyLibrary,
     pub config: Config,
     /// The settings the torrent engine started with. Some apply only at the next start.
     pub started_with: Config,
@@ -77,6 +83,7 @@ impl Backend {
         subtitles_dir: PathBuf,
         default_torrent_dir: PathBuf,
         sources_dir: PathBuf,
+        library_dir: PathBuf,
     ) -> Backend {
         crate::captions::prune(&subtitles_dir);
         // A newer copy of the definitions is fetched in the background (the saved one was read at
@@ -107,8 +114,10 @@ impl Backend {
             config: Arc::new(std::sync::Mutex::new(config.clone())),
             dir: torrent_dir.clone(),
         };
+        let library = crate::library::LazyLibrary::new(library_dir, Some(LIBRARY_UPLOAD_BPS));
         Backend {
             streamer,
+            library,
             started_with: config.clone(),
             config,
             config_path,

@@ -140,6 +140,9 @@ impl Remembered {
     }
 }
 
+/// What the address of a subtitle saved in the library starts with: the rest is its path.
+pub const SAVED: &str = "saved:";
+
 /// Where the file for a subtitle address is kept: the same address is the same file.
 pub fn cache_file(dir: &Path, url: &str) -> PathBuf {
     use std::hash::{DefaultHasher, Hash as _, Hasher as _};
@@ -150,6 +153,10 @@ pub fn cache_file(dir: &Path, url: &str) -> PathBuf {
 
 /// The subtitle as a WebVTT file mpv can load, downloaded unless it already is.
 pub async fn download(dir: PathBuf, url: String) -> Result<PathBuf, String> {
+    // A subtitle saved in the library is already a file here.
+    if let Some(path) = url.strip_prefix(SAVED) {
+        return Ok(PathBuf::from(path));
+    }
     let path = cache_file(&dir, &url);
     if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 0) {
         return Ok(path);
@@ -294,5 +301,13 @@ mod tests {
         remembered.set(None);
         assert_eq!(Remembered::load(path).language(), None);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_subtitle_saved_in_the_library_is_already_a_file() {
+        let path = std::path::PathBuf::from("/library/subtitles/ab/0-en.vtt");
+        let url = format!("{SAVED}{}", path.display());
+        let found = futures::executor::block_on(download(std::env::temp_dir(), url));
+        assert_eq!(found, Ok(path));
     }
 }

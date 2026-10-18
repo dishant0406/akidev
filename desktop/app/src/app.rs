@@ -1,11 +1,14 @@
 //! The window: one bar that is both title bar and navigation, and the current screen below it.
 
+use crate::backend::Backend;
 use crate::browse::BrowsePage;
 use crate::design::button::{icon_button, keep_from_title_bar, primary_button, tab};
 use crate::design::state::state_card;
-use crate::design::tokens::{CANVAS, LINE, RAISED, TEXT, TOP_BAR, color, radius};
+use crate::design::tokens::{ACCENT, CANVAS, LINE, RAISED, TEXT, TOP_BAR, color, radius};
+use crate::download_picker::{DownloadPicker, PickerHandle};
 use crate::history::History;
 use crate::home::HomePage;
+use crate::library_page::LibraryPage;
 use crate::music_album::AlbumPage;
 use crate::music_artist::ArtistPage;
 use crate::music_home::MusicPage;
@@ -53,6 +56,8 @@ pub struct AkidevApp {
     history: History<Screen>,
     palette: Entity<Palette>,
     party: Entity<Party>,
+    /// Where the source and subtitles of a download are chosen.
+    picker: Entity<DownloadPicker>,
     updates: Entity<Updates>,
     toasts: Vec<Toast>,
     next_toast: u64,
@@ -60,12 +65,15 @@ pub struct AkidevApp {
     focused: bool,
     /// The published sources say this build is too old to run: only the update screen shows.
     locked: bool,
+    /// Held while something is being saved, so the computer does not go to sleep on it.
+    awake: Option<keepawake::KeepAwake>,
     palette_was_open: bool,
     /// The Akidev mark drawn beside the name.
     mark: Arc<Image>,
     pictures: Entity<crate::images::PictureCache>,
     _palette_changes: Subscription,
     _party_changes: Subscription,
+    _picker_changes: Subscription,
     _update_changes: Subscription,
     /// Redraws the page when music starts or stops, so it leaves room for the bar.
     _music_changes: Subscription,
@@ -80,6 +88,9 @@ impl AkidevApp {
         let party = cx.new(|cx| Party::new(window, cx));
         cx.set_global(PartyHandle(party.clone()));
         let party_changes = cx.observe(&party, |_, _, cx| cx.notify());
+        let picker = cx.new(|_| DownloadPicker::new());
+        cx.set_global(PickerHandle(picker.clone()));
+        let picker_changes = cx.observe(&picker, |_, _, cx| cx.notify());
         let updates = cx.new(Updates::new);
         cx.set_global(Shared(updates.clone()));
         let update_changes = cx.observe(&updates, |_, _, cx| cx.notify());
@@ -103,16 +114,30 @@ impl AkidevApp {
             }
         })
         .detach();
+        // A download that finishes is said so, on screen and to the system, wherever the viewer is.
+        cx.spawn(async move |app, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+                if app.update(cx, |app, cx| app.check_in(cx)).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
         AkidevApp {
             history: History::new(first, screen),
             palette,
             party,
+            picker,
             updates,
             toasts: Vec::new(),
             next_toast: 0,
             focus: cx.focus_handle(),
             focused: false,
             locked: false,
+            awake: None,
             palette_was_open: false,
             pictures: crate::images::PictureCache::new(cx),
             mark: Arc::new(Image::from_bytes(
@@ -121,6 +146,7 @@ impl AkidevApp {
             )),
             _palette_changes: palette_changes,
             _party_changes: party_changes,
+            _picker_changes: picker_changes,
             _update_changes: update_changes,
             _music_changes: music_changes,
         }
@@ -154,6 +180,7 @@ impl AkidevApp {
                 cx.new(|cx| ArtistPage::new(id, cx)).into()
             }
             Route::Settings => cx.new(SettingsPage::new).into(),
+            Route::Library => cx.new(LibraryPage::new).into(),
         }
     }
 
@@ -230,6 +257,7 @@ impl AkidevApp {
 
     fn top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let route = self.route().clone();
+        let saving = self.awake.is_some();
         let scrolled = self.history.current().scroll.offset().y < px(-SOLID_AFTER);
         let browsing = |wanted: Option<Kind>| matches!(&route, Route::Browse { kind, term } if *kind == wanted && term.is_empty());
         let background: Background = if scrolled {
@@ -368,6 +396,24 @@ impl AkidevApp {
                                     }
                                 }),
                             ))
+                            .child(
+                                icon_button("library", IconName::Library, |_, _, cx| {
+                                    navigate(Route::Library, cx)
+                                })
+                                .relative()
+                                .when(saving, |button| {
+                                    // An accent dot while something is being saved, as on the party button.
+                                    button.child(
+                                        div()
+                                            .absolute()
+                                            .top(px(6.))
+                                            .right(px(6.))
+                                            .size(px(8.))
+                                            .rounded_full()
+                                            .bg(color(ACCENT)),
+                                    )
+                                }),
+                            )
                             .child(icon_button("settings", IconName::Settings, |_, _, cx| {
                                 navigate(Route::Settings, cx)
                             })),
@@ -377,6 +423,48 @@ impl AkidevApp {
 }
 
 impl AkidevApp {
+    /// Twice a second: opens links the system sent, says what has finished saving, and keeps the
+    /// computer awake while something is being saved.
+    fn check_in(&mut self, cx: &mut Context<Self>) {
+        let busy = cx
+            .global::<Backend>()
+            .library
+            .running()
+            .is_some_and(|library| library.busy());
+        if busy && self.awake.is_none() {
+            self.awake = keepawake::Builder::default()
+                .idle(true)
+                .sleep(true)
+                .reason("Saving to the library")
+                .app_name("Akidev")
+                .create()
+                .ok();
+        } else if !busy {
+            self.awake = None;
+        }
+        for route in crate::route::take_opened() {
+            self.go(route, cx);
+        }
+        self.announce_finished(cx);
+    }
+
+    fn announce_finished(&mut self, cx: &mut Context<Self>) {
+        let Some(library) = cx.global::<Backend>().library.running() else {
+            return;
+        };
+        for name in library.take_finished() {
+            let text = format!("{name} is ready to watch offline");
+            self.toast(text.clone(), cx);
+            std::thread::spawn(move || {
+                // The system may not allow notifications; the toast has said it already.
+                let _ = notify_rust::Notification::new()
+                    .summary("Saved to your library")
+                    .body(&text)
+                    .show();
+            });
+        }
+    }
+
     /// The one screen of a build the published sources no longer allow: what is wrong, and a button.
     fn update_screen(&self, message: String, cx: &mut Context<Self>) -> Div {
         let updates = self.updates.clone();
@@ -481,6 +569,9 @@ impl Render for AkidevApp {
             .when(palette_open, |shell| shell.child(self.palette.clone()))
             .when(self.party.read(cx).is_open(), |shell| {
                 shell.child(self.party.clone())
+            })
+            .when(self.picker.read(cx).is_open(), |shell| {
+                shell.child(self.picker.clone())
             })
             .child(
                 div()

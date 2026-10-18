@@ -29,6 +29,7 @@ it. The bar is transparent over artwork and turns solid once a page scrolls.
 | Title | Banner, facts, Play and Trailer, episodes by season, cast, related and recommended titles |
 | Watch | The picture fills the window. Controls hide after three seconds. Seek bar, ±10 seconds, volume, a source picker (every release found, play any), subtitles from the file and from online providers, audio tracks, an episode panel, next episode, fullscreen, and an offer of the next episode near the end |
 | Watch party | The people icon in the bar opens a panel: start a party (you get a six-letter code and a link), or join one by its code. Everyone in a party watches or listens to the same thing and stays in step: what the host plays, guests play; a guest can pause, play and seek for everyone. Works between the app and the website, in any mix. See [Watch parties](#watch-parties) |
+| Library | The books icon in the bar. Films, episodes and tracks saved to watch offline: what is downloading (progress, pause, resume, remove), what is saved, and collections you make. A download button is on episodes, a season, films, the watch page, tracks and albums. Saved copies play with no search and no buffering, in a party too. See [Downloads](#downloads) |
 | Settings | Two sliders: how much disk the torrents may use, and how many are kept at once, a switch for update checks, and the version. Saved as soon as you let go |
 
 Keys on the watch page: `space` pause, `←` `→` seek 10 seconds, `↑` `↓` volume, `m` mute,
@@ -52,12 +53,41 @@ ones. The messages, and the rules that keep a guest in step, are in
 website has the same in `akidev-frontend/src/lib/party`. `AKIDEV_API` points a development build at
 another server (`AKIDEV_API=http://localhost:9000 cargo run -p akidev`).
 
+## Downloads
+
+A download keeps a file instead of discarding it: the app joins the release's swarm on your own machine
+(nothing goes through our server), fetches only the one file, then locks it into the library and
+deletes the plain copy. Music is the audio yt-dlp finds, fetched the same way. The library is in
+`<data>/library/`: `library.db` (the list and collections), `files/` (the saved items, named by a hash
+of their id), and `staging/` and `session/` (what is being fetched, which carries on after a restart).
+
+Pressing Download on an episode, a film or the watch page opens a panel on the right with every source
+found (the same list as the watch page's Sources) and the subtitle languages available: pick the release to
+save and the languages to keep. The subtitles are fetched with the film and kept beside it, so the saved copy
+shows them with no network. "Download season" and the track and album buttons take the best source without
+asking. In a party the host's source is what everyone plays: a device with a saved copy of that very release
+plays it, and the others stream that release.
+
+A saved file is encrypted in 64 KiB chunks with a key of its own, wrapped by a master key kept in the
+system keychain (a file in the library folder where there is no keychain, or it does not answer in 20
+seconds). It does not open outside Akidev, and a copy of the folder is useless on another machine or
+account. It is private to the app, not DRM: whoever has the app and the key can read it. mpv plays it
+through an `akc://` address that decrypts as it reads (`app/src/saved.rs`), so no plain video is
+written to disk. Nothing is uploaded after a download completes: the torrent is dropped at once.
+
+`library/` is `akidev-library`: the container (`container.rs`), the key (`keys.rs`), the list
+(`store.rs`) and the downloader (`download.rs`), tested with a seeder on this machine. The website has
+no downloads of its own; its "Download in the app" button opens `akidev://download?id=<media id>`,
+which opens that title in the app (nothing starts without a press), or the page that offers the app.
+The plan and the reasons are in [`../DOWNLOADS_PLAN.md`](../DOWNLOADS_PLAN.md).
+
 ## Layout
 
 ```
 core/      akidev-core: providers, indexers, release ranking, torrent engine, stream resolver
 sources/   the definitions of the indexers and providers, published separately from the app
 party/  akidev-party: watch parties, the connection and the rules that keep guests in step
+library/ akidev-library: saved films and music, the encrypted container and the downloader
 app/    akidev: the GPUI app and the libmpv player
 ```
 
@@ -268,6 +298,7 @@ app bundling it is covered by the GPL. This project is AGPL-3.0.
 | Indexer and provider definitions | `~/Library/Caches/live.akidev.Akidev/sources/` (the last signed copy fetched; the built-in one is used when it is missing or older) |
 | Posters | `~/Library/Caches/live.akidev.Akidev/images/` (files downloaded more than 30 days ago are removed at start; shrunk to the size they are shown at before they are kept) |
 | Catalogue answers | `~/Library/Caches/live.akidev.Akidev/catalog/` (lists and title pages; shown at once for up to 24 hours while a newer copy is fetched, pruned after 2 days) |
+| Downloaded library | `~/Library/Application Support/live.akidev.Akidev/library/` (see [Downloads](#downloads); the keychain entry `live.akidev.Akidev` holds its key. Deleting the folder removes everything saved) |
 | Torrent downloads | `<cache>/torrents/akidev-torrents/`, emptied at start and on quit and capped by the settings. It holds what was fetched while watching: the part played so far plus a little ahead, not the whole file. A `cache_dir` in `config.toml` moves the base directory; only the `akidev-torrents` folder inside it is ever deleted |
 
 Every setting has a default, so no file is needed. The limits apply after a restart. A setting from

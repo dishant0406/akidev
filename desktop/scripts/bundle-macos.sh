@@ -46,6 +46,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$(cargo pkgid -p akidev | sed 's/.*[#@]//')</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>Akidev</string>
+      <key>CFBundleURLSchemes</key><array><string>akidev</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

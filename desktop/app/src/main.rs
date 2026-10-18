@@ -9,12 +9,16 @@ mod browse;
 mod captions;
 mod choices;
 mod design;
+mod download_picker;
+mod downloads;
 mod episodes;
 mod genre_assets;
 mod hero;
 mod history;
 mod home;
 mod images;
+mod library;
+mod library_page;
 mod music_album;
 mod music_artist;
 mod music_home;
@@ -29,6 +33,7 @@ mod progress;
 mod route;
 mod row;
 mod runtime;
+mod saved;
 mod settings;
 mod task;
 mod theme;
@@ -68,6 +73,7 @@ fn main() {
     let torrent_cache = dirs.cache_dir().join("torrents");
     let sources_dir = dirs.cache_dir().join("sources");
     let ytdlp_dir = dirs.cache_dir().join("yt-dlp");
+    let library_dir = dirs.data_dir().join("library");
     akidev_core::providers::keep_answers_in(dirs.cache_dir().join("catalog"));
     let first = Route::from_args(std::env::args().skip(1));
     // The definitions saved by an earlier run are used at once. What the home screen needs is
@@ -77,46 +83,49 @@ fn main() {
         home::prefetch();
     }
 
-    application()
-        .with_assets(genre_assets::AppAssets)
-        .run(move |cx| {
-            init(cx);
-            cx.set_global(backend::Backend::start(
-                config_path,
-                progress_path,
-                subtitle_language_path,
-                subtitles_dir,
-                torrent_cache,
-                sources_dir,
-            ));
-            theme::fonts(cx);
-            theme::apply(cx);
-            start_music(&ytdlp_dir, cx);
-            cx.set_http_client(Arc::new(images::ImageClient::new(image_cache)));
-            cx.bind_keys([KeyBinding::new("secondary-k", app::OpenSearch, None)]);
-            quit_with_the_window(cx);
-            let options = WindowOptions {
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Akidev".into()),
-                    appears_transparent: true,
-                    traffic_light_position: Some(point(px(18.), px(20.))),
-                }),
-                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                    None,
-                    size(px(1360.), px(860.)),
-                    cx,
-                ))),
-                window_min_size: Some(size(px(960.), px(620.))),
-                // The bar draws itself and moves the window itself, so AppKit must not also treat
-                // it as a drag region.
-                app_owns_titlebar_drag: true,
-                ..Default::default()
-            };
-            open_window(options, cx, |window, cx| {
-                cx.new(|cx| AkidevApp::new(first, window, cx))
-            })
-            .expect("window opens");
-        });
+    let app = application().with_assets(genre_assets::AppAssets);
+    // Links from the website (`akidev://download?id=...`) reach the running app this way; a first
+    // launch gets them as an argument.
+    app.on_open_urls(route::opened);
+    app.run(move |cx| {
+        init(cx);
+        cx.set_global(backend::Backend::start(
+            config_path,
+            progress_path,
+            subtitle_language_path,
+            subtitles_dir,
+            torrent_cache,
+            sources_dir,
+            library_dir,
+        ));
+        theme::fonts(cx);
+        theme::apply(cx);
+        start_music(&ytdlp_dir, cx);
+        cx.set_http_client(Arc::new(images::ImageClient::new(image_cache)));
+        cx.bind_keys([KeyBinding::new("secondary-k", app::OpenSearch, None)]);
+        quit_with_the_window(cx);
+        let options = WindowOptions {
+            titlebar: Some(TitlebarOptions {
+                title: Some("Akidev".into()),
+                appears_transparent: true,
+                traffic_light_position: Some(point(px(18.), px(20.))),
+            }),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                size(px(1360.), px(860.)),
+                cx,
+            ))),
+            window_min_size: Some(size(px(960.), px(620.))),
+            // The bar draws itself and moves the window itself, so AppKit must not also treat
+            // it as a drag region.
+            app_owns_titlebar_drag: true,
+            ..Default::default()
+        };
+        open_window(options, cx, |window, cx| {
+            cx.new(|cx| AkidevApp::new(first, window, cx))
+        })
+        .expect("window opens");
+    });
 }
 
 /// The music catalogue and its player. yt-dlp, which finds the audio, is fetched the first time a
@@ -127,6 +136,9 @@ fn start_music(ytdlp_dir: &std::path::Path, cx: &mut App) {
         akidev_core::music::Music::new(program.to_string_lossy().into_owned()).with_system_certs(),
     );
     runtime::block_on(async { music.keep_updated() });
+    cx.global::<backend::Backend>()
+        .library
+        .use_music(music.clone());
     let player = cx.new(music_player::MusicPlayer::new);
     cx.set_global(music_player::MusicHub {
         music,

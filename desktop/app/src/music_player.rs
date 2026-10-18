@@ -124,6 +124,8 @@ pub struct MusicPlayer {
     party_sync: PartySync,
     /// The role last seen, so a change of role starts the party's bookkeeping afresh.
     last_role: Role,
+    /// The saved copy of the track playing, kept open for as long as it plays.
+    saved: Option<crate::saved::Opened>,
     /// The speed a guest was last set to, so it is only set when it changes.
     speed: f64,
     last_catch_up: Instant,
@@ -160,6 +162,7 @@ impl MusicPlayer {
             party: None,
             party_sync: PartySync::default(),
             last_role: Role::None,
+            saved: None,
             speed: 1.,
             last_catch_up: Instant::now(),
         }
@@ -290,6 +293,11 @@ impl MusicPlayer {
         if let Some(audio) = &self.audio {
             audio.stop();
         }
+        self.saved = None;
+        if let Some(resolved) = self.saved_copy(&track.id, cx) {
+            self.start_audio(resolved, cx);
+            return;
+        }
         let (music, dir) = {
             let hub = hub(cx);
             (hub.music.clone(), hub.ytdlp_dir.clone())
@@ -318,6 +326,27 @@ impl MusicPlayer {
         );
         cx.notify();
         cx.emit(Changed);
+    }
+
+    /// The track from the library, when it was saved: it plays with no search and no network.
+    fn saved_copy(&mut self, track_id: &str, cx: &App) -> Option<akidev_core::music::Resolved> {
+        let library = &cx.global::<crate::backend::Backend>().library;
+        let item = library.saved_track(track_id)?;
+        let sealed = match library.open(&item) {
+            Ok(sealed) => sealed,
+            Err(error) => {
+                tracing::warn!("[library] the saved track {track_id} cannot be played: {error}");
+                return None;
+            }
+        };
+        let opened = crate::saved::Opened::new(sealed);
+        let url = opened.address().to_string();
+        self.saved = Some(opened);
+        Some(akidev_core::music::Resolved {
+            url,
+            content_type: "audio/mp4",
+            headers: Vec::new(),
+        })
     }
 
     fn start_audio(&mut self, resolved: akidev_core::music::Resolved, cx: &mut Context<Self>) {

@@ -64,6 +64,11 @@ export default function PrivacyPage() {
           Playing a title joins a BitTorrent swarm. As with any BitTorrent client, the other peers in that swarm can see
           your IP address. Use a VPN if that matters to you. What was fetched is deleted when you quit.
         </p>
+        <p>
+          Downloading a film, episode or track in the app keeps it on your computer, in a library only the app can open.
+          It is fetched the same way, so the same applies: while it downloads, the peers can see your IP address. Nothing
+          is uploaded once it is complete, and nothing in the library is sent to us.
+        </p>
       </Section>
 
       <Section title="Contact">

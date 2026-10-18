@@ -3,6 +3,7 @@
 import { ExternalLink, Play } from "lucide-react";
 import Image from "next/image";
 
+import AppDownload from "@/components/app-download";
 import { Button } from "@/components/button";
 import Episodes from "@/components/episodes";
 import { stripTags } from "@/lib/text";
@@ -109,6 +110,7 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
                 {play.label}
               </Button>
             )}
+            <AppDownload id={play?.id ?? key} />
             {trailer && (
               <a
                 href={`https://www.youtube.com/watch?v=${trailer}`}

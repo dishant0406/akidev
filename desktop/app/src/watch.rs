@@ -209,6 +209,8 @@ pub struct WatchPage {
     online_ready: bool,
     /// The viewer's language has been looked for in this video, so it is done only once.
     subtitles_started: bool,
+    /// The subtitles are the ones saved with a downloaded copy, so the sites are not asked.
+    offline_subtitles: bool,
     /// The online subtitle on screen, by id.
     online_in_use: Option<String>,
     /// The language in the subtitle panel whose options are showing.
@@ -225,6 +227,8 @@ pub struct WatchPage {
     sub_delay: f64,
     /// Which torrent file is playing, to ask how its download is going.
     stream: Option<StreamId>,
+    /// The saved copy being played, kept open for as long as it plays.
+    saved: Option<crate::saved::Opened>,
     transfer: Option<StreamStats>,
     focus: FocusHandle,
     /// Keys reach the page only once it holds focus, which it takes on its first frame.
@@ -342,6 +346,7 @@ impl WatchPage {
             online: Vec::new(),
             online_ready: false,
             subtitles_started: false,
+            offline_subtitles: false,
             online_in_use: None,
             language_open: None,
             resume_from: None,
@@ -352,6 +357,7 @@ impl WatchPage {
             release: None,
             sub_delay: 0.,
             stream: None,
+            saved: None,
             transfer: None,
             focus: cx.focus_handle(),
             took_focus: false,
@@ -435,14 +441,23 @@ impl WatchPage {
         self.stats.resolving_since = Some(Instant::now());
         self.online_in_use = None;
         self.subtitles_started = false;
+        self.offline_subtitles = false;
         self.player = None;
         self.video = None;
         self.stream = None;
+        self.saved = None;
         self.transfer = None;
         self.state = PlayerState::default();
         self.phase = Phase::Resolving;
         self.controls_visible = true;
         cx.notify();
+
+        // A copy saved in the library plays at once: no search, no swarm, no buffering.
+        if let Some(resolution) = self.saved_copy(release.as_deref(), cx) {
+            self.resolved(resolution, cx);
+            self.say("Playing from your downloads", cx);
+            return;
+        }
 
         let streamer = cx.global::<Backend>().streamer.clone();
         let id = self.id.clone();
@@ -467,6 +482,54 @@ impl WatchPage {
             let _ = page.update(cx, |page, cx| page.resolved(resolution, cx));
         })
         .detach();
+    }
+
+    /// The saved copy of this film or episode (of `release` when one is asked for), ready to play.
+    fn saved_copy(&mut self, release: Option<&str>, cx: &App) -> Option<Resolution> {
+        let library = &cx.global::<Backend>().library;
+        let item = library.saved_video(&self.id, release)?;
+        let sealed = match library.open(&item) {
+            Ok(sealed) => sealed,
+            Err(error) => {
+                tracing::warn!(
+                    "[library] the saved copy of {} cannot be played: {error}",
+                    self.id
+                );
+                return None;
+            }
+        };
+        let opened = crate::saved::Opened::new(sealed);
+        let url = opened.address().to_string();
+        self.saved = Some(opened);
+        // The subtitles chosen when it was downloaded are used as they are, with no network.
+        let kept = library.saved_subtitles(&item.id);
+        if !kept.is_empty() {
+            let subtitles = kept
+                .into_iter()
+                .enumerate()
+                .map(|(index, (saved, path))| Subtitle {
+                    id: format!("saved-{index}"),
+                    provider: "library".into(),
+                    lang: saved.lang,
+                    language: saved.language.clone(),
+                    label: saved.language,
+                    url: format!("{}{}", captions::SAVED, path.display()),
+                    format: None,
+                    hearing_impaired: false,
+                })
+                .collect();
+            self.online = captions::group(subtitles);
+            self.online_ready = true;
+            self.offline_subtitles = true;
+        }
+        Some(Resolution::Ready {
+            url,
+            release: item.title,
+            stream: StreamId {
+                info_hash: item.release.unwrap_or_default(),
+                file_index: item.file_index.unwrap_or(0) as usize,
+            },
+        })
     }
 
     fn resolved(&mut self, resolution: Resolution, cx: &mut Context<Self>) {
@@ -1202,6 +1265,9 @@ impl WatchPage {
             cx,
             async move { subtitles::find(&query, SUBTITLES_WAIT).await },
             |page, found, cx| {
+                if page.offline_subtitles {
+                    return;
+                }
                 page.online = captions::group(found);
                 page.rank_online();
                 page.online_ready = true;
@@ -1425,10 +1491,31 @@ impl WatchPage {
                             )
                             .child(div().flex_1())
                             .children(self.elsewhere(cx))
+                            .children(self.save_button())
                             .child(crate::party::button(cx)),
                     ),
             )
             .on_mouse_move(cx.listener(|page, _, _, cx| page.activity(cx)))
+    }
+
+    /// The button that saves what is playing to the library: not offered for what is already a
+    /// saved copy.
+    fn save_button(&self) -> Option<Stateful<Div>> {
+        if self.saved.is_some() {
+            return None;
+        }
+        let id = self.id.clone();
+        // The release playing is the one saved, so what is downloaded is what was watched.
+        let release = self
+            .stream
+            .as_ref()
+            .map(|stream| stream.info_hash.clone())
+            .filter(|hash| !hash.is_empty());
+        Some(icon_button(
+            "watch-save",
+            IconName::ArrowDownToLine,
+            move |_, _, cx| crate::downloads::choose(id.clone(), release.clone(), cx),
+        ))
     }
 
     /// A guest who is watching something other than what the party is gets a way back to it.
@@ -1706,7 +1793,11 @@ impl WatchPage {
                         }
                     })
                 });
-                panels::shell("Sources", close, panels::sources_body(view, playing, act))
+                panels::shell(
+                    "Sources",
+                    close,
+                    panels::sources_body(view, playing, "Playing", act),
+                )
             }
             Panel::Subtitles => {
                 let on_screen = self.state.sid.is_some_and(|sid| {

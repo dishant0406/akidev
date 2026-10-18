@@ -32,6 +32,12 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "..\target\release\bundle\Akidev\Akidev.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\release\bundle\Akidev\libmpv-2.dll"; DestDir: "{app}"; Flags: ignoreversion
 
+[Registry]
+; Links from the website (akidev://download?id=...) open the app.
+Root: HKCU; Subkey: "Software\Classes\akidev"; ValueType: string; ValueName: ""; ValueData: "URL:Akidev"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\akidev"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\akidev\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Akidev.exe"" ""%1"""
+
 [Icons]
 Name: "{group}\Akidev"; Filename: "{app}\Akidev.exe"
 Name: "{autodesktop}\Akidev"; Filename: "{app}\Akidev.exe"; Tasks: desktopicon

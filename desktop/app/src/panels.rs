@@ -153,8 +153,13 @@ pub enum SourceAction {
 }
 
 /// Every release found, the usual formats first and the others under their own divider.
-/// `playing` is the info hash of the one on screen.
-pub fn sources_body(view: SourcesView, playing: Option<&str>, act: Act<SourceAction>) -> Div {
+/// `marked` is the info hash of the one on screen (or chosen), which `mark` says in its row.
+pub fn sources_body(
+    view: SourcesView,
+    marked: Option<&str>,
+    mark: &'static str,
+    act: Act<SourceAction>,
+) -> Div {
     let list = scroll_area("sources-scroll");
     let body = match view {
         SourcesView::Loading => list.child(
@@ -186,7 +191,7 @@ pub fn sources_body(view: SourcesView, playing: Option<&str>, act: Act<SourceAct
             let (usual, other) = choices::split(all);
             let source_row = |choice: &Choice| {
                 let id = choice.id.clone();
-                let is_playing = playing.is_some_and(|hash| hash.eq_ignore_ascii_case(&choice.id));
+                let is_playing = marked.is_some_and(|hash| hash.eq_ignore_ascii_case(&choice.id));
                 let act = act.clone();
                 row(
                     SharedString::from(format!("source-{}", choice.id)),
@@ -223,7 +228,7 @@ pub fn sources_body(view: SourcesView, playing: Option<&str>, act: Act<SourceAct
                                         .text_size(px(11.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(color(ACCENT))
-                                        .child(crate::design::state::spaced("Playing"))
+                                        .child(crate::design::state::spaced(mark))
                                 }))
                                 .child(choices::badges(choice).join(" · ")),
                         ),

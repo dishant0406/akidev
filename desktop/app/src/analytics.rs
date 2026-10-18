@@ -258,5 +258,6 @@ pub fn screen_of(route: &crate::route::Route) {
         Route::MusicAlbum { .. } => screen("music_album", Value::Null),
         Route::MusicArtist { .. } => screen("music_artist", Value::Null),
         Route::Settings => screen("settings", Value::Null),
+        Route::Library => screen("library", Value::Null),
     }
 }
