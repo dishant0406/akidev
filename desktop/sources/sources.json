@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 4,
+  "version": 6,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
@@ -97,6 +97,33 @@
           "hash": "torznab:attr@infohash",
           "size": "torznab:attr@size",
           "seeders": "torznab:attr@seeders"
+        }
+      }
+    },
+    {
+      "id": "tokyotosho",
+      "name": "Tokyo Toshokan",
+      "kinds": [
+        "anime"
+      ],
+      "hosts": [
+        "https://www.tokyotosho.se"
+      ],
+      "request": {
+        "path": "/rss.php",
+        "query": {
+          "terms": "{term}",
+          "reversepolarity": "0"
+        }
+      },
+      "response": {
+        "format": "rss",
+        "fields": {
+          "title": "title",
+          "hash": {
+            "magnet_hash": "link"
+          },
+          "magnet": "link"
         }
       }
     },
@@ -263,7 +290,8 @@
         "movie"
       ],
       "hosts": [
-        "https://movies-api.accel.li/api/v2"
+        "https://movies-api.accel.li/api/v2",
+        "https://yts.gg/api/v2"
       ],
       "request": {
         "path": "/list_movies.json",
@@ -294,6 +322,8 @@
       ],
       "fanout": "per-title",
       "hosts": [
+        "https://eztv.yt/api",
+        "https://eztv1.xyz/api",
         "https://eztv.wf/api"
       ],
       "request": {

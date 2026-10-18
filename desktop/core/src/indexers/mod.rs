@@ -417,6 +417,7 @@ mod tests {
                 "subsplease",
                 "nyaa",
                 "animetosho",
+                "tokyotosho",
                 "knaben",
                 "torrents-csv",
                 "apibay"

@@ -326,6 +326,22 @@ mod tests {
     }
 
     #[test]
+    fn tokyotosho_reads_the_hash_from_the_magnet_in_its_link() {
+        // The feed names the hash in base32 and sends the magnet as the item's link.
+        let feed = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Tokyo Toshokan</title>\
+             <item><category>Batch</category>\
+             <title>[SubsPlease] Show (01-12) (1080p) [Batch]</title>\
+             <link><![CDATA[magnet:?xt=urn:btih:QCQTJORS4NU3BKJHPAYLRRPR2CJ3GRR4&tr=udp://tracker.opentrackr.org:1337/announce]]></link>\
+             </item><item><title>No link</title></item></channel></rss>";
+        let found = run_text("tokyotosho", feed, "Show");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "[SubsPlease] Show (01-12) (1080p) [Batch]");
+        assert_eq!(found[0].source, "tokyotosho");
+        assert_eq!(found[0].info_hash.len(), 40);
+        assert!(found[0].magnet.starts_with("magnet:?xt=urn:btih:"));
+    }
+
+    #[test]
     fn a_page_that_is_not_the_expected_format_is_an_error() {
         let sources = sources::current();
         let html = "<html><body>Access denied</body></html>";

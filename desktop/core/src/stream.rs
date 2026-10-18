@@ -8,9 +8,9 @@ use crate::indexers::{SearchOptions, search_all};
 use crate::media_id::{self, MediaId};
 use crate::model::{Detail, Kind, Release};
 use crate::releases::{
-    Audio, Codec, is_batch, movie_search_terms, parse_audio, parse_codec, parse_resolution,
-    rank_movie_releases, rank_movie_releases_by, rank_releases, rank_releases_by, search_terms,
-    series_search_terms,
+    Audio, Codec, is_batch, movie_search_terms, normalize_title, parse_audio, parse_codec,
+    parse_resolution, rank_movie_releases, rank_movie_releases_by, rank_releases, rank_releases_by,
+    search_terms, series_search_terms,
 };
 use crate::torrent::{Engine, StreamStats};
 use crate::{providers, serve};
@@ -295,6 +295,97 @@ async fn find_releases(
     } else {
         media.title_variants.clone()
     };
+    let found = find_releases_named(config, parsed, detail, &titles).await;
+    if !found.1.is_empty() || parsed.kind == Kind::Anime {
+        return found;
+    }
+    // A catalogue of films and series knows a Japanese show by one spelling, and releases are
+    // named by another ("Tomei na Yoru ni Kakeru Kimi to" is "Love Unseen Beneath the Clear Night
+    // Sky" at the indexers). When nothing was found, the anime catalogue is asked for the names
+    // it knows the same title by, and the search is made again with them.
+    let aliases = alias_titles(media).await;
+    if aliases.is_empty() {
+        return found;
+    }
+    let mut more = titles;
+    more.extend(aliases);
+    let again = find_releases_named(config, parsed, detail, &more).await;
+    if again.1.is_empty() { found } else { again }
+}
+
+/// The other names the anime catalogue knows `media` by, when it has the very same title.
+async fn alias_titles(media: &crate::model::Media) -> Vec<String> {
+    for query in alias_queries(&media.title) {
+        let Ok(found) = crate::search::search_kind(Kind::Anime, &query).await else {
+            continue;
+        };
+        for candidate in found.iter().take(3) {
+            let Some(detail) = providers::detail(&candidate.id).await else {
+                continue;
+            };
+            let names = known_names(&detail.media);
+            if is_same_title(media, &detail.media, &names) {
+                return names;
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// What to ask the anime catalogue: the whole title, then each part of it that is long enough to
+/// mean something (a spelling that differs in one word still has a part that is the same).
+fn alias_queries(title: &str) -> Vec<String> {
+    let mut parts: Vec<String> = title
+        .split([',', ':', ';', '(', ')'])
+        .map(|part| part.trim().to_string())
+        .filter(|part| part.chars().count() >= 8 && part != title)
+        .collect();
+    parts.sort_by_key(|part| std::cmp::Reverse(part.chars().count()));
+    let mut queries = vec![title.to_string()];
+    queries.extend(parts);
+    queries
+}
+
+/// A title with the differences between romanisations taken out ("Tomei" and "Toumei", "Shoujo"
+/// and "Shojo"), and its spaces, for comparing two spellings of one name.
+fn loose_key(title: &str) -> String {
+    normalize_title(title)
+        .replace("ou", "o")
+        .replace("oo", "o")
+        .replace("uu", "u")
+        .replace(' ', "")
+}
+
+/// Every name a card carries: its title and its variants.
+fn known_names(media: &crate::model::Media) -> Vec<String> {
+    let mut names = vec![media.title.clone()];
+    names.extend(media.title_variants.iter().cloned());
+    names
+}
+
+/// Whether the anime `candidate` (with these `names`) is `media`: one of its names is the title,
+/// and the years, when both are known, are no more than a year apart.
+fn is_same_title(
+    media: &crate::model::Media,
+    candidate: &crate::model::Media,
+    names: &[String],
+) -> bool {
+    let wanted = loose_key(&media.title);
+    let named = names.iter().any(|name| loose_key(name) == wanted);
+    let near = match (media.year, candidate.year) {
+        (Some(a), Some(b)) => (a - b).abs() <= 1,
+        _ => true,
+    };
+    named && near
+}
+
+async fn find_releases_named(
+    config: &Config,
+    parsed: &MediaId,
+    detail: &Detail,
+    titles: &[String],
+) -> (Vec<String>, Vec<Release>, Vec<Release>) {
+    let media = &detail.media;
     let year = media.year.and_then(|year| u32::try_from(year).ok());
     // Torrentio and EZTV are searched by IMDb id rather than by text, and Torrentio
     // takes the season and episode in its path. Indexers that need none of it ignore it.
@@ -307,26 +398,24 @@ async fn find_releases(
 
     let (terms, mut ranked, mut all) = match (parsed.kind, parsed.episode) {
         (Kind::Movie, _) => {
-            let terms = movie_search_terms(&titles, year);
+            let terms = movie_search_terms(titles, year);
             let found = search_all(config, &terms, &options).await;
-            let ranked = rank_movie_releases(&found, year, &media.title, &titles);
-            let all = rank_movie_releases_by(&found, year, &media.title, &titles, false);
+            let ranked = rank_movie_releases(&found, year, &media.title, titles);
+            let all = rank_movie_releases_by(&found, year, &media.title, titles, false);
             (terms, ranked, all)
         }
         (Kind::Series, Some(episode)) => {
-            let terms = series_search_terms(&titles, parsed.season, Some(episode));
+            let terms = series_search_terms(titles, parsed.season, Some(episode));
             let found = search_all(config, &terms, &options).await;
-            let ranked = rank_releases(&found, episode, &media.title, &titles, parsed.season);
-            let all =
-                rank_releases_by(&found, episode, &media.title, &titles, parsed.season, false);
+            let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
+            let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all)
         }
         (Kind::Anime, Some(episode)) => {
-            let terms = search_terms(&titles, Some(episode));
+            let terms = search_terms(titles, Some(episode));
             let found = search_all(config, &terms, &options).await;
-            let ranked = rank_releases(&found, episode, &media.title, &titles, parsed.season);
-            let all =
-                rank_releases_by(&found, episode, &media.title, &titles, parsed.season, false);
+            let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
+            let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all)
         }
         (_, None) => (Vec::new(), Vec::new(), Vec::new()),
@@ -463,6 +552,51 @@ mod tests {
         ];
         assert_eq!(titles(candidates(&ranked, 2)), ["a", "b"]);
         assert!(candidates(&[], 3).is_empty());
+    }
+
+    fn card(title: &str, variants: &[&str], year: Option<i32>) -> crate::model::Media {
+        let mut media = plan_with(Vec::new(), Vec::new()).detail.media;
+        media.title = title.into();
+        media.title_variants = variants.iter().map(|v| v.to_string()).collect();
+        media.year = year;
+        media
+    }
+
+    #[test]
+    fn a_title_is_asked_whole_and_then_by_its_longer_parts() {
+        assert_eq!(
+            alias_queries("Tomei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita"),
+            [
+                "Tomei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita",
+                "Tomei na Yoru ni Kakeru Kimi to",
+                "Me ni Mienai Koi wo Shita"
+            ]
+        );
+        assert_eq!(alias_queries("Naruto"), ["Naruto"]);
+    }
+
+    #[test]
+    fn an_anime_with_the_same_title_and_about_the_same_year_lends_its_other_names() {
+        let show = card(
+            "Tomei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita",
+            &[],
+            Some(2026),
+        );
+        let anime = card(
+            "Love Unseen Beneath the Clear Night Sky",
+            &["Toumei na Yoru ni Kakeru Kimi to, Me ni Mienai Koi wo Shita."],
+            Some(2025),
+        );
+        assert!(is_same_title(&show, &anime, &known_names(&anime)));
+        // Another show that only looks similar, or the same name from decades away, is not it.
+        let other = card("Another Show", &["Tomei na Yoru"], Some(2025));
+        assert!(!is_same_title(&show, &other, &known_names(&other)));
+        let old = card(
+            "Love Unseen",
+            &["Tomei na Yoru ni Kakeru Kimi to Me ni Mienai Koi wo Shita"],
+            Some(1999),
+        );
+        assert!(!is_same_title(&show, &old, &known_names(&old)));
     }
 
     fn plan_with(ranked: Vec<Release>, extra: Vec<Release>) -> Plan {
