@@ -2,7 +2,7 @@
 
 ## Design
 
-Every screen, on the website and in the desktop app, follows `pipeline/DESIGN_PLAN.md`: read it before
+Every screen, on the website and in the desktop app, follows `design/DESIGN_PLAN.md`: read it before
 changing how anything looks, moves or reads. It says what the interface is meant to feel like and which
 patterns to keep (one warm ink palette, amber only for state such as progress, active and focus, three
 button looks, state cards for empty and error screens, translucent chrome).
