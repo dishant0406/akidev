@@ -67,6 +67,8 @@ struct PartySync {
     told: Option<Instant>,
     /// Where the picture was at the last look, and whether it was playing.
     looked: Option<(Instant, f64, bool)>,
+    /// What the host was choosing when it last told, so opening or closing a panel is told at once.
+    choosing: Option<String>,
 }
 
 /// The side panels. One is open at a time.
@@ -245,6 +247,11 @@ pub struct WatchPage {
     holding: Option<Instant>,
     /// The speed a guest was last set to, so it is only set when it changes.
     speed: f64,
+    /// The release (info hash) a guest last set out to play because the host plays it, so it is
+    /// asked for once, even if it could not be found and the best one is playing instead.
+    party_tried: Option<String>,
+    /// The host's picture was paused because a panel opened; it starts again when the panel closes.
+    panel_pause: bool,
     last_catch_up: Instant,
     _party_changes: Subscription,
     _party_requests: Subscription,
@@ -344,6 +351,8 @@ impl WatchPage {
             party_sync: PartySync::default(),
             holding: None,
             speed: 1.,
+            party_tried: None,
+            panel_pause: false,
             last_catch_up: Instant::now(),
             _party_changes: party_changes,
             _party_requests: party_requests,
@@ -356,17 +365,54 @@ impl WatchPage {
     /// Looks for a source and starts playing it. `fresh` forgets a torrent that already
     /// failed, for a retry.
     fn start(&mut self, fresh: bool, cx: &mut Context<Self>) {
-        self.begin(None, fresh, cx);
+        // A guest plays the release the host plays; if that is gone, the best there is.
+        let wanted = self.party_release(cx);
+        self.party_tried = wanted.clone();
+        let or_best = wanted.is_some();
+        self.begin(wanted, fresh, or_best, cx);
+    }
+
+    /// The release the party's host is playing of this very film or episode, for a guest.
+    fn party_release(&self, cx: &App) -> Option<String> {
+        let party = self.party.read(cx);
+        if party.role() != Role::Guest {
+            return None;
+        }
+        match party.item() {
+            Some(Item::Video { id, release }) if *id == self.id => release.clone(),
+            _ => None,
+        }
     }
 
     /// Plays the release with this info hash, from where the viewer is.
     fn play_release(&mut self, info_hash: String, cx: &mut Context<Self>) {
         self.panel = None;
-        self.begin(Some(info_hash), false, cx);
+        // A host says which release it is about to play right away, so the guests start finding the
+        // same one instead of waiting for it to load here first.
+        if self.party.read(cx).role() == Role::Host && self.is_the_party_item(cx) {
+            let playback = Playback {
+                item: Some(Item::Video {
+                    id: self.id.clone(),
+                    release: Some(info_hash.clone()),
+                }),
+                playing: false,
+                position: self.state.position,
+                choosing: None,
+            };
+            self.party
+                .update(cx, |party, _| party.publish(playback, false));
+        }
+        self.begin(Some(info_hash), false, false, cx);
     }
 
     /// Opens a release and plays it: the one asked for, or else the best that works.
-    fn begin(&mut self, release: Option<String>, fresh: bool, cx: &mut Context<Self>) {
+    fn begin(
+        &mut self,
+        release: Option<String>,
+        fresh: bool,
+        or_best: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.save_progress(cx);
         if release.is_some() && self.state.position > 0. {
             self.resume_from = Some(self.state.position);
@@ -396,7 +442,15 @@ impl WatchPage {
                 }
             };
             match release {
-                Some(info_hash) => streamer.resolve_release(&id, &info_hash).await,
+                Some(info_hash) => {
+                    let found = streamer.resolve_release(&id, &info_hash).await;
+                    // A guest asked for the host's release; if it is gone, it plays the best it can.
+                    if or_best && matches!(found, Resolution::Unavailable { .. }) {
+                        streamer.resolve(&id, fresh).await
+                    } else {
+                        found
+                    }
+                }
                 None => streamer.resolve(&id, fresh).await,
             }
         });
@@ -595,9 +649,14 @@ impl WatchPage {
 
     /// A guest tells the host how it is doing with this video.
     fn report_readiness(&mut self, cx: &mut Context<Self>) {
-        let (state, id) = (self.readiness(), self.id.clone());
+        // Named the way the host names it, release and all, so the host knows which one is ready.
+        let key = match self.party.read(cx).item() {
+            Some(item @ Item::Video { id, .. }) if *id == self.id => item.key(),
+            _ => self.id.clone(),
+        };
+        let state = self.readiness();
         self.party
-            .update(cx, |party, _| party.set_status(state, Some(id)));
+            .update(cx, |party, _| party.set_status(state, Some(key)));
     }
 
     /// A host with company starts paused, and waits for the guests to be ready; a guest starts
@@ -638,13 +697,51 @@ impl WatchPage {
     /// A host tells its party where the picture is; a guest is kept where the host is.
     fn party_tick(&mut self, player: &Player, cx: &mut Context<Self>) {
         match self.party.read(cx).role() {
-            Role::Host => self.tell_party(cx),
+            Role::Host => {
+                self.pause_for_panel(player, cx);
+                self.tell_party(cx)
+            }
             Role::Guest => self.follow_party(player, cx),
             Role::None => {}
         }
         if self.party.read(cx).role() != Role::Guest && self.speed != 1. {
             self.speed = 1.;
             player.set_speed(1.);
+        }
+    }
+
+    /// What is playing, as the party names it: the film and the release this window plays.
+    fn party_item(&self) -> Item {
+        Item::Video {
+            id: self.id.clone(),
+            release: self.stream.as_ref().map(|stream| stream.info_hash.clone()),
+        }
+    }
+
+    /// What the host is choosing while a panel is open, for the guests to say so.
+    fn choosing(&self) -> Option<&'static str> {
+        self.panel.map(|panel| match panel {
+            Panel::Sources => "source",
+            Panel::Episodes => "episode",
+            Panel::Subtitles => "subtitles",
+        })
+    }
+
+    /// A host with a panel open pauses the picture, so everyone waits while it chooses, and
+    /// starts it again when the panel closes, if it was playing.
+    fn pause_for_panel(&mut self, player: &Player, cx: &mut Context<Self>) {
+        if !self.party.read(cx).has_company() || !self.is_the_party_item(cx) {
+            return;
+        }
+        if self.panel.is_some() && !self.panel_pause && !self.state.paused {
+            player.set_pause(true);
+            self.panel_pause = true;
+        } else if self.panel.is_none() && self.panel_pause {
+            self.panel_pause = false;
+            // A new release holds the start itself, until the guests have it.
+            if self.holding.is_none() && self.state.paused {
+                player.set_pause(false);
+            }
         }
     }
 
@@ -657,17 +754,21 @@ impl WatchPage {
             !self.state.paused && !self.state.buffering,
         );
         let now = Instant::now();
-        let changed = match self.party_sync.looked {
-            Some((at, was, was_playing)) => {
-                let expected = if was_playing {
-                    was + at.elapsed().as_secs_f64()
-                } else {
-                    was
-                };
-                was_playing != playing || (position - expected).abs() > SEEK_JUMP
-            }
-            None => true,
-        };
+        let choosing = self.choosing();
+        let panel_changed = self.party_sync.choosing.as_deref() != choosing;
+        self.party_sync.choosing = choosing.map(str::to_string);
+        let changed = panel_changed
+            || match self.party_sync.looked {
+                Some((at, was, was_playing)) => {
+                    let expected = if was_playing {
+                        was + at.elapsed().as_secs_f64()
+                    } else {
+                        was
+                    };
+                    was_playing != playing || (position - expected).abs() > SEEK_JUMP
+                }
+                None => true,
+            };
         self.party_sync.looked = Some((now, position, playing));
         let due = self
             .party_sync
@@ -679,11 +780,10 @@ impl WatchPage {
         let heartbeat = !changed && self.party_sync.told.is_some();
         self.party_sync.told = Some(now);
         let playback = Playback {
-            item: Some(Item::Video {
-                id: self.id.clone(),
-            }),
+            item: Some(self.party_item()),
             playing,
             position,
+            choosing: self.choosing().map(str::to_string),
         };
         self.party
             .update(cx, |party, _| party.publish(playback, heartbeat));
@@ -702,9 +802,32 @@ impl WatchPage {
                 }
                 return;
             }
-            Some(Item::Video { id }) if *id == self.id => {}
+            Some(Item::Video { id, .. }) if *id == self.id => {}
             // What else the party plays is another page's to show.
             Some(_) => return,
+        }
+        // The host switched to another release of this film: go to it, from where the host is.
+        if let Some(Item::Video {
+            release: Some(release),
+            ..
+        }) = &target.playback.item
+            && self.party_tried.as_deref() != Some(release.as_str())
+            && !self
+                .stream
+                .as_ref()
+                .is_some_and(|stream| stream.info_hash.eq_ignore_ascii_case(release))
+        {
+            self.party_tried = Some(release.clone());
+            self.resume_from = Some(target.position_now());
+            self.begin(Some(release.clone()), false, true, cx);
+            return;
+        }
+        // The host has a panel open, so everyone waits with the picture paused.
+        if target.playback.choosing.is_some() {
+            if !self.state.paused {
+                player.set_pause(true);
+            }
+            return;
         }
         // Until the picture has loaded there is no position to correct.
         if self.state.duration <= 0. {
@@ -729,10 +852,10 @@ impl WatchPage {
 
     /// This video is what the party is playing.
     fn is_the_party_item(&self, cx: &App) -> bool {
-        self.party.read(cx).item()
-            == Some(&Item::Video {
-                id: self.id.clone(),
-            })
+        matches!(
+            self.party.read(cx).item(),
+            Some(Item::Video { id, .. }) if *id == self.id
+        )
     }
 
     /// A host does what a guest asked for, while this video is what the party is playing.
@@ -766,6 +889,7 @@ impl WatchPage {
                 item: None,
                 playing: false,
                 position: 0.,
+                choosing: None,
             };
             self.party
                 .update(cx, |party, _| party.publish(nothing, false));
@@ -1246,7 +1370,7 @@ impl WatchPage {
     /// A guest who is watching something other than what the party is gets a way back to it.
     fn elsewhere(&self, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let party = self.party.read(cx);
-        let Some(Item::Video { id }) = party.item().cloned() else {
+        let Some(Item::Video { id, .. }) = party.item().cloned() else {
             return None;
         };
         (party.role() == Role::Guest && id != self.id).then(|| {
@@ -1424,11 +1548,13 @@ impl WatchPage {
                             cx.listener(|page, _, _, cx| page.with_player(cx, Player::cycle_audio)),
                         ))
                     })
-                    .child(icon_button(
-                        "sources",
-                        IconName::Layers,
-                        cx.listener(|page, _, _, cx| page.toggle_panel(Panel::Sources, cx)),
-                    ))
+                    .when(!self.guest, |row| {
+                        row.child(icon_button(
+                            "sources",
+                            IconName::Layers,
+                            cx.listener(|page, _, _, cx| page.toggle_panel(Panel::Sources, cx)),
+                        ))
+                    })
                     .when(self.episodes.is_some() && !self.guest, |row| {
                         row.child(icon_button(
                             "episodes",
@@ -1621,6 +1747,14 @@ impl WatchPage {
             }
             Phase::Playing => {
                 let waiting = self.state.buffering || !self.state.video_ready;
+                let host_choosing = if self.guest {
+                    self.party
+                        .read(cx)
+                        .target()
+                        .and_then(|target| target.playback.choosing.clone())
+                } else {
+                    None
+                };
                 frame
                     .children(self.video.clone())
                     .child(
@@ -1664,6 +1798,30 @@ impl WatchPage {
                                     .text_color(color(TEXT_DIM))
                                     .child(transfer_line(&transfer))
                             }))
+                    }))
+                    .children(host_choosing.map(|what| {
+                        // The picture is paused for everyone: this says why.
+                        let title = match what.as_str() {
+                            "episode" => "Choosing an episode",
+                            "subtitles" => "Choosing subtitles",
+                            _ => "Choosing a source",
+                        };
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .bg(color(CANVAS).opacity(0.94))
+                            .child(state_card(
+                                Some("The host"),
+                                title,
+                                "Playback is paused for everyone until they are done.",
+                                false,
+                                Vec::new(),
+                            ))
                     }))
             }
         }

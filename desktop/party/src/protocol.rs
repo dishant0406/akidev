@@ -7,8 +7,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Item {
-    /// A film or an episode: the media id, like `series-tt0903747-s1e5`.
-    Video { id: String },
+    /// A film or an episode: the media id, like `series-tt0903747-s1e5`, and the release the
+    /// host is playing (its info hash), so every device plays the same source. A guest that
+    /// cannot find that release plays the best one it can.
+    Video {
+        id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        release: Option<String>,
+    },
     /// A music track: the video id on YouTube Music, with what a guest shows before it has loaded.
     Music {
         id: String,
@@ -23,7 +29,19 @@ impl Item {
     /// The media id or the track id, whichever this is.
     pub fn id(&self) -> &str {
         match self {
-            Item::Video { id } | Item::Music { id, .. } => id,
+            Item::Video { id, .. } | Item::Music { id, .. } => id,
+        }
+    }
+
+    /// What `Status` names: the id, and for a video the release too, so a guest that was ready
+    /// for the film is still loading it when the host switches to another release.
+    pub fn key(&self) -> String {
+        match self {
+            Item::Video {
+                id,
+                release: Some(release),
+            } => format!("{id}#{release}"),
+            other => other.id().to_string(),
         }
     }
 }
@@ -61,6 +79,10 @@ pub enum Message {
         playing: bool,
         position: f64,
         at: u64,
+        /// `source`, `episode` or `subtitles` while the host has that panel open; guests pause
+        /// and say so on screen.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        choosing: Option<String>,
     },
     /// Host to guests: who is in the party.
     Members {
@@ -104,10 +126,12 @@ mod tests {
         let state = Message::State {
             item: Some(Item::Video {
                 id: "movie-tt1".into(),
+                release: None,
             }),
             playing: true,
             position: 12.5,
             at: 1_700_000_000_000,
+            choosing: None,
         };
         assert_eq!(
             serde_json::to_string(&state).unwrap(),
@@ -153,8 +177,53 @@ mod tests {
                 }),
                 playing: false,
                 position: 0.0,
-                at: 1
+                at: 1,
+                choosing: None
             }
         );
+    }
+
+    #[test]
+    fn the_release_and_what_the_host_is_choosing_travel_with_the_state() {
+        let state = Message::State {
+            item: Some(Item::Video {
+                id: "movie-tt1".into(),
+                release: Some("abc123".into()),
+            }),
+            playing: false,
+            position: 4.0,
+            at: 7,
+            choosing: Some("source".into()),
+        };
+        let text = serde_json::to_string(&state).unwrap();
+        assert_eq!(
+            text,
+            r#"{"t":"state","item":{"kind":"video","id":"movie-tt1","release":"abc123"},"playing":false,"position":4.0,"at":7,"choosing":"source"}"#
+        );
+        assert_eq!(serde_json::from_str::<Message>(&text).unwrap(), state);
+        // A state from a device that predates both fields still reads.
+        let old: Message = serde_json::from_str(
+            r#"{"t":"state","item":{"kind":"video","id":"movie-tt1"},"playing":true,"position":1.0,"at":1}"#,
+        )
+        .unwrap();
+        let Message::State { item, choosing, .. } = old else {
+            panic!("a state")
+        };
+        assert_eq!(choosing, None);
+        assert_eq!(item.unwrap().key(), "movie-tt1");
+    }
+
+    #[test]
+    fn a_status_names_the_release_too() {
+        let a = Item::Video {
+            id: "m".into(),
+            release: Some("x".into()),
+        };
+        let b = Item::Video {
+            id: "m".into(),
+            release: Some("y".into()),
+        };
+        assert_ne!(a.key(), b.key());
+        assert_eq!(a.id(), b.id());
     }
 }

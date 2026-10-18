@@ -331,8 +331,15 @@ impl Player {
                         .await
                     {
                         Ok(found) => {
-                            self.deliver(found.origin, found.release, "debrid", hevc, start)
-                                .await
+                            self.deliver(
+                                found.origin,
+                                found.release,
+                                Some(found.info_hash),
+                                "debrid",
+                                hevc,
+                                start,
+                            )
+                            .await
                         }
                         Err(reason) => Err(Miss::Reason(reason)),
                     },
@@ -355,7 +362,14 @@ impl Player {
                                     name: playable.file_name,
                                 };
                                 attempt = self
-                                    .deliver(origin, release.title, "torrent", hevc, start)
+                                    .deliver(
+                                        origin,
+                                        release.title,
+                                        Some(playable.info_hash.clone()),
+                                        "torrent",
+                                        hevc,
+                                        start,
+                                    )
                                     .await;
                                 match &attempt {
                                     Err(Miss::Reason(_)) => plan
@@ -393,6 +407,7 @@ impl Player {
                             url: found.url,
                             stream_type: "file",
                             release: found.title,
+                            release_id: None,
                             source: "archive-org",
                             duration: None,
                             subtitles: Vec::new(),
@@ -437,6 +452,7 @@ impl Player {
         &self,
         origin: Origin,
         release: String,
+        release_id: Option<String>,
         source: &'static str,
         hevc: bool,
         start: Option<f64>,
@@ -463,6 +479,7 @@ impl Player {
                     url: format!("{public}/s/{token}"),
                     stream_type: "file",
                     release,
+                    release_id,
                     source,
                     duration: probe.duration,
                     subtitles: Vec::new(),
@@ -498,6 +515,7 @@ impl Player {
                     url: format!("{public}/s/{token}/index.m3u8"),
                     stream_type: "hls",
                     release,
+                    release_id,
                     source,
                     duration,
                     subtitles: Vec::new(),

@@ -438,12 +438,14 @@ impl Party {
         match event {
             GuestEvent::Target(target) => {
                 let item = target.playback.item.clone();
-                let changed = item != self.item;
+                // Only another film or episode takes the guest to another page: a new release of
+                // the same one is the page's own to switch to.
+                let changed = item.as_ref().map(Item::id) != self.item.as_ref().map(Item::id);
                 self.item = item.clone();
                 self.target = Some(target);
                 // What the host starts, the guest is taken to, once. After this update is over: the
                 // page it builds reads the party.
-                if let (true, Some(Item::Video { id })) = (changed, item) {
+                if let (true, Some(Item::Video { id, .. })) = (changed, item) {
                     cx.defer(move |cx| route::navigate(Route::Watch { id }, cx));
                 }
             }

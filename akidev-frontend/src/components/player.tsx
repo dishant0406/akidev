@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
+import { itemKey, type Choosing } from "@/lib/party/protocol";
 import { fix, positionNow } from "@/lib/party/sync";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/play";
 import { optionForChoice, preferRelease, readChoice, shiftCues, writeChoice } from "@/lib/subtitles";
@@ -29,7 +30,7 @@ import { Button, IconButton } from "./button";
 import CaptionsMenu from "./captions-menu";
 import PartyButton from "./party";
 import { SidePanel } from "./side-panel";
-import { Spinner } from "./states";
+import { Spinner, StateCard } from "./states";
 
 /** "Next episode" is offered this many seconds before the end. */
 const NEXT_OFFER = 40;
@@ -67,6 +68,8 @@ type Props = {
   subtitles?: SubtitleOption[];
   /** The name of the release being played, so the subtitles made for it are offered first. */
   release?: string | null;
+  /** The release's id (info hash), which a watch party names so every device plays the same source. */
+  releaseId?: string | null;
   /** Still looking for them, so the captions button says so instead of "none". */
   subtitlesLoading?: boolean;
   /** The line in the top bar: title, episode, name. */
@@ -106,6 +109,7 @@ export default function Player({
   streamType,
   subtitles: listed = NO_SUBTITLES,
   release = null,
+  releaseId = null,
   subtitlesLoading = false,
   title,
   startAt,
@@ -141,9 +145,17 @@ export default function Player({
   const [fullscreen, setFullscreen] = useState(false);
   const [visible, setVisible] = useState(true);
   const [panel, setPanel] = useState<Panel | null>(null);
+  // What a host has open tells its party to wait: guests pause and say so.
+  const choosing: Choosing | null = panel === "sources" ? "source" : panel === "episodes" ? "episode" : panel === "subtitles" ? "subtitles" : null;
+  const choosingNow = useRef<Choosing | null>(null);
+  choosingNow.current = choosing;
+  /** The host's picture was paused because a panel opened, so it starts again when the panel closes. */
+  const panelPaused = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
   /** When a host began waiting for guests that are still loading, or null when it is not waiting. */
   const [heldSince, setHeldSince] = useState<number | null>(null);
+  const heldSinceNow = useRef<number | null>(null);
+  heldSinceNow.current = heldSince;
   /** The subtitle file showing; null is off. */
   const [active, setActive] = useState<SubtitleOption | null>(null);
   /** Set once the viewer's remembered language has been looked at, or they have chosen themselves. */
@@ -347,6 +359,12 @@ export default function Player({
     else if (video.current) video.current.currentTime = to;
   }, []);
 
+  /** How a guest names what it is ready for: the host's item, release included. */
+  const statusKey = () => {
+    const item = partyNow.current.item;
+    return item?.kind === "video" && item.id === mediaId ? (itemKey(item) ?? mediaId) : mediaId;
+  };
+
   // Hosting: the party is told what is playing when it changes, and every couple of seconds.
   const publish = useCallback(
     (heartbeat: boolean) => {
@@ -354,11 +372,36 @@ export default function Player({
       if (partyNow.current.role !== "host" || !element) return;
       // Playing means the picture is moving: a host that is still loading or buffering is not.
       const moving = !element.paused && element.readyState >= HAVE_FUTURE_DATA;
-      partyNow.current.publish({ item: { kind: "video", id: mediaId }, playing: moving, position: element.currentTime }, heartbeat);
+      partyNow.current.publish(
+        {
+          item: { kind: "video", id: mediaId, release: releaseId },
+          playing: moving,
+          position: element.currentTime,
+          choosing: choosingNow.current,
+        },
+        heartbeat,
+      );
     },
-    [mediaId],
+    [mediaId, releaseId],
   );
   useEffect(() => publish(false), [publish, party.role]);
+
+  // Hosting: a panel open pauses the picture for everyone while the host chooses, and closing it carries on.
+  useEffect(() => {
+    const now = partyNow.current;
+    const element = video.current;
+    if (now.role === "host" && now.members.length > 1 && element) {
+      if (choosing && !panelPaused.current && !element.paused) {
+        element.pause();
+        panelPaused.current = true;
+      } else if (!choosing && panelPaused.current) {
+        panelPaused.current = false;
+        // A new release holds the start itself, until the guests have it.
+        if (heldSinceNow.current === null) element.play().catch(() => {});
+      }
+    }
+    publish(false);
+  }, [choosing]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!playing || party.role !== "host") return undefined;
     const timer = setInterval(() => publish(true), PARTY_BEAT);
@@ -419,6 +462,11 @@ export default function Player({
       }
       // What else the party is playing is another page's to show.
       if (item.kind !== "video" || item.id !== mediaId) return;
+      // The host has a panel open: everyone waits, paused, until it is done.
+      if (target.playback.choosing) {
+        if (!element.paused) element.pause();
+        return;
+      }
       const change = fix(element.currentTime, positionNow(target), target.playback.playing);
       if (change.seek !== null) element.currentTime = change.seek;
       element.playbackRate = change.speed;
@@ -432,6 +480,8 @@ export default function Player({
       if (element) element.playbackRate = 1;
     };
   }, [party.role, party.target, mediaId]);
+
+  const hostChoosing = party.role === "guest" ? (party.target?.playback.choosing ?? null) : null;
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -568,7 +618,7 @@ export default function Player({
           }
           resumed.current = true;
         }}
-        onCanPlay={() => partyNow.current.setStatus("ready", mediaId)}
+        onCanPlay={() => partyNow.current.setStatus("ready", statusKey())}
         onDurationChange={(event) => setDuration(finite(event.currentTarget.duration))}
         onPlay={() => {
           setPlaying(true);
@@ -592,7 +642,7 @@ export default function Player({
         }}
         onWaiting={() => {
           setReady(false);
-          partyNow.current.setStatus("loading", mediaId);
+          partyNow.current.setStatus("loading", statusKey());
           publish(false);
         }}
         onPlaying={() => {
@@ -632,6 +682,16 @@ export default function Player({
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
           <Spinner />
           <p className="text-sm font-semibold text-ink">{isHls ? "Converting for your browser" : "Buffering"}</p>
+        </div>
+      )}
+
+      {hostChoosing && (
+        <div className="absolute inset-0 flex items-center justify-center bg-canvas/95">
+          <StateCard
+            eyebrow="The host"
+            title={hostChoosing === "episode" ? "Choosing an episode" : hostChoosing === "subtitles" ? "Choosing subtitles" : "Choosing a source"}
+            detail="Playback is paused for everyone until they are done."
+          />
         </div>
       )}
 

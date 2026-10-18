@@ -4,7 +4,7 @@
 
 /** Something to play. Every device finds its own stream from the id, so no address travels. */
 export type Item =
-  | { kind: "video"; id: string }
+  | { kind: "video"; id: string; /** The release (info hash) the host plays, so every device plays the same source. */ release?: string | null }
   | { kind: "music"; id: string; title: string; artist: string; cover?: string | null };
 
 /**
@@ -12,6 +12,9 @@ export type Item =
  * source or buffering (a film from a torrent can take a while), or it could not find or play it.
  */
 export type Readiness = "ready" | "loading" | "trouble";
+
+/** What the host has open while the party waits: a source list, an episode list or subtitles. */
+export type Choosing = "source" | "episode" | "subtitles";
 
 export interface Member {
   name: string;
@@ -21,7 +24,7 @@ export interface Member {
 
 export type Message =
   | { t: "hello"; name: string }
-  | { t: "state"; item: Item | null; playing: boolean; position: number; at: number }
+  | { t: "state"; item: Item | null; playing: boolean; position: number; at: number; choosing?: Choosing }
   | { t: "members"; members: Member[] }
   | { t: "play" }
   | { t: "pause" }
@@ -40,11 +43,18 @@ export function itemId(item: Item | null): string | null {
   return item ? item.id : null;
 }
 
+/** What a `status` names: the id, and for a video the release too, so a guest that was ready for the
+ * film is still loading it when the host switches to another release. */
+export function itemKey(item: Item | null): string | null {
+  if (!item) return null;
+  return item.kind === "video" && item.release ? `${item.id}#${item.release}` : item.id;
+}
+
 function parseItem(value: unknown): Item | null | undefined {
   if (value === null) return null;
   if (typeof value !== "object") return undefined;
   const item = value as Record<string, unknown>;
-  if (item.kind === "video" && isText(item.id)) return { kind: "video", id: item.id };
+  if (item.kind === "video" && isText(item.id)) return { kind: "video", id: item.id, release: isText(item.release) ? item.release : null };
   if (item.kind === "music" && isText(item.id) && isText(item.title) && isText(item.artist)) {
     return { kind: "music", id: item.id, title: item.title, artist: item.artist, cover: isText(item.cover) ? item.cover : null };
   }
@@ -67,7 +77,8 @@ export function parseMessage(text: string): Message | null {
     case "state": {
       const item = parseItem(raw.item);
       if (item === undefined || typeof raw.playing !== "boolean" || !isNumber(raw.position) || !isNumber(raw.at)) return null;
-      return { t: "state", item, playing: raw.playing, position: raw.position, at: raw.at };
+      const choosing = raw.choosing === "source" || raw.choosing === "episode" || raw.choosing === "subtitles" ? raw.choosing : undefined;
+      return { t: "state", item, playing: raw.playing, position: raw.position, at: raw.at, ...(choosing ? { choosing } : {}) };
     }
     case "members": {
       if (!Array.isArray(raw.members)) return null;
@@ -96,5 +107,7 @@ export function parseMessage(text: string): Message | null {
 }
 
 export function sameItem(a: Item | null, b: Item | null): boolean {
-  return a === b || (a !== null && b !== null && a.kind === b.kind && a.id === b.id);
+  if (a === b) return true;
+  if (a === null || b === null || a.kind !== b.kind || a.id !== b.id) return false;
+  return a.kind === "video" && b.kind === "video" ? (a.release ?? null) === (b.release ?? null) : true;
 }

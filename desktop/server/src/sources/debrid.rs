@@ -64,6 +64,7 @@ struct AccountFile {
 /// A file the service can serve, chosen for the episode.
 pub struct Found {
     pub release: String,
+    pub info_hash: String,
     pub origin: Origin,
 }
 
@@ -389,6 +390,7 @@ impl Debrid {
                 Ok(Some(origin)) => {
                     return Ok(Found {
                         release: release.title.clone(),
+                        info_hash: release.info_hash.clone(),
                         origin,
                     });
                 }

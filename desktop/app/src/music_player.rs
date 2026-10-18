@@ -470,6 +470,7 @@ impl MusicPlayer {
             item: Some(item),
             playing,
             position,
+            choosing: None,
         };
         party.update(cx, |party, _| party.publish(playback, heartbeat));
     }

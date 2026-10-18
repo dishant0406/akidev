@@ -19,6 +19,8 @@ pub struct Playback {
     pub item: Option<Item>,
     pub playing: bool,
     pub position: f64,
+    /// While the host has a panel open (`source`, `episode`, `subtitles`) everyone waits.
+    pub choosing: Option<String>,
 }
 
 /// What a guest should be playing: the host's `Playback`, with the position where the host is
@@ -124,6 +126,7 @@ pub(crate) fn target_of(
     playing: bool,
     position: f64,
     at: u64,
+    choosing: Option<String>,
     clock: &Clock,
     now: u64,
 ) -> Target {
@@ -132,6 +135,7 @@ pub(crate) fn target_of(
         item,
         playing,
         position: if playing { position + late } else { position },
+        choosing,
     })
 }
 
@@ -210,16 +214,16 @@ mod tests {
         let mut clock = Clock::default();
         clock.sample(1000, 6010, 1020);
         // The host said "10.0 seconds" at its 7000; it is now its 7400 (this device's 2400).
-        let target = target_of(None, true, 10.0, 7000, &clock, 2400);
+        let target = target_of(None, true, 10.0, 7000, None, &clock, 2400);
         assert!((target.playback.position - 10.4).abs() < 0.001);
-        let paused = target_of(None, false, 10.0, 7000, &clock, 2400);
+        let paused = target_of(None, false, 10.0, 7000, None, &clock, 2400);
         assert_eq!(paused.playback.position, 10.0);
     }
 
     #[test]
     fn a_clock_that_is_far_out_cannot_send_a_guest_far_away() {
         // No reading yet, and the host's clock is ten minutes behind this one.
-        let target = target_of(None, true, 10.0, 0, &Clock::default(), 600_000);
+        let target = target_of(None, true, 10.0, 0, None, &Clock::default(), 600_000);
         assert_eq!(target.playback.position, 20.0);
     }
 }

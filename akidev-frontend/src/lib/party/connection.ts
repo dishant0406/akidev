@@ -1,7 +1,7 @@
 // The two ends of a party over WebRTC: the host that holds it and the guest that follows. The
 // desktop app does the same in desktop/party/src/{host,guest}.rs.
 
-import { itemId, parseMessage, type Member, type Message, type Readiness } from "./protocol.ts";
+import { itemId, itemKey, parseMessage, type Member, type Message, type Readiness } from "./protocol.ts";
 import * as signal from "./signal.ts";
 import { Clock, targetOf, type Playback, type Target } from "./sync.ts";
 
@@ -85,8 +85,9 @@ interface GuestSlot {
  * How a guest is doing with what the host is playing now. What it said about an earlier item says
  * nothing about this one: it is still getting to it.
  */
-export function guestState(said: Readiness, about: string | null, playing: string | null): Readiness {
-  return playing !== null && about !== playing ? "loading" : said;
+export function guestState(said: Readiness, about: string | null, playing: string | null, plain: string | null = playing): Readiness {
+  // A device from before releases were shared names the plain id, which is enough.
+  return playing !== null && about !== playing && about !== plain ? "loading" : said;
 }
 
 /** Opens a party. `name` is how the host appears to the guests. */
@@ -100,10 +101,11 @@ export async function openParty(name: string, on: HostEvents): Promise<HostParty
 
   const broadcast = (message: Message) => guests.forEach((slot) => send(slot.channel, message));
   const shareMembers = () => {
-    const playing = last?.t === "state" ? itemId(last.item) : null;
+    const playing = last?.t === "state" ? itemKey(last.item) : null;
+    const plain = last?.t === "state" ? itemId(last.item) : null;
     const members: Member[] = [
       { name, host: true, state: "ready" },
-      ...[...guests.values()].map((slot): Member => ({ name: slot.name, host: false, state: guestState(slot.state, slot.about, playing) })),
+      ...[...guests.values()].map((slot): Member => ({ name: slot.name, host: false, state: guestState(slot.state, slot.about, playing, plain) })),
     ];
     broadcast({ t: "members", members });
     on.members(members);
@@ -204,12 +206,19 @@ export async function openParty(name: string, on: HostEvents): Promise<HostParty
   return {
     code,
     publish: (playback) => {
-      const before = last?.t === "state" ? itemId(last.item) : null;
-      last = { t: "state", item: playback.item, playing: playback.playing, position: playback.position, at: Date.now() };
+      const before = last?.t === "state" ? itemKey(last.item) : null;
+      last = {
+        t: "state",
+        item: playback.item,
+        playing: playback.playing,
+        position: playback.position,
+        at: Date.now(),
+        ...(playback.choosing ? { choosing: playback.choosing } : {}),
+      };
       broadcast(last);
       // A guest is loading whatever the host starts until it says it is ready for it, so a new
       // item changes who is.
-      if (before !== itemId(playback.item)) shareMembers();
+      if (before !== itemKey(playback.item)) shareMembers();
     },
     end: () => {
       stop.abort();

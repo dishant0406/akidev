@@ -42,14 +42,30 @@ export default function WatchPage() {
   const [picked, setPicked] = useState<Pick | null>(null);
   const pick = picked && picked.episode === id ? picked : null;
   const resumeFrom = pick ? pick.start : startAt;
-  const stream = usePlay(id, resumeFrom, pick?.release.id);
+  const party = useParty();
+  const guest = party.role === "guest";
+  // A guest plays the release the host plays; if it is no longer listed, the best there is.
+  const partyRelease = guest && party.item?.kind === "video" && party.item.id === id ? (party.item.release ?? null) : null;
+  const [missed, setMissed] = useState<string | null>(null);
+  const wanted = partyRelease && missed !== partyRelease ? partyRelease : null;
+  const stream = usePlay(id, resumeFrom, wanted ?? pick?.release.id);
+  useEffect(() => {
+    if (partyRelease && partyRelease !== missed && (stream.isError || (stream.data && !stream.data.available))) setMissed(partyRelease);
+  }, [partyRelease, missed, stream.isError, stream.data]);
   const subtitles = useSubtitles(id);
+  // A host that picks another release says so at once, while it is still finding it, so the guests
+  // start finding the same one instead of waiting. (The player says it again, playing, once it loads.)
+  const { role: partyRole, publish: publishParty } = party;
+  const pickedRelease = pick?.release.id ?? null;
+  const pickedStart = pick?.start ?? 0;
+  useEffect(() => {
+    if (partyRole !== "host" || !pickedRelease || !id) return;
+    publishParty({ item: { kind: "video", id, release: pickedRelease }, playing: false, position: pickedStart });
+  }, [pickedRelease]); // eslint-disable-line react-hooks/exhaustive-deps
   /** The episode whose source picker is open over the "no source" screen. */
   const [choosing, setChoosing] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<{ id: string; message: string } | null>(null);
 
-  const party = useParty();
-  const guest = party.role === "guest";
   const data = detail.data;
   const card = data?.media;
   const next = neighbour(data, id, 1);
@@ -180,6 +196,7 @@ export default function WatchPage() {
         streamType={link.stream_type}
         subtitles={subtitles.subtitles}
         release={link.release}
+        releaseId={link.release_id ?? pick?.release.id ?? null}
         subtitlesLoading={subtitles.loading}
         title={titleLine(data, id)}
         startAt={resumeFrom}
@@ -191,7 +208,10 @@ export default function WatchPage() {
         onStarted={() => track("playback_started", { title_key: key ?? null, stream_type: link.stream_type })}
         onProgress={onProgress}
         onNext={next && !guest ? onNext : undefined}
-        sources={({ position, close }) => (
+        sources={
+          guest
+            ? undefined
+            : ({ position, close }) => (
           <Sources
             id={id}
             picked={pick?.release.id ?? null}
@@ -202,7 +222,8 @@ export default function WatchPage() {
               if (release.id !== pick?.release.id && (pick || release.title !== link.release)) choose(release, position());
             }}
           />
-        )}
+              )
+        }
         episodes={
           !isFilm && !guest && key && data ? (
             <Episodes titleKey={key} count={count} list={data.episodes} currentId={id} compact />

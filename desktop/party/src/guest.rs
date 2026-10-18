@@ -160,6 +160,7 @@ async fn read(
             playing,
             position,
             at,
+            choosing,
         }) = state
         else {
             continue;
@@ -171,10 +172,11 @@ async fn read(
                 playing,
                 position,
                 at,
+                choosing,
             });
             continue;
         }
-        let target = target_of(item, playing, position, at, &clock, now_ms());
+        let target = target_of(item, playing, position, at, choosing, &clock, now_ms());
         if events.send(GuestEvent::Target(target)).is_err() {
             return;
         }

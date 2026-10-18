@@ -1,7 +1,7 @@
 //! The device that holds the party. Guests connect to it; it tells them what is playing.
 
 use crate::peer::{Open, Peer, Sender, Wire};
-use crate::protocol::{Member, Message, Readiness};
+use crate::protocol::{Item, Member, Message, Readiness};
 use crate::signal::{self, is_gone};
 use crate::sync::{Playback, now_ms};
 use std::collections::HashMap;
@@ -100,11 +100,12 @@ impl Host {
             playing: playback.playing,
             position: playback.position,
             at: now_ms(),
+            choosing: playback.choosing,
         };
         let changed = {
             let mut last = self.shared.last.lock().unwrap();
-            let before = last.as_ref().and_then(item_id);
-            let changed = before != item_id(&message);
+            let before = last.as_ref().and_then(item_key);
+            let changed = before != item_key(&message);
             *last = Some(message.clone());
             changed
         };
@@ -147,7 +148,15 @@ async fn send_all(shared: &Shared, message: &Message) {
     }
 }
 
-/// The id of what a `State` message is playing.
+/// What a `State` message is playing, as a guest names it in `Status`: the id, and the release.
+fn item_key(message: &Message) -> Option<String> {
+    match message {
+        Message::State { item, .. } => item.as_ref().map(Item::key),
+        _ => None,
+    }
+}
+
+/// The plain id of what a `State` message is playing.
 fn item_id(message: &Message) -> Option<String> {
     match message {
         Message::State { item, .. } => item.as_ref().map(|item| item.id().to_string()),
@@ -156,7 +165,13 @@ fn item_id(message: &Message) -> Option<String> {
 }
 
 fn members(shared: &Shared) -> Vec<Member> {
-    let playing = shared.last.lock().unwrap().as_ref().and_then(item_id);
+    let (playing, plain) = {
+        let last = shared.last.lock().unwrap();
+        (
+            last.as_ref().and_then(item_key),
+            last.as_ref().and_then(item_id),
+        )
+    };
     let guests = shared.guests.lock().unwrap();
     let mut list = vec![Member {
         name: shared.name.clone(),
@@ -166,16 +181,27 @@ fn members(shared: &Shared) -> Vec<Member> {
     list.extend(guests.values().map(|slot| Member {
         name: slot.name.clone(),
         host: false,
-        state: guest_state(slot.state, slot.about.as_deref(), playing.as_deref()),
+        state: guest_state(
+            slot.state,
+            slot.about.as_deref(),
+            playing.as_deref(),
+            plain.as_deref(),
+        ),
     }));
     list
 }
 
 /// How a guest is doing with what the host is playing now. What it said about an earlier item says
-/// nothing about this one: it is still getting to it.
-fn guest_state(said: Readiness, about: Option<&str>, playing: Option<&str>) -> Readiness {
+/// nothing about this one: it is still getting to it. `playing` is the item's key (id and release)
+/// and `plain` its id: a device from before releases were shared names the id alone, which counts.
+fn guest_state(
+    said: Readiness,
+    about: Option<&str>,
+    playing: Option<&str>,
+    plain: Option<&str>,
+) -> Readiness {
     match playing {
-        Some(id) if about != Some(id) => Readiness::Loading,
+        Some(key) if about != Some(key) && about != plain => Readiness::Loading,
         _ => said,
     }
 }
@@ -318,6 +344,7 @@ fn as_of_now(state: Message) -> Message {
             playing: true,
             position,
             at,
+            choosing,
         } => {
             let now = now_ms();
             Message::State {
@@ -325,6 +352,7 @@ fn as_of_now(state: Message) -> Message {
                 playing: true,
                 position: position + now.saturating_sub(at) as f64 / 1000.0,
                 at: now,
+                choosing,
             }
         }
         other => other,
@@ -350,14 +378,31 @@ mod tests {
     fn a_guest_is_loading_what_it_has_not_yet_said_it_is_ready_for() {
         use Readiness::{Loading, Ready, Trouble};
         // Nothing playing: whatever the guest said stands.
-        assert_eq!(guest_state(Ready, None, None), Ready);
+        assert_eq!(guest_state(Ready, None, None, None), Ready);
         // Something is playing and the guest has said nothing, or said it of the one before.
-        assert_eq!(guest_state(Ready, None, Some("b")), Loading);
-        assert_eq!(guest_state(Ready, Some("a"), Some("b")), Loading);
+        assert_eq!(guest_state(Ready, None, Some("b"), Some("b")), Loading);
+        assert_eq!(guest_state(Ready, Some("a"), Some("b"), Some("b")), Loading);
         // Said of this one.
-        assert_eq!(guest_state(Ready, Some("b"), Some("b")), Ready);
-        assert_eq!(guest_state(Loading, Some("b"), Some("b")), Loading);
-        assert_eq!(guest_state(Trouble, Some("b"), Some("b")), Trouble);
+        assert_eq!(guest_state(Ready, Some("b"), Some("b"), Some("b")), Ready);
+        assert_eq!(
+            guest_state(Loading, Some("b"), Some("b"), Some("b")),
+            Loading
+        );
+        assert_eq!(
+            guest_state(Trouble, Some("b"), Some("b"), Some("b")),
+            Trouble
+        );
+        // The same film on another release is a new thing to get to.
+        assert_eq!(
+            guest_state(Ready, Some("m#x"), Some("m#y"), Some("m")),
+            Loading
+        );
+        assert_eq!(
+            guest_state(Ready, Some("m#y"), Some("m#y"), Some("m")),
+            Ready
+        );
+        // A device from before releases were shared says the plain id, which is enough.
+        assert_eq!(guest_state(Ready, Some("m"), Some("m#y"), Some("m")), Ready);
     }
 
     #[test]
@@ -367,6 +412,7 @@ mod tests {
             playing: true,
             position: 10.0,
             at: now_ms() - 5_000,
+            choosing: None,
         };
         let Message::State { position, .. } = as_of_now(said) else {
             panic!("still a state")
@@ -377,6 +423,7 @@ mod tests {
             playing: false,
             position: 10.0,
             at: 1,
+            choosing: None,
         };
         assert_eq!(as_of_now(paused.clone()), paused);
     }

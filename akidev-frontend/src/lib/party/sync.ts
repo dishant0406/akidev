@@ -1,7 +1,7 @@
 // Keeping a guest's player in step with the host's. The same rules, and the same tests, as
 // desktop/party/src/sync.rs.
 
-import type { Item } from "./protocol.ts";
+import type { Choosing, Item } from "./protocol.ts";
 
 /** A gap bigger than this is fixed with a seek; a smaller one by running a little faster or slower. */
 const SEEK_ABOVE = 0.8;
@@ -20,6 +20,8 @@ export interface Playback {
   item: Item | null;
   playing: boolean;
   position: number;
+  /** While the host has a panel open everyone waits, and the guests say so on screen. */
+  choosing?: Choosing | null;
 }
 
 /** What a guest should be playing, with the position where the host was when it was received. */
@@ -77,14 +79,19 @@ export class Clock {
 
 /** What the host said, moved on by how long ago it said it. */
 export function targetOf(
-  state: { item: Item | null; playing: boolean; position: number; at: number },
+  state: { item: Item | null; playing: boolean; position: number; at: number; choosing?: Choosing | null },
   clock: Clock,
   now: number,
   received = performance.now(),
 ): Target {
   const late = Math.min(MAX_LATE, Math.max(0, clock.hostTime(now) - state.at) / 1000);
   return {
-    playback: { item: state.item, playing: state.playing, position: state.playing ? state.position + late : state.position },
+    playback: {
+      item: state.item,
+      playing: state.playing,
+      position: state.playing ? state.position + late : state.position,
+      choosing: state.choosing ?? null,
+    },
     received,
   };
 }

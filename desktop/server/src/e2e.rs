@@ -150,7 +150,14 @@ async fn get(
 
 async fn deliver(rig: &Rig, path: &Path, hevc: bool) -> Result<crate::dto::Ready, String> {
     rig.player
-        .deliver(origin(path), "test release".into(), "torrent", hevc, None)
+        .deliver(
+            origin(path),
+            "test release".into(),
+            None,
+            "torrent",
+            hevc,
+            None,
+        )
         .await
         .map_err(|miss| match miss {
             crate::play::Miss::Busy => "busy".to_string(),
@@ -916,9 +923,11 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     host.publish(Playback {
         item: Some(Item::Video {
             id: "movie-tt1".into(),
+            release: Some("abc".into()),
         }),
         playing: true,
         position: 10.0,
+        choosing: None,
     })
     .await;
     let target = tokio::time::timeout(wait, async {
@@ -934,7 +943,8 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     assert_eq!(
         target.playback.item,
         Some(Item::Video {
-            id: "movie-tt1".into()
+            id: "movie-tt1".into(),
+            release: Some("abc".into())
         })
     );
     assert!(target.playback.playing);
@@ -954,7 +964,7 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     .await
     .expect("the host gets the request");
     // How a guest is doing with what is playing reaches the host.
-    let id = Some("movie-tt1".to_string());
+    let id = Some("movie-tt1#abc".to_string());
     guest.status(Readiness::Ready, id.clone()).await;
     host_sees(&mut host_events, Readiness::Ready).await;
     guest.status(Readiness::Loading, id.clone()).await;
@@ -978,9 +988,31 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     assert_eq!(
         told.playback.item,
         Some(Item::Video {
-            id: "movie-tt1".into()
+            id: "movie-tt1".into(),
+            release: Some("abc".into())
         })
     );
+    // While the host has a panel open, guests are told, and they get it with the paused picture.
+    host.publish(Playback {
+        item: told.playback.item.clone(),
+        playing: false,
+        position: 11.0,
+        choosing: Some("source".into()),
+    })
+    .await;
+    let waiting = tokio::time::timeout(wait, async {
+        loop {
+            if let Some(GuestEvent::Target(target)) = guest_events.recv().await
+                && target.playback.choosing.is_some()
+            {
+                return target;
+            }
+        }
+    })
+    .await
+    .expect("the guest is told the host is choosing");
+    assert_eq!(waiting.playback.choosing.as_deref(), Some("source"));
+    assert!(!waiting.playback.playing);
 
     // Ending the party tells everyone.
     host.end().await;

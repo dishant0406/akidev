@@ -104,6 +104,8 @@ export type PlayResult =
       /** "hls" when the container needed converting, "file" when the browser plays it directly. */
       stream_type: "file" | "hls";
       release: string | null;
+      /** The release's info hash, when the source has one: what a watch party names, and what `release` in the request plays. */
+      release_id?: string | null;
       source: string | null;
       /** Seconds, when known. */
       duration: number | null;

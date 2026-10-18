@@ -5,13 +5,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cleanName, guestState } from "../src/lib/party/connection.ts";
-import { parseMessage } from "../src/lib/party/protocol.ts";
+import { itemKey, parseMessage, sameItem } from "../src/lib/party/protocol.ts";
 import { Clock, fix, positionNow, targetOf } from "../src/lib/party/sync.ts";
 
 test("messages are read the way the desktop app writes them", () => {
   assert.deepEqual(
     parseMessage('{"t":"state","item":{"kind":"video","id":"movie-tt1"},"playing":true,"position":12.5,"at":1700000000000}'),
-    { t: "state", item: { kind: "video", id: "movie-tt1" }, playing: true, position: 12.5, at: 1700000000000 },
+    { t: "state", item: { kind: "video", id: "movie-tt1", release: null }, playing: true, position: 12.5, at: 1700000000000 },
   );
   assert.deepEqual(parseMessage('{"t":"pause"}'), { t: "pause" });
   assert.deepEqual(parseMessage('{"t":"seek","position":3.0}'), { t: "seek", position: 3 });
@@ -90,4 +90,42 @@ test("a guest's name is kept short and plain", () => {
   assert.equal(cleanName("  Sam \n"), "Sam");
   assert.equal(cleanName(""), "Guest");
   assert.equal(cleanName("x".repeat(100)).length, 24);
+});
+
+test("the release and what the host is choosing travel with the state, as the desktop app writes them", () => {
+  const text =
+    '{"t":"state","item":{"kind":"video","id":"movie-tt1","release":"abc123"},"playing":false,"position":4.0,"at":7,"choosing":"source"}';
+  assert.deepEqual(parseMessage(text), {
+    t: "state",
+    item: { kind: "video", id: "movie-tt1", release: "abc123" },
+    playing: false,
+    position: 4,
+    at: 7,
+    choosing: "source",
+  });
+  // A state from a device that predates both fields still reads, and an unknown panel is ignored.
+  const old = parseMessage('{"t":"state","item":{"kind":"video","id":"movie-tt1"},"playing":true,"position":1,"at":1,"choosing":"what"}');
+  assert.equal(old?.t === "state" && old.choosing, undefined);
+});
+
+test("a status names the release too, so a new release is something to get to", () => {
+  const a = { kind: "video" as const, id: "m", release: "x" };
+  const b = { kind: "video" as const, id: "m", release: "y" };
+  assert.notEqual(itemKey(a), itemKey(b));
+  assert.equal(itemKey({ kind: "video", id: "m", release: null }), "m");
+  assert.equal(sameItem(a, b), false);
+  assert.equal(sameItem(a, { ...a }), true);
+  // The same film on another release is a new thing to get to, and a device from before releases
+  // were shared says the plain id, which is enough.
+  assert.equal(guestState("ready", "m#x", "m#y", "m"), "loading");
+  assert.equal(guestState("ready", "m#y", "m#y", "m"), "ready");
+  assert.equal(guestState("ready", "m", "m#y", "m"), "ready");
+});
+
+test("what the host is choosing reaches the guest's target", () => {
+  const clock = new Clock();
+  clock.sample(1000, 6010, 1020);
+  const target = targetOf({ item: null, playing: false, position: 3, at: 7000, choosing: "episode" }, clock, 2400);
+  assert.equal(target.playback.choosing, "episode");
+  assert.equal(targetOf({ item: null, playing: false, position: 3, at: 7000 }, clock, 2400).playback.choosing, null);
 });

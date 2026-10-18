@@ -24,22 +24,42 @@ One JSON object per data-channel message, as text. `t` says which. The Rust list
 | `t` | from | fields | meaning |
 | --- | --- | --- | --- |
 | `hello` | guest | `name` | First message: who is joining. |
-| `state` | host | `item`, `playing`, `position`, `at` | What is playing. `position` is seconds, read at `at` (the host's clock, milliseconds since 1970). Sent when it changes, and every 2 seconds while playing. A guest who joins is sent the last one at once. |
+| `state` | host | `item`, `playing`, `position`, `at`, `choosing` | What is playing. `position` is seconds, read at `at` (the host's clock, milliseconds since 1970). Sent when it changes, and every 2 seconds while playing. A guest who joins is sent the last one at once. |
 | `members` | host | `members: [{ name, host, state }]` | Who is in the party, and how each guest is doing with what is playing: `state` is `ready`, `loading` or `trouble`. |
 | `play`, `pause` | guest | | Asks the host to play or pause. |
 | `seek` | guest | `position` | Asks the host to seek. |
-| `status` | guest | `state`, `id` | How this device is doing with the item whose id is `id`: `ready` (can play it now), `loading` (still finding a source or buffering) or `trouble` (cannot find or play it). |
+| `status` | guest | `state`, `id` | How this device is doing with the item whose key is `id` (the media id, and for a video `#` and its release): `ready` (can play it now), `loading` (still finding a source or buffering) or `trouble` (cannot find or play it). |
 | `ping` | guest | `id`, `sent` | Measures the way and the clock difference. |
 | `pong` | host | `id`, `sent`, `at` | The answer: `sent` as it came, `at` the host's clock. |
 | `bye` | either | | Leaving. From the host it ends the party. |
 
-`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5" }` (a media id, as
-in `desktop/server/API.md`), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
+`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<info hash>" }` (a media id, as
+in `desktop/server/API.md`, and the release the host plays; `release` is optional), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
 "cover" }` (the last three are only what a guest shows before its own copy has loaded).
 
 Everyone can ask to play, pause or seek; only the host acts, and only the host chooses what plays. A guest that presses pause sends `pause`; the host pauses
 and sends `state`, and every device, the asker included, follows it. That gives one order of
 events, so two people pressing things at once cannot leave devices disagreeing.
+
+## The same source
+
+A video item carries the release the host is playing (its info hash). A guest asks for exactly that
+release (`release` in `POST /v1/play`, or the desktop app's `resolve_release`), so everyone watches the
+same source. If the release is gone the guest plays the best one it can find. When the host picks
+another release, the item changes (same `id`, new `release`); guests do not change page, they switch
+release and seek to where the host is. The guest's `status` names the item by key, `id` plus `#` plus
+`release`, so a guest that was ready for the old release is loading the new one until it says so, and
+the host holds the start as it does for a new film. A device from before releases were shared says the
+plain id, which counts as ready for any release of that film. Only the host chooses the source, so a
+guest's window has no source button.
+
+## Waiting while the host chooses
+
+While the host has a panel open (sources, episodes or subtitles), its picture is paused and `state`
+carries `choosing: "source" | "episode" | "subtitles"` with `playing: false`. A guest pauses and
+shows "Choosing a source" (or an episode, or subtitles) over the picture. When the host closes the
+panel it plays again if it was playing, and `choosing` is gone from the next `state`. An old device that
+does not know the field still pauses, because `playing` is false.
 
 ## Keeping in step
 

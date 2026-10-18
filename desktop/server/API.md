@@ -77,7 +77,7 @@ Finding a source searches indexers and can take up to a minute, so the request s
 
 ```json
 { "available": true, "url": "https://api.akidev.live/s/<token>", "stream_type": "file",
-  "release": "Breaking Bad S01E01 1080p", "source": "torrent", "duration": 3480.5,
+  "release": "Breaking Bad S01E01 1080p", "release_id": "ab12...40 hex characters", "source": "torrent", "duration": 3480.5,
   "subtitles": [{ "label": "English", "lang": "en", "url": "https://.../s/<token>/sub/0.vtt" }] }
 ```
 
@@ -88,6 +88,9 @@ set) or the plays of ten minutes.
 
 The origin of `url` is `STREAM_URL` when that is set (video can be served from a host of its own),
 otherwise `PUBLIC_URL`.
+
+`release_id` (absent when the source has no hash) is the info hash of the release being played: pass it back as
+`release` to play exactly that one, which is how a watch party puts every device on the same source.
 
 `stream_type` is `file` (give `url` to a `<video>` element) or `hls` (attach hls.js to `url`;
 Safari plays it natively). `duration` is seconds when known. `subtitles` is always empty now (kept so older clients parse the reply); use
