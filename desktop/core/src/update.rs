@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
-/// The GitHub repository releases are published in. It may be renamed; GitHub redirects.
-pub const REPO: &str = "dishant0406/konflix-mono";
+/// The GitHub repository releases are published in. It has been renamed once (from konflix-mono); GitHub redirects the old name, so installed apps still find it.
+pub const REPO: &str = "dishant0406/akidev";
 
 /// Shown when a release has no page of its own to open.
-pub const RELEASES_PAGE: &str = "https://github.com/dishant0406/konflix-mono/releases";
+pub const RELEASES_PAGE: &str = "https://github.com/dishant0406/akidev/releases";
 
 /// Hosts an installer or its hash may be fetched from, and be redirected to.
 const ALLOWED_HOSTS: [&str; 3] = [

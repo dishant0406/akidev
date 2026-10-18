@@ -11,7 +11,7 @@ export const SITE_DOMAIN = process.env.NEXT_PUBLIC_SITE_DOMAIN || "akidev.live";
 export const CONTENT_TYPES: ContentType[] = ["anime", "series", "movie"];
 
 /** Where the source and the desktop releases live. */
-export const REPO_URL = "https://github.com/dishant0406/konflix-mono";
+export const REPO_URL = "https://github.com/dishant0406/akidev";
 
 /** The attribution the metadata providers require. */
 export const ATTRIBUTION =

@@ -186,7 +186,7 @@ DirectX shaders are compiled by tools that only exist on Windows.
 
 The app looks for a newer version of itself about 20 seconds after it starts and then every six
 hours (Settings, "Check for updates", on by default). It asks the GitHub releases of
-`dishant0406/konflix-mono` (one constant, `REPO` in `core/src/update.rs`, so a rename is a one-line
+`dishant0406/akidev` (one constant, `REPO` in `core/src/update.rs`, so a rename is a one-line
 change) for the newest non-draft, non-prerelease tag with this platform's prefix,
 `desktop-mac-v<version>` or `desktop-windows-v<version>`, and compares it by number with the
 running version (0.1.10 is newer than 0.1.9). When there is one, a small download icon with a
