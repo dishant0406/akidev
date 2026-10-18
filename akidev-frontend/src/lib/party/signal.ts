@@ -5,6 +5,9 @@ import { API_BASE } from "../api.ts";
 /** The party is over or never was, or the host's secret is not accepted: asking again is no use. */
 export class Gone extends Error {}
 
+/** The server refused: the request was wrong or the code belongs to another party. */
+export class Refused extends Error {}
+
 export interface IceServer {
   urls: string[];
   username?: string;
@@ -46,7 +49,8 @@ async function call(path: string, options: { method?: string; token?: string; bo
     body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
       ? (body as { error: string }).error
       : `The party server answered ${response.status}.`;
-  throw response.status === 404 || response.status === 401 ? new Gone(message) : new Error(message);
+  if (response.status === 404 || response.status === 401) throw new Gone(message);
+  throw response.status === 400 || response.status === 409 ? new Refused(message) : new Error(message);
 }
 
 export async function create(): Promise<{ code: string; token: string }> {
@@ -64,9 +68,25 @@ export async function join(code: string, offer: string): Promise<string> {
   return ((await response.json()) as { guest: string }).guest;
 }
 
-/** The offers waiting for the host. Empty when none came within the wait. */
-export async function offers(code: string, token: string, signal: AbortSignal): Promise<{ guest: string; offer: string }[]> {
-  const response = await call(`/${code}/offers`, { token, timeout: 40_000, signal });
+/**
+ * Opens the party `code` again for the host that holds `token`: the server forgot it (it was
+ * restarted, or the host's device slept) or the page was reloaded. False means the server will not
+ * have it (the code is another party's), so asking again is no use.
+ */
+export async function register(code: string, token: string, signal?: AbortSignal): Promise<boolean> {
+  try {
+    await call(`/${code}`, { method: "PUT", token, body: { host_token: token }, signal });
+    return true;
+  } catch (error) {
+    // 400 and 409 are the server saying no; a 404 or 401 cannot come from this call.
+    if (error instanceof Refused) return false;
+    throw error;
+  }
+}
+
+/** The offers waiting for the host. Empty when none came within the wait. `active` is the guests the host has a connection to. */
+export async function offers(code: string, token: string, active: string[], signal: AbortSignal): Promise<{ guest: string; offer: string }[]> {
+  const response = await call(`/${code}/offers?active=${encodeURIComponent(active.join(","))}`, { token, timeout: 40_000, signal });
   return ((await response.json()) as { offers: { guest: string; offer: string }[] }).offers;
 }
 

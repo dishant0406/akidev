@@ -57,6 +57,10 @@ const CATCH_UP_EVERY: Duration = Duration::from_secs(1);
 const SEEK_JUMP: f64 = 1.;
 /// A host with company waits at least this long, and at most the longer one, for guests that are
 /// still loading before it starts.
+/// How long a click waits to see whether it is the first of a double click.
+const DOUBLE_CLICK: Duration = Duration::from_millis(250);
+/// A host is told a guest is buffering no more often than this.
+const BUFFER_PING_EVERY: Duration = Duration::from_secs(12);
 const HOLD_AT_LEAST: Duration = Duration::from_secs(1);
 const HOLD_AT_MOST: Duration = Duration::from_secs(45);
 
@@ -253,6 +257,12 @@ pub struct WatchPage {
     /// The host's picture was paused because a panel opened; it starts again when the panel closes.
     panel_pause: bool,
     last_catch_up: Instant,
+    /// Counts clicks on the picture, so one that a double click follows is dropped.
+    click_seq: u64,
+    /// The role last seen, so a change of role starts the party's bookkeeping afresh.
+    last_role: Role,
+    /// When the host was last told a guest is buffering, so it is told now and then, not every look.
+    last_buffer_ping: Option<Instant>,
     _party_changes: Subscription,
     _party_requests: Subscription,
     _tick: Task<()>,
@@ -307,7 +317,14 @@ impl WatchPage {
 
         let party = party(cx);
         let party_changes = cx.observe(&party, |page, party, cx| {
-            page.guest = party.read(cx).role() == Role::Guest;
+            let role = party.read(cx).role();
+            page.guest = role == Role::Guest;
+            // A new role is a new party, so what was last told to the old one is not remembered.
+            if role != page.last_role {
+                page.last_role = role;
+                page.party_sync = PartySync::default();
+                page.panel_pause = false;
+            }
             cx.notify();
         });
         let party_requests = cx.subscribe(&party, |page, _, event: &PartyEvent, cx| {
@@ -354,6 +371,9 @@ impl WatchPage {
             party_tried: None,
             panel_pause: false,
             last_catch_up: Instant::now(),
+            click_seq: 0,
+            last_role: Role::None,
+            last_buffer_ping: None,
             _party_changes: party_changes,
             _party_requests: party_requests,
             _tick: tick,
@@ -365,11 +385,11 @@ impl WatchPage {
     /// Looks for a source and starts playing it. `fresh` forgets a torrent that already
     /// failed, for a retry.
     fn start(&mut self, fresh: bool, cx: &mut Context<Self>) {
-        // A guest plays the release the host plays; if that is gone, the best there is.
+        // A guest plays the very release the host plays, so everyone sees the same cut; if that is
+        // gone it says so, rather than play another one out of step.
         let wanted = self.party_release(cx);
         self.party_tried = wanted.clone();
-        let or_best = wanted.is_some();
-        self.begin(wanted, fresh, or_best, cx);
+        self.begin(wanted, fresh, cx);
     }
 
     /// The release the party's host is playing of this very film or episode, for a guest.
@@ -397,22 +417,16 @@ impl WatchPage {
                 }),
                 playing: false,
                 position: self.state.position,
-                choosing: None,
+                choosing: Some("finding".into()),
             };
             self.party
                 .update(cx, |party, _| party.publish(playback, false));
         }
-        self.begin(Some(info_hash), false, false, cx);
+        self.begin(Some(info_hash), false, cx);
     }
 
     /// Opens a release and plays it: the one asked for, or else the best that works.
-    fn begin(
-        &mut self,
-        release: Option<String>,
-        fresh: bool,
-        or_best: bool,
-        cx: &mut Context<Self>,
-    ) {
+    fn begin(&mut self, release: Option<String>, fresh: bool, cx: &mut Context<Self>) {
         self.save_progress(cx);
         if release.is_some() && self.state.position > 0. {
             self.resume_from = Some(self.state.position);
@@ -442,15 +456,7 @@ impl WatchPage {
                 }
             };
             match release {
-                Some(info_hash) => {
-                    let found = streamer.resolve_release(&id, &info_hash).await;
-                    // A guest asked for the host's release; if it is gone, it plays the best it can.
-                    if or_best && matches!(found, Resolution::Unavailable { .. }) {
-                        streamer.resolve(&id, fresh).await
-                    } else {
-                        found
-                    }
-                }
+                Some(info_hash) => streamer.resolve_release(&id, &info_hash).await,
                 None => streamer.resolve(&id, fresh).await,
             }
         });
@@ -699,15 +705,47 @@ impl WatchPage {
         match self.party.read(cx).role() {
             Role::Host => {
                 self.pause_for_panel(player, cx);
-                self.tell_party(cx)
+                self.tell_party(cx);
+                self.ping_for_buffering(cx);
             }
-            Role::Guest => self.follow_party(player, cx),
+            Role::Guest => {
+                self.follow_party(player, cx);
+                let party = self.party.read(cx);
+                if party.reconnecting() {
+                    self.say("Getting back into the party…", cx);
+                } else if party.host_silent() {
+                    self.say("No word from the host…", cx);
+                }
+            }
             Role::None => {}
         }
         if self.party.read(cx).role() != Role::Guest && self.speed != 1. {
             self.speed = 1.;
             player.set_speed(1.);
         }
+    }
+
+    /// A host whose picture is moving while a guest is still buffering is told so now and then:
+    /// the guest catches up on its own, and the host may prefer to pause and wait for it.
+    fn ping_for_buffering(&mut self, cx: &mut Context<Self>) {
+        if self.holding.is_some() || self.state.paused {
+            return;
+        }
+        let waiting = self.party.read(cx).waiting_for();
+        if waiting.is_empty()
+            || self
+                .last_buffer_ping
+                .is_some_and(|at| at.elapsed() < BUFFER_PING_EVERY)
+        {
+            return;
+        }
+        self.last_buffer_ping = Some(Instant::now());
+        let who = waiting.join(", ");
+        let verb = if waiting.len() > 1 { "are" } else { "is" };
+        self.say(
+            format!("{who} {verb} buffering. Pause to wait for them."),
+            cx,
+        );
     }
 
     /// What is playing, as the party names it: the film and the release this window plays.
@@ -730,13 +768,16 @@ impl WatchPage {
     /// A host with a panel open pauses the picture, so everyone waits while it chooses, and
     /// starts it again when the panel closes, if it was playing.
     fn pause_for_panel(&mut self, player: &Player, cx: &mut Context<Self>) {
-        if !self.party.read(cx).has_company() || !self.is_the_party_item(cx) {
-            return;
-        }
-        if self.panel.is_some() && !self.panel_pause && !self.state.paused {
+        let opens = self.panel.is_some()
+            && !self.panel_pause
+            && !self.state.paused
+            && self.party.read(cx).has_company()
+            && self.is_the_party_item(cx);
+        if opens {
             player.set_pause(true);
             self.panel_pause = true;
         } else if self.panel.is_none() && self.panel_pause {
+            // Even if the guests have gone in the meantime.
             self.panel_pause = false;
             // A new release holds the start itself, until the guests have it.
             if self.holding.is_none() && self.state.paused {
@@ -773,7 +814,7 @@ impl WatchPage {
         let due = self
             .party_sync
             .told
-            .is_none_or(|told| playing && told.elapsed() >= PARTY_BEAT);
+            .is_none_or(|told| told.elapsed() >= PARTY_BEAT);
         if !changed && !due {
             return;
         }
@@ -819,7 +860,7 @@ impl WatchPage {
         {
             self.party_tried = Some(release.clone());
             self.resume_from = Some(target.position_now());
-            self.begin(Some(release.clone()), false, true, cx);
+            self.begin(Some(release.clone()), false, cx);
             return;
         }
         // The host has a panel open, so everyone waits with the picture paused.
@@ -896,6 +937,25 @@ impl WatchPage {
         }
     }
 
+    /// A click plays or pauses, a double click is fullscreen and plays nothing: so a click waits a
+    /// moment to see whether another follows.
+    fn clicked_picture(&mut self, count: usize, cx: &mut Context<Self>) {
+        self.click_seq += 1;
+        if count > 1 {
+            return;
+        }
+        let seq = self.click_seq;
+        cx.spawn(async move |page, cx| {
+            cx.background_executor().timer(DOUBLE_CLICK).await;
+            let _ = page.update(cx, |page, cx| {
+                if page.click_seq == seq {
+                    page.toggle_pause(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
     /// Plays or pauses. A guest asks the host, and the picture follows when the host does it.
     fn toggle_pause(&mut self, cx: &mut Context<Self>) {
         if self.guest {
@@ -913,7 +973,11 @@ impl WatchPage {
 
     fn seek_by(&mut self, seconds: f64, cx: &mut Context<Self>) {
         if self.guest {
-            let to = (self.state.position + seconds).clamp(0., self.state.duration.max(0.));
+            // With no length known there is nowhere to clamp to, and a seek would only rewind.
+            if self.state.duration <= 0. {
+                return;
+            }
+            let to = (self.state.position + seconds).clamp(0., self.state.duration);
             self.party.read(cx).ask(Message::Seek { position: to });
             self.activity(cx);
             return;
@@ -1701,22 +1765,44 @@ impl WatchPage {
                 let next = self.neighbour(1);
                 // Trying the same source again rarely helps, so a different one leads; the episodes
                 // either side are plain text.
-                let mut actions = vec![
-                    primary_button(
-                        "choose-source",
-                        "Choose another source",
-                        None,
-                        cx.listener(|page, _, _, cx| page.toggle_panel(Panel::Sources, cx)),
-                    )
-                    .into_any_element(),
-                    secondary_button(
-                        "retry",
-                        "Try again",
-                        None,
-                        cx.listener(|page, _, _, cx| page.start(true, cx)),
-                    )
-                    .into_any_element(),
-                ];
+                let mut actions = if self.guest {
+                    // A guest plays what the host plays: another source would be out of step.
+                    vec![
+                        primary_button(
+                            "retry",
+                            "Try again",
+                            None,
+                            cx.listener(|page, _, _, cx| page.start(true, cx)),
+                        )
+                        .into_any_element(),
+                        secondary_button(
+                            "leave-party",
+                            "Leave the party",
+                            None,
+                            cx.listener(|page, _, _, cx| {
+                                page.party.update(cx, |party, cx| party.leave(cx))
+                            }),
+                        )
+                        .into_any_element(),
+                    ]
+                } else {
+                    vec![
+                        primary_button(
+                            "choose-source",
+                            "Choose another source",
+                            None,
+                            cx.listener(|page, _, _, cx| page.toggle_panel(Panel::Sources, cx)),
+                        )
+                        .into_any_element(),
+                        secondary_button(
+                            "retry",
+                            "Try again",
+                            None,
+                            cx.listener(|page, _, _, cx| page.start(true, cx)),
+                        )
+                        .into_any_element(),
+                    ]
+                };
                 if let Some(id) = previous {
                     actions.push(
                         ghost_button("try-previous", "Previous episode", move |_, _, cx| {
@@ -1764,8 +1850,8 @@ impl WatchPage {
                             .top_0()
                             .left_0()
                             .size_full()
-                            .on_click(cx.listener(|page, _, _, cx| {
-                                page.with_player(cx, Player::toggle_pause)
+                            .on_click(cx.listener(|page, event: &ClickEvent, _, cx| {
+                                page.clicked_picture(event.click_count(), cx)
                             }))
                             .on_double_click(|_, window, _| window.toggle_fullscreen()),
                     )
@@ -1804,6 +1890,7 @@ impl WatchPage {
                         let title = match what.as_str() {
                             "episode" => "Choosing an episode",
                             "subtitles" => "Choosing subtitles",
+                            "finding" => "Finding a source",
                             _ => "Choosing a source",
                         };
                         div()

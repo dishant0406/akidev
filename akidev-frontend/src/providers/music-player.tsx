@@ -59,6 +59,8 @@ const PARTY_BEAT = 2000;
 
 /** How often a guest checks it is in step with the host. */
 const PARTY_CHECK = 1000;
+/** A guest does not seek again this soon after a seek. */
+const SEEK_COOLDOWN = 2000;
 
 const GUEST_MESSAGE = "Only the host chooses what plays.";
 
@@ -252,11 +254,12 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
     [current],
   );
   useEffect(() => publish(false), [publish, playing, party.role]);
+  // The position is said every couple of seconds, paused too, so a guest can tell a host that is still there from one that is gone.
   useEffect(() => {
-    if (!playing || party.role !== "host") return undefined;
+    if (party.role !== "host") return undefined;
     const timer = setInterval(() => publish(true), PARTY_BEAT);
     return () => clearInterval(timer);
-  }, [playing, party.role, publish]);
+  }, [party.role, publish]);
 
   // Hosting: what guests ask for. Only while the music is what the party is playing.
   useEffect(
@@ -275,9 +278,10 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
   useEffect(() => {
     if (party.role !== "guest") return undefined;
     const element = audio.current;
+    let lastSeek = 0;
     const follow = () => {
       const target = partyNow.current.target;
-      if (!element || !target) return;
+      if (!element || !target || element.seeking) return;
       const item = target.playback.item;
       if (item?.kind !== "music") {
         // The party is playing something else, which has its own player.
@@ -291,9 +295,21 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
       // Until the track has loaded there is no position to correct.
       if (element.readyState < 1) return;
       const change = fix(element.currentTime, positionNow(target), target.playback.playing);
-      if (change.seek !== null) element.currentTime = change.seek;
+      // A seek is not repeated at once: a track that has not got that far yet would be asked again and again.
+      if (change.seek !== null && performance.now() - lastSeek > SEEK_COOLDOWN) {
+        element.currentTime = change.seek;
+        lastSeek = performance.now();
+      }
       element.playbackRate = change.speed;
-      if (target.playback.playing && element.paused) element.play().catch(() => {});
+      if (target.playback.playing && element.paused) {
+        element.play().catch((failure: unknown) => {
+          // The browser wants a tap before it plays: say so once, not every second.
+          if (failure instanceof DOMException && failure.name === "NotAllowedError" && !element.dataset.asked) {
+            element.dataset.asked = "1";
+            toast("Press play to join the music.");
+          }
+        });
+      }
       else if (!target.playback.playing && !element.paused) element.pause();
     };
     follow();

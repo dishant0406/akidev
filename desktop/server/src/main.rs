@@ -88,6 +88,11 @@ async fn run() -> anyhow::Result<()> {
     if !ffmpeg {
         tracing::warn!("ffmpeg or ffprobe is missing: only MP4 files can be played");
     }
+    if !party::relay_is_set_up(&settings) {
+        tracing::warn!(
+            "watch parties have no relay (CF_TURN_KEY_ID and CF_TURN_TOKEN are not set): devices behind a strict network cannot connect"
+        );
+    }
 
     let streamer =
         Arc::new(Streamer::engine_only(settings.core(), settings.cache_dir.clone()).await?);

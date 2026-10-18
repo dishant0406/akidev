@@ -51,29 +51,45 @@ export function fix(local: number, target: number, playing: boolean): Fix {
   return { seek: null, speed: gap > 0 ? 1 - NUDGE : 1 + NUDGE };
 }
 
+/** How long a reading of the host's clock is trusted. */
+const READING_FOR = 60_000;
+/** A round trip longer than this says nothing about the clock. */
+const LONGEST_TRIP = 10_000;
+
+/** Milliseconds on this device's steady clock, which a change of the clock (network time, wake from sleep) cannot move. */
+export function steady(): number {
+  return Math.round(performance.now());
+}
+
 /**
- * The difference between this device's clock and the host's, from the quickest round trip seen
- * (the quickest is the least disturbed, so the closest to the truth).
+ * The difference between the host's clock and this device's steady clock, from the quickest round
+ * trip in the last minute (the quickest is the least disturbed, so the closest to the truth).
  */
 export class Clock {
-  private best: { roundTrip: number; offset: number } | null = null;
+  /** When it was read (steady clock), how long the round trip took, and the offset it gave. */
+  private readings: { read: number; trip: number; offset: number }[] = [];
 
-  /** A `pong`: sent at `sent` (this clock), answered at `at` (host clock), received at `now`. */
+  /** A `pong`: sent at `sent` and received at `now` (both on the steady clock), answered at `at` (the host's clock). */
   sample(sent: number, at: number, now: number) {
-    const roundTrip = Math.max(0, now - sent);
+    const trip = Math.max(0, now - sent);
+    if (trip > LONGEST_TRIP) return;
     // The host read its clock about half way.
-    const offset = at + Math.floor(roundTrip / 2) - now;
-    if (!this.best || roundTrip <= this.best.roundTrip) this.best = { roundTrip, offset };
+    this.readings.push({ read: now, trip, offset: at + Math.floor(trip / 2) - now });
+    this.readings = this.readings.filter((reading) => now - reading.read <= READING_FOR);
   }
 
   /** Whether a `pong` has been seen, so the clocks are known. */
   get known(): boolean {
-    return this.best !== null;
+    return this.readings.length > 0;
   }
 
-  /** The host's clock now, when this device's reads `now`. */
+  /** The host's clock now, when this device's steady clock reads `now`. The newest of the quickest readings wins a tie. */
   hostTime(now: number): number {
-    return Math.max(0, now + (this.best?.offset ?? 0));
+    let best: { read: number; trip: number; offset: number } | null = null;
+    for (const reading of this.readings) {
+      if (!best || reading.trip < best.trip || (reading.trip === best.trip && reading.read > best.read)) best = reading;
+    }
+    return Math.max(0, now + (best?.offset ?? 0));
   }
 }
 

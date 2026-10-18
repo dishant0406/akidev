@@ -122,6 +122,8 @@ pub struct MusicPlayer {
     radio_for: Option<String>,
     party: Option<Joined>,
     party_sync: PartySync,
+    /// The role last seen, so a change of role starts the party's bookkeeping afresh.
+    last_role: Role,
     /// The speed a guest was last set to, so it is only set when it changes.
     speed: f64,
     last_catch_up: Instant,
@@ -157,6 +159,7 @@ impl MusicPlayer {
             radio_for: None,
             party: None,
             party_sync: PartySync::default(),
+            last_role: Role::None,
             speed: 1.,
             last_catch_up: Instant::now(),
         }
@@ -389,6 +392,11 @@ impl MusicPlayer {
             return;
         };
         let role = party.read(cx).role();
+        // A new role is a new party, so what was last told to the old one is not remembered.
+        if role != self.last_role {
+            self.last_role = role;
+            self.party_sync = PartySync::default();
+        }
         // A guest tells the host how it is doing with the track, while the track is what the party
         // is playing.
         if let (Role::Guest, Some(track)) = (role, self.current())
@@ -460,7 +468,7 @@ impl MusicPlayer {
         let due = self
             .party_sync
             .told
-            .is_none_or(|told| playing && told.elapsed() >= PARTY_BEAT);
+            .is_none_or(|told| told.elapsed() >= PARTY_BEAT);
         if !changed && !due {
             return;
         }

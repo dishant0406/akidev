@@ -156,8 +156,20 @@ fn quit_with_the_window(cx: &mut App) {
     // sockets close with the process.
     cx.on_app_quit(|cx| {
         let dir = cx.global::<backend::Backend>().downloads_dir.clone();
+        let farewell = cx
+            .try_global::<party::PartyHandle>()
+            .map(|handle| handle.0.clone())
+            .map(|party| party.read(cx).farewell());
         async move {
             let _ = std::fs::remove_dir_all(dir);
+            if let Some(farewell) = farewell {
+                // The party is told, but a network that is not answering does not hold the quit.
+                runtime::run(async move {
+                    let _ =
+                        tokio::time::timeout(std::time::Duration::from_millis(800), farewell).await;
+                })
+                .await;
+            }
             runtime::run(analytics::finish()).await;
         }
     })

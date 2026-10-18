@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/button";
 import Episodes from "@/components/episodes";
@@ -44,14 +44,14 @@ export default function WatchPage() {
   const resumeFrom = pick ? pick.start : startAt;
   const party = useParty();
   const guest = party.role === "guest";
-  // A guest plays the release the host plays; if it is no longer listed, the best there is.
+  // A guest plays the very release the host plays, so everyone sees the same cut; if it cannot be
+  // had, the guest says so rather than play another one out of step. The release stays when the
+  // party ends, so the picture carries on instead of starting over on another source.
   const partyRelease = guest && party.item?.kind === "video" && party.item.id === id ? (party.item.release ?? null) : null;
-  const [missed, setMissed] = useState<string | null>(null);
-  const wanted = partyRelease && missed !== partyRelease ? partyRelease : null;
-  const stream = usePlay(id, resumeFrom, wanted ?? pick?.release.id);
-  useEffect(() => {
-    if (partyRelease && partyRelease !== missed && (stream.isError || (stream.data && !stream.data.available))) setMissed(partyRelease);
-  }, [partyRelease, missed, stream.isError, stream.data]);
+  const kept = useRef<{ id: string; release: string } | null>(null);
+  if (partyRelease && id) kept.current = { id, release: partyRelease };
+  const heldRelease = !pick && kept.current && kept.current.id === id ? kept.current.release : undefined;
+  const stream = usePlay(id, resumeFrom, partyRelease ?? pick?.release.id ?? heldRelease);
   const subtitles = useSubtitles(id);
   // A host that picks another release says so at once, while it is still finding it, so the guests
   // start finding the same one instead of waiting. (The player says it again, playing, once it loads.)
@@ -60,11 +60,19 @@ export default function WatchPage() {
   const pickedStart = pick?.start ?? 0;
   useEffect(() => {
     if (partyRole !== "host" || !pickedRelease || !id) return;
-    publishParty({ item: { kind: "video", id, release: pickedRelease }, playing: false, position: pickedStart });
+    publishParty({
+      item: { kind: "video", id, release: pickedRelease },
+      playing: false,
+      position: pickedStart,
+      choosing: "finding",
+    });
   }, [pickedRelease]); // eslint-disable-line react-hooks/exhaustive-deps
   /** The episode whose source picker is open over the "no source" screen. */
   const [choosing, setChoosing] = useState<string | null>(null);
-  const [playbackError, setPlaybackError] = useState<{ id: string; message: string } | null>(null);
+  const [playbackError, setPlaybackError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
 
   const data = detail.data;
   const card = data?.media;
@@ -73,10 +81,7 @@ export default function WatchPage() {
 
   const leave = useCallback(() => router.push(key ? titlePath(key) : ROUTES.HOME), [key, router]);
   // Swapping episodes replaces the page, so Back still leaves the show.
-  const go = useCallback(
-    (episode: string) => key && router.replace(watchPath(key, episode)),
-    [key, router],
-  );
+  const go = useCallback((episode: string) => key && router.replace(watchPath(key, episode)), [key, router]);
 
   const onProgress = useCallback(
     (position: number, duration: number) => {
@@ -111,7 +116,11 @@ export default function WatchPage() {
     (release: Release, position: number) => {
       if (!id) return;
       setChoosing(null);
-      setPicked({ episode: id, release, start: position >= RESUME_AFTER ? Math.floor(position) : null });
+      setPicked({
+        episode: id,
+        release,
+        start: position >= RESUME_AFTER ? Math.floor(position) : null,
+      });
     },
     [id],
   );
@@ -144,24 +153,33 @@ export default function WatchPage() {
 
   // Retrying the same source rarely helps, so a different one leads; the episodes either side are
   // plain text links.
-  const ways = (retry: () => void) => (
-    <>
-      <Button onClick={() => setChoosing(id ?? null)}>Choose another source</Button>
-      <Button look="secondary" onClick={retry}>
-        Try again
-      </Button>
-      {previous && (
-        <Button look="ghost" onClick={() => go(previous)}>
-          Previous episode
+  const ways = (retry: () => void) =>
+    guest ? (
+      // A guest plays what the host plays: another source would be out of step.
+      <>
+        <Button onClick={retry}>Try again</Button>
+        <Button look="secondary" onClick={() => party.leave()}>
+          Leave the party
         </Button>
-      )}
-      {next && (
-        <Button look="ghost" onClick={() => go(next)}>
-          Next episode
+      </>
+    ) : (
+      <>
+        <Button onClick={() => setChoosing(id ?? null)}>Choose another source</Button>
+        <Button look="secondary" onClick={retry}>
+          Try again
         </Button>
-      )}
-    </>
-  );
+        {previous && (
+          <Button look="ghost" onClick={() => go(previous)}>
+            Previous episode
+          </Button>
+        )}
+        {next && (
+          <Button look="ghost" onClick={() => go(next)}>
+            Next episode
+          </Button>
+        )}
+      </>
+    );
 
   if (stream.isError) {
     return status(
@@ -202,33 +220,38 @@ export default function WatchPage() {
         startAt={resumeFrom}
         onBack={leave}
         onError={(message) => {
-          track("playback_failed", { title_key: key ?? null, stream_type: link.stream_type, message });
+          track("playback_failed", {
+            title_key: key ?? null,
+            stream_type: link.stream_type,
+            message,
+          });
           if (id) setPlaybackError({ id, message });
         }}
-        onStarted={() => track("playback_started", { title_key: key ?? null, stream_type: link.stream_type })}
+        onStarted={() =>
+          track("playback_started", {
+            title_key: key ?? null,
+            stream_type: link.stream_type,
+          })
+        }
         onProgress={onProgress}
         onNext={next && !guest ? onNext : undefined}
         sources={
           guest
             ? undefined
             : ({ position, close }) => (
-          <Sources
-            id={id}
-            picked={pick?.release.id ?? null}
-            playedTitle={link.release}
-            onPick={(release) => {
-              close();
-              // The one already playing is not started over.
-              if (release.id !== pick?.release.id && (pick || release.title !== link.release)) choose(release, position());
-            }}
-          />
+                <Sources
+                  id={id}
+                  picked={pick?.release.id ?? null}
+                  playedTitle={link.release}
+                  onPick={(release) => {
+                    close();
+                    // The one already playing is not started over.
+                    if (release.id !== pick?.release.id && (pick || release.title !== link.release)) choose(release, position());
+                  }}
+                />
               )
         }
-        episodes={
-          !isFilm && !guest && key && data ? (
-            <Episodes titleKey={key} count={count} list={data.episodes} currentId={id} compact />
-          ) : undefined
-        }
+        episodes={!isFilm && !guest && key && data ? <Episodes titleKey={key} count={count} list={data.episodes} currentId={id} compact /> : undefined}
       />
       {guest && party.item?.kind === "video" && party.item.id !== id && (
         <div className="fixed left-1/2 top-16 z-[70] flex -translate-x-1/2 items-center gap-3 material-panel rounded-xl px-4 py-2.5 shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_24px_60px_rgb(0_0_0/0.55)]">
@@ -246,4 +269,3 @@ export default function WatchPage() {
     </>
   );
 }
-

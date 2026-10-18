@@ -58,6 +58,8 @@ pub struct Updates {
     update: Option<Update>,
     phase: Phase,
     progress: Arc<Progress>,
+    /// A check started by the update screen is under way, so pressing again does not start another.
+    checking: bool,
 }
 
 impl Updates {
@@ -97,6 +99,7 @@ impl Updates {
             update: None,
             phase: Phase::Ready,
             progress: Arc::default(),
+            checking: false,
         }
     }
 
@@ -131,6 +134,35 @@ impl Updates {
             Phase::Page => cx.open_url(&updater::download_page(self.update.as_ref())),
             Phase::Working | Phase::Restarting => {}
         }
+    }
+
+    /// Updates now, whether or not a check has found an update yet: for the screen that stops an
+    /// app too old to run. With nothing found (or the check failing) it opens the download page.
+    pub fn update_now(&mut self, cx: &mut Context<Self>) {
+        if self.update.is_some() {
+            self.activate(cx);
+            return;
+        }
+        if self.checking {
+            return;
+        }
+        self.checking = true;
+        let current = updater::current_version();
+        cx.spawn(async move |updates, cx| {
+            let found =
+                runtime::run(async move { akidev_core::update::check(&current).await }).await;
+            let _ = updates.update(cx, |updates, cx| {
+                updates.checking = false;
+                match found {
+                    Some(Ok(Some(update))) => {
+                        updates.found(Some(update), cx);
+                        updates.activate(cx);
+                    }
+                    _ => cx.open_url(&updater::download_page(None)),
+                }
+            });
+        })
+        .detach();
     }
 
     /// Downloads, checks and installs, then restarts. Only ever started by a press.
@@ -239,9 +271,10 @@ impl Updates {
     }
 
     /// What the tooltip and the settings row say about the update, in a few words.
-    fn label(&self) -> String {
+    pub fn label(&self) -> String {
         let version = self.update.as_ref().map_or("", |update| &update.version);
         match &self.phase {
+            Phase::Ready if version.is_empty() => "Update now".into(),
             Phase::Ready => format!("Update to {version}"),
             Phase::Working => {
                 let (done, total, stage) = self.progress.snapshot();

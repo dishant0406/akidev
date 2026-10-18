@@ -15,4 +15,5 @@ mod sync;
 pub use guest::{Guest, GuestEvent};
 pub use host::{Host, HostEvent};
 pub use protocol::{Item, Member, Message, Readiness};
+pub use signal::is_gone;
 pub use sync::{Fix, Playback, Target, fix};

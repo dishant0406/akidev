@@ -23,8 +23,8 @@ One JSON object per data-channel message, as text. `t` says which. The Rust list
 
 | `t` | from | fields | meaning |
 | --- | --- | --- | --- |
-| `hello` | guest | `name` | First message: who is joining. |
-| `state` | host | `item`, `playing`, `position`, `at`, `choosing` | What is playing. `position` is seconds, read at `at` (the host's clock, milliseconds since 1970). Sent when it changes, and every 2 seconds while playing. A guest who joins is sent the last one at once. |
+| `hello` | guest | `name`, `id` | First message: who is joining. `id` is optional: a random id for this run of the app or page, the same each time it joins, so a host that sees it again drops the old connection and the guest is not there twice. |
+| `state` | host | `item`, `playing`, `position`, `at`, `choosing` | What is playing. `position` is seconds, read at `at` (the host's clock, milliseconds since 1970). Sent when it changes, and every 2 seconds, paused too, so a guest can tell a host that is still there from one that is gone. A guest who joins is sent the last one at once. |
 | `members` | host | `members: [{ name, host, state }]` | Who is in the party, and how each guest is doing with what is playing: `state` is `ready`, `loading` or `trouble`. |
 | `play`, `pause` | guest | | Asks the host to play or pause. |
 | `seek` | guest | `position` | Asks the host to seek. |
@@ -45,7 +45,8 @@ events, so two people pressing things at once cannot leave devices disagreeing.
 
 A video item carries the release the host is playing (its info hash). A guest asks for exactly that
 release (`release` in `POST /v1/play`, or the desktop app's `resolve_release`), so everyone watches the
-same source. If the release is gone the guest plays the best one it can find. When the host picks
+same source, always. If the release cannot be had the guest says so (its `status` is `trouble`, the
+host sees "Can't play") and offers to try again or leave; it never plays another release out of step. When the host picks
 another release, the item changes (same `id`, new `release`); guests do not change page, they switch
 release and seek to where the host is. The guest's `status` names the item by key, `id` plus `#` plus
 `release`, so a guest that was ready for the old release is loading the new one until it says so, and
@@ -56,7 +57,9 @@ guest's window has no source button.
 ## Waiting while the host chooses
 
 While the host has a panel open (sources, episodes or subtitles), its picture is paused and `state`
-carries `choosing: "source" | "episode" | "subtitles"` with `playing: false`. A guest pauses and
+carries `choosing: "source" | "episode" | "subtitles"` with `playing: false`. A host that has just
+picked another release says `choosing: "finding"` until its own picture has loaded. A device ignores a
+word it does not know, so more can be added. A guest pauses and
 shows "Choosing a source" (or an episode, or subtitles) over the picture. When the host closes the
 panel it plays again if it was playing, and `choosing` is gone from the next `state`. An old device that
 does not know the field still pauses, because `playing` is false.
@@ -93,8 +96,9 @@ says `ready`. The host's list of members shows who is.
 - **At the start of a film** a host with company waits: it stays paused until no guest is loading,
   at least one second (so the guests have time to say they are) and at most 45 seconds (so a guest
   that cannot load does not hold everyone). Then it plays, and the guests follow.
-- **In the middle of a film** nothing waits. A guest that finishes loading later seeks to where
-  the host is and carries on from there.
+- **In the middle of a film** nothing waits. A guest that finishes loading, or stalls, climbs back to
+  where the host is on its own (seeking, at most once every two seconds), and the host is shown a
+  note that the guest is buffering, so it can pause for them if it likes.
 - **Music** does not wait: a track loads in seconds, and a guest that is late seeks to the host.
 
 ## When things go wrong
@@ -102,7 +106,23 @@ says `ready`. The host's list of members shows who is.
 - A guest that cannot find a stream for the item sends `status` with `state: "trouble"`; the host's
   list of members marks it. Everyone else carries on, and the host does not wait for it.
 - A connection that fails or closes removes the guest, and the host frees its place on the server.
-- When the host leaves or its connection ends, the party ends: guests get `bye` or see the
-  connection close. The host role is not handed on.
+- A guest that loses the host without a `bye` (a network change, the host's page reloaded) keeps
+  trying to join again with the same code and `id` for two minutes, every three seconds, saying so
+  on screen; it tells the host again how it is doing once back in. A `404` ends that, as the party
+  is gone.
+- A guest that has heard nothing from the host for eight seconds says so on screen; a host that has
+  heard nothing from a guest for fifteen drops it.
+- A host that is a web page keeps its code and token for the tab, so a reload opens the same party
+  again (`PUT /v1/party/{code}`) and its guests find their way back. A tab closed for good lets the
+  server forget the party after two minutes. The desktop app's party ends when the app quits (it
+  says goodbye first).
+- A guest may send about twenty messages a second (a burst of forty): the excess is dropped, and a
+  guest that goes on is dropped.
+- A browser may refuse to play without a tap: the guest is asked for one.
+- A device from before any of this keeps working: new fields are only added, and a word it does not
+  know in `choosing` is ignored. Which versions may run at all is the published sources' to say (see
+  `desktop/sources/README.md`, "Forcing an update").
 - Devices on networks that block direct connections need the TURN relay (Cloudflare's, set up
-  with `CF_TURN_KEY_ID` and `CF_TURN_TOKEN` on the server). Without it they cannot join.
+  with `CF_TURN_KEY_ID` and `CF_TURN_TOKEN` on the server). Without it they cannot join; the server
+  says so in its log when it starts. A desktop host behind such a network is told to host from the
+  website, whose connection is the one the relay serves.

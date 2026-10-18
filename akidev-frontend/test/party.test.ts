@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { CODE_LENGTH, partyCodeFrom } from "../src/lib/party/code.ts";
 import { cleanName, guestState } from "../src/lib/party/connection.ts";
 import { itemKey, parseMessage, sameItem } from "../src/lib/party/protocol.ts";
 import { Clock, fix, positionNow, targetOf } from "../src/lib/party/sync.ts";
@@ -128,4 +129,41 @@ test("what the host is choosing reaches the guest's target", () => {
   const target = targetOf({ item: null, playing: false, position: 3, at: 7000, choosing: "episode" }, clock, 2400);
   assert.equal(target.playback.choosing, "episode");
   assert.equal(targetOf({ item: null, playing: false, position: 3, at: 7000 }, clock, 2400).playback.choosing, null);
+});
+
+test("a pasted link gives its code, and nothing else that is pasted is turned into one by accident", () => {
+  assert.equal(CODE_LENGTH, 6);
+  assert.equal(partyCodeFrom("https://akidev.live/?party=k7qf92"), "K7QF92");
+  assert.equal(partyCodeFrom("see https://akidev.live/anime?x=1&party=K7QF92#top"), "K7QF92");
+  assert.equal(partyCodeFrom("k7q f92"), "K7QF92");
+  // O, 0, I and 1 are never in a code, so they are dropped, and a code is never longer than six.
+  assert.equal(partyCodeFrom("K7QF92ABC"), "K7QF92");
+  assert.equal(partyCodeFrom("K0O1I7"), "K7");
+  // A link that is not a party link is not a code (its letters would otherwise be "HTTPSA").
+  assert.equal(partyCodeFrom("https://akidev.live/anime"), "");
+});
+
+test("a name has no invisible or direction-changing characters and is cut by whole characters", () => {
+  assert.equal(cleanName("  Sam \n"), "Sam");
+  assert.equal(cleanName("\u202eSam\u200b"), "Sam");
+  assert.equal(cleanName(""), "Guest");
+  assert.equal(cleanName("\u200b\u200e"), "Guest");
+  // 30 emoji are cut to 24 whole ones, never half of one.
+  const cut = cleanName("😀".repeat(30));
+  assert.equal([...cut].length, 24);
+  assert.equal(cut, "😀".repeat(24));
+});
+
+test("the clock follows the host after a change, because an old reading is forgotten", () => {
+  const clock = new Clock();
+  // The host's clock is 5000 ms ahead, read with a very quick round trip.
+  clock.sample(1000, 6001, 1002);
+  assert.equal(clock.hostTime(2000), 7000);
+  // Two minutes later it has been put right (2000 ms ahead), and the trips are slower.
+  clock.sample(121_000, 123_050, 121_100);
+  assert.equal(clock.hostTime(122_000), 124_000);
+  // A trip that took forever says nothing.
+  const fresh = new Clock();
+  fresh.sample(0, 5000, 60_000);
+  assert.equal(fresh.known, false);
 });

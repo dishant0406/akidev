@@ -9,7 +9,7 @@ import type { Page as CataloguePage } from "@/types/media";
 import { cn } from "@/lib/utils";
 import { useBrowse, useSearch } from "@/query/use-media";
 
-import { Button, Tab } from "./button";
+import { Tab } from "./button";
 import { EmptyState, ErrorState, LoadMore, Skeleton } from "./states";
 import Tile from "./tile";
 

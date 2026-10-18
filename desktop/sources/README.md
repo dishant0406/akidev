@@ -39,6 +39,24 @@ that gets through is undone by publishing a corrected copy with a higher version
 the providers that answer for each kind, in order: the next answers when the first has
 nothing or fails.
 
+### Forcing an update
+
+Two optional fields at the top of the document lock out apps that are too old:
+
+```json
+{ "min_version": "0.1.17", "min_version_message": "This version has a bug that breaks parties. Please update." }
+```
+
+An app whose version is lower than `min_version` shows an "Update required" screen (with the message, an
+Update button and the download page) and nothing else, from the moment it reads the document: from its
+saved copy at start, and again as soon as the background check picks a newer one up. Apps that are not
+older, and apps from before this field existed (they ignore it), run as normal. A `min_version` that is
+not `major.minor.patch` makes the whole document invalid, so a typo can never lock anyone out (the
+previous document stays in use); and a document that cannot be fetched or verified says nothing.
+Publish the release the version points to first: the Update button finds it from the release feed, and
+with nothing there it can only open the download page. To lift
+it again, publish a document without the field (or with a lower one) and a higher `version`.
+
 ### Indexers
 
 ```json

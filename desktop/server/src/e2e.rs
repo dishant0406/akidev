@@ -875,6 +875,89 @@ async fn a_watch_party_is_made_joined_answered_and_ended_through_the_router() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn party_answers_are_never_kept_and_a_host_can_reopen_its_party() {
+    let Some(rig) = rig("party-reopen", |_| {}).await else {
+        return;
+    };
+    let router = &rig.router;
+    let (_, party) = call(router, "POST", "/v1/party", None, None).await;
+    let code = party["code"].as_str().unwrap().to_string();
+    let host = party["host_token"].as_str().unwrap().to_string();
+
+    // Nothing about a party is for the edge to keep, and the servers to try come back as a list.
+    let mut request = Request::builder()
+        .uri(format!("/v1/party/{code}/ice"))
+        .body(Body::empty())
+        .unwrap();
+    request
+        .extensions_mut()
+        .insert(ConnectInfo("192.0.2.1:4000".parse::<SocketAddr>().unwrap()));
+    let response = router.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let ice: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(ice["ice_servers"].is_array());
+
+    // The party is ended (the server forgot it, as a restart would), and the host opens it again
+    // under the same code. Another token cannot take the code over.
+    let (status, _) = call(
+        router,
+        "DELETE",
+        &format!("/v1/party/{code}"),
+        Some(&host),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let reopen = format!("/v1/party/{code}");
+    let body = format!(r#"{{"host_token":"{host}"}}"#);
+    let (status, _) = call(router, "PUT", &reopen, None, Some(&body)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(router, "PUT", &reopen, None, Some(&body)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = call(
+        router,
+        "PUT",
+        &reopen,
+        None,
+        Some(r#"{"host_token":"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = call(router, "PUT", "/v1/party/abc", None, Some(&body)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // A guest can join the reopened party.
+    let (status, _) = call(
+        router,
+        "POST",
+        &format!("/v1/party/{code}/join"),
+        None,
+        Some(r#"{"offer":"v=0 offer"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // Asking about a party that is there is not guessing, however often.
+    for _ in 0..60 {
+        let (status, _) = call(router, "GET", &format!("/v1/party/{code}/ice"), None, None).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    // Asking about codes that are not parties is.
+    let mut refused = false;
+    for number in 0..40 {
+        let (status, _) = call(
+            router,
+            "GET",
+            &format!("/v1/party/ZZZZ{number:02}/ice"),
+            None,
+            None,
+        )
+        .await;
+        refused |= status == StatusCode::TOO_MANY_REQUESTS;
+    }
+    assert!(refused, "guessing codes is stopped");
+}
+
 /// The real server on a local port, and two real devices (the party crate) joining through it
 /// over a real WebRTC connection on this machine.
 #[tokio::test]
@@ -899,7 +982,7 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     let wait = Duration::from_secs(20);
 
     let (host, mut host_events) = Host::create_on(&api, "Hana", local).await.unwrap();
-    let (guest, mut guest_events) = Guest::join_on(&api, &host.code, "Sam", local)
+    let (guest, mut guest_events) = Guest::join_on(&api, &host.code, "Sam", local, "sam")
         .await
         .unwrap();
 
@@ -973,7 +1056,7 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     host_sees(&mut host_events, Readiness::Trouble).await;
 
     // Someone who joins late is told what is playing without waiting for the next update.
-    let (_late, mut late_events) = Guest::join_on(&api, &host.code, "Kai", local)
+    let (_late, mut late_events) = Guest::join_on(&api, &host.code, "Kai", local, "kai")
         .await
         .unwrap();
     let told = tokio::time::timeout(wait, async {
@@ -1014,11 +1097,50 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
     assert_eq!(waiting.playback.choosing.as_deref(), Some("source"));
     assert!(!waiting.playback.playing);
 
+    // A guest that comes back (its network changed) is the same guest: the old connection is
+    // dropped, the roster keeps one Sam, and the new connection is told what is playing.
+    let (_back, mut back_events) = Guest::join_on(&api, &host.code, "Sam", local, "sam")
+        .await
+        .unwrap();
+    tokio::time::timeout(wait, async {
+        loop {
+            if let Some(GuestEvent::Lost) = guest_events.recv().await {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("the old connection of a guest that came back is dropped");
+    let again = tokio::time::timeout(wait, async {
+        loop {
+            if let Some(GuestEvent::Target(target)) = back_events.recv().await {
+                return target;
+            }
+        }
+    })
+    .await
+    .expect("the guest that came back is told what is playing");
+    assert!(again.playback.choosing.is_some());
+    let roster = tokio::time::timeout(wait, async {
+        loop {
+            if let Some(HostEvent::Members(members)) = host_events.recv().await
+                && members.iter().filter(|member| member.name == "Sam").count() == 1
+                && members.iter().any(|member| member.name == "Kai")
+                && members.len() == 3
+            {
+                return members;
+            }
+        }
+    })
+    .await
+    .expect("the roster has one Sam after the guest came back");
+    assert!(roster[0].host);
+
     // Ending the party tells everyone.
     host.end().await;
     tokio::time::timeout(wait, async {
         loop {
-            if let Some(GuestEvent::Ended) = guest_events.recv().await {
+            if let Some(GuestEvent::Ended) = back_events.recv().await {
                 return;
             }
         }

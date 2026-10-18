@@ -49,6 +49,13 @@ pub struct Sources {
     pub subtitles: Vec<SubtitleDef>,
     /// Which providers answer for each kind, in order.
     pub chains: BTreeMap<Kind, Vec<String>>,
+    /// The oldest version of the app that may run (`0.1.17`). An older one shows an update screen and
+    /// nothing else. Absent: any version may.
+    #[serde(default)]
+    pub min_version: Option<String>,
+    /// What the update screen says. Absent: a default.
+    #[serde(default)]
+    pub min_version_message: Option<String>,
 }
 
 impl Sources {
@@ -110,6 +117,19 @@ impl Sources {
                 .check()
                 .with_context(|| format!("provider {}", provider.id))?;
         }
+        // A version nobody can read must not lock anyone out, so the document that carries it is refused.
+        if let Some(min) = &self.min_version {
+            ensure!(
+                crate::update::Version::parse(min).is_some(),
+                "min_version {min:?} is not major.minor.patch"
+            );
+        }
+        ensure!(
+            self.min_version_message
+                .as_ref()
+                .is_none_or(|message| message.chars().count() <= 300),
+            "min_version_message is too long"
+        );
         ensure!(self.subtitles.len() <= 16, "too many subtitle sources");
         for (index, source) in self.subtitles.iter().enumerate() {
             ensure!(
@@ -235,6 +255,23 @@ pub(crate) fn definitions_change_lock() -> &'static tokio::sync::Mutex<()> {
 
 const DOCUMENT: &str = "sources.json";
 const SIGNATURE: &str = "sources.sig";
+
+/// What the update screen says when `running` (this build's version) is older than the oldest the
+/// published document allows, or `None` when it may run. A document that cannot be read says nothing,
+/// so a failure never locks anyone out.
+pub fn update_required(running: &str) -> Option<String> {
+    required(&current(), running)
+}
+
+fn required(sources: &Sources, running: &str) -> Option<String> {
+    let running = crate::update::Version::parse(running)?;
+    let min = crate::update::Version::parse(sources.min_version.as_deref()?)?;
+    (running < min).then(|| {
+        sources.min_version_message.clone().unwrap_or_else(|| {
+            "This version of Akidev can no longer be used. Update to carry on.".into()
+        })
+    })
+}
 
 /// Uses the copy saved by an earlier run, when it is still valid and newer than the one
 /// built in. It is checked again on every start, so a damaged file does no harm.
@@ -565,5 +602,53 @@ mod tests {
         load_saved_with(&key_hex(), &dir);
         assert_eq!(current().version, in_use + 10);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn with_minimum(min: Option<&str>, message: Option<&str>) -> Sources {
+        let mut sources = parse(EMBEDDED.as_bytes()).unwrap();
+        sources.min_version = min.map(str::to_string);
+        sources.min_version_message = message.map(str::to_string);
+        sources
+    }
+
+    #[test]
+    fn a_build_older_than_the_published_minimum_must_update_and_a_newer_or_equal_one_runs() {
+        let sources = with_minimum(Some("0.1.17"), Some("Please update."));
+        assert_eq!(
+            required(&sources, "0.1.16").as_deref(),
+            Some("Please update.")
+        );
+        assert_eq!(
+            required(&sources, "0.1.9").as_deref(),
+            Some("Please update.")
+        );
+        assert_eq!(required(&sources, "0.1.17"), None);
+        assert_eq!(required(&sources, "0.2.0"), None);
+        assert_eq!(required(&sources, "1.0.0"), None);
+        // Versions compare by number: 0.1.9 is older than 0.1.10.
+        assert!(required(&with_minimum(Some("0.1.10"), None), "0.1.9").is_some());
+    }
+
+    #[test]
+    fn nothing_locks_anyone_out_unless_the_document_clearly_says_so() {
+        // No minimum, or this build's version cannot be read: it runs.
+        assert_eq!(required(&with_minimum(None, None), "0.0.1"), None);
+        assert_eq!(required(&with_minimum(Some("0.1.17"), None), "dev"), None);
+        // The default message is used when there is none.
+        assert!(required(&with_minimum(Some("9.0.0"), None), "0.1.1").is_some());
+        // A minimum nobody can read makes the whole document unusable, so the old one stays in use.
+        assert!(with_minimum(Some("soon"), None).validate().is_err());
+        assert!(
+            with_minimum(Some("0.1.17"), Some(&"x".repeat(301)))
+                .validate()
+                .is_err()
+        );
+        assert!(
+            with_minimum(Some("0.1.17"), Some("Update."))
+                .validate()
+                .is_ok()
+        );
+        // The built-in document has no minimum, so it never locks anyone out.
+        assert_eq!(update_required("0.0.1"), None);
     }
 }

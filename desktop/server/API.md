@@ -167,16 +167,18 @@ with yt-dlp (`YT_DLP` names the binary; the image's copy updates itself daily).
 A party's host is a device, and guests connect to it directly with WebRTC (see
 `party/PROTOCOL.md`). These routes are only the meeting point: they pass the first message each
 way, an offer and an answer, and never see what is playing. A party is forgotten when its host
-stops asking for guests for two minutes, or after twelve hours.
+stops asking for guests for two minutes, or after twelve hours. Every party route answers
+`Cache-Control: no-store`, and the edge must not keep any of them (`scripts/cloudflare-cache.sh`).
 
 The host's secret is sent as `Authorization: Bearer <host_token>`.
 
 | route | does |
 | --- | --- |
-| `POST /v1/party` | Opens a party: `{ "code": "K7QF92", "host_token": "..." }`. 20 an hour per client. `503` when the server holds too many. |
+| `POST /v1/party` | Opens a party: `{ "code": "K7QF92", "host_token": "..." }`. 20 an hour per client, and at most 5 open at once for one client. `503` when the server holds too many. |
+| `PUT /v1/party/{code}` | Host only. Opens the party again under its own code when the server has forgotten it (a restart), or does nothing when it is there: `204`. This is how a host page that reloaded carries on. `404` when the code was never this host's. |
 | `GET /v1/party/{code}/ice` | `{ "ice_servers": [...] }`, asked for by the host before each guest and by a guest before it makes its offer. `404` when the party is gone. |
 | `POST /v1/party/{code}/join` | Body `{ "offer": "<sdp>" }`; answers `{ "guest": "<id>" }`. `404` gone, `409` full (20 guests). 60 per ten minutes per client. |
-| `GET /v1/party/{code}/offers` | Host only. Waits up to 25 seconds, then answers `{ "offers": [{ "guest": "<id>", "offer": "<sdp>" }] }`, possibly empty. Each call counts as the host being there. |
+| `GET /v1/party/{code}/offers` | Host only. `?active=<id>,<id>` names the guests the host still has a connection to; places for others are freed. Waits up to 25 seconds, then answers `{ "offers": [{ "guest": "<id>", "offer": "<sdp>" }] }`, possibly empty. Each call counts as the host being there. |
 | `POST /v1/party/{code}/answer/{guest}` | Host only. Body `{ "answer": "<sdp>" }`; `204`. `404` when no guest has that id. |
 | `GET /v1/party/{code}/answer/{guest}` | The guest waits up to 25 seconds for `{ "answer": "<sdp>" }`; `204` when it has not come yet, ask again. `404` when the party is gone or no guest has that id. |
 | `DELETE /v1/party/{code}/guests/{guest}` | Host only. A guest left: frees its place. `204`. A place the host has not been given the offer for in a minute is freed on its own. |
@@ -187,9 +189,9 @@ at most 32 KB (`400` when empty or larger). `429` when a client asks about codes
 person would (60 `ice` or answer requests in ten minutes, 60 joins, 20 parties an hour). `ice_servers` is the
 WebRTC `iceServers` list. With `CF_TURN_KEY_ID` and `CF_TURN_TOKEN` set it is what Cloudflare's
 Realtime TURN service gives for that key (its STUN servers and a TURN relay, with a login that
-works for six hours, asked for at most every half hour). Without them, or when Cloudflare does
+works for twelve hours, asked for at most every half hour, and the last one is still handed out for up to ten hours if Cloudflare stops answering). Without them, or when Cloudflare does
 not answer, it is the STUN servers (`STUN_URLS`) alone, and devices on networks that block direct
-connections cannot join; everything else works.
+connections cannot join; everything else works. The server says so in its log when it starts.
 
 ## Media
 

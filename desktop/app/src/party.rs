@@ -13,7 +13,7 @@ use crate::design::tokens::{
 use crate::route::{self, Route};
 use crate::runtime;
 use akidev_party::{
-    Guest, GuestEvent, Host, HostEvent, Item, Member, Message, Playback, Readiness, Target,
+    Guest, GuestEvent, Host, HostEvent, Item, Member, Message, Playback, Readiness, Target, is_gone,
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
@@ -21,12 +21,19 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedSender;
 
 /// Where the meeting point is. `AKIDEV_API` points a development build at another server.
 const API: &str = "https://api.akidev.live";
 const SITE: &str = "https://akidev.live";
+
+/// How long a guest keeps trying to get back into a party it lost, and how often it tries: the
+/// host's page may only have reloaded, or the network changed.
+const RECONNECT_FOR: Duration = Duration::from_secs(120);
+const RECONNECT_EVERY: Duration = Duration::from_secs(3);
+
+const UNREACHABLE: &str = "Lost contact with the party server, so no one new can join.";
 
 fn api() -> String {
     std::env::var("AKIDEV_API").unwrap_or_else(|_| API.to_string())
@@ -114,6 +121,12 @@ pub struct Party {
     members: Vec<Member>,
     /// Why the last attempt to start or join failed, or the party stopped working.
     error: Option<String>,
+    /// A guest lost the connection and is trying to get back in.
+    reconnecting: bool,
+    /// A guest has heard nothing from the host for a while.
+    host_silent: bool,
+    /// How this guest introduced itself, so it can again after losing the host.
+    joined_as: String,
     /// What the party is playing: what the host last published, or what the host last said.
     item: Option<Item>,
     /// A guest's latest word from the host.
@@ -173,6 +186,9 @@ impl Party {
             code: None,
             members: Vec::new(),
             error: None,
+            reconnecting: false,
+            host_silent: false,
+            joined_as: String::new(),
             item: None,
             target: None,
             panel_open: false,
@@ -202,6 +218,16 @@ impl Party {
     /// What the party is playing.
     pub fn item(&self) -> Option<&Item> {
         self.item.as_ref()
+    }
+
+    /// A guest has lost the connection and is trying to get back.
+    pub fn reconnecting(&self) -> bool {
+        self.reconnecting
+    }
+
+    /// A guest has heard nothing from the host for a while.
+    pub fn host_silent(&self) -> bool {
+        self.host_silent
     }
 
     pub fn is_open(&self) -> bool {
@@ -255,6 +281,17 @@ impl Party {
             .collect()
     }
 
+    /// What the panel says under the party: that a guest is getting back in or has lost the host, or why something failed.
+    fn notice(&self) -> Option<String> {
+        if self.reconnecting {
+            Some("Getting back into the party…".into())
+        } else if self.host_silent {
+            Some("No word from the host…".into())
+        } else {
+            self.error.clone()
+        }
+    }
+
     /// Whether anyone else is in the party.
     pub fn has_company(&self) -> bool {
         self.members.len() > 1
@@ -268,6 +305,8 @@ impl Party {
         self.session += 1;
         self.role = Role::None;
         self.connecting = false;
+        self.reconnecting = false;
+        self.host_silent = false;
         self.code = None;
         self.members.clear();
         self.item = None;
@@ -277,6 +316,21 @@ impl Party {
         self.publishing = None;
         self.published = None;
         self.said = None;
+    }
+
+    /// Says goodbye to the party as the app quits, so the guests are told it ended and the host is
+    /// told the guest has gone, without waiting for them to notice.
+    pub fn farewell(&self) -> impl std::future::Future<Output = ()> + Send + use<> {
+        let host = self.host.clone();
+        let guest = self.guest.clone();
+        async move {
+            if let Some(host) = host {
+                host.end().await;
+            }
+            if let Some(guest) = guest {
+                guest.leave().await;
+            }
+        }
     }
 
     /// Ends or leaves the party, whichever this is.
@@ -351,11 +405,11 @@ impl Party {
                     }
                     match event {
                         HostEvent::Members(members) => party.members = members,
-                        HostEvent::Unreachable => {
-                            party.error = Some(
-                                "Lost contact with the party server, so no one new can join."
-                                    .into(),
-                            );
+                        HostEvent::Unreachable => party.error = Some(UNREACHABLE.into()),
+                        HostEvent::Reachable => {
+                            if party.error.as_deref() == Some(UNREACHABLE) {
+                                party.error = None;
+                            }
                         }
                         HostEvent::Play => cx.emit(PartyEvent::Play),
                         HostEvent::Pause => cx.emit(PartyEvent::Pause),
@@ -385,6 +439,7 @@ impl Party {
             name if name.is_empty() => "Guest".to_string(),
             name => name,
         };
+        self.joined_as = name.clone();
         cx.notify();
         let joining = code.clone();
         cx.spawn(async move |party, cx| {
@@ -415,7 +470,14 @@ impl Party {
     ) {
         self.role = Role::Guest;
         self.code = Some(code);
-        self.guest = Some(Arc::new(guest));
+        let guest = Arc::new(guest);
+        // After getting back in, the host is told again how this device is doing.
+        if let Some((state, id)) = self.said.clone() {
+            let guest = guest.clone();
+            runtime::spawn(async move { guest.status(state, id).await });
+        }
+        self.guest = Some(guest);
+        self.host_silent = false;
         let session = self.session;
         cx.spawn(async move |party, cx| {
             while let Some(event) = events.recv().await {
@@ -450,6 +512,11 @@ impl Party {
                 }
             }
             GuestEvent::Members(members) => self.members = members,
+            GuestEvent::HostSilent(silent) => self.host_silent = silent,
+            GuestEvent::Lost => {
+                self.rejoin(cx);
+                return false;
+            }
             GuestEvent::Ended => {
                 self.reset();
                 self.error = Some("The party ended.".into());
@@ -459,6 +526,58 @@ impl Party {
         }
         cx.notify();
         true
+    }
+
+    /// Keeps trying to get back into the party that was lost, for a while.
+    fn rejoin(&mut self, cx: &mut Context<Self>) {
+        let Some(code) = self.code.clone() else {
+            return;
+        };
+        let name = self.joined_as.clone();
+        self.guest = None;
+        self.reconnecting = true;
+        self.host_silent = false;
+        let session = self.session;
+        cx.notify();
+        cx.spawn(async move |party, cx| {
+            let started = Instant::now();
+            loop {
+                let (api, joining, as_name) = (api(), code.clone(), name.clone());
+                let joined =
+                    runtime::run(async move { Guest::join(&api, &joining, &as_name).await }).await;
+                let done = party.update(cx, |party, cx| {
+                    if party.session != session {
+                        // Left in the meantime: the connection that just opened is not kept.
+                        if let Some(Ok((guest, _))) = joined {
+                            runtime::spawn(async move { guest.leave().await });
+                        }
+                        return true;
+                    }
+                    match joined {
+                        Some(Ok((guest, events))) => {
+                            party.reconnecting = false;
+                            party.following(guest, code.clone(), events, cx);
+                        }
+                        Some(Err(error)) if is_gone(&error) => {
+                            party.reset();
+                            party.error = Some("The party ended.".into());
+                        }
+                        _ if started.elapsed() > RECONNECT_FOR => {
+                            party.reset();
+                            party.error = Some("Lost the party and could not get back in.".into());
+                        }
+                        _ => return false,
+                    }
+                    cx.notify();
+                    true
+                });
+                if done.unwrap_or(true) {
+                    break;
+                }
+                cx.background_executor().timer(RECONNECT_EVERY).await;
+            }
+        })
+        .detach();
     }
 
     fn copy(&mut self, what: Copied, text: String, cx: &mut Context<Self>) {
@@ -989,29 +1108,24 @@ impl Render for Party {
                     // A click inside the panel is not a click on the scrim.
                     .on_click(|_, _, cx| cx.stop_propagation())
                     .child(body)
-                    .children(
-                        self.error
-                            .clone()
-                            .filter(|_| !self.connecting)
-                            .map(|error| {
+                    .children(self.notice().filter(|_| !self.connecting).map(|error| {
+                        div()
+                            .flex()
+                            .items_start()
+                            .gap_2()
+                            .text_size(px(13.))
+                            .line_height(relative(1.35))
+                            .text_color(color(ACCENT))
+                            .child(
                                 div()
-                                    .flex()
-                                    .items_start()
-                                    .gap_2()
-                                    .text_size(px(13.))
-                                    .line_height(relative(1.35))
-                                    .text_color(color(ACCENT))
-                                    .child(
-                                        div()
-                                            .mt(px(6.))
-                                            .flex_none()
-                                            .size(px(6.))
-                                            .rounded_full()
-                                            .bg(color(ACCENT)),
-                                    )
-                                    .child(div().flex_1().child(error))
-                            }),
-                    ),
+                                    .mt(px(6.))
+                                    .flex_none()
+                                    .size(px(6.))
+                                    .rounded_full()
+                                    .bg(color(ACCENT)),
+                            )
+                            .child(div().flex_1().child(error))
+                    })),
             )
     }
 }

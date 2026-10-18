@@ -1,24 +1,9 @@
 "use client";
 
-import {
-  Captions,
-  ChevronLeft,
-  Layers,
-  List,
-  Maximize,
-  Minimize,
-  Pause,
-  Play,
-  RotateCcw,
-  RotateCw,
-  SkipForward,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { Captions, ChevronLeft, Layers, List, Maximize, Minimize, Pause, Play, RotateCcw, RotateCw, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { itemKey, type Choosing } from "@/lib/party/protocol";
-import { fix, positionNow } from "@/lib/party/sync";
+import type { Choosing } from "@/lib/party/protocol";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/play";
 import { optionForChoice, preferRelease, readChoice, shiftCues, writeChoice } from "@/lib/subtitles";
 import { cn, formatSeconds } from "@/lib/utils";
@@ -29,6 +14,7 @@ import type { SubtitleOption } from "@/types/media";
 import { Button, IconButton } from "./button";
 import CaptionsMenu from "./captions-menu";
 import PartyButton from "./party";
+import { usePartyPlayback } from "./player-party";
 import { SidePanel } from "./side-panel";
 import { Spinner, StateCard } from "./states";
 
@@ -38,16 +24,16 @@ const NEXT_OFFER = 40;
 const IDLE_FOR = 3000;
 /** How often the position is reported. */
 const REPORT_EVERY = 5000;
-/** A host waits at least this long, and at most the longer one, for guests that are still loading. */
-const HOLD_AT_LEAST = 1000;
-const HOLD_AT_MOST = 45_000;
-/** `readyState` at which there is enough picture ahead to be moving. */
-const HAVE_FUTURE_DATA = 3;
-/** How often a host says where the picture is while it plays, and how often a guest checks it is in step. */
-const PARTY_BEAT = 2000;
-const PARTY_CHECK = 1000;
+/** How long a click waits to see whether it is the first of a double click. */
+const DOUBLE_CLICK = 250;
 /** How far the captions rise to stay clear of the control bar while it is showing. */
 const CUES_LIFT = "5.5rem";
+const CHOOSING: Record<Choosing, string> = {
+  source: "Choosing a source",
+  episode: "Choosing an episode",
+  subtitles: "Choosing subtitles",
+  finding: "Finding a source",
+};
 type Panel = "episodes" | "sources" | "subtitles";
 const NO_SUBTITLES: SubtitleOption[] = [];
 
@@ -147,15 +133,7 @@ export default function Player({
   const [panel, setPanel] = useState<Panel | null>(null);
   // What a host has open tells its party to wait: guests pause and say so.
   const choosing: Choosing | null = panel === "sources" ? "source" : panel === "episodes" ? "episode" : panel === "subtitles" ? "subtitles" : null;
-  const choosingNow = useRef<Choosing | null>(null);
-  choosingNow.current = choosing;
-  /** The host's picture was paused because a panel opened, so it starts again when the panel closes. */
-  const panelPaused = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
-  /** When a host began waiting for guests that are still loading, or null when it is not waiting. */
-  const [heldSince, setHeldSince] = useState<number | null>(null);
-  const heldSinceNow = useRef<number | null>(null);
-  heldSinceNow.current = heldSince;
   /** The subtitle file showing; null is off. */
   const [active, setActive] = useState<SubtitleOption | null>(null);
   /** Set once the viewer's remembered language has been looked at, or they have chosen themselves. */
@@ -163,13 +141,9 @@ export default function Player({
 
   const isHls = streamType === "hls";
 
-  // The party as the timers and handlers below see it, so they need not be rebuilt each time it changes.
   const music = useMusicPlayer();
   const party = useParty();
-  const partyNow = useRef(party);
-  useEffect(() => {
-    partyNow.current = party;
-  });
+  const { publish, report, hold, held, blocked, tapToPlay, hostChoosing } = usePartyPlayback({ video, mediaId, releaseId, choosing });
 
   // Callbacks are held in refs so a caller passing inline functions cannot tear down and
   // rebuild the stream on every render.
@@ -226,7 +200,11 @@ export default function Player({
 
       // A playlist that is still growing counts as live, and a live player starts near its end.
       // This one starts at the beginning, whatever the conversion has got to.
-      const hls = new Hls({ enableWorker: true, maxBufferLength: 30, startPosition: 0 });
+      const hls = new Hls({
+        enableWorker: true,
+        maxBufferLength: 30,
+        startPosition: 0,
+      });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (!cancelled) setReady(true);
       });
@@ -337,151 +315,29 @@ export default function Player({
     const element = video.current;
     if (!element) return;
     // A guest asks the host, and plays or pauses when the host says so.
-    if (partyNow.current.role === "guest") return partyNow.current.ask({ t: element.paused ? "play" : "pause" });
+    if (party.role === "guest") return party.ask({ t: element.paused ? "play" : "pause" });
     if (element.paused) element.play().catch(() => callbacks.current.onError("Playback could not be started."));
     else element.pause();
-  }, []);
+  }, [party]);
+
+  const seekTo = useCallback(
+    (to: number) => {
+      if (party.role === "guest") party.ask({ t: "seek", position: to });
+      else if (video.current) video.current.currentTime = to;
+    },
+    [party],
+  );
 
   const seekBy = useCallback(
     (delta: number) => {
       const element = video.current;
-      if (!element) return;
-      const to = Math.min(Math.max(0, element.currentTime + delta), element.duration || 0);
-      if (partyNow.current.role === "guest") partyNow.current.ask({ t: "seek", position: to });
-      else element.currentTime = to;
+      // With no length known there is nowhere to clamp to, and a seek would only rewind.
+      if (!element || !(finite(element.duration) > 0)) return;
+      seekTo(Math.min(Math.max(0, element.currentTime + delta), element.duration));
       say(`${delta > 0 ? "+" : "−"}${Math.abs(delta)}s`);
     },
-    [say],
+    [say, seekTo],
   );
-
-  const seekTo = useCallback((to: number) => {
-    if (partyNow.current.role === "guest") partyNow.current.ask({ t: "seek", position: to });
-    else if (video.current) video.current.currentTime = to;
-  }, []);
-
-  /** How a guest names what it is ready for: the host's item, release included. */
-  const statusKey = () => {
-    const item = partyNow.current.item;
-    return item?.kind === "video" && item.id === mediaId ? (itemKey(item) ?? mediaId) : mediaId;
-  };
-
-  // Hosting: the party is told what is playing when it changes, and every couple of seconds.
-  const publish = useCallback(
-    (heartbeat: boolean) => {
-      const element = video.current;
-      if (partyNow.current.role !== "host" || !element) return;
-      // Playing means the picture is moving: a host that is still loading or buffering is not.
-      const moving = !element.paused && element.readyState >= HAVE_FUTURE_DATA;
-      partyNow.current.publish(
-        {
-          item: { kind: "video", id: mediaId, release: releaseId },
-          playing: moving,
-          position: element.currentTime,
-          choosing: choosingNow.current,
-        },
-        heartbeat,
-      );
-    },
-    [mediaId, releaseId],
-  );
-  useEffect(() => publish(false), [publish, party.role]);
-
-  // Hosting: a panel open pauses the picture for everyone while the host chooses, and closing it carries on.
-  useEffect(() => {
-    const now = partyNow.current;
-    const element = video.current;
-    if (now.role === "host" && now.members.length > 1 && element) {
-      if (choosing && !panelPaused.current && !element.paused) {
-        element.pause();
-        panelPaused.current = true;
-      } else if (!choosing && panelPaused.current) {
-        panelPaused.current = false;
-        // A new release holds the start itself, until the guests have it.
-        if (heldSinceNow.current === null) element.play().catch(() => {});
-      }
-    }
-    publish(false);
-  }, [choosing]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!playing || party.role !== "host") return undefined;
-    const timer = setInterval(() => publish(true), PARTY_BEAT);
-    return () => clearInterval(timer);
-  }, [playing, party.role, publish]);
-
-  // Hosting: starts when the guests are ready, or after a while whether they are or not.
-  const { role, waitingFor } = party;
-  useEffect(() => {
-    if (heldSince === null) return undefined;
-    const release = () => {
-      setHeldSince(null);
-      video.current?.play().catch(() => {});
-    };
-    const wait = role !== "host" ? 0 : Math.max(0, (waitingFor.length === 0 ? heldSince + HOLD_AT_LEAST : heldSince + HOLD_AT_MOST) - Date.now());
-    const timer = setTimeout(release, wait);
-    return () => clearTimeout(timer);
-  }, [heldSince, role, waitingFor]);
-
-  // Hosting: what guests ask for, while this is what the party is playing.
-  useEffect(
-    () =>
-      party.onRequest((request) => {
-        const element = video.current;
-        const item = partyNow.current.item;
-        if (!element || item?.kind !== "video" || item.id !== mediaId) return;
-        if (request.t === "play") element.play().catch(() => {});
-        else if (request.t === "pause") element.pause();
-        else element.currentTime = Math.min(request.position, element.duration || request.position);
-      }),
-    [party.onRequest, mediaId], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-
-  // A host who leaves the film tells the party nothing is playing, so guests do not carry on without it.
-  useEffect(
-    () => () => {
-      const now = partyNow.current;
-      if (now.role === "host" && now.item?.kind === "video" && now.item.id === mediaId) {
-        now.publish({ item: null, playing: false, position: 0 });
-      }
-    },
-    [mediaId],
-  );
-
-  // Following: be where the host is, playing or paused, a little faster or slower to close a small gap.
-  useEffect(() => {
-    if (party.role !== "guest") return undefined;
-    const element = video.current;
-    const follow = () => {
-      const target = partyNow.current.target;
-      // Until the picture has loaded there is no position to correct.
-      if (!element || !target || element.readyState < 1) return;
-      const item = target.playback.item;
-      // The host has stopped.
-      if (!item) {
-        if (!element.paused) element.pause();
-        return;
-      }
-      // What else the party is playing is another page's to show.
-      if (item.kind !== "video" || item.id !== mediaId) return;
-      // The host has a panel open: everyone waits, paused, until it is done.
-      if (target.playback.choosing) {
-        if (!element.paused) element.pause();
-        return;
-      }
-      const change = fix(element.currentTime, positionNow(target), target.playback.playing);
-      if (change.seek !== null) element.currentTime = change.seek;
-      element.playbackRate = change.speed;
-      if (target.playback.playing && element.paused) element.play().catch(() => {});
-      else if (!target.playback.playing && !element.paused) element.pause();
-    };
-    follow();
-    const timer = setInterval(follow, PARTY_CHECK);
-    return () => {
-      clearInterval(timer);
-      if (element) element.playbackRate = 1;
-    };
-  }, [party.role, party.target, mediaId]);
-
-  const hostChoosing = party.role === "guest" ? (party.target?.playback.choosing ?? null) : null;
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -491,6 +347,27 @@ export default function Player({
       // Refused (iPhone Safari does not allow it on an arbitrary element); silent.
     }
   }, []);
+
+  // A click plays or pauses, a double click is fullscreen and plays nothing: so a click waits a moment to see if another follows.
+  const click = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onPicture = useCallback(() => {
+    if (click.current) {
+      clearTimeout(click.current);
+      click.current = null;
+      void toggleFullscreen();
+      return;
+    }
+    click.current = setTimeout(() => {
+      click.current = null;
+      toggle();
+    }, DOUBLE_CLICK);
+  }, [toggle, toggleFullscreen]);
+  useEffect(
+    () => () => {
+      if (click.current) clearTimeout(click.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (video.current) video.current.volume = volume;
@@ -512,9 +389,12 @@ export default function Player({
       if (!video.current?.paused) setVisible(false);
     }, IDLE_FOR);
   }, []);
-  useEffect(() => () => {
-    if (idle.current) clearTimeout(idle.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (idle.current) clearTimeout(idle.current);
+    },
+    [],
+  );
 
   // Report the position on a timer, and once more on the way out.
   useEffect(() => {
@@ -534,6 +414,11 @@ export default function Player({
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || event.metaKey || event.ctrlKey) return;
+      // Holding a key repeats it; for play and pause that would flip the picture back and forth.
+      if (event.repeat && (event.key === " " || event.key === "k")) {
+        event.preventDefault();
+        return;
+      }
       const handled = (() => {
         switch (event.key) {
           case " ":
@@ -600,25 +485,24 @@ export default function Player({
         ref={video}
         playsInline
         crossOrigin="anonymous"
-        preload="metadata"
+        preload={party.role === "guest" ? "auto" : "metadata"}
         className="size-full"
-        onClick={toggle}
-        onDoubleClick={toggleFullscreen}
+        onClick={onPicture}
         onLoadedMetadata={(event) => {
           const element = event.currentTarget;
           setDuration(finite(element.duration));
           setReady(true);
+          publish(false);
           if (!resumed.current) {
-            const now = partyNow.current;
             // A host with company waits for the guests to be ready, so no one starts behind; a
             // guest starts when the host does. Anyone else starts on their own, as they pressed Play
             // to get here, and a browser that refuses leaves the play button for them.
-            if (now.role === "host" && now.members.length > 1) setHeldSince(Date.now());
-            else if (now.role !== "guest") element.play().catch(() => {});
+            if (party.role === "host" && party.members.length > 1) hold();
+            else if (party.role !== "guest") element.play().catch(() => {});
           }
           resumed.current = true;
         }}
-        onCanPlay={() => partyNow.current.setStatus("ready", statusKey())}
+        onCanPlay={() => report("ready")}
         onDurationChange={(event) => setDuration(finite(event.currentTarget.duration))}
         onPlay={() => {
           setPlaying(true);
@@ -642,7 +526,7 @@ export default function Player({
         }}
         onWaiting={() => {
           setReady(false);
-          partyNow.current.setStatus("loading", statusKey());
+          report("loading");
           publish(false);
         }}
         onPlaying={() => {
@@ -667,15 +551,13 @@ export default function Player({
             .then((response) => response.status === 429)
             .catch(() => false)
             .then((limited) =>
-              callbacks.current.onError(
-                limited
-                  ? DAILY_LIMIT_MESSAGE
-                  : "Playback failed. The stream may have expired - reload the episode to try again.",
-              ),
+              callbacks.current.onError(limited ? DAILY_LIMIT_MESSAGE : "Playback failed. The stream may have expired - reload the episode to try again."),
             );
         }}
       >
-        {active && <track key={active.id} id={active.id} kind="subtitles" src={active.url} srcLang={active.lang} label={active.language} onLoad={shiftCuesNow} />}
+        {active && (
+          <track key={active.id} id={active.id} kind="subtitles" src={active.url} srcLang={active.lang} label={active.language} onLoad={shiftCuesNow} />
+        )}
       </video>
 
       {!ready && (
@@ -687,18 +569,38 @@ export default function Player({
 
       {hostChoosing && (
         <div className="absolute inset-0 flex items-center justify-center bg-canvas/95">
-          <StateCard
-            eyebrow="The host"
-            title={hostChoosing === "episode" ? "Choosing an episode" : hostChoosing === "subtitles" ? "Choosing subtitles" : "Choosing a source"}
-            detail="Playback is paused for everyone until they are done."
-          />
+          <StateCard eyebrow="The host" title={CHOOSING[hostChoosing]} detail="Playback is paused for everyone until they are done." />
         </div>
       )}
 
-      {heldSince !== null && (
+      {held && (
         <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-semibold text-ink">
-          Waiting for {waitingFor.length > 0 ? waitingFor.join(", ") : "everyone"}…
+          Waiting for {party.waitingFor.length > 0 ? party.waitingFor.join(", ") : "everyone"}…
         </div>
+      )}
+
+      {blocked && (
+        <div className="absolute inset-0 flex items-center justify-center bg-canvas/80">
+          <StateCard eyebrow="The party is playing" title="Tap to join in" detail="Your browser needs a tap before it will play the picture.">
+            <Button onClick={tapToPlay}>Play</Button>
+          </StateCard>
+        </div>
+      )}
+
+      {party.role === "guest" && (party.reconnecting || party.hostSilent) && (
+        <div className="pointer-events-none absolute left-1/2 top-20 -translate-x-1/2 rounded-full bg-black/60 px-4 py-2 text-sm font-semibold text-ink">
+          {party.reconnecting ? "Getting back into the party…" : "No word from the host…"}
+        </div>
+      )}
+
+      {party.role === "host" && playing && !held && party.waitingFor.length > 0 && (
+        <button
+          type="button"
+          onClick={toggle}
+          className="absolute left-1/2 top-20 -translate-x-1/2 cursor-pointer rounded-full bg-black/60 px-4 py-2 text-sm font-semibold text-ink"
+        >
+          {party.waitingFor.join(", ")} {party.waitingFor.length > 1 ? "are" : "is"} buffering · Pause
+        </button>
       )}
 
       {message && (
@@ -816,7 +718,10 @@ export default function Player({
       )}
       {sources && panel === "sources" && (
         <SidePanel title="Sources" onClose={() => setPanel(null)}>
-          {sources({ position: () => video.current?.currentTime ?? 0, close: () => setPanel(null) })}
+          {sources({
+            position: () => video.current?.currentTime ?? 0,
+            close: () => setPanel(null),
+          })}
         </SidePanel>
       )}
     </div>
@@ -824,19 +729,18 @@ export default function Player({
 }
 
 /** The seek bar: buffered behind played, with a handle that grows under the pointer. */
-function Seek({
-  position,
-  duration,
-  buffered,
-  onSeek,
-}: {
-  position: number;
-  duration: number;
-  buffered: number;
-  onSeek: (seconds: number) => void;
-}) {
+function Seek({ position, duration, buffered, onSeek }: { position: number; duration: number; buffered: number; onSeek: (seconds: number) => void }) {
   const seekable = duration > 0;
-  const played = seekable ? Math.min((position / duration) * 100, 100) : 0;
+  // While the bar is held it follows the hand and the seek is made once, when it is let go: a
+  // party would otherwise be told about every step of the drag.
+  const [scrub, setScrub] = useState<number | null>(null);
+  const shownAt = scrub ?? position;
+  const commit = () => {
+    if (scrub === null) return;
+    onSeek(scrub);
+    setScrub(null);
+  };
+  const played = seekable ? Math.min((shownAt / duration) * 100, 100) : 0;
   const loaded = seekable ? Math.min((buffered / duration) * 100, 100) : 0;
   return (
     <div className="group/seek relative flex h-5 flex-1 items-center">
@@ -853,10 +757,14 @@ function Seek({
         min={0}
         max={seekable ? duration : 0}
         step={1}
-        value={seekable ? position : 0}
+        value={seekable ? shownAt : 0}
         aria-label="Seek"
         disabled={!seekable}
-        onChange={(event) => onSeek(Number(event.target.value))}
+        onChange={(event) => setScrub(Number(event.target.value))}
+        onPointerUp={commit}
+        onPointerCancel={commit}
+        onKeyUp={commit}
+        onBlur={commit}
         className="absolute inset-0 size-full cursor-pointer opacity-0"
       />
     </div>

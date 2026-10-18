@@ -10,7 +10,7 @@ use crate::play::{Outcome, Player};
 use akidev_core::media_id;
 use akidev_core::model::{Filters, Kind, Media, Sort};
 use akidev_core::{providers, search};
-use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -159,8 +160,14 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/music/albums/{id}", get(music_album))
         .route("/v1/music/artists/{id}", get(music_artist))
         .route("/v1/music/radio/{id}", get(music_radio))
+        .layer(CompressionLayer::new().gzip(true))
+        .with_state(state.clone());
+
+    // Never kept by the edge (an answer here is about now: who is waiting, whether the party is
+    // still there), and small: nothing a party sends is bigger than an SDP.
+    let party = Router::new()
         .route("/v1/party", post(party_create))
-        .route("/v1/party/{code}", delete(party_end))
+        .route("/v1/party/{code}", delete(party_end).put(party_register))
         .route("/v1/party/{code}/ice", get(party_ice))
         .route("/v1/party/{code}/join", post(party_join))
         .route("/v1/party/{code}/offers", get(party_offers))
@@ -169,7 +176,11 @@ pub fn router(state: AppState) -> Router {
             get(party_take_answer).post(party_answer),
         )
         .route("/v1/party/{code}/guests/{guest}", delete(party_guest_gone))
-        .layer(CompressionLayer::new().gzip(true))
+        .layer(DefaultBodyLimit::max(party::MAX_SDP + 1024))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
         .with_state(state.clone());
 
     let deliverer = Deliverer {
@@ -186,7 +197,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/music/stream/{id}", get(music_stream))
         .with_state(state.clone());
 
-    api.merge(streams).merge(audio).layer(cors(&state.settings))
+    api.merge(party)
+        .merge(streams)
+        .merge(audio)
+        .layer(cors(&state.settings))
 }
 
 #[derive(Deserialize)]
@@ -257,6 +271,7 @@ fn cors(settings: &Settings) -> CorsLayer {
             Method::GET,
             Method::HEAD,
             Method::POST,
+            Method::PUT,
             Method::DELETE,
             Method::OPTIONS,
         ])
@@ -882,10 +897,10 @@ async fn party_create(
     {
         return too_many();
     }
-    let Some(created) = state.parties.create() else {
+    let Some(created) = state.parties.create(&client) else {
         return error(
             StatusCode::SERVICE_UNAVAILABLE,
-            "Too many parties right now.",
+            "Too many parties are open right now. Try again later.",
         );
     };
     Json(json!({
@@ -895,12 +910,55 @@ async fn party_create(
     .into_response()
 }
 
-/// A client that asks about parties by their codes faster than any person would is guessing them.
-fn within_party_polls(state: &AppState, headers: &HeaderMap, peer: SocketAddr) -> bool {
-    let client = client_of(headers, Some(peer));
-    state
+#[derive(Deserialize)]
+struct RegisterBody {
+    host_token: String,
+}
+
+/// The host opens its party again under the same code: the server forgot it (a restart, or the host's
+/// device slept), or the page was reloaded and the code and token were kept.
+async fn party_register(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(code): Path<String>,
+    Json(body): Json<RegisterBody>,
+) -> Response {
+    let client = client_of(&headers, Some(peer));
+    if !state
         .limiter
-        .allow(&client, "party-poll", 60, Duration::from_secs(600))
+        .allow(&client, "party-register", 60, Duration::from_secs(3600))
+    {
+        return too_many();
+    }
+    match state.parties.register(&client, &code, &body.host_token) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(party::NotRegistered::Malformed) => error(
+            StatusCode::BAD_REQUEST,
+            "That is not a party code and token.",
+        ),
+        // Finding out that a code is in use is a guess at a party, and counts as one.
+        Err(party::NotRegistered::Taken) => {
+            if guessing(&state, &headers, peer) {
+                return too_many();
+            }
+            error(StatusCode::CONFLICT, "That code belongs to another party.")
+        }
+        Err(party::NotRegistered::TooMany) => error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Too many parties are open right now. Try again later.",
+        ),
+    }
+}
+
+/// A client that asks about codes that are not parties, faster than any person would, is guessing
+/// them. Asking about a party that exists, as every guest and host does while connecting, does not
+/// count.
+fn guessing(state: &AppState, headers: &HeaderMap, peer: SocketAddr) -> bool {
+    let client = client_of(headers, Some(peer));
+    !state
+        .limiter
+        .allow(&client, "party-miss", 30, Duration::from_secs(600))
 }
 
 async fn party_ice(
@@ -909,13 +967,15 @@ async fn party_ice(
     headers: HeaderMap,
     Path(code): Path<String>,
 ) -> Response {
-    if !within_party_polls(&state, &headers, peer) {
-        return too_many();
-    }
     if !state.parties.exists(&code) {
-        return no_such_party();
+        return if guessing(&state, &headers, peer) {
+            too_many()
+        } else {
+            no_such_party()
+        };
     }
-    Json(json!({ "ice_servers": party::ice_servers(&state.settings).await })).into_response()
+    let servers = party::ice_servers(&state.settings).await;
+    Json(json!({ "ice_servers": servers })).into_response()
 }
 
 async fn party_join(
@@ -944,12 +1004,30 @@ async fn party_join(
     }
 }
 
+#[derive(Deserialize)]
+struct OffersQuery {
+    /// The guests the host has a connection to, comma separated.
+    active: Option<String>,
+}
+
 async fn party_offers(
     State(state): State<AppState>,
     Path(code): Path<String>,
+    Query(query): Query<OffersQuery>,
     headers: HeaderMap,
 ) -> Response {
-    match state.parties.take_offers(&code, bearer(&headers)).await {
+    let active: Option<Vec<String>> = query.active.map(|list| {
+        list.split(',')
+            .filter(|id| !id.is_empty() && id.len() <= 32)
+            .take(party::MAX_GUESTS * 2)
+            .map(str::to_string)
+            .collect()
+    });
+    match state
+        .parties
+        .take_offers(&code, bearer(&headers), active.as_deref())
+        .await
+    {
         Some(offers) => {
             let offers: Vec<_> = offers
                 .into_iter()
@@ -989,12 +1067,10 @@ async fn party_take_answer(
     headers: HeaderMap,
     Path((code, guest)): Path<(String, String)>,
 ) -> Response {
-    if !within_party_polls(&state, &headers, peer) {
-        return too_many();
-    }
     match state.parties.take_answer(&code, &guest).await {
         Some(Some(answer)) => Json(json!({ "answer": answer })).into_response(),
         Some(None) => StatusCode::NO_CONTENT.into_response(),
+        None if guessing(&state, &headers, peer) => too_many(),
         None => no_such_party(),
     }
 }

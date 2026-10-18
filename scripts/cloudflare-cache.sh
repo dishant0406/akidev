@@ -15,8 +15,9 @@
 #                   page names. Not the router's own requests (`_rsc`): those are a different answer
 #                   at the same address, depending on the page the browser is on.
 #   pictures        /v1/img. Each is a new file per address and never changes, so a month.
-#   catalogue       the rest of /v1 except /v1/play. For as long as the API says (a minute to
-#                   fifteen), so most never reach the server.
+#   catalogue       the rest of /v1 except /v1/play and /v1/party (a party's answers are about now:
+#                   who is waiting, whether it is still there). For as long as the API says (a minute
+#                   to fifteen), so most never reach the server.
 #
 # The API sends no `Vary: Origin` (it allows one origin and says so on every answer), which is what
 # lets these be kept: the edge ignores Vary, so a copy made for a request without an Origin header
@@ -47,7 +48,7 @@ RULES="$(cat <<JSON
   {
     "action": "set_cache_settings",
     "description": "Catalogue, search and title answers: kept for as long as the API says",
-    "expression": "(http.host eq \"$API\" and starts_with(http.request.uri.path, \"/v1/\") and not starts_with(http.request.uri.path, \"/v1/play\") and not starts_with(http.request.uri.path, \"/v1/img\"))",
+    "expression": "(http.host eq \"$API\" and starts_with(http.request.uri.path, \"/v1/\") and not starts_with(http.request.uri.path, \"/v1/play\") and not starts_with(http.request.uri.path, \"/v1/img\") and not starts_with(http.request.uri.path, \"/v1/party\"))",
     "enabled": true,
     "action_parameters": { "cache": true, "edge_ttl": { "mode": "respect_origin" }, "browser_ttl": { "mode": "respect_origin" } }
   }

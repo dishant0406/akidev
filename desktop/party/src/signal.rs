@@ -107,6 +107,24 @@ pub async fn create(api: &str) -> anyhow::Result<Created> {
     })
 }
 
+/// Opens the party `code` again for the host that holds `token`: the server forgot it (it was
+/// restarted, or the host's device slept) and the guests still have the code. `Ok(false)` means the
+/// server will not have it (the code is another party's), so asking again is no use.
+pub async fn register(api: &str, code: &str, token: &str) -> anyhow::Result<bool> {
+    let response = client()
+        .put(format!("{api}/v1/party/{code}"))
+        .json(&json!({ "host_token": token }))
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await
+        .context("could not reach the party server")?;
+    match response.status() {
+        status if status.is_success() => Ok(true),
+        reqwest::StatusCode::CONFLICT | reqwest::StatusCode::BAD_REQUEST => Ok(false),
+        status => bail!("the party server answered {status}"),
+    }
+}
+
 pub async fn ice(api: &str, code: &str) -> anyhow::Result<Vec<RTCIceServer>> {
     let list: IceList = checked(
         client()
@@ -139,11 +157,18 @@ pub async fn join(api: &str, code: &str, offer: &str) -> anyhow::Result<String> 
     Ok(body["guest"].as_str().unwrap_or_default().to_string())
 }
 
-/// The offers waiting for the host. Empty when none came within the wait.
-pub async fn offers(api: &str, code: &str, token: &str) -> anyhow::Result<Vec<Offer>> {
+/// The offers waiting for the host. Empty when none came within the wait. `active` is the guests the
+/// host has a connection to, so the server can give back the places of ones it lost.
+pub async fn offers(
+    api: &str,
+    code: &str,
+    token: &str,
+    active: &[String],
+) -> anyhow::Result<Vec<Offer>> {
     let body: serde_json::Value = checked(
         client()
             .get(format!("{api}/v1/party/{code}/offers"))
+            .query(&[("active", active.join(","))])
             .bearer_auth(token)
             .timeout(LONG_POLL)
             .send()

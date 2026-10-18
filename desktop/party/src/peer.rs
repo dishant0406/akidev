@@ -12,7 +12,10 @@ use webrtc::peer_connection::{
 };
 
 /// How long finding the way to the other device (gathering addresses, asking STUN) may take.
-const GATHER_FOR: Duration = Duration::from_secs(10);
+/// Gathering normally ends within a second; this is for a STUN server that does not answer.
+const GATHER_FOR: Duration = Duration::from_secs(4);
+/// What was just sent is given this long to leave before the connection is closed.
+const CLOSE_AFTER: Duration = Duration::from_millis(300);
 /// How long the other device has to open the channel once the answer is in.
 const OPEN_WITHIN: Duration = Duration::from_secs(30);
 
@@ -165,6 +168,11 @@ impl Peer {
         Ok(description.sdp)
     }
 
+    /// Gives up on a connection that never opened.
+    pub async fn close(self) {
+        let _ = self.pc.close().await;
+    }
+
     /// The offering end takes the other's answer.
     pub async fn accept_answer(&self, answer: &str) -> anyhow::Result<()> {
         let answer = RTCSessionDescription::answer(answer.to_string())
@@ -223,6 +231,8 @@ impl Peer {
                 }
             }
             let _ = wire_tx.send(Wire::Closed);
+            // A goodbye sent just before the end is on its way: closing at once could lose it.
+            tokio::time::sleep(CLOSE_AFTER).await;
             let _ = pc.close().await;
         });
         Ok(Open {

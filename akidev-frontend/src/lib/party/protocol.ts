@@ -13,8 +13,12 @@ export type Item =
  */
 export type Readiness = "ready" | "loading" | "trouble";
 
-/** What the host has open while the party waits: a source list, an episode list or subtitles. */
-export type Choosing = "source" | "episode" | "subtitles";
+/**
+ * What the host is doing while the party waits: choosing from a source list, an episode list or
+ * subtitles, or still finding the source it just picked. A device that does not know a word
+ * ignores it, so more can be added.
+ */
+export type Choosing = "source" | "episode" | "subtitles" | "finding";
 
 export interface Member {
   name: string;
@@ -23,7 +27,7 @@ export interface Member {
 }
 
 export type Message =
-  | { t: "hello"; name: string }
+  | { t: "hello"; name: string; id?: string }
   | { t: "state"; item: Item | null; playing: boolean; position: number; at: number; choosing?: Choosing }
   | { t: "members"; members: Member[] }
   | { t: "play" }
@@ -73,11 +77,11 @@ export function parseMessage(text: string): Message | null {
   }
   switch (raw.t) {
     case "hello":
-      return isText(raw.name) ? { t: "hello", name: raw.name } : null;
+      return isText(raw.name) ? { t: "hello", name: raw.name, ...(isText(raw.id) ? { id: raw.id } : {}) } : null;
     case "state": {
       const item = parseItem(raw.item);
       if (item === undefined || typeof raw.playing !== "boolean" || !isNumber(raw.position) || !isNumber(raw.at)) return null;
-      const choosing = raw.choosing === "source" || raw.choosing === "episode" || raw.choosing === "subtitles" ? raw.choosing : undefined;
+      const choosing = raw.choosing === "source" || raw.choosing === "episode" || raw.choosing === "subtitles" || raw.choosing === "finding" ? raw.choosing : undefined;
       return { t: "state", item, playing: raw.playing, position: raw.position, at: raw.at, ...(choosing ? { choosing } : {}) };
     }
     case "members": {

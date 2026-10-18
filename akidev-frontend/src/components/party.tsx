@@ -4,15 +4,12 @@ import { Check, ClipboardPaste, Link2, Loader2, Users } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { CODE_LENGTH, partyCodeFrom } from "@/lib/party/code";
 import { cn } from "@/lib/utils";
 import { useParty } from "@/providers/party";
 import type { Member } from "@/lib/party/protocol";
 
 import { IconButton } from "./button";
-
-/** The code's letters and digits, as the server makes them: the ones that are not easily mistaken. */
-const CODE_LENGTH = 6;
-const clean = (text: string) => text.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "").slice(0, CODE_LENGTH);
 
 /** The party button for a bar, and the panel it opens. */
 export default function PartyButton({ className }: { className?: string }) {
@@ -20,10 +17,16 @@ export default function PartyButton({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const live = party.role !== "none";
+  // Kept here, not in the tabs, so a join that fails (or is cancelled) leaves the code as it was typed.
+  const [tab, setTab] = useState<"start" | "join">("start");
+  const [typed, setTyped] = useState("");
 
   // A link to a party opens the panel with its code ready.
   useEffect(() => {
-    if (party.invite) setOpen(true);
+    if (!party.invite) return;
+    setOpen(true);
+    setTab("join");
+    setTyped(party.invite);
   }, [party.invite]);
 
   // A press anywhere else, or Escape, puts it away.
@@ -57,28 +60,34 @@ export default function PartyButton({ className }: { className?: string }) {
           aria-label="Watch party"
           className="absolute right-0 top-full z-[70] mt-2 w-[320px] max-w-[calc(100vw-2rem)] origin-top-right animate-pop material-panel rounded-xl p-4 shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_24px_60px_rgb(0_0_0/0.55)]"
         >
-          <Panel />
+          <Panel tab={tab} setTab={setTab} typed={typed} setTyped={setTyped} />
         </div>
       )}
     </div>
   );
 }
 
-function Panel() {
+type Choice = { tab: "start" | "join"; setTab: (tab: "start" | "join") => void; typed: string; setTyped: (code: string) => void };
+
+/** A party that cannot be reached from here is often one hosted from the desktop app on a network that blocks it. */
+const CANNOT_CONNECT = /did not (connect|answer)/i;
+
+function Panel(choice: Choice) {
   const party = useParty();
   return (
     <div className="flex flex-col gap-4">
-      {party.connecting ? (
-        <Working />
-      ) : party.role === "none" ? (
-        <Idle />
-      ) : (
-        <Live />
-      )}
+      {party.connecting ? <Working /> : party.role === "none" ? <Idle {...choice} /> : <Live />}
       {party.error && !party.connecting && (
         <p className="flex items-start gap-2 text-[13px] leading-snug text-accent">
           <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />
-          {party.error}
+          <span>
+            {party.error}
+            {CANNOT_CONNECT.test(party.error) && (
+              <span className="mt-1 block text-dim">
+                If it keeps happening, ask the host to start the party from akidev.live: a network can block the desktop app.
+              </span>
+            )}
+          </span>
         </p>
       )}
     </div>
@@ -86,18 +95,22 @@ function Panel() {
 }
 
 function Working() {
+  const party = useParty();
   return (
-    <div className="flex items-center justify-center gap-2.5 py-8 text-sm text-dim">
-      <Loader2 className="size-4 animate-spin" />
-      Connecting
+    <div className="flex flex-col items-center gap-3 py-6 text-sm text-dim">
+      <span className="flex items-center gap-2.5">
+        <Loader2 className="size-4 animate-spin" />
+        Connecting
+      </span>
+      <button type="button" onClick={party.cancel} className="cursor-pointer text-[13px] font-medium text-faint transition-colors hover:text-ink">
+        Cancel
+      </button>
     </div>
   );
 }
 
 /** Start a party, or join one. */
-function Idle() {
-  const party = useParty();
-  const [tab, setTab] = useState<"start" | "join">(party.invite ? "join" : "start");
+function Idle({ tab, setTab, typed, setTyped }: Choice) {
   return (
     <>
       <div role="tablist" aria-label="Start or join" className="grid grid-cols-2 gap-0.5 rounded-[10px] bg-wash p-0.5">
@@ -117,8 +130,28 @@ function Idle() {
           </button>
         ))}
       </div>
-      {tab === "start" ? <Start /> : <Join />}
+      {tab === "start" ? <Start /> : <Join typed={typed} setTyped={setTyped} />}
     </>
+  );
+}
+
+/** Who you appear as: the name the others see. */
+function NameField() {
+  const party = useParty();
+  return (
+    <label className="flex items-center gap-3 rounded-xl bg-wash px-3 py-2.5 transition-colors focus-within:bg-wash">
+      <Avatar name={party.name} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[11px] font-medium text-faint">You appear as</span>
+        <input
+          value={party.name}
+          onChange={(event) => party.setName(event.target.value)}
+          maxLength={24}
+          spellCheck={false}
+          className="min-w-0 bg-transparent text-[15px] font-medium text-ink outline-none"
+        />
+      </span>
+    </label>
   );
 }
 
@@ -126,32 +159,20 @@ function Start() {
   const party = useParty();
   return (
     <>
-      <label className="flex items-center gap-3 rounded-xl bg-wash px-3 py-2.5 transition-colors focus-within:bg-wash">
-        <Avatar name={party.name} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-[11px] font-medium text-faint">You appear as</span>
-          <input
-            value={party.name}
-            onChange={(event) => party.setName(event.target.value)}
-            maxLength={24}
-            spellCheck={false}
-            className="min-w-0 bg-transparent text-[15px] font-medium text-ink outline-none"
-          />
-        </span>
-      </label>
+      <NameField />
       <p className="text-[13px] leading-snug text-dim">Everyone plays what you play, in step. Share the code, and they join in seconds.</p>
       <Action onClick={() => void party.create()}>Start party</Action>
     </>
   );
 }
 
-function Join() {
+function Join({ typed, setTyped }: { typed: string; setTyped: (code: string) => void }) {
   const party = useParty();
-  const [typed, setTyped] = useState(clean(party.invite ?? ""));
   const [focused, setFocused] = useState(false);
 
   const change = (text: string) => {
-    const next = clean(text);
+    // A pasted link is read for its code, not for its letters.
+    const next = partyCodeFrom(text);
     setTyped(next);
     // The last letter joins, so there is nothing more to press.
     if (next.length === CODE_LENGTH && next !== typed) void party.join(next);
@@ -166,6 +187,7 @@ function Join() {
 
   return (
     <>
+      <NameField />
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <label htmlFor="party-code" className="text-[11px] font-medium text-faint">
@@ -269,6 +291,14 @@ function Live() {
         </button>
       </div>
 
+      {party.reconnecting && (
+        <p className="flex items-center gap-2 text-[13px] text-accent">
+          <Loader2 className="size-3.5 animate-spin" />
+          Lost the party. Getting back in…
+        </p>
+      )}
+      {!party.reconnecting && party.hostSilent && <p className="text-[13px] text-accent">The host isn&apos;t answering. Waiting for them…</p>}
+
       <div className="flex flex-col gap-1">
         <span className="text-[11px] font-medium text-faint">In this party · {party.members.length}</span>
         <ul aria-label="In this party" className="-mx-1 flex max-h-56 flex-col overflow-y-auto">
@@ -279,7 +309,7 @@ function Live() {
       </div>
 
       <p className="text-[12px] leading-snug text-faint">
-        {host ? "Anyone can pause and seek. You choose what plays." : "The host chooses what plays. You can pause and seek for everyone."}
+        {host ? "Anyone in the party can pause and seek. You choose what plays." : "The host chooses what plays. You can pause and seek for everyone."}
       </p>
       <button
         type="button"

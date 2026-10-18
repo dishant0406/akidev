@@ -1,7 +1,8 @@
 //! The window: one bar that is both title bar and navigation, and the current screen below it.
 
 use crate::browse::BrowsePage;
-use crate::design::button::{icon_button, keep_from_title_bar, tab};
+use crate::design::button::{icon_button, keep_from_title_bar, primary_button, tab};
+use crate::design::state::state_card;
 use crate::design::tokens::{CANVAS, LINE, RAISED, TEXT, TOP_BAR, color, radius};
 use crate::history::History;
 use crate::home::HomePage;
@@ -14,6 +15,7 @@ use crate::party::{Party, PartyHandle};
 use crate::route::{Navigator, Route, navigate};
 use crate::settings::SettingsPage;
 use crate::title::TitlePage;
+use crate::updater;
 use crate::updates::{Shared, Updates};
 use crate::watch::WatchPage;
 use akidev_core::model::Kind;
@@ -56,6 +58,8 @@ pub struct AkidevApp {
     next_toast: u64,
     focus: FocusHandle,
     focused: bool,
+    /// The published sources say this build is too old to run: only the update screen shows.
+    locked: bool,
     palette_was_open: bool,
     /// The Akidev mark drawn beside the name.
     mark: Arc<Image>,
@@ -86,6 +90,19 @@ impl AkidevApp {
             view: Some(Self::build(&first, cx)),
             scroll: ScrollHandle::new(),
         };
+        // The sources are fetched a little after the start and again from time to time; a build the
+        // published document turns out to rule out is stopped when it does.
+        cx.spawn(async move |app, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_secs(30))
+                    .await;
+                if app.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
         AkidevApp {
             history: History::new(first, screen),
             palette,
@@ -95,6 +112,7 @@ impl AkidevApp {
             next_toast: 0,
             focus: cx.focus_handle(),
             focused: false,
+            locked: false,
             palette_was_open: false,
             pictures: crate::images::PictureCache::new(cx),
             mark: Arc::new(Image::from_bytes(
@@ -358,8 +376,57 @@ impl AkidevApp {
     }
 }
 
+impl AkidevApp {
+    /// The one screen of a build the published sources no longer allow: what is wrong, and a button.
+    fn update_screen(&self, message: String, cx: &mut Context<Self>) -> Div {
+        let updates = self.updates.clone();
+        let label = updates.read(cx).label();
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(color(CANVAS))
+            .text_color(color(TEXT))
+            .child(TitleBar::new())
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(state_card(
+                        Some("Update required"),
+                        "Update Akidev to carry on",
+                        message,
+                        true,
+                        vec![
+                            primary_button("update-now", &label, None, move |_, _, cx| {
+                                updates.update(cx, |updates, cx| updates.update_now(cx))
+                            })
+                            .into_any_element(),
+                        ],
+                    )),
+            )
+    }
+}
+
 impl Render for AkidevApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A build that is too old to run shows the update screen and nothing else.
+        if let Some(message) = akidev_core::sources::update_required(&updater::current_version()) {
+            if !self.locked {
+                self.locked = true;
+                // Whatever was playing stops: the screen it was on is let go.
+                self.leave();
+                crate::music_player::pause(cx);
+            }
+            return self.update_screen(message, cx).into_any_element();
+        }
+        if self.locked {
+            // The sources no longer rule this build out: the page that was let go is built again.
+            self.locked = false;
+            self.arrive(cx);
+        }
         // Focus starts on the window itself, so Cmd-K works before anything is clicked.
         if !self.focused {
             window.focus(&self.focus, cx);
@@ -440,6 +507,9 @@ impl Render for AkidevApp {
                             .child(toast.text.clone())
                     })),
             );
-        image_cache(pictures).size_full().child(shell)
+        image_cache(pictures)
+            .size_full()
+            .child(shell)
+            .into_any_element()
     }
 }

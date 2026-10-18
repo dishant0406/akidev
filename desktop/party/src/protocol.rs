@@ -71,6 +71,10 @@ pub enum Message {
     /// Guest to host, first: who is joining.
     Hello {
         name: String,
+        /// A random id for this run of the app or page, the same each time it joins. A host that
+        /// sees it again drops the old connection, so a guest that comes back is not there twice.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
     },
     /// Host to guests: what is playing. `at` is the host's clock in milliseconds since 1970,
     /// when `position` (seconds) was read.
@@ -211,6 +215,27 @@ mod tests {
         };
         assert_eq!(choosing, None);
         assert_eq!(item.unwrap().key(), "movie-tt1");
+    }
+
+    #[test]
+    fn a_hello_may_carry_the_guests_own_id_and_one_without_still_reads() {
+        let hello = Message::Hello {
+            name: "Sam".into(),
+            id: Some("a1b2".into()),
+        };
+        assert_eq!(
+            serde_json::to_string(&hello).unwrap(),
+            r#"{"t":"hello","name":"Sam","id":"a1b2"}"#
+        );
+        // What a device from before the id said.
+        let old: Message = serde_json::from_str(r#"{"t":"hello","name":"Sam"}"#).unwrap();
+        assert_eq!(
+            old,
+            Message::Hello {
+                name: "Sam".into(),
+                id: None
+            }
+        );
     }
 
     #[test]
