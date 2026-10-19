@@ -18,7 +18,7 @@ use anyhow::{Context, bail};
 use futures::TryStreamExt;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -151,7 +151,7 @@ impl Debrid {
         Self::unwrap(body)
     }
 
-    async fn add_if_cached(&self, release: &Release, left: Duration) -> bool {
+    async fn add_if_cached(&self, release: &Release, left: Duration) -> Option<Option<i64>> {
         let form = reqwest::multipart::Form::new()
             .text("magnet", release.magnet.clone())
             .text("add_only_if_cached", "true");
@@ -165,18 +165,14 @@ impl Debrid {
             .await;
         let outcome = match sent {
             Ok(response) => match response.json::<Value>().await {
-                Ok(body) => Self::unwrap(body).map(|_| ()),
+                Ok(body) => Self::unwrap(body),
                 Err(error) => Err(anyhow::anyhow!(error.without_url())),
             },
             Err(error) => Err(anyhow::anyhow!(error.without_url())),
         };
         match outcome {
-            Ok(()) => {
-                // The listing is cached, so it is dropped, or the new entry would be invisible
-                // and every request would add the torrent again.
-                cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
-                true
-            }
+            // The id lets the entry be read on its own, without listing the whole account.
+            Ok(data) => Some(data.get("torrent_id").and_then(Value::as_i64)),
             Err(error) => {
                 // A refusal means the release is not cached, which is the normal case for most
                 // candidates, so it is only worth a debug line.
@@ -185,22 +181,54 @@ impl Debrid {
                     release.title,
                     self.redact(format!("{error:#}"))
                 );
-                false
+                None
             }
         }
     }
 
-    /// Which of these releases the service already holds.
-    async fn cached_hashes(
+    /// One entry of the account, by its id: a single small answer, where the listing is the whole
+    /// account and grows with every title ever watched.
+    async fn entry_by_id(&self, id: i64, left: Duration) -> anyhow::Result<Option<Account>> {
+        let data = self
+            .api(
+                "mylist",
+                &[("id", id.to_string()), ("bypass_cache", "true".into())],
+                left,
+            )
+            .await?;
+        let one = match data {
+            Value::Array(mut all) if !all.is_empty() => all.swap_remove(0),
+            other => other,
+        };
+        if one.is_null() {
+            return Ok(None);
+        }
+        let entry: Account = serde_json::from_value(one).context("reading the account entry")?;
+        if entry.files.is_empty() {
+            return Ok(None);
+        }
+        // Kept in the cached listing, so the next look for it does not read the account again.
+        let mut list = cache::peek::<Vec<Account>>("torbox:mylist").unwrap_or_default();
+        if !list.is_empty() {
+            list.retain(|each| each.id != entry.id);
+            list.push(entry.clone());
+            cache::put("torbox:mylist", list, LIST_TTL);
+        }
+        Ok(Some(entry))
+    }
+
+    /// The releases the service already holds, each with its files when the service listed them. A
+    /// release with no list is `None`, which means unknown and not empty.
+    async fn cached_entries(
         &self,
         releases: &[Release],
         left: Duration,
-    ) -> anyhow::Result<HashSet<String>> {
+    ) -> anyhow::Result<HashMap<String, Option<Vec<VideoFile>>>> {
         let mut hashes: Vec<&str> = releases.iter().map(|r| r.info_hash.as_str()).collect();
         hashes.sort_unstable();
         hashes.dedup();
         if hashes.is_empty() {
-            return Ok(HashSet::new());
+            return Ok(HashMap::new());
         }
         let key = format!("torbox:checkcached:{}", hashes.join(","));
         let joined = hashes.join(",");
@@ -227,10 +255,22 @@ impl Debrid {
                 found
                     .iter()
                     .filter(|(_, entry)| !entry.is_null() && entry.as_bool() != Some(false))
-                    .map(|(hash, _)| hash.to_ascii_lowercase())
+                    .map(|(hash, entry)| (hash.to_ascii_lowercase(), listed_files(entry)))
                     .collect()
             })
             .unwrap_or_default())
+    }
+
+    async fn cached_hashes(
+        &self,
+        releases: &[Release],
+        left: Duration,
+    ) -> anyhow::Result<HashSet<String>> {
+        Ok(self
+            .cached_entries(releases, left)
+            .await?
+            .into_keys()
+            .collect())
     }
 
     /// Which of these releases the service holds, for showing a viewer which will start at once.
@@ -362,7 +402,8 @@ impl Debrid {
         if left().is_zero() {
             return Err("Timed out looking for a playable source.".into());
         }
-        let cached = match self.cached_hashes(ranked, left()).await {
+        let started = Instant::now();
+        let cached = match self.cached_entries(ranked, left()).await {
             Ok(cached) => cached,
             Err(error) => {
                 // An outage must not take the app down: "unavailable" lets the relay answer.
@@ -373,12 +414,39 @@ impl Debrid {
                 return Err("The debrid service could not be reached.".into());
             }
         };
-        let usable: Vec<&Release> = ranked
+        let held: Vec<&Release> = ranked
             .iter()
-            .filter(|release| cached.contains(&release.info_hash))
+            .filter(|release| cached.contains_key(&release.info_hash))
             .collect();
-        if usable.is_empty() {
+        if held.is_empty() {
             return Err("No cached copy of this episode on the debrid service.".into());
+        }
+        // The service said which files each cached release holds, so one without a file for this
+        // episode is passed over now. Finding that out by adding it to the account and reading the
+        // account back cost seconds a release, and was where a play that ended on the torrent
+        // engine spent most of its wait.
+        let held_count = held.len();
+        let listed = held
+            .iter()
+            .filter(|release| matches!(cached.get(&release.info_hash), Some(Some(_))))
+            .count();
+        let usable: Vec<&Release> = held
+            .into_iter()
+            .filter(|release| match cached.get(&release.info_hash) {
+                Some(Some(files)) if !files.is_empty() => {
+                    pick_video_file(files, episode, 0, season).is_some()
+                }
+                _ => true,
+            })
+            .collect();
+        tracing::info!(
+            "[debrid] {} releases asked after {:?}: {held_count} cached, {listed} with a file list, {} with a file for the episode",
+            ranked.len(),
+            started.elapsed(),
+            usable.len()
+        );
+        if usable.is_empty() {
+            return Err("Cached copies exist, but none holds a file that could be played.".into());
         }
 
         // Each candidate costs two or three calls, so the loop is bounded.
@@ -386,7 +454,19 @@ impl Debrid {
             if left() < MIN_STEP {
                 break;
             }
-            match self.file_for(release, episode, season, left()).await {
+            let tried = Instant::now();
+            let outcome = self.file_for(release, episode, season, left()).await;
+            tracing::info!(
+                "[debrid] \"{}\": {} after {:?}",
+                release.title,
+                if matches!(outcome, Ok(Some(_))) {
+                    "file found"
+                } else {
+                    "no file"
+                },
+                tried.elapsed()
+            );
+            match outcome {
                 Ok(Some(origin)) => {
                     return Ok(Found {
                         release: release.title.clone(),
@@ -418,16 +498,25 @@ impl Debrid {
         // A cached release the account does not hold yet has no ids, so it is added first. That
         // is the step that makes the source work on a fresh account at all.
         let mut entry = self.account_entry(&release.info_hash, left).await?;
-        if entry.is_none() && self.add_if_cached(release, left).await {
-            // The add is asynchronous on the service's side: the listing read straight after can
-            // still be the pre-add snapshot, so it is read once more after a short pause.
-            entry = self.account_entry(&release.info_hash, left).await?;
-            if entry.is_none() && left > SETTLE + MIN_STEP {
-                tokio::time::sleep(SETTLE).await;
+        if entry.is_none()
+            && let Some(id) = self.add_if_cached(release, left).await
+        {
+            if let Some(id) = id {
+                entry = self.entry_by_id(id, left).await.unwrap_or(None);
+            }
+            if entry.is_none() {
+                // The id was not given, or the entry was not ready. The add is asynchronous on the
+                // service's side: the listing read straight after can still be the pre-add
+                // snapshot, so it is read once more after a short pause.
                 cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
-                entry = self
-                    .account_entry(&release.info_hash, left - SETTLE)
-                    .await?;
+                entry = self.account_entry(&release.info_hash, left).await?;
+                if entry.is_none() && left > SETTLE + MIN_STEP {
+                    tokio::time::sleep(SETTLE).await;
+                    cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
+                    entry = self
+                        .account_entry(&release.info_hash, left - SETTLE)
+                        .await?;
+                }
             }
         }
         let Some(entry) = entry else { return Ok(None) };
@@ -465,6 +554,28 @@ impl Debrid {
             name,
         }))
     }
+}
+
+/// The files a `checkcached` entry lists, or `None` when it lists none (it does not always).
+fn listed_files(entry: &Value) -> Option<Vec<VideoFile>> {
+    let files: Vec<VideoFile> = entry
+        .get("files")?
+        .as_array()?
+        .iter()
+        .enumerate()
+        .filter_map(|(index, file)| {
+            let name = file
+                .get("name")
+                .or_else(|| file.get("short_name"))
+                .and_then(Value::as_str)?;
+            Some(VideoFile {
+                index,
+                name: name.to_string(),
+                length: file.get("size").and_then(Value::as_u64).unwrap_or(0),
+            })
+        })
+        .collect();
+    (!files.is_empty()).then_some(files)
 }
 
 /// Whether a host is one of the allowed domains or a subdomain of one.
@@ -506,13 +617,29 @@ mod tests {
         struct Mock {
             added: Arc<AtomicBool>,
             port: Arc<std::sync::atomic::AtomicU16>,
+            /// How many times the whole account was listed, as opposed to one entry read.
+            listings: Arc<std::sync::atomic::AtomicUsize>,
         }
 
         async fn checkcached(headers: HeaderMap) -> Json<Value> {
             assert_eq!(headers[header::AUTHORIZATION], "Bearer secret-key");
             Json(json!({ "success": true, "data": { HASH: { "name": "x" } } }))
         }
-        async fn mylist(State(mock): State<Mock>) -> Json<Value> {
+        async fn mylist(
+            State(mock): State<Mock>,
+            Query(query): Query<std::collections::HashMap<String, String>>,
+        ) -> Json<Value> {
+            if query.contains_key("id") {
+                // One entry, as an object, the way the service answers a lookup by id.
+                assert_eq!(query["id"], "7");
+                return Json(
+                    json!({ "success": true, "data": { "id": 7, "hash": HASH, "files": [
+                        { "id": 1, "name": "Show/Show - 04.mkv", "size": BODY.len() },
+                        { "id": 2, "name": "Show/Show - 05.mkv", "size": BODY.len() },
+                    ]}}),
+                );
+            }
+            mock.listings.fetch_add(1, Ordering::SeqCst);
             let data = if mock.added.load(Ordering::SeqCst) {
                 json!([{ "id": 7, "hash": HASH, "files": [
                     { "id": 1, "name": "Show/Show - 04.mkv", "size": BODY.len() },
@@ -525,7 +652,7 @@ mod tests {
         }
         async fn createtorrent(State(mock): State<Mock>) -> Json<Value> {
             mock.added.store(true, Ordering::SeqCst);
-            Json(json!({ "success": true, "data": {} }))
+            Json(json!({ "success": true, "data": { "torrent_id": 7 } }))
         }
         async fn requestdl(
             State(mock): State<Mock>,
@@ -558,6 +685,7 @@ mod tests {
         let mock = Mock {
             added: Arc::new(AtomicBool::new(false)),
             port: Arc::new(Default::default()),
+            listings: Arc::new(Default::default()),
         };
         let app = Router::new()
             .route("/checkcached", get(checkcached))
@@ -611,6 +739,9 @@ mod tests {
         );
         assert_eq!(found.origin.name(), "Show - 05.mkv");
         assert_eq!(found.origin.length(), BODY.len() as u64);
+        // The account was listed once, to see the torrent was not there; the new entry was read by
+        // its id and not by listing the account again.
+        assert_eq!(mock.listings.load(Ordering::SeqCst), 1);
 
         use tokio::io::AsyncReadExt;
         let mut reader = found.origin.open_at(10).await.unwrap();
@@ -621,6 +752,83 @@ mod tests {
         let mut all = Vec::new();
         reader.read_to_end(&mut all).await.unwrap();
         assert_eq!(all, BODY);
+    }
+
+    /// A cached release whose listed files hold nothing for the episode is passed over at once,
+    /// without adding it to the account or reading the account.
+    #[tokio::test]
+    async fn a_cached_release_without_the_episode_is_skipped_without_touching_the_account() {
+        use axum::routing::{get, post};
+        use axum::{Json, Router};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        const HASH: &str = "dddddddddddddddddddddddddddddddddddddddd";
+        let touched = Arc::new(AtomicUsize::new(0));
+        let (a, b) = (touched.clone(), touched.clone());
+        let app = Router::new()
+            .route(
+                "/checkcached",
+                get(|| async {
+                    Json(serde_json::json!({ "success": true, "data": { HASH: {
+                        "name": "Show S01", "files": [
+                            { "name": "Show/Show - 01.mkv", "size": 100 },
+                            { "name": "Show/Show - 02.mkv", "size": 100 },
+                        ] } } }))
+                }),
+            )
+            .route(
+                "/mylist",
+                get(move || {
+                    a.fetch_add(1, Ordering::SeqCst);
+                    async { Json(serde_json::json!({ "success": true, "data": [] })) }
+                }),
+            )
+            .route(
+                "/createtorrent",
+                post(move || {
+                    b.fetch_add(1, Ordering::SeqCst);
+                    async { Json(serde_json::json!({ "success": true, "data": {} })) }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let debrid = Debrid::with_base(
+            "secret-key".into(),
+            Duration::from_secs(5),
+            vec![],
+            format!("http://127.0.0.1:{port}"),
+        )
+        .unwrap();
+        let release = Release {
+            title: "Show S01".into(),
+            info_hash: HASH.into(),
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: 1,
+            source: "t".into(),
+        };
+        let reason = debrid
+            .find(
+                &[release],
+                Some(9),
+                Some(1),
+                3,
+                Instant::now() + Duration::from_secs(5),
+            )
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert!(reason.contains("none holds a file"), "{reason}");
+        assert_eq!(touched.load(Ordering::SeqCst), 0, "the account was touched");
+    }
+
+    #[test]
+    fn a_checkcached_entry_lists_its_files_or_none() {
+        let with = serde_json::json!({ "files": [{ "name": "a/b.mkv", "size": 5 }] });
+        let files = listed_files(&with).unwrap();
+        assert_eq!((files[0].name.as_str(), files[0].length), ("a/b.mkv", 5));
+        assert!(listed_files(&serde_json::json!({ "name": "x" })).is_none());
+        assert!(listed_files(&serde_json::json!({ "files": [] })).is_none());
     }
 
     #[tokio::test]
