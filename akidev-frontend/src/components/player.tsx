@@ -7,7 +7,6 @@ import type { Choosing } from "@/lib/party/protocol";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/play";
 import { optionForChoice, preferRelease, readChoice, shiftCues, writeChoice } from "@/lib/subtitles";
 import { cn, formatSeconds } from "@/lib/utils";
-import { useMusicPlayer } from "@/providers/music-player";
 import { useParty } from "@/providers/party";
 import type { SubtitleOption } from "@/types/media";
 
@@ -141,7 +140,6 @@ export default function Player({
 
   const isHls = streamType === "hls";
 
-  const music = useMusicPlayer();
   const party = useParty();
   const { publish, report, hold, held, blocked, tapToPlay, hostChoosing } = usePartyPlayback({ video, mediaId, releaseId, choosing });
 
@@ -508,8 +506,6 @@ export default function Player({
           setPlaying(true);
           wake();
           publish(false);
-          // The picture has the sound to itself.
-          music.pause();
         }}
         onSeeked={() => publish(false)}
         onPause={() => {

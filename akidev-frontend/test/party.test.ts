@@ -16,13 +16,6 @@ test("messages are read the way the desktop app writes them", () => {
   );
   assert.deepEqual(parseMessage('{"t":"pause"}'), { t: "pause" });
   assert.deepEqual(parseMessage('{"t":"seek","position":3.0}'), { t: "seek", position: 3 });
-  assert.deepEqual(parseMessage('{"t":"state","item":{"kind":"music","id":"abc","title":"A","artist":"B"},"playing":false,"position":0,"at":1}'), {
-    t: "state",
-    item: { kind: "music", id: "abc", title: "A", artist: "B", cover: null },
-    playing: false,
-    position: 0,
-    at: 1,
-  });
   assert.deepEqual(parseMessage('{"t":"members","members":[{"name":"Hana","host":true,"state":"ready"}]}'), {
     t: "members",
     members: [{ name: "Hana", host: true, state: "ready" }],

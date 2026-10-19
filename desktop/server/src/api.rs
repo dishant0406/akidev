@@ -35,7 +35,6 @@ pub struct AppState {
     pub engine: Option<Arc<akidev_core::torrent::Engine>>,
     pub images: Arc<crate::img::Images>,
     pub subs: Arc<crate::subs::Subs>,
-    pub music: Arc<akidev_core::music::Music>,
     pub parties: Arc<crate::party::Parties>,
     pub ffmpeg: bool,
 }
@@ -155,11 +154,6 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/subtitles", get(subtitle_list))
         .route("/v1/subtitles/file/{token}", get(subtitle_file))
         .route("/v1/play", post(play))
-        .route("/v1/music/home", get(music_home))
-        .route("/v1/music/search", get(music_search))
-        .route("/v1/music/albums/{id}", get(music_album))
-        .route("/v1/music/artists/{id}", get(music_artist))
-        .route("/v1/music/radio/{id}", get(music_radio))
         .layer(CompressionLayer::new().gzip(true))
         .with_state(state.clone());
 
@@ -193,14 +187,7 @@ pub fn router(state: AppState) -> Router {
         .route("/s/{token}", get(deliver::direct))
         .route("/s/{token}/{file}", get(deliver::hls))
         .with_state(deliverer);
-    let audio = Router::new()
-        .route("/v1/music/stream/{id}", get(music_stream))
-        .with_state(state.clone());
-
-    api.merge(party)
-        .merge(streams)
-        .merge(audio)
-        .layer(cors(&state.settings))
+    api.merge(party).merge(streams).layer(cors(&state.settings))
 }
 
 #[derive(Deserialize)]
@@ -720,133 +707,6 @@ async fn subtitle_file(
             "The subtitle could not be fetched.",
         ),
     }
-}
-
-const MUSIC_CACHE: &str = "public, max-age=600, stale-while-revalidate=3600";
-
-#[derive(Deserialize)]
-struct MusicQuery {
-    q: Option<String>,
-}
-
-async fn music_home(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-) -> Response {
-    if !within_api_limit(&state, &headers, peer) {
-        return too_many();
-    }
-    match state.music.home().await {
-        Ok(found) => cached(MUSIC_CACHE, found),
-        Err(_) => error(StatusCode::BAD_GATEWAY, "Music is not answering."),
-    }
-}
-
-async fn music_search(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    Query(query): Query<MusicQuery>,
-) -> Response {
-    if !within_api_limit(&state, &headers, peer) {
-        return too_many();
-    }
-    let term = query.q.unwrap_or_default();
-    let term = term.trim();
-    if term.is_empty() || term.chars().count() > 100 {
-        return error(StatusCode::BAD_REQUEST, "q must be 1 to 100 characters.");
-    }
-    match state.music.search(term).await {
-        Ok(found) => cached(MUSIC_CACHE, found),
-        Err(_) => error(StatusCode::BAD_GATEWAY, "Music search is not answering."),
-    }
-}
-
-/// YouTube Music ids are letters, digits, `-` and `_`.
-fn is_music_id(id: &str) -> bool {
-    (1..=64).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-}
-
-async fn music_album(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> Response {
-    if !within_api_limit(&state, &headers, peer) {
-        return too_many();
-    }
-    if !is_music_id(&id) {
-        return error(StatusCode::BAD_REQUEST, "That is not an album id.");
-    }
-    match state.music.album(&id).await {
-        Ok(album) => cached(MUSIC_CACHE, album),
-        Err(_) => error(StatusCode::NOT_FOUND, "That album could not be loaded."),
-    }
-}
-
-/// What plays after a track, for a player that has run out of queue.
-async fn music_radio(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> Response {
-    if !within_api_limit(&state, &headers, peer) {
-        return too_many();
-    }
-    if !crate::music::is_track_id(&id) {
-        return error(StatusCode::BAD_REQUEST, "That is not a track id.");
-    }
-    match state.music.radio(&id).await {
-        Ok(songs) => cached(MUSIC_CACHE, json!({ "songs": songs })),
-        Err(_) => error(StatusCode::BAD_GATEWAY, "Music is not answering."),
-    }
-}
-
-async fn music_artist(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> Response {
-    if !within_api_limit(&state, &headers, peer) {
-        return too_many();
-    }
-    if !is_music_id(&id) {
-        return error(StatusCode::BAD_REQUEST, "That is not an artist id.");
-    }
-    match state.music.artist(&id).await {
-        Ok(artist) => cached(MUSIC_CACHE, artist),
-        Err(_) => error(StatusCode::NOT_FOUND, "That artist could not be loaded."),
-    }
-}
-
-/// The audio of one track. Not compressed (audio does not shrink, and a range reply must keep
-/// its length), so it is merged in outside the compression layer.
-async fn music_stream(
-    State(state): State<AppState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> Response {
-    if !crate::music::is_track_id(&id) {
-        return error(StatusCode::BAD_REQUEST, "That is not a track id.");
-    }
-    // A browser asks for a track in several ranges while it plays and seeks, so this allowance is
-    // generous; the costly part (finding the address) is cached and limited inside.
-    let client = client_of(&headers, Some(peer));
-    if !state
-        .limiter
-        .allow(&client, "music", 600, Duration::from_secs(60))
-    {
-        return too_many();
-    }
-    crate::music::stream(&state.music, &id, headers.get(header::RANGE)).await
 }
 
 // A watch party: see party.rs. Everything here is the first message each way between two devices.

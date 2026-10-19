@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 
 import { CATALOGUES } from "@/constants/site";
 import { ROUTES } from "@/constants/routes";
-import { MUSIC_ROUTE } from "@/lib/music";
 import { cn } from "@/lib/utils";
 
 import { IconButton } from "./button";
@@ -22,7 +21,6 @@ const SOLID_AFTER = 40;
 const TABS = [
   { label: "Home", href: ROUTES.HOME },
   ...CATALOGUES.map((page) => ({ label: page.label, href: `/${page.slug}` })),
-  { label: "Music", href: MUSIC_ROUTE },
 ];
 
 /** Home, the three catalogues and search, in one bar that floats over the artwork. */
@@ -56,7 +54,7 @@ export default function TopBar() {
   }, []);
 
   const active = (href: string) =>
-    href === ROUTES.HOME ? pathname === ROUTES.HOME : href === MUSIC_ROUTE ? pathname.startsWith(MUSIC_ROUTE) : pathname === href;
+    pathname === href;
 
   return (
     <>
@@ -117,7 +115,7 @@ export default function TopBar() {
         </div>
       </header>
 
-      {searching && <Palette music={pathname.startsWith(MUSIC_ROUTE)} onClose={() => setSearching(false)} />}
+      {searching && <Palette onClose={() => setSearching(false)} />}
     </>
   );
 }

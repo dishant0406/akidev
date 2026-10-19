@@ -129,7 +129,7 @@ impl Settings {
             transcode_threads: number("TRANSCODE_THREADS", 2),
             image_hosts: list(
                 "IMAGE_HOSTS",
-                "anilist.co,kitsu.app,tvmaze.com,metahub.space,media-amazon.com,tmdb.org,yts.gg,yts.mx,googleusercontent.com,ytimg.com,ggpht.com,monophonic.digital,open-audio-validator.com,figment.io,altego.net,theblueprint.xyz,staked.cloud,audiusindex.org,stuffisup.com",
+                "anilist.co,kitsu.app,tvmaze.com,metahub.space,media-amazon.com,tmdb.org,yts.gg,yts.mx",
             ),
             image_cache_bytes: number("IMAGE_CACHE_BYTES", 768 * 1024 * 1024),
             play_limit: number("PLAY_LIMIT_PER_10_MIN", 20),

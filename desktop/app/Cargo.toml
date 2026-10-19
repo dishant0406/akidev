@@ -8,7 +8,7 @@ license.workspace = true
 embed-resource = "3"
 
 [dependencies]
-akidev-core = { path = "../core" }
+akidev-core = { path = "../core", features = ["music"] }
 akidev-library = { path = "../library" }
 akidev-party = { path = "../party" }
 gpui-kit = "=0.7.3"

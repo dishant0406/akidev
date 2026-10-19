@@ -1,3 +1,4 @@
+#[cfg(feature = "music")]
 pub mod audius;
 pub mod cache;
 pub mod calendar;
@@ -9,6 +10,7 @@ pub mod indexers;
 pub mod magnet;
 pub mod media_id;
 pub mod model;
+#[cfg(feature = "music")]
 pub mod music;
 pub mod providers;
 pub mod releases;

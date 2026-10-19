@@ -3,9 +3,12 @@
 // desktop/party/PROTOCOL.md. Change them together.
 
 /** Something to play. Every device finds its own stream from the id, so no address travels. */
-export type Item =
-  | { kind: "video"; id: string; /** The release (info hash) the host plays, so every device plays the same source. */ release?: string | null }
-  | { kind: "music"; id: string; title: string; artist: string; cover?: string | null };
+export type Item = {
+  kind: "video";
+  id: string;
+  /** The release (info hash) the host plays, so every device plays the same source. */
+  release?: string | null;
+};
 
 /**
  * How a guest is doing with what the party is playing: it can play it now, it is still finding a
@@ -42,7 +45,7 @@ const isNumber = (value: unknown): value is number => typeof value === "number" 
 const isText = (value: unknown): value is string => typeof value === "string";
 const isReadiness = (value: unknown): value is Readiness => value === "ready" || value === "loading" || value === "trouble";
 
-/** The media id or the track id, whichever this item is. */
+/** The media id of this item. */
 export function itemId(item: Item | null): string | null {
   return item ? item.id : null;
 }
@@ -51,7 +54,7 @@ export function itemId(item: Item | null): string | null {
  * film is still loading it when the host switches to another release. */
 export function itemKey(item: Item | null): string | null {
   if (!item) return null;
-  return item.kind === "video" && item.release ? `${item.id}#${item.release}` : item.id;
+  return item.release ? `${item.id}#${item.release}` : item.id;
 }
 
 function parseItem(value: unknown): Item | null | undefined {
@@ -59,9 +62,6 @@ function parseItem(value: unknown): Item | null | undefined {
   if (typeof value !== "object") return undefined;
   const item = value as Record<string, unknown>;
   if (item.kind === "video" && isText(item.id)) return { kind: "video", id: item.id, release: isText(item.release) ? item.release : null };
-  if (item.kind === "music" && isText(item.id) && isText(item.title) && isText(item.artist)) {
-    return { kind: "music", id: item.id, title: item.title, artist: item.artist, cover: isText(item.cover) ? item.cover : null };
-  }
   return undefined;
 }
 
@@ -112,6 +112,6 @@ export function parseMessage(text: string): Message | null {
 
 export function sameItem(a: Item | null, b: Item | null): boolean {
   if (a === b) return true;
-  if (a === null || b === null || a.kind !== b.kind || a.id !== b.id) return false;
-  return a.kind === "video" && b.kind === "video" ? (a.release ?? null) === (b.release ?? null) : true;
+  if (a === null || b === null) return false;
+  return a.id === b.id && (a.release ?? null) === (b.release ?? null);
 }

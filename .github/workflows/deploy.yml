@@ -227,7 +227,6 @@ jobs:
           STUN_URLS: ${{ vars.STUN_URLS }}
           CF_TURN_KEY_ID: ${{ secrets.CF_TURN_KEY_ID }}
           CF_TURN_TOKEN: ${{ secrets.CF_TURN_TOKEN }}
-          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
         run: |
           # Defaults, so a missing repository variable does not silently deploy an
           # empty value.
@@ -251,7 +250,6 @@ jobs:
           STUN_URLS=$STUN_URLS
           CF_TURN_KEY_ID=$CF_TURN_KEY_ID
           CF_TURN_TOKEN=$CF_TURN_TOKEN
-          YOUTUBE_COOKIES_B64=$YOUTUBE_COOKIES_B64
           EOF
 
           # Only the shape is reported; the file holds the

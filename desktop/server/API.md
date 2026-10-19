@@ -146,24 +146,6 @@ What `url` points at: the video with `Range` support (`file`), or the playlist a
 (`hls`, `index.m3u8`, `init.mp4`, `seg00000.m4s`), and subtitle files (`sub/0.vtt`). A player
 only needs the URL it was given.
 
-## Music: `GET /v1/music/search?q=<term>`, `/v1/music/albums/{id}`, `/v1/music/artists/{id}`, `/v1/music/radio/{videoId}`, `/v1/music/stream/{videoId}`
-
-Music comes from YouTube Music (the vendored `vendor/ytmapi-rs`, see its PATCH.md); the audio is found
-with yt-dlp (`YT_DLP` names the binary; the image's copy updates itself daily).
-
-- `search` answers `{ songs: Track[], albums: AlbumCard[], artists: ArtistCard[] }`. A track's `id` is
-  the YouTube video id. When YouTube Music does not answer at all, `songs` come from Audius instead (no
-  albums or artists), and their ids are `audius:<id>`.
-- `radio/{videoId}` answers `{ songs: Track[] }`: what YouTube Music plays after that track (without
-  the track itself). A player that has run out of queue appends these, which is the autoplay.
-- `albums/{id}` answers the album with its `tracks`. `artists/{id}` answers `songs`, `albums`,
-  `singles` and `related`.
-- `stream/{id}` (a YouTube video id or an `audius:` id) is the audio, passed through with `Range` support (206), so the browser can seek.
-  When yt-dlp is refused with its usual player client it asks again as the embedded player. The address
-  yt-dlp finds is cached for 30 minutes; the server fetches the bytes itself because the
-  address only works from the machine that asked. Not compressed.
-- Covers are YouTube hosts and Audius storage nodes, which `IMAGE_HOSTS` allows, and go through `/v1/img` like every picture.
-
 ## Watch party: `/v1/party`
 
 A party's host is a device, and guests connect to it directly with WebRTC (see

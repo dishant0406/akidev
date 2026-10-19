@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-akidev-core = { path = "../core" }
+akidev-core = { path = "../core", features = ["music"] }
 anyhow.workspace = true
 chacha20poly1305 = "0.10"
 fs2 = "0.4"

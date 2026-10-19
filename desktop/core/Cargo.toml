@@ -8,6 +8,10 @@ license.workspace = true
 name = "akidev-sources"
 path = "src/bin/sources.rs"
 
+[features]
+# YouTube Music and Audius, played by the desktop app. The server does not turn it on.
+music = ["dep:ytmapi-rs", "dep:zip", "tokio/process"]
+
 [dependencies]
 anyhow.workspace = true
 futures.workspace = true
@@ -15,9 +19,9 @@ regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["process"] }
-zip = { version = "7", default-features = false, features = ["deflate"] }
-ytmapi-rs = { path = "../vendor/ytmapi-rs", default-features = false, features = ["default-tls", "simplified-queries"] }
+tokio.workspace = true
+zip = { version = "7", default-features = false, features = ["deflate"], optional = true }
+ytmapi-rs = { path = "../vendor/ytmapi-rs", default-features = false, features = ["default-tls", "simplified-queries"], optional = true }
 tracing.workspace = true
 toml = "0.8"
 librqbit = "9.0.1"
