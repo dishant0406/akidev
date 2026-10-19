@@ -1,7 +1,7 @@
 # Akidev production stack: one server, three containers.
 #
-#   caddy          the only thing that publishes ports (80 and 443). It terminates TLS with its
-#                  own Let's Encrypt certificates and routes by hostname (caddy/Caddyfile). The
+#   caddy          publishes 80 and 443 (the api also publishes the torrent port). It terminates TLS with
+#                  its own Let's Encrypt certificates and routes by hostname (caddy/Caddyfile). The
 #                  site and the API are proxied by Cloudflare; stream.<zone> is not, so video goes
 #                  from this server to the viewer without passing through Cloudflare.
 #   api            the REST API and the video delivery, one Rust binary built on the same
@@ -66,8 +66,17 @@ services:
       # for why it is not compiled here.
       context: desktop/server
     restart: unless-stopped
+    ports:
+      # The torrent port, the same number inside and out because it is what the trackers and the
+      # DHT announce. Without it no peer can connect in, and a small swarm is mostly out of reach.
+      # Open it in the host's firewall too, for TCP and UDP.
+      - "${LISTEN_PORT:-6881}:${LISTEN_PORT:-6881}/tcp"
+      - "${LISTEN_PORT:-6881}:${LISTEN_PORT:-6881}/udp"
     environment:
       PORT: 9000
+      LISTEN_PORT: ${LISTEN_PORT:-6881}
+      # Bytes a second uploaded to peers. Peers send more to those who send back.
+      UPLOAD_LIMIT_BPS: ${UPLOAD_LIMIT_BPS:-2097152}
       # The public API origin.
       PUBLIC_URL: ${PUBLIC_URL}
       # The origin of the video URLs it hands out. Empty means the same as PUBLIC_URL.
@@ -97,7 +106,7 @@ services:
       # container runs as.
       - torrent-cache:/data
     # The health check is the image's own (`akidev-server --check`), run inside the container,
-    # which is the only place this port is reachable from. The api publishes nothing to the host.
+    # which is the only place this port is reachable from. The api publishes only the torrent port.
     logging: *logging
 
   frontend:

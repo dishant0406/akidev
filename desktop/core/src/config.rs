@@ -12,6 +12,10 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     /// How long one indexer request may take before it is abandoned.
     pub indexer_timeout_ms: u64,
+    /// The longest a search for releases waits for its indexers as a whole. It also ends sooner,
+    /// once there is something to play and a moment has passed. What is still out is not lost: it
+    /// finishes in the background and the next search finds it cached.
+    pub search_ceiling_ms: u64,
     /// Where in-progress downloads live. `None` means the app's cache directory.
     pub cache_dir: Option<PathBuf>,
     /// Upper bound on bytes held on disk by active torrents.
@@ -28,6 +32,11 @@ pub struct Config {
     /// no use for seeding and would only pay for the bandwidth, so it sets a small one. The
     /// desktop app leaves it unlimited.
     pub upload_limit_bps: Option<u32>,
+    /// The port other peers connect to, over TCP, and the DHT's UDP port. `None` listens on
+    /// nothing, so only peers that are reachable can be used: two peers that cannot be reached
+    /// never connect, and a small swarm shrinks to its reachable members. A server publishes
+    /// this port, so it sets one; the desktop app leaves it off.
+    pub listen_port: Option<u16>,
     /// Whether the desktop app looks for a newer version of itself now and then.
     pub check_for_updates: bool,
     /// The random name this install reports usage under. Made at the first start, and tied to
@@ -39,6 +48,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             indexer_timeout_ms: 5_000,
+            search_ceiling_ms: 4_000,
             cache_dir: None,
             max_cache_bytes: 8 * 1024 * 1024 * 1024,
             max_torrents: 3,
@@ -46,6 +56,7 @@ impl Default for Config {
             max_candidates: 3,
             resolve_deadline_ms: 75_000,
             upload_limit_bps: None,
+            listen_port: None,
             check_for_updates: true,
             analytics_id: None,
         }

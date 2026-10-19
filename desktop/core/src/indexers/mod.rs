@@ -15,9 +15,12 @@ use crate::sources;
 use crate::template::Fill;
 use regex::Regex;
 use serde_json::Value;
+use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// How long a non-empty answer is reused. An empty one lives shorter, see `cache::list_ttl`.
 const TTL: Duration = Duration::from_secs(10 * 60);
@@ -31,6 +34,15 @@ const MAX_RESPONSE_BYTES: usize = 8 << 20;
 /// timeout is what actually bounds the tail. The cap stays as a guard against a
 /// definition set with many more indexers or terms than the default.
 const MAX_CONCURRENT_REQUESTS: usize = 24;
+
+/// How long a search keeps listening once it has enough to play. The first answers are rarely the
+/// only good ones, so a short wait lets the quick indexers add theirs, and no longer: what is still
+/// out is added to the cache for the next search, not waited for.
+const GRACE: Duration = Duration::from_millis(700);
+
+/// How long a mirror gets before the next one is asked as well. The first to answer is used. A dead
+/// mirror then costs this and not its whole timeout.
+const HEDGE: Duration = Duration::from_millis(1000);
 
 #[derive(Debug, Clone)]
 pub struct SearchOptions {
@@ -190,6 +202,54 @@ fn down_until() -> &'static Mutex<HashMap<String, Instant>> {
     DOWN.get_or_init(Default::default)
 }
 
+fn health_file() -> &'static Mutex<Option<PathBuf>> {
+    static FILE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+    FILE.get_or_init(Default::default)
+}
+
+/// Remembers which hosts are resting in `dir`, across runs. Without it every launch starts by asking
+/// each dead mirror again and waiting for it, which is the slowest part of a first search.
+pub fn remember_host_health_in(dir: &std::path::Path) {
+    let file = dir.join("indexer-health.json");
+    if let Ok(text) = std::fs::read_to_string(&file)
+        && let Ok(saved) = serde_json::from_str::<HashMap<String, u64>>(&text)
+    {
+        let now = unix_now();
+        let mut down = down_until().lock().unwrap();
+        for (host, until) in saved {
+            if until > now {
+                down.insert(host, Instant::now() + Duration::from_secs(until - now));
+            }
+        }
+    }
+    *health_file().lock().unwrap() = Some(file);
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
+/// Rests `host` for `pause`, and saves what is resting.
+fn mark_down(host: &str, pause: Duration) {
+    let now = Instant::now();
+    let mut down = down_until().lock().unwrap();
+    down.insert(host.to_string(), now + pause);
+    down.retain(|_, until| *until > now);
+    let Some(file) = health_file().lock().unwrap().clone() else {
+        return;
+    };
+    let wall = unix_now();
+    let saved: HashMap<&String, u64> = down
+        .iter()
+        .map(|(host, until)| (host, wall + until.duration_since(now).as_secs()))
+        .collect();
+    if let Ok(text) = serde_json::to_string(&saved) {
+        let _ = std::fs::write(file, text);
+    }
+}
+
 fn usable(host: &str) -> bool {
     down_until()
         .lock()
@@ -254,65 +314,207 @@ async fn search_one(
     // The definitions' version is part of the key, so an update is not answered from rows
     // read with the old one.
     let key = format!("v{}:{}", sources::current().version, request.key(def));
-    cached(&key, list_ttl(TTL), || async {
-        let mut last = None;
-        for host in hosts {
-            match ask(def, host, &request, term, trackers, limit).await {
-                Ok(rows) => return Ok(rows),
-                Err(error) => {
-                    let pause = Duration::from_secs(def.cooldown_secs);
-                    down_until()
-                        .lock()
-                        .unwrap()
-                        .insert(host.clone(), Instant::now() + pause);
-                    tracing::debug!("[indexer:{}] {host}: {error:#}", def.id);
-                    last = Some(error);
-                }
-            }
-        }
-        Err(last.expect("there was at least one host"))
+    cached(&key, list_ttl(TTL), || {
+        ask_hosts(def, hosts, &request, term, trackers, limit)
     })
     .await
 }
 
+/// `ask`, with the host that answered named, so several can be in flight at once.
+async fn ask_named<'a>(
+    def: &IndexerDef,
+    host: &'a String,
+    request: &Request,
+    term: &str,
+    trackers: &[String],
+    limit: Duration,
+) -> (&'a String, anyhow::Result<Vec<Release>>) {
+    (host, ask(def, host, request, term, trackers, limit).await)
+}
+
+/// Asks the hosts in order, the next one as soon as the one before fails and also when it has
+/// not answered within `HEDGE`. The first answer wins and the others are dropped. A host that
+/// failed rests for the definition's cooldown; one that lost to a later mirror rests as well, so
+/// the next search does not wait on it again.
+async fn ask_hosts(
+    def: &IndexerDef,
+    hosts: Vec<&String>,
+    request: &Request,
+    term: &str,
+    trackers: &[String],
+    limit: Duration,
+) -> anyhow::Result<Vec<Release>> {
+    let pause = Duration::from_secs(def.cooldown_secs);
+    let mut pending = FuturesUnordered::new();
+    let mut started: Vec<&String> = Vec::new();
+    let mut last = None;
+    loop {
+        if pending.is_empty() && started.len() < hosts.len() {
+            let host = hosts[started.len()];
+            started.push(host);
+            pending.push(ask_named(def, host, request, term, trackers, limit));
+        }
+        if pending.is_empty() {
+            break;
+        }
+        let more = started.len() < hosts.len();
+        tokio::select! {
+            Some((host, result)) = pending.next() => match result {
+                Ok(rows) => {
+                    // The mirrors still out were slower than this one: rest them.
+                    for other in started
+                        .iter()
+                        .filter(|other| ***other != *host && usable(other))
+                    {
+                        mark_down(other, pause);
+                    }
+                    return Ok(rows);
+                }
+                Err(error) => {
+                    mark_down(host, pause);
+                    tracing::debug!("[indexer:{}] {host}: {error:#}", def.id);
+                    last = Some(error);
+                }
+            },
+            _ = tokio::time::sleep(HEDGE), if more => {
+                let host = hosts[started.len()];
+                started.push(host);
+                pending.push(ask_named(def, host, request, term, trackers, limit));
+            }
+        }
+    }
+    Err(last.expect("there was at least one host"))
+}
+
+/// One request's answer, as it reaches the search.
+struct Arrival {
+    index: usize,
+    indexer: String,
+    took: Duration,
+    answered: bool,
+    rows: Vec<Release>,
+}
+
+/// The releases answered so far, in the order of the requests and not of the answers, so what
+/// "first seen wins" keeps does not depend on who was fastest.
+fn merged(answers: &[Option<Vec<Release>>]) -> Vec<Release> {
+    let mut seen = HashSet::new();
+    answers
+        .iter()
+        .flatten()
+        .flatten()
+        .filter(|release| seen.insert(release.info_hash.clone()))
+        .cloned()
+        .collect()
+}
+
+/// Asks every indexer and returns what has come back when one of three things happens: all have
+/// answered; `enough` says the answers so far hold something to play and `GRACE` has passed since;
+/// or `search_ceiling_ms` has run out. The requests still out are not cancelled: they finish in the
+/// background, fill the cache, and give the next search their rows.
+///
+/// `enough` is given the answers so far, deduplicated, and says whether they hold a release worth
+/// opening. The caller knows what the ranking would keep, which is not the same as having rows.
 pub async fn search_all(
     config: &Config,
     terms: &[String],
     options: &SearchOptions,
+    enough: impl Fn(&[Release]) -> bool,
 ) -> Vec<Release> {
+    let started = Instant::now();
     let sources = sources::current();
     let chosen = serving(&sources.indexers, options.kind);
     let pairs = plan(&chosen, terms);
+    let total = pairs.len();
     // A single slow indexer must not hold the whole search open. Every normal request is
     // well under a second; the limit only bounds the tail, per host.
     let limit = Duration::from_millis(config.indexer_timeout_ms);
+    let ceiling = started + Duration::from_millis(config.search_ceiling_ms);
 
-    // Requests run in batches, in order, so "first seen wins" below is deterministic.
-    let mut results: Vec<Vec<Release>> = Vec::new();
-    for batch in pairs.chunks(MAX_CONCURRENT_REQUESTS) {
-        results.extend(
-            futures::future::join_all(batch.iter().map(|(indexer, term)| {
-                let trackers = &sources.trackers;
-                async move {
-                    match search_one(indexer, term, options, trackers, limit).await {
-                        Ok(rows) => rows,
-                        Err(error) => {
-                            tracing::warn!("[indexer:{}] {error:#}", indexer.id);
-                            Vec::new()
-                        }
-                    }
-                }
-            }))
-            .await,
-        );
+    let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let (send, mut receive) = tokio::sync::mpsc::unbounded_channel::<Arrival>();
+    for (index, (indexer, term)) in pairs.into_iter().enumerate() {
+        let (def, term, options) = (indexer.clone(), term, options.clone());
+        let (sources, slots, send) = (sources.clone(), slots.clone(), send.clone());
+        tokio::spawn(async move {
+            let Ok(_slot) = slots.acquire_owned().await else {
+                return;
+            };
+            let began = Instant::now();
+            let result = search_one(&def, &term, &options, &sources.trackers, limit).await;
+            if let Err(error) = &result {
+                tracing::warn!("[indexer:{}] {error:#}", def.id);
+            }
+            let answered = result.is_ok();
+            let _ = send.send(Arrival {
+                index,
+                indexer: def.id.clone(),
+                took: began.elapsed(),
+                answered,
+                rows: result.unwrap_or_default(),
+            });
+        });
     }
+    drop(send);
 
-    let mut seen = HashSet::new();
-    results
-        .into_iter()
-        .flatten()
-        .filter(|release| seen.insert(release.info_hash.clone()))
-        .collect()
+    let mut answers: Vec<Option<Vec<Release>>> = vec![None; total];
+    let mut arrived = 0;
+    let mut first_enough: Option<Duration> = None;
+    let mut grace_ends: Option<Instant> = None;
+    // Per indexer: requests answered, requests failed, rows, slowest answer.
+    let mut each: Vec<(String, usize, usize, usize, Duration)> = Vec::new();
+    let stopped = loop {
+        let until = grace_ends.map_or(ceiling, |grace| grace.min(ceiling));
+        match tokio::time::timeout_at(until.into(), receive.recv()).await {
+            Ok(Some(arrival)) => {
+                arrived += 1;
+                let position = match each.iter().position(|row| row.0 == arrival.indexer) {
+                    Some(position) => position,
+                    None => {
+                        each.push((arrival.indexer.clone(), 0, 0, 0, Duration::ZERO));
+                        each.len() - 1
+                    }
+                };
+                let row = &mut each[position];
+                if arrival.answered {
+                    row.1 += 1;
+                } else {
+                    row.2 += 1;
+                }
+                row.3 += arrival.rows.len();
+                row.4 = row.4.max(arrival.took);
+                answers[arrival.index] = Some(arrival.rows);
+                if grace_ends.is_none() && enough(&merged(&answers)) {
+                    first_enough = Some(started.elapsed());
+                    grace_ends = Some(Instant::now() + GRACE);
+                }
+            }
+            Ok(None) => break "every request answered",
+            Err(_) if grace_ends.is_some_and(|grace| grace <= ceiling) => {
+                break "enough, after the grace";
+            }
+            Err(_) => break "the ceiling",
+        }
+    };
+    let found = merged(&answers);
+    each.sort_by_key(|row| std::cmp::Reverse(row.4));
+    tracing::info!(
+        "[search] {} for {:?}: {arrived} of {total} requests answered in {:?}, stopped on {stopped}; \
+         first playable after {}; {} releases; per indexer (requests, failed, rows, slowest): {}",
+        options.kind.as_str(),
+        terms.first().map(String::as_str).unwrap_or(""),
+        started.elapsed(),
+        first_enough.map_or("never".to_string(), |took| format!("{took:?}")),
+        found.len(),
+        each.iter()
+            .map(|(id, ok, failed, rows, slowest)| format!(
+                "{id} ({}, {failed}, {rows}, {slowest:?})",
+                ok + failed
+            ))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    found
 }
 
 #[cfg(test)]
@@ -604,5 +806,62 @@ mod tests {
         let found = search_one(&def, "show", &options(Kind::Anime), &[], quick).await;
         assert_eq!(found.unwrap().len(), 1);
         assert!(!usable(&hosts[0]), "the hung mirror rests");
+    }
+
+    /// A dead mirror used to cost its whole timeout before the next was asked.
+    #[tokio::test]
+    async fn a_silent_mirror_costs_one_hedge_and_not_its_timeout() {
+        let base = stub().await;
+        let hosts = [format!("{base}/hang"), format!("{base}/rows")];
+        let def = indexer_at("hedge-test", &hosts);
+        let started = Instant::now();
+        let found = search_one(&def, "show", &options(Kind::Anime), &[], LIMIT).await;
+        let took = started.elapsed();
+        assert_eq!(found.unwrap().len(), 1);
+        assert!(
+            took < Duration::from_millis(2500),
+            "waited {took:?} on a mirror that never answers"
+        );
+        assert!(!usable(&hosts[0]), "the slow mirror rests for the next search");
+        assert!(usable(&hosts[1]));
+    }
+
+    #[test]
+    fn answers_are_merged_in_request_order_without_repeats() {
+        let release = |hash: &str, title: &str| Release {
+            title: title.into(),
+            info_hash: hash.into(),
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: 1,
+            source: "t".into(),
+        };
+        // The second request answered first; its rows still come after the first's.
+        let answers = vec![
+            Some(vec![release("a", "from first"), release("b", "from first")]),
+            None,
+            Some(vec![release("b", "from third"), release("c", "from third")]),
+        ];
+        let merged = merged(&answers);
+        let titles: Vec<&str> = merged.iter().map(|r| r.title.as_str()).collect();
+        assert_eq!(titles, ["from first", "from first", "from third"]);
+    }
+
+    #[test]
+    fn resting_hosts_are_remembered_across_runs() {
+        let dir = std::env::temp_dir().join(format!("akidev-health-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        remember_host_health_in(&dir);
+        mark_down("http://remembered.test", Duration::from_secs(120));
+        let saved = std::fs::read_to_string(dir.join("indexer-health.json")).unwrap();
+        assert!(saved.contains("remembered.test"));
+
+        // A new run: nothing is resting in memory, and the file says what was.
+        down_until().lock().unwrap().remove("http://remembered.test");
+        assert!(usable("http://remembered.test"));
+        remember_host_health_in(&dir);
+        assert!(!usable("http://remembered.test"));
+        let _ = std::fs::remove_dir_all(&dir);
+        *health_file().lock().unwrap() = None;
     }
 }

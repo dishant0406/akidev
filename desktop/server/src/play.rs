@@ -307,7 +307,8 @@ impl Player {
         plan.ranked
             .sort_by_key(|release| (needs_encode_by_name(&release.title), heavy(release, movie)));
 
-        let deadline = Instant::now() + Duration::from_millis(self.settings.resolve_deadline_ms);
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(self.settings.resolve_deadline_ms);
         let episode = plan.parsed.episode;
         let season = plan.parsed.season;
         let mut reasons: Vec<String> = Vec::new();
@@ -418,7 +419,14 @@ impl Player {
                 other => Err(Miss::Reason(format!("Unknown stream source \"{other}\"."))),
             };
             match attempt {
-                Ok(ready) => return Outcome::Ready(ready),
+                Ok(ready) => {
+                    tracing::info!(
+                        "[play] {id}: ready from {source} after {:?} ({} releases found)",
+                        started.elapsed(),
+                        plan.ranked.len()
+                    );
+                    return Outcome::Ready(ready);
+                }
                 Err(Miss::Busy) => return Outcome::Busy,
                 Err(Miss::Reason(reason)) => {
                     tracing::info!("[play] {id}: {source}: {reason}");

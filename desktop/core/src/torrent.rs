@@ -134,33 +134,54 @@ impl Engine {
         let dir = Engine::downloads_dir(base);
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-        let options = |dht: Option<librqbit::DhtSessionConfig>| SessionOptions {
+        // With a port, peers can connect in as well as being connected to, and the trackers and
+        // the DHT are told that port. The DHT shares the number over UDP.
+        let options = |dht: Option<librqbit::DhtSessionConfig>, port: Option<u16>| SessionOptions {
             dht,
             persistence: None,
             fastresume: false,
+            listen: port.map(|port| librqbit::ListenerOptions {
+                listen_addr: (std::net::Ipv6Addr::UNSPECIFIED, port).into(),
+                announce_port: (port != 0).then_some(port),
+                ..Default::default()
+            }),
             ratelimits: librqbit::limits::LimitsConfig {
                 upload_bps: config.upload_limit_bps.and_then(std::num::NonZeroU32::new),
                 download_bps: None,
             },
             ..Default::default()
         };
+        let dht_on = |port: Option<u16>| librqbit::DhtSessionConfig {
+            port,
+            persistence: None,
+            ..Default::default()
+        };
         // The DHT remembers the port it used and binds it again, in a file every copy of the
         // library on the machine shares. A second window, or the server beside the app on a
         // developer's machine, then fails to start with "address already in use", and nothing
-        // can be played. When the remembered port is taken the DHT takes any free one instead.
-        let session =
-            match Session::new_with_opts(dir.clone(), options(Some(Default::default()))).await {
-                Ok(session) => session,
-                Err(error) => {
-                    tracing::warn!("[torrent] the DHT could not start as it was: {error:#}");
-                    let own_port = librqbit::DhtSessionConfig {
-                        port: None,
-                        persistence: None,
-                        ..Default::default()
-                    };
-                    Session::new_with_opts(dir, options(Some(own_port))).await?
-                }
-            };
+        // can be played. When the wanted port is taken the engine takes any free one instead.
+        let first = match config.listen_port {
+            Some(port) => Session::new_with_opts(
+                dir.clone(),
+                options(Some(dht_on(Some(port))), Some(port)),
+            )
+            .await,
+            None => Session::new_with_opts(dir.clone(), options(Some(Default::default()), None))
+                .await,
+        };
+        let session = match first {
+            Ok(session) => session,
+            Err(error) => {
+                tracing::warn!("[torrent] the ports could not be used as asked: {error:#}");
+                let port = config.listen_port.map(|_| 0);
+                Session::new_with_opts(dir, options(Some(dht_on(None)), port)).await?
+            }
+        };
+        tracing::info!(
+            "[torrent] listening on {:?}, upload limit {:?}",
+            session.listen_addr(),
+            config.upload_limit_bps
+        );
         Ok(Engine::new(session, config))
     }
 
@@ -207,6 +228,7 @@ impl Engine {
         peers: &[SocketAddr],
     ) -> anyhow::Result<Playable> {
         let hash = Id20::from_str(&release.info_hash).context("bad info hash")?;
+        let started = Instant::now();
 
         if fresh {
             let dropped = {
@@ -299,6 +321,7 @@ impl Engine {
             }
         };
 
+        let metadata_ms = started.elapsed().as_millis();
         let chosen =
             match tokio::time::timeout(wait, self.choose_file(&handle, release, episode, season))
                 .await
@@ -317,6 +340,7 @@ impl Engine {
                 .await
                 .unwrap_or_else(|_| Err(anyhow::anyhow!("timed out opening the file")));
                 fetch_start(&handle, file_index).await;
+                log_open(&handle, release, metadata_ms, started.elapsed().as_millis());
                 match held {
                     Ok(hold) => {
                         let playable =
@@ -539,6 +563,32 @@ impl Engine {
         });
         let _ = deleted.await;
     }
+}
+
+/// One line per opened torrent: how long the swarm took to give the file list and then the start of
+/// the file, and how the peers look at that moment. These are the numbers to read before changing
+/// anything about how a torrent is fetched.
+fn log_open(handle: &Handle, release: &Release, metadata_ms: u128, head_ms: u128) {
+    let Some(live) = handle.stats().live else {
+        return;
+    };
+    let peers = &live.snapshot.peer_stats;
+    tracing::info!(
+        "[torrent] \"{}\": file list after {metadata_ms}ms, start of the file after {head_ms}ms; \
+         peers live {} (tcp {}, utp {}), connecting {}, queued {}, seen {}, dead {}; \
+         down {}, up {}, {} bytes uploaded",
+        release.title,
+        peers.live,
+        peers.live_tcp,
+        peers.live_utp,
+        peers.connecting,
+        peers.queued,
+        peers.seen,
+        peers.dead,
+        live.download_speed,
+        live.upload_speed,
+        live.snapshot.uploaded_bytes,
+    );
 }
 
 /// Opens a stream parked at the end of the file: it asks for no pieces, and counts as a

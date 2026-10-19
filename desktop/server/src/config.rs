@@ -31,8 +31,11 @@ pub struct Settings {
     pub max_candidates: usize,
     pub resolve_deadline_ms: u64,
     pub indexer_timeout_ms: u64,
-    /// Upload cap towards peers, bytes a second. A server has no use for seeding.
+    /// Upload cap towards peers, bytes a second.
     pub upload_limit_bps: u32,
+    /// The port peers connect to (TCP) and the DHT uses (UDP). It must be published by the container
+    /// and open in the host's firewall, or the server is outbound-only.
+    pub listen_port: u16,
     /// Conversions running at once. Each is an ffmpeg process, and a copy costs disk and bandwidth
     /// rather than CPU, so this can be higher than the number of encodes.
     pub max_hls_sessions: usize,
@@ -115,7 +118,11 @@ impl Settings {
             max_candidates: number("MAX_CANDIDATES", 3),
             resolve_deadline_ms: number("RESOLVE_DEADLINE_MS", 75_000),
             indexer_timeout_ms: number("INDEXER_TIMEOUT_MS", 5_000),
-            upload_limit_bps: number("UPLOAD_LIMIT_BPS", 256 * 1024),
+            // Peers upload to whoever uploads to them, so a tiny allowance gets a tiny download. 2 MiB
+            // a second is for streaming a few titles at once; the log line per torrent shows what
+            // was uploaded, to tune it against the host's monthly transfer.
+            upload_limit_bps: number("UPLOAD_LIMIT_BPS", 2 * 1024 * 1024),
+            listen_port: number("LISTEN_PORT", 6881),
             max_hls_sessions: number("MAX_HLS_SESSIONS", 4),
             max_video_transcodes: number("MAX_VIDEO_TRANSCODES", 1),
             hls_session_ttl: Duration::from_secs(number("HLS_SESSION_TTL_MINUTES", 30u64) * 60),
@@ -151,6 +158,7 @@ impl Settings {
             max_candidates: self.max_candidates,
             resolve_deadline_ms: self.resolve_deadline_ms,
             upload_limit_bps: Some(self.upload_limit_bps),
+            listen_port: Some(self.listen_port),
             ..akidev_core::config::Config::default()
         }
     }

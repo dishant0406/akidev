@@ -58,6 +58,7 @@ impl Streamer {
     /// Starts the torrent engine, downloading under a directory it owns inside `dir`,
     /// and the localhost server the player reads from.
     pub async fn start(config: Config, dir: PathBuf) -> anyhow::Result<Streamer> {
+        crate::indexers::remember_host_health_in(&dir);
         let engine = Arc::new(Engine::start(&config, &dir).await?);
         let server = serve::start(engine.clone()).await?;
         Ok(Streamer {
@@ -71,6 +72,7 @@ impl Streamer {
     /// The torrent engine alone, for a server that reads the files itself and has no player
     /// to hand a localhost address to. `resolve` is not meant to be used on one of these.
     pub async fn engine_only(config: Config, dir: PathBuf) -> anyhow::Result<Streamer> {
+        crate::indexers::remember_host_health_in(&dir);
         let engine = Arc::new(Engine::start(&config, &dir).await?);
         Ok(Streamer {
             config: Mutex::new(config),
@@ -145,10 +147,18 @@ impl Streamer {
         if parsed.kind != Kind::Movie && parsed.episode.is_none() {
             return Err("No episode was requested.".into());
         }
+        let started = Instant::now();
         let Some(detail) = providers::detail(&parsed.key()).await else {
             return Err("Unknown title.".into());
         };
+        let detail_took = started.elapsed();
         let (terms, ranked, extra) = find_releases(&config, &parsed, &detail).await;
+        tracing::info!(
+            "[stream] {id}: title after {detail_took:?}, releases after {:?} more: {} playable, {} others",
+            started.elapsed().saturating_sub(detail_took),
+            ranked.len(),
+            extra.len()
+        );
         Ok(Plan {
             id: id.to_string(),
             parsed,
@@ -399,21 +409,30 @@ async fn find_releases_named(
     let (terms, mut ranked, mut all) = match (parsed.kind, parsed.episode) {
         (Kind::Movie, _) => {
             let terms = movie_search_terms(titles, year);
-            let found = search_all(config, &terms, &options).await;
+            let found = search_all(config, &terms, &options, |found| {
+                !rank_movie_releases(found, year, &media.title, titles).is_empty()
+            })
+            .await;
             let ranked = rank_movie_releases(&found, year, &media.title, titles);
             let all = rank_movie_releases_by(&found, year, &media.title, titles, false);
             (terms, ranked, all)
         }
         (Kind::Series, Some(episode)) => {
             let terms = series_search_terms(titles, parsed.season, Some(episode));
-            let found = search_all(config, &terms, &options).await;
+            let found = search_all(config, &terms, &options, |found| {
+                !rank_releases(found, episode, &media.title, titles, parsed.season).is_empty()
+            })
+            .await;
             let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
             let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all)
         }
         (Kind::Anime, Some(episode)) => {
             let terms = search_terms(titles, Some(episode));
-            let found = search_all(config, &terms, &options).await;
+            let found = search_all(config, &terms, &options, |found| {
+                !rank_releases(found, episode, &media.title, titles, parsed.season).is_empty()
+            })
+            .await;
             let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
             let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all)
