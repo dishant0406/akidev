@@ -152,15 +152,17 @@ Music comes from YouTube Music (the vendored `vendor/ytmapi-rs`, see its PATCH.m
 with yt-dlp (`YT_DLP` names the binary; the image's copy updates itself daily).
 
 - `search` answers `{ songs: Track[], albums: AlbumCard[], artists: ArtistCard[] }`. A track's `id` is
-  the YouTube video id.
+  the YouTube video id. When YouTube Music does not answer at all, `songs` come from Audius instead (no
+  albums or artists), and their ids are `audius:<id>`.
 - `radio/{videoId}` answers `{ songs: Track[] }`: what YouTube Music plays after that track (without
   the track itself). A player that has run out of queue appends these, which is the autoplay.
 - `albums/{id}` answers the album with its `tracks`. `artists/{id}` answers `songs`, `albums`,
   `singles` and `related`.
-- `stream/{videoId}` is the audio, passed through with `Range` support (206), so the browser can seek.
-  The address yt-dlp finds is cached for 30 minutes; the server fetches the bytes itself because the
+- `stream/{id}` (a YouTube video id or an `audius:` id) is the audio, passed through with `Range` support (206), so the browser can seek.
+  When yt-dlp is refused with its usual player client it asks again as the embedded player. The address
+  yt-dlp finds is cached for 30 minutes; the server fetches the bytes itself because the
   address only works from the machine that asked. Not compressed.
-- Covers are YouTube hosts, which `IMAGE_HOSTS` allows, and go through `/v1/img` like every picture.
+- Covers are YouTube hosts and Audius storage nodes, which `IMAGE_HOSTS` allows, and go through `/v1/img` like every picture.
 
 ## Watch party: `/v1/party`
 

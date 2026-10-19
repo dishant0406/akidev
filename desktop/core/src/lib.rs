@@ -1,3 +1,4 @@
+pub mod audius;
 pub mod cache;
 pub mod calendar;
 pub mod config;

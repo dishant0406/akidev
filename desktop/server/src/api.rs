@@ -799,7 +799,7 @@ async fn music_radio(
     if !within_api_limit(&state, &headers, peer) {
         return too_many();
     }
-    if !crate::music::is_video_id(&id) {
+    if !crate::music::is_track_id(&id) {
         return error(StatusCode::BAD_REQUEST, "That is not a track id.");
     }
     match state.music.radio(&id).await {
@@ -834,7 +834,7 @@ async fn music_stream(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
-    if !crate::music::is_video_id(&id) {
+    if !crate::music::is_track_id(&id) {
         return error(StatusCode::BAD_REQUEST, "That is not a track id.");
     }
     // A browser asks for a track in several ranges while it plays and seeks, so this allowance is

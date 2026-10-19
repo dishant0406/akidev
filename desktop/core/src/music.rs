@@ -6,6 +6,7 @@
 //! them. The address it finds only works from the machine that asked, so the server fetches the
 //! bytes and hands them on rather than sending the browser to YouTube.
 
+use crate::audius;
 use anyhow::{Context, anyhow};
 use futures::future::join_all;
 use serde::Serialize;
@@ -328,9 +329,17 @@ impl Music {
         // library is retiring.
         let (songs, albums, artists) =
             tokio::join!(self.songs(term), self.albums(term), self.artists(term));
-        // One kind failing leaves the others; all three failing is an outage.
+        // One kind failing leaves the others; all three failing is an outage, and Audius answers
+        // instead.
         if songs.is_err() && albums.is_err() && artists.is_err() {
-            return Err(anyhow!("YouTube Music did not answer"));
+            tracing::warn!("music: YouTube Music did not answer, searching Audius");
+            return Ok(SearchOut {
+                songs: audius::search(term)
+                    .await
+                    .context("neither YouTube Music nor Audius answered")?,
+                albums: Vec::new(),
+                artists: Vec::new(),
+            });
         }
         Ok(SearchOut {
             songs: songs.unwrap_or_default(),
@@ -427,6 +436,10 @@ impl Music {
     /// What YouTube Music plays after a track: the tracks of its "radio", without the track
     /// itself. A player that has run out of queue plays these.
     pub async fn radio(&self, video_id: &str) -> anyhow::Result<Vec<Track>> {
+        // Audius has no radio, so the queue simply ends after one of its tracks.
+        if audius::is_id(video_id) {
+            return Ok(Vec::new());
+        }
         anyhow::ensure!(is_video_id(video_id), "not a video id");
         let yt = self.yt().await?;
         let tracks = yt
@@ -526,6 +539,9 @@ impl Music {
 
     /// Where the audio of a track is, and what to say to fetch it. Found with yt-dlp and kept for a while.
     pub async fn resolve(&self, video_id: &str) -> anyhow::Result<Resolved> {
+        if audius::is_id(video_id) {
+            return Ok(audius::resolve(video_id));
+        }
         if let Some(found) = self.remembered(video_id) {
             return Ok(found);
         }
@@ -534,7 +550,17 @@ impl Music {
         if let Some(found) = self.remembered(video_id) {
             return Ok(found);
         }
-        let found = self.ask_ytdlp(video_id).await?;
+        let found = match self.ask_ytdlp(video_id, None).await {
+            Ok(found) => found,
+            // YouTube treats each of its player clients differently and changes how, so when the
+            // usual one is refused the embedded player is the next to ask.
+            Err(first) => {
+                tracing::warn!("music: {first}, trying the embedded player");
+                self.ask_ytdlp(video_id, Some("web_embedded"))
+                    .await
+                    .map_err(|_| first)?
+            }
+        };
         let mut addresses = self.addresses.lock().unwrap();
         if addresses.len() >= ADDRESS_MAX {
             addresses.retain(|_, (at, _)| at.elapsed() < ADDRESS_TTL);
@@ -575,7 +601,11 @@ impl Music {
         }
     }
 
-    async fn ask_ytdlp(&self, video_id: &str) -> anyhow::Result<Resolved> {
+    async fn ask_ytdlp(
+        &self,
+        video_id: &str,
+        player_client: Option<&str>,
+    ) -> anyhow::Result<Resolved> {
         // m4a (AAC) plays everywhere, Safari included; failing that, whatever audio is best.
         let mut command = tokio::process::Command::new(&self.ytdlp);
         command.args([
@@ -595,6 +625,11 @@ impl Music {
             if let Some(file) = self.system_ca_file().await {
                 command.env("SSL_CERT_FILE", file);
             }
+        }
+        if let Some(player_client) = player_client {
+            command
+                .arg("--extractor-args")
+                .arg(format!("youtube:player_client={player_client}"));
         }
         let copy = self.cookie_copy().await;
         if let Some(copy) = &copy {
@@ -738,6 +773,11 @@ pub fn is_video_id(text: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
+/// A track the player may ask for: a YouTube video, or an Audius track standing in for one.
+pub fn is_track_id(text: &str) -> bool {
+    is_video_id(text) || audius::is_id(text)
+}
+
 fn is_explicit(explicit: &ytmapi_rs::common::Explicit) -> bool {
     matches!(explicit, ytmapi_rs::common::Explicit::IsExplicit)
 }
@@ -753,6 +793,17 @@ fn cover(thumbnails: &[Thumbnail]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn an_audius_track_has_no_radio() {
+        assert!(
+            Music::new("yt-dlp")
+                .radio("audius:vZJJz")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn only_real_video_ids_pass() {

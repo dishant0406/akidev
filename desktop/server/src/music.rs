@@ -11,7 +11,7 @@ use axum::response::Response;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-pub use akidev_core::music::is_video_id;
+pub use akidev_core::music::is_track_id;
 
 fn http() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
