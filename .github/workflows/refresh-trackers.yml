@@ -1,7 +1,9 @@
 name: Refresh trackers
 
-# Once a day, takes the best public trackers from ngosang/trackerslist, writes them into
-# desktop/sources/sources.json, and publishes the signed document so running apps pick them up.
+# Once a day, takes the best public trackers from ngosang/trackerslist, writes them into the
+# document that is live at sources.akidev.live, and publishes it signed, so running apps pick them
+# up. The live document is the one that counts: this starts from it and does not touch the
+# repository, so indexers published by hand are kept.
 #
 # Needs these repository secrets:
 #   SOURCES_SIGNING_KEY    the contents of .secrets/sources.key (the private signing key)
@@ -15,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: refresh-trackers
@@ -34,27 +36,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Take the trackers
-        run: ./scripts/refresh-trackers.sh
-
-      - name: Is the file newer than what is live?
-        id: newer
+      - name: Take the live document and replace its trackers
+        id: refresh
         run: |
-          file="$(jq .version sources/sources.json)"
-          live="$(curl -fsS "$FEED/sources.json" | jq .version || echo 0)"
-          echo "file $file, live $live"
-          if [ "$file" -gt "${live:-0}" ]; then echo "publish=true" >> "$GITHUB_OUTPUT"; fi
+          set -euo pipefail
+          work="$RUNNER_TEMP/sources"
+          mkdir -p "$work"
+          curl -fsS --retry 3 "$FEED/sources.json" -o "$work/sources.json"
+          echo "live version $(jq .version "$work/sources.json")"
+          result="$(FILE="$work/sources.json" ./scripts/refresh-trackers.sh | tail -n 1)"
+          echo "$result"
+          echo "work=$work" >> "$GITHUB_OUTPUT"
+          if [ "$result" = changed ]; then echo "publish=true" >> "$GITHUB_OUTPUT"; fi
 
-      - if: steps.newer.outputs.publish == 'true'
+      - if: steps.refresh.outputs.publish == 'true'
         uses: dtolnay/rust-toolchain@stable
-      - if: steps.newer.outputs.publish == 'true'
+      - if: steps.refresh.outputs.publish == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
 
       - name: Check, sign and publish
-        if: steps.newer.outputs.publish == 'true'
+        if: steps.refresh.outputs.publish == 'true'
         env:
+          WORK: ${{ steps.refresh.outputs.work }}
           SIGNING_KEY: ${{ secrets.SOURCES_SIGNING_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -62,27 +67,15 @@ jobs:
           ACCOUNT: ${{ secrets.R2_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/sources"
-          mkdir -p "$work"
-          trap 'rm -rf "$work"' EXIT
-          (umask 077; printf '%s' "$SIGNING_KEY" > "$work/sources.key")
+          trap 'rm -rf "$WORK"' EXIT
+          (umask 077; printf '%s' "$SIGNING_KEY" > "$WORK/sources.key")
           tool=(cargo run -q -p akidev-core --bin akidev-sources --)
-          "${tool[@]}" sign "$work/sources.key" sources/sources.json "$work/sources.sig"
-          "${tool[@]}" check sources/sources.json "$work/sources.sig"
+          "${tool[@]}" sign "$WORK/sources.key" "$WORK/sources.json" "$WORK/sources.sig"
+          "${tool[@]}" check "$WORK/sources.json" "$WORK/sources.sig"
           put() {
             aws s3 cp "$2" "s3://$BUCKET/$1" --content-type "$3" \
               --endpoint-url "https://$ACCOUNT.r2.cloudflarestorage.com"
           }
-          put sources.json sources/sources.json application/json
-          put sources.sig "$work/sources.sig" text/plain
-
-      # After publishing, so a failed upload leaves the repository as it was and the next run
-      # tries again.
-      - name: Commit the new list
-        run: |
-          git diff --quiet sources/sources.json && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sources/sources.json
-          git commit -m "Refresh the public trackers"
-          git push
+          put sources.json "$WORK/sources.json" application/json
+          put sources.sig "$WORK/sources.sig" text/plain
+          echo "Published version $(jq .version "$WORK/sources.json")"

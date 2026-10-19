@@ -24,12 +24,13 @@ that gets through is undone by publishing a corrected copy with a higher version
 
 ### Trackers
 
-`.github/workflows/refresh-trackers.yml` runs daily. It runs `scripts/refresh-trackers.sh`, which
-puts the first 32 udp/http(s) trackers of [ngosang/trackerslist](https://github.com/ngosang/trackerslist)
-(`trackers_all.txt`, best first) into `trackers` and raises `version`; then it signs and publishes
-the document and commits it. It needs the repository secrets `SOURCES_SIGNING_KEY` (the contents
-of `.secrets/sources.key`), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Hand edits to
-`trackers` are overwritten by the next run.
+`.github/workflows/refresh-trackers.yml` runs daily. It downloads the document that is live at
+`sources.akidev.live`, runs `scripts/refresh-trackers.sh` on it (the first 32 udp/http(s) trackers of
+[ngosang/trackerslist](https://github.com/ngosang/trackerslist), `trackers_all.txt`, best first, into
+`trackers`, and `version` raised), then signs and publishes it. It never touches the repository, so the
+live document is the one that counts and `sources/sources.json` is the copy built into the app. A hand
+edit of `trackers` is overwritten by the next run. It needs the repository secrets `SOURCES_SIGNING_KEY`
+(the contents of `.secrets/sources.key`), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
 ### One-time setup
 
