@@ -1,0 +1,88 @@
+name: Refresh trackers
+
+# Once a day, takes the best public trackers from ngosang/trackerslist, writes them into
+# desktop/sources/sources.json, and publishes the signed document so running apps pick them up.
+#
+# Needs these repository secrets:
+#   SOURCES_SIGNING_KEY    the contents of .secrets/sources.key (the private signing key)
+#   R2_ACCOUNT_ID          Cloudflare account id
+#   R2_ACCESS_KEY_ID       an R2 API token's access key, with write access to the bucket
+#   R2_SECRET_ACCESS_KEY   its secret
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-trackers
+  cancel-in-progress: false
+
+env:
+  BUCKET: akidev-sources
+  FEED: https://sources.akidev.live
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Take the trackers
+        run: ./scripts/refresh-trackers.sh
+
+      - name: Is the file newer than what is live?
+        id: newer
+        run: |
+          file="$(jq .version sources/sources.json)"
+          live="$(curl -fsS "$FEED/sources.json" | jq .version || echo 0)"
+          echo "file $file, live $live"
+          if [ "$file" -gt "${live:-0}" ]; then echo "publish=true" >> "$GITHUB_OUTPUT"; fi
+
+      - if: steps.newer.outputs.publish == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.newer.outputs.publish == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+
+      - name: Check, sign and publish
+        if: steps.newer.outputs.publish == 'true'
+        env:
+          SIGNING_KEY: ${{ secrets.SOURCES_SIGNING_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          ACCOUNT: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/sources"
+          mkdir -p "$work"
+          trap 'rm -rf "$work"' EXIT
+          (umask 077; printf '%s' "$SIGNING_KEY" > "$work/sources.key")
+          tool=(cargo run -q -p akidev-core --bin akidev-sources --)
+          "${tool[@]}" sign "$work/sources.key" sources/sources.json "$work/sources.sig"
+          "${tool[@]}" check sources/sources.json "$work/sources.sig"
+          put() {
+            aws s3 cp "$2" "s3://$BUCKET/$1" --content-type "$3" \
+              --endpoint-url "https://$ACCOUNT.r2.cloudflarestorage.com"
+          }
+          put sources.json sources/sources.json application/json
+          put sources.sig "$work/sources.sig" text/plain
+
+      # After publishing, so a failed upload leaves the repository as it was and the next run
+      # tries again.
+      - name: Commit the new list
+        run: |
+          git diff --quiet sources/sources.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sources/sources.json
+          git commit -m "Refresh the public trackers"
+          git push

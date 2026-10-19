@@ -22,6 +22,15 @@ Otherwise it keeps what it has. Validation cannot know whether a mirror is alive
 selection is right, so test a change against the live services before publishing it; a mistake
 that gets through is undone by publishing a corrected copy with a higher version.
 
+### Trackers
+
+`.github/workflows/refresh-trackers.yml` runs daily. It runs `scripts/refresh-trackers.sh`, which
+puts the first 32 udp/http(s) trackers of [ngosang/trackerslist](https://github.com/ngosang/trackerslist)
+(`trackers_all.txt`, best first) into `trackers` and raises `version`; then it signs and publishes
+the document and commits it. It needs the repository secrets `SOURCES_SIGNING_KEY` (the contents
+of `.secrets/sources.key`), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Hand edits to
+`trackers` are overwritten by the next run.
+
 ### One-time setup
 
 - Create an R2 bucket and give it the custom domain `sources.akidev.live` (done with the cf CLI:
