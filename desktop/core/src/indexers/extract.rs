@@ -371,6 +371,63 @@ mod tests {
     }
 
     #[test]
+    fn zilean_reads_hashes_and_drops_adult_rows() {
+        let body = json!([
+            { "raw_title": "Show S01 1080p", "info_hash": A, "size": "31518434075", "adult": false },
+            { "raw_title": "Bad", "info_hash": B, "size": "1", "adult": true },
+            { "raw_title": "No hash", "adult": false }
+        ]);
+        let found = run("zilean", &body, "Show");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "Show S01 1080p");
+        assert_eq!(found[0].size_bytes, Some(31_518_434_075));
+        // The list holds no seeder counts.
+        assert_eq!(found[0].seeders, 0);
+        let anime = run("zilean-anime", &body, "Show");
+        assert_eq!(anime.len(), 1);
+        assert!(run("zilean-anime", &body, "Other").is_empty());
+    }
+
+    #[test]
+    fn nekobt_reads_text_seeders_and_skips_hidden_rows() {
+        let body = json!({ "data": { "results": [
+            { "title": "[Group] Frieren - 01", "infohash": A, "seeders": "24", "filesize": "6107202578", "hidden": false },
+            { "title": "[Group] Frieren - 02", "infohash": B, "seeders": "1", "filesize": "1", "hidden": true }
+        ] } });
+        let found = run("nekobt", &body, "Frieren");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].seeders, 24);
+        assert_eq!(found[0].size_bytes, Some(6_107_202_578));
+    }
+
+    #[test]
+    fn bangumi_moe_reads_sizes_written_as_text() {
+        let body = json!({ "torrents": [
+            { "title": "[7ACG] Sousou no Frieren S01", "infoHash": A, "size": "52.02 GB", "seeders": 3 },
+            { "title": "Something else", "infoHash": B, "size": "1 GB", "seeders": 9 }
+        ] });
+        let found = run("bangumi-moe", &body, "Frieren");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].seeders, 3);
+        assert!(found[0].size_bytes.unwrap() > 50_000_000_000);
+    }
+
+    #[test]
+    fn torrentsdb_reads_a_stremio_stream() {
+        let body = json!({ "streams": [{
+            "name": "TorrentsDB\n2160p",
+            "title": "Breaking Bad S01E05 Gray Matter 2160p\n📅 S01E05 👤 12 💾 5.66 GB ⚙️ limetorrent",
+            "infoHash": A,
+            "behaviorHints": { "filename": "Breaking Bad S01E05 Gray Matter 2160p.mkv" }
+        }] });
+        let found = run("torrentsdb", &body, "");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].seeders, 12);
+        assert!(found[0].title.contains("Gray Matter"));
+        assert!(found[0].size_bytes.is_some());
+    }
+
+    #[test]
     fn torrents_csv_keeps_only_rows_that_name_the_searched_title() {
         let body = json!({ "torrents": [
             { "name": "Gyaarah.Gyaarah.S01E01.1080p", "infohash": A, "size_bytes": 2000, "seeders": 71 },

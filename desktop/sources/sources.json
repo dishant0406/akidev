@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 7,
+  "version": 8,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -408,6 +408,208 @@
           "hash": "info_hash",
           "size": "size",
           "seeders": "seeders"
+        }
+      }
+    },
+    {
+      "id": "zilean",
+      "name": "Zilean",
+      "kinds": [
+        "series",
+        "movie"
+      ],
+      "fanout": "once",
+      "hosts": [
+        "https://zileanfortheweebs.midnightignite.me"
+      ],
+      "request": {
+        "path": {
+          "$kind": {
+            "movie": "/dmm/filtered?ImdbId={imdb}",
+            "series": "/dmm/filtered?ImdbId={imdb}&Season={season}&Episode={episode}"
+          }
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "",
+        "drop": [
+          {
+            "path": "adult",
+            "equals": "true"
+          }
+        ],
+        "fields": {
+          "title": "raw_title",
+          "hash": "info_hash",
+          "size": "size"
+        }
+      }
+    },
+    {
+      "id": "zilean-anime",
+      "name": "Zilean",
+      "kinds": [
+        "anime"
+      ],
+      "fanout": "per-title",
+      "hosts": [
+        "https://zileanfortheweebs.midnightignite.me"
+      ],
+      "request": {
+        "path": "/dmm/filtered",
+        "query": {
+          "Query": "{term}"
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "",
+        "must_contain_term": true,
+        "drop": [
+          {
+            "path": "adult",
+            "equals": "true"
+          }
+        ],
+        "fields": {
+          "title": "raw_title",
+          "hash": "info_hash",
+          "size": "size"
+        }
+      }
+    },
+    {
+      "id": "nekobt",
+      "name": "NekoBT",
+      "kinds": [
+        "anime"
+      ],
+      "fanout": "per-title",
+      "hosts": [
+        "https://nekobt.to"
+      ],
+      "request": {
+        "path": "/api/v1/torrents/search",
+        "query": {
+          "query": "{term}"
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "data.results",
+        "must_contain_term": true,
+        "drop": [
+          {
+            "path": "hidden",
+            "equals": "true"
+          }
+        ],
+        "fields": {
+          "title": "title",
+          "hash": "infohash",
+          "size": "filesize",
+          "seeders": "seeders"
+        }
+      }
+    },
+    {
+      "id": "bangumi-moe",
+      "name": "Bangumi.moe",
+      "kinds": [
+        "anime"
+      ],
+      "fanout": "per-title",
+      "hosts": [
+        "https://bangumi.moe"
+      ],
+      "request": {
+        "path": "/api/v2/torrent/search",
+        "query": {
+          "query": "{term}"
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "torrents",
+        "must_contain_term": true,
+        "fields": {
+          "title": "title",
+          "hash": "infoHash",
+          "size": "size",
+          "seeders": "seeders"
+        }
+      }
+    },
+    {
+      "id": "torrentsdb",
+      "name": "TorrentsDB",
+      "kinds": [
+        "series",
+        "movie"
+      ],
+      "fanout": "once",
+      "hosts": [
+        "https://torrentsdb.com"
+      ],
+      "request": {
+        "path": {
+          "$kind": {
+            "movie": "/stream/movie/{imdb}.json",
+            "series": "/stream/series/{imdb}:{season}:{episode}.json"
+          }
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "streams",
+        "dedupe": {
+          "avoid": "(?i)(?:^|[^a-z0-9])(?:bonus|discarded|deleted|behind[ ._]*the[ ._]*scenes|bloopers?|outtakes?)(?:[^a-z0-9]|$)"
+        },
+        "fields": {
+          "title": {
+            "join": [
+              {
+                "line": {
+                  "from": "title",
+                  "skip": "👤|💾",
+                  "index": 0
+                }
+              },
+              {
+                "coalesce": [
+                  "behaviorHints.filename",
+                  {
+                    "line": {
+                      "from": "title",
+                      "skip": "👤|💾",
+                      "index": 1
+                    }
+                  },
+                  {
+                    "line": {
+                      "from": "title",
+                      "skip": "👤|💾",
+                      "index": 0
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "hash": "infoHash",
+          "size": {
+            "regex": {
+              "from": "title",
+              "pattern": "(?i)💾\\s*([0-9.]+\\s*(?:KB|MB|GB|TB))"
+            }
+          },
+          "seeders": {
+            "regex": {
+              "from": "title",
+              "pattern": "👤\\s*([0-9]+)"
+            }
+          }
         }
       }
     }

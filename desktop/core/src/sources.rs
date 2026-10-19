@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn the_embedded_definitions_are_valid_and_complete() {
         let sources = parse(EMBEDDED.as_bytes()).unwrap();
-        assert_eq!(sources.indexers.len(), 10);
+        assert_eq!(sources.indexers.len(), 15);
         assert_eq!(sources.providers.len(), 4);
         assert!(!sources.trackers.is_empty());
         for kind in Kind::ALL {

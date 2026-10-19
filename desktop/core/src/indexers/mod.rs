@@ -622,16 +622,35 @@ mod tests {
                 "tokyotosho",
                 "knaben",
                 "torrents-csv",
-                "apibay"
+                "apibay",
+                "zilean-anime",
+                "nekobt",
+                "bangumi-moe"
             ]
         );
         assert_eq!(
             names(Kind::Series),
-            ["knaben", "torrents-csv", "torrentio", "eztv", "apibay"]
+            [
+                "knaben",
+                "torrents-csv",
+                "torrentio",
+                "eztv",
+                "apibay",
+                "zilean",
+                "torrentsdb"
+            ]
         );
         assert_eq!(
             names(Kind::Movie),
-            ["knaben", "torrents-csv", "torrentio", "yts", "apibay"]
+            [
+                "knaben",
+                "torrents-csv",
+                "torrentio",
+                "yts",
+                "apibay",
+                "zilean",
+                "torrentsdb"
+            ]
         );
     }
 
@@ -659,6 +678,15 @@ mod tests {
         assert_eq!(series.path, "/stream/series/tt0903747:1:5.json");
         let film = request("torrentio", "", &options(Kind::Movie)).unwrap();
         assert_eq!(film.path, "/stream/movie/tt0903747.json");
+
+        // Zilean takes the season and episode as query parameters, which a film must not send.
+        let zilean = request("zilean", "", &options(Kind::Series)).unwrap();
+        assert_eq!(
+            zilean.path,
+            "/dmm/filtered?ImdbId=tt0903747&Season=1&Episode=5"
+        );
+        let zilean = request("zilean", "", &options(Kind::Movie)).unwrap();
+        assert_eq!(zilean.path, "/dmm/filtered?ImdbId=tt0903747");
 
         let knaben = |kind| {
             request("knaben", "bad", &options(kind))
