@@ -67,6 +67,13 @@ const GUEST_MESSAGE = "Only the host chooses what plays.";
 /** Pressing Previous this far into a track starts it again instead of going back. */
 const RESTART_AFTER = 3;
 
+/** Tracks that may fail one after another before the queue stops. When the server cannot find any
+ * audio at all, every track fails, and moving on through a long queue only repeats the error. */
+const MAX_FAILED_IN_A_ROW = 3;
+
+/** One id for every music error, so a new one replaces the one showing and they never pile up. */
+const ERROR_TOAST = "music-error";
+
 function shuffled<T>(list: T[]): T[] {
   const out = [...list];
   for (let i = out.length - 1; i > 0; i--) {
@@ -109,6 +116,10 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
   const radioFor = useRef<string | null>(null);
   // The track whose audio was asked for again after failing, so one bad address is retried once.
   const retried = useRef<string | null>(null);
+  // Tracks that failed one after another, since the last sound.
+  const failedInARow = useRef(0);
+  // A video has taken the sound: nothing here may start playing, or skip on, until the music is asked for.
+  const yielded = useRef(false);
 
   const current = queue[index] ?? null;
 
@@ -155,6 +166,8 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
     const first = tracks[at];
     const list = shuffleOn && first ? [first, ...shuffled(tracks.filter((_, i) => i !== at))] : tracks;
     retried.current = null;
+    failedInARow.current = 0;
+    yielded.current = false;
     setShuffle(shuffleOn);
     setQueue(list);
     setIndex(shuffleOn ? 0 : at);
@@ -201,7 +214,10 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
     else element.pause();
   }, [current]);
 
-  const pause = useCallback(() => audio.current?.pause(), []);
+  const pause = useCallback(() => {
+    yielded.current = true;
+    audio.current?.pause();
+  }, []);
 
   const seek = useCallback((seconds: number) => {
     if (partyNow.current.role === "guest") return partyNow.current.ask({ t: "seek", position: seconds });
@@ -339,6 +355,13 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
   const onError = () => {
     if (!current) return;
     const element = audio.current;
+    // A video has the sound. A track that was still loading when it did, and then failed, has
+    // nothing to tell: no message, and no moving on to start the next one over the film.
+    if (yielded.current) {
+      setLoading(false);
+      setPlaying(false);
+      return;
+    }
     // The address may have expired: ask once more, which makes the server look it up again.
     if (retried.current !== current.id && element) {
       retried.current = current.id;
@@ -351,7 +374,13 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
     setLoading(false);
     setPlaying(false);
     partyNow.current.setStatus("trouble", current.id);
-    toast.error(`Could not play "${current.title}".`);
+    failedInARow.current += 1;
+    if (failedInARow.current >= MAX_FAILED_IN_A_ROW) {
+      // Stopped where it is: pressing play on any track starts it again.
+      toast.error("Music is not playing right now. Try again in a little while.", { id: ERROR_TOAST });
+      return;
+    }
+    toast.error(`Could not play "${current.title}".`, { id: ERROR_TOAST });
     if (index + 1 < queue.length) setIndex(index + 1);
   };
 
@@ -399,9 +428,13 @@ export default function MusicPlayerProvider({ children }: { children: React.Reac
         ref={audio}
         data-track={current?.id}
         preload="auto"
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          yielded.current = false;
+          setPlaying(true);
+        }}
         onPause={() => setPlaying(false)}
         onPlaying={() => {
+          failedInARow.current = 0;
           setLoading(false);
           publish(false);
         }}
