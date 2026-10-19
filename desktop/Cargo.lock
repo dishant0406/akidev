@@ -229,6 +229,7 @@ dependencies = [
  "akidev-party",
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "futures",
  "getrandom 0.3.4",

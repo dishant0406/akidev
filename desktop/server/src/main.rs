@@ -132,9 +132,12 @@ async fn run() -> anyhow::Result<()> {
         hls.clone(),
         registry.clone(),
     );
-    let music = Arc::new(akidev_core::music::Music::new(
-        std::env::var("YT_DLP").unwrap_or_else(|_| "yt-dlp".into()),
-    ));
+    let mut music =
+        akidev_core::music::Music::new(std::env::var("YT_DLP").unwrap_or_else(|_| "yt-dlp".into()));
+    if let Some(file) = youtube_cookies(&settings.cache_dir) {
+        music = music.with_cookies(file);
+    }
+    let music = Arc::new(music);
     music.keep_updated();
     let state = api::AppState {
         settings: settings.clone(),
@@ -248,4 +251,42 @@ async fn shutdown() {
         _ = terminate => {},
     }
     tracing::info!("shutting down");
+}
+
+/// The YouTube session cookies, if `YOUTUBE_COOKIES_B64` holds them (the base64 of a Netscape
+/// cookies.txt, one line, which is how a multi-line file travels in an environment variable). They
+/// are written to the data directory, readable by this user only.
+fn youtube_cookies(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    use base64::Engine as _;
+    let text = std::env::var("YOUTUBE_COOKIES_B64").ok()?;
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(text) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::warn!("YOUTUBE_COOKIES_B64 is not base64: {error}");
+            return None;
+        }
+    };
+    let file = dir.join("youtube-cookies.txt");
+    let written = std::fs::write(&file, bytes).and_then(|()| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))?;
+        }
+        Ok(())
+    });
+    match written {
+        Ok(()) => {
+            tracing::info!("[music] using a YouTube session from YOUTUBE_COOKIES_B64");
+            Some(file)
+        }
+        Err(error) => {
+            tracing::warn!("the YouTube cookies could not be saved: {error}");
+            None
+        }
+    }
 }

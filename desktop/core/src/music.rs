@@ -149,6 +149,9 @@ pub struct Music {
     /// network or behind antivirus has its own roots that only the system knows.
     system_certs: bool,
     ca_bundle: OnceCell<Option<std::path::PathBuf>>,
+    /// A cookies file (Netscape format) of a signed-in YouTube session. YouTube asks the addresses
+    /// of data centres to prove they are not a bot, and a signed-in session is how yt-dlp does.
+    cookies: Option<std::path::PathBuf>,
 }
 
 impl Music {
@@ -162,7 +165,15 @@ impl Music {
             front: Mutex::new(None),
             system_certs: false,
             ca_bundle: OnceCell::new(),
+            cookies: None,
         }
+    }
+
+    /// yt-dlp then asks YouTube as the session in this file. Each run reads its own copy: yt-dlp
+    /// writes the file back when it ends, and two runs at once would otherwise overwrite each other.
+    pub fn with_cookies(mut self, file: impl Into<std::path::PathBuf>) -> Music {
+        self.cookies = Some(file.into());
+        self
     }
 
     /// yt-dlp then checks YouTube's certificate against the system's roots, as the rest of the app does.
@@ -546,6 +557,24 @@ impl Music {
         (at.elapsed() < ADDRESS_TTL).then(|| found.clone())
     }
 
+    /// A private copy of the cookies file for one run, or `None` when there is none to use.
+    async fn cookie_copy(&self) -> Option<std::path::PathBuf> {
+        static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let from = self.cookies.as_ref()?;
+        let to = std::env::temp_dir().join(format!(
+            "akidev-cookies-{}-{}.txt",
+            std::process::id(),
+            RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match tokio::fs::copy(from, &to).await {
+            Ok(_) => Some(to),
+            Err(error) => {
+                tracing::warn!("music: the cookies file could not be read: {error}");
+                None
+            }
+        }
+    }
+
     async fn ask_ytdlp(&self, video_id: &str) -> anyhow::Result<Resolved> {
         // m4a (AAC) plays everywhere, Safari included; failing that, whatever audio is best.
         let mut command = tokio::process::Command::new(&self.ytdlp);
@@ -567,13 +596,20 @@ impl Music {
                 command.env("SSL_CERT_FILE", file);
             }
         }
+        let copy = self.cookie_copy().await;
+        if let Some(copy) = &copy {
+            command.arg("--cookies").arg(copy);
+        }
         let run = command
             .arg("--")
             .arg(format!("https://music.youtube.com/watch?v={video_id}"))
             .kill_on_drop(true)
             .output();
-        let output = tokio::time::timeout(RESOLVE_TIMEOUT, run)
-            .await
+        let output = tokio::time::timeout(RESOLVE_TIMEOUT, run).await;
+        if let Some(copy) = &copy {
+            let _ = tokio::fs::remove_file(copy).await;
+        }
+        let output = output
             .context("yt-dlp took too long")?
             .context("yt-dlp did not start")?;
         if !output.status.success() {

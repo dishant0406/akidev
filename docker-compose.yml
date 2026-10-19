@@ -88,6 +88,9 @@ services:
       CACHE_DIR: /data
       STREAM_SOURCES: ${STREAM_SOURCES:-debrid,torrent,archive-org}
       TORBOX_API_KEY: ${TORBOX_API_KEY:-}
+      # A signed-in YouTube session (base64 of a cookies.txt), which is how music gets past YouTube's
+      # bot check on a data centre address. Empty means none.
+      YOUTUBE_COOKIES_B64: ${YOUTUBE_COOKIES_B64:-}
       # Watch parties: devices connect to each other, and this only helps them find the way. Empty
       # STUN_URLS means the public servers. CF_TURN_KEY_ID and CF_TURN_TOKEN are a Cloudflare Realtime
       # TURN key, the relay for devices on networks that block direct connections; without them
