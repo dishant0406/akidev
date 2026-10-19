@@ -50,7 +50,7 @@ export default function Hero({ items, loading }: { items: Card[]; loading: boole
         {/* One scrim across, so the words read over a busy picture, and one up from the
             bottom, so the banner melts into the page. */}
         <div className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/0 via-[72%] to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent via-[55%] to-canvas" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-canvas/40 via-[30%] to-canvas md:via-transparent md:via-[55%]" />
 
         <div className="gutter absolute inset-x-0 bottom-[72px] flex max-w-[calc(580px+5rem)] flex-col items-start gap-3">
           <div className="flex items-center gap-3">

@@ -30,7 +30,7 @@ export function SidePanel({
     >
       <header className="flex h-14 shrink-0 items-center justify-between pl-5 pr-3 shadow-[0_1px_0_rgb(var(--ink)/0.07)]">
         <h2 className="font-title text-lg font-semibold tracking-[-0.01em] text-ink">{title}</h2>
-        <IconButton label={`Close ${title.toLowerCase()}`} onClick={onClose} className="size-8">
+        <IconButton label={`Close ${title.toLowerCase()}`} onClick={onClose} className="size-10 sm:size-8">
           <X className="size-4" />
         </IconButton>
       </header>

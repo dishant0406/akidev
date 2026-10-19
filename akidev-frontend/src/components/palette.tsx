@@ -102,7 +102,7 @@ export default function Palette({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Search"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-canvas/60 px-4 pt-[110px] backdrop-blur-md animate-fade"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-canvas/60 px-4 pt-[72px] backdrop-blur-md sm:pt-[110px] animate-fade"
       onClick={onClose}
       onKeyDown={onKeyDown}
     >
@@ -125,7 +125,7 @@ export default function Palette({ onClose }: { onClose: () => void }) {
         </div>
 
         {(hint || results.length > 0) && (
-          <div className={cn("flex max-h-[60vh] flex-col overflow-y-auto p-2 shadow-[inset_0_1px_0_rgb(var(--ink)/0.07)]", stale && "opacity-50")}>
+          <div className={cn("flex max-h-[38dvh] flex-col overflow-y-auto sm:max-h-[60vh] p-2 shadow-[inset_0_1px_0_rgb(var(--ink)/0.07)]", stale && "opacity-50")}>
             {results.map((item, index) => (
               <button
                 key={item.key}
@@ -138,7 +138,16 @@ export default function Palette({ onClose }: { onClose: () => void }) {
                 )}
               >
                 <div className="relative h-[54px] w-9 shrink-0 overflow-hidden rounded-md bg-line">
-                  {item.picture && <Image src={item.picture} alt="" fill sizes="36px" className="object-cover" />}
+                  {item.picture && (
+                    <Image
+                      src={item.picture}
+                      alt=""
+                      fill
+                      sizes="36px"
+                      className="object-cover"
+                      onError={(event) => (event.currentTarget.hidden = true)}
+                    />
+                  )}
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="truncate text-[15px] font-semibold text-ink">{item.title}</span>

@@ -619,22 +619,22 @@ export default function Player({
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-canvas/90 via-canvas/60 to-transparent pt-16">
           <div className="gutter flex flex-col gap-1 pb-4">
             <div className="flex items-center gap-3 text-xs tabular-nums text-ink">
-              <span className="w-12 text-right">{formatSeconds(position)}</span>
+              <span className="w-11 text-right sm:w-12">{formatSeconds(position)}</span>
               <Seek position={position} duration={duration} buffered={buffered} onSeek={seekTo} />
-              <span className="w-12">{duration > 0 ? `−${formatSeconds(remaining)}` : "--:--"}</span>
+              <span className="w-11 sm:w-12">{duration > 0 ? `−${formatSeconds(remaining)}` : "--:--"}</span>
             </div>
 
-            <div className="flex items-center gap-1">
-              <IconButton label={playing ? "Pause" : "Play"} onClick={toggle}>
+            <div className="flex items-center sm:gap-1">
+              <IconButton label={playing ? "Pause" : "Play"} onClick={toggle} className="size-10 sm:size-9">
                 {playing ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
               </IconButton>
-              <IconButton label="Back 10 seconds" onClick={() => seekBy(-10)}>
+              <IconButton label="Back 10 seconds" onClick={() => seekBy(-10)} className="size-10 sm:size-9">
                 <RotateCcw className="size-[18px]" />
               </IconButton>
-              <IconButton label="Forward 10 seconds" onClick={() => seekBy(10)}>
+              <IconButton label="Forward 10 seconds" onClick={() => seekBy(10)} className="size-10 sm:size-9">
                 <RotateCw className="size-[18px]" />
               </IconButton>
-              <div className="group/volume flex items-center">
+              <div className="group/volume hidden items-center sm:flex">
                 <IconButton label={muted ? "Unmute" : "Mute"} onClick={() => setMuted((value) => !value)}>
                   {muted || volume === 0 ? <VolumeX className="size-[18px]" /> : <Volume2 className="size-[18px]" />}
                 </IconButton>
@@ -660,11 +660,12 @@ export default function Player({
                 title={subtitles.length > 0 ? "Subtitles" : subtitlesLoading ? "Looking for subtitles" : "No subtitles found"}
                 disabled={subtitles.length === 0}
                 onClick={() => togglePanel("subtitles")}
+                className="size-10 sm:size-9"
               >
                 <Captions className="size-[18px]" />
               </IconButton>
               {sources && (
-                <IconButton label="Sources" title="Sources" onClick={() => togglePanel("sources")}>
+                <IconButton label="Sources" title="Sources" onClick={() => togglePanel("sources")} className="size-10 sm:size-9">
                   <Layers className="size-[18px]" />
                 </IconButton>
               )}
@@ -672,18 +673,19 @@ export default function Player({
                 <button
                   type="button"
                   onClick={() => togglePanel("episodes")}
-                  className="flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold text-ink transition-colors hover:bg-wash-2"
+                  aria-label="Episodes"
+                  className="flex h-10 w-10 cursor-pointer items-center justify-center gap-1.5 rounded-full text-xs font-semibold text-ink transition-colors hover:bg-wash-2 sm:h-9 sm:w-auto sm:px-2.5"
                 >
                   <List className="size-[18px]" />
-                  Episodes
+                  <span className="hidden sm:inline">Episodes</span>
                 </button>
               )}
               {onNext && (
-                <IconButton label="Next episode" onClick={onNext}>
+                <IconButton label="Next episode" onClick={onNext} className="size-10 sm:size-9 max-[359px]:hidden">
                   <SkipForward className="size-[18px]" />
                 </IconButton>
               )}
-              <IconButton label="Fullscreen" onClick={toggleFullscreen}>
+              <IconButton label="Fullscreen" onClick={toggleFullscreen} className="size-10 sm:size-9">
                 {fullscreen ? <Minimize className="size-[18px]" /> : <Maximize className="size-[18px]" />}
               </IconButton>
             </div>
@@ -693,7 +695,7 @@ export default function Player({
 
       {offerNext && panel === null && onNext && (
         <div className="gutter absolute bottom-[150px] right-0 flex justify-end">
-          <div className="flex items-center gap-4 material-panel rounded-xl px-4 py-3 shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_24px_60px_rgb(0_0_0/0.55)]">
+          <div className="flex max-w-full items-center gap-3 material-panel rounded-xl px-4 py-3 shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_24px_60px_rgb(0_0_0/0.55)]">
             <span className="text-sm font-semibold text-ink">Next episode</span>
             <Button look="secondary" icon={<SkipForward className="size-4" />} onClick={onNext}>
               Play now
@@ -739,12 +741,12 @@ function Seek({ position, duration, buffered, onSeek }: { position: number; dura
   const played = seekable ? Math.min((shownAt / duration) * 100, 100) : 0;
   const loaded = seekable ? Math.min((buffered / duration) * 100, 100) : 0;
   return (
-    <div className="group/seek relative flex h-5 flex-1 items-center">
+    <div className="group/seek relative flex h-8 flex-1 items-center sm:h-5">
       <div className="relative h-0.5 w-full rounded-full bg-wash-2 transition-all group-hover/seek:h-1">
         <div className="absolute inset-y-0 left-0 rounded-full bg-ink/30" style={{ width: `${loaded}%` }} />
         <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${played}%` }} />
         <div
-          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink opacity-0 transition-opacity group-hover/seek:opacity-100"
+          className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink opacity-0 transition-opacity group-hover/seek:opacity-100 [@media(hover:none)]:opacity-100"
           style={{ left: `${played}%` }}
         />
       </div>

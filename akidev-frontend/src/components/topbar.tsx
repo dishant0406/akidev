@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, Search } from "lucide-react";
+import { ChevronLeft, Clapperboard, House, Search, Sparkles, Tv, type LucideIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,12 +18,21 @@ const Palette = dynamic(() => import("./palette"));
 /** The bar turns solid once the page has moved this far. */
 const SOLID_AFTER = 40;
 
-const TABS = [
-  { label: "Home", href: ROUTES.HOME },
-  ...CATALOGUES.map((page) => ({ label: page.label, href: `/${page.slug}` })),
+const ICONS: Record<string, LucideIcon> = { anime: Sparkles, series: Tv, films: Clapperboard };
+
+const TABS: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Home", href: ROUTES.HOME, icon: House },
+  ...CATALOGUES.map((page) => ({
+    label: page.label,
+    href: `/${page.slug}`,
+    icon: ICONS[page.slug] ?? Clapperboard,
+  })),
 ];
 
-/** Home, the three catalogues and search, in one bar that floats over the artwork. */
+/**
+ * Home, the three catalogues and search, in one bar that floats over the artwork. On a phone the
+ * catalogues move to a bar at the foot of the screen, where a thumb reaches them.
+ */
 export default function TopBar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -53,8 +62,7 @@ export default function TopBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const active = (href: string) =>
-    pathname === href;
+  const active = (href: string) => pathname === href;
 
   return (
     <>
@@ -78,18 +86,18 @@ export default function TopBar() {
           <IconButton
             label="Back"
             onClick={() => (canGoBack ? router.back() : router.push(ROUTES.HOME))}
-            className={cn(!canGoBack && "opacity-35")}
+            className={cn(!canGoBack && "hidden opacity-35 md:flex")}
           >
             <ChevronLeft className="size-5" />
           </IconButton>
 
-          <Link href={ROUTES.HOME} className="flex items-center gap-2 text-xl font-semibold text-ink">
+          <Link href={ROUTES.HOME} className="flex items-center justify-center gap-2 text-xl font-semibold text-ink max-sm:size-11">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icon.svg" alt="" width={28} height={28} className="size-7 shrink-0" />
             <span className="hidden sm:inline">AKIDEV</span>
           </Link>
 
-          <nav aria-label="Catalogues" className="no-scrollbar flex min-w-0 flex-1 items-center gap-4 overflow-x-auto md:gap-5">
+          <nav aria-label="Catalogues" className="no-scrollbar hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto md:flex">
             {TABS.map((tab) => (
               <Link
                 key={tab.href}
@@ -108,12 +116,34 @@ export default function TopBar() {
             ))}
           </nav>
 
+          <div className="flex-1 md:hidden" />
           <PartyButton />
           <IconButton label="Search" onClick={() => setSearching(true)} className={cn(searching && "bg-wash-2")}>
             <Search className="size-[18px]" />
           </IconButton>
         </div>
       </header>
+
+      {!pathname.startsWith("/watch") && (
+        <nav aria-label="Catalogues" className="material fixed inset-x-0 bottom-0 z-40 flex shadow-[0_-1px_0_rgb(var(--ink)/0.07)] md:hidden">
+          {TABS.map(({ label, href, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              prefetch
+              aria-current={active(href) ? "page" : undefined}
+              className={cn(
+                "relative flex h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors",
+                active(href) ? "font-semibold text-ink" : "text-dim",
+              )}
+            >
+              {active(href) && <span className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-accent" />}
+              <Icon className="size-5" />
+              {label}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {searching && <Palette onClose={() => setSearching(false)} />}
     </>

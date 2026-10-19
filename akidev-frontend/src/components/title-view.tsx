@@ -20,8 +20,8 @@ import { useDetail, useMoreLike } from "@/query/use-media";
 import type { Detail } from "@/types/media";
 
 const HEIGHT = "h-[min(700px,max(480px,70vh))]";
-/** The banner is at least this tall, and taller when what it says needs the room. */
-const MIN_HEIGHT = "min-h-[min(700px,max(480px,70vh))]";
+/** From a tablet up the banner is at least this tall, and taller when what it says needs the room. */
+const MIN_HEIGHT = "md:min-h-[min(700px,max(480px,70vh))]";
 
 export default function TitleView({ id: key, initial }: { id: string; initial?: Detail }) {
   const parsed = parseMediaId(key);
@@ -84,13 +84,17 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
   return (
     <div className="pb-8">
       <section className={`relative flex w-full flex-col justify-end overflow-hidden bg-canvas ${MIN_HEIGHT}`}>
-        {art && <Image src={art} alt="" fill priority sizes="100vw" className="object-cover" />}
-        <div className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/0 via-[70%] to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent via-50% to-canvas" />
+        {/* The artwork is a band above the words on a phone, so they sit on the page and not on a
+            picture; it fills the whole banner from a tablet up. */}
+        <div className="relative h-[42vh] min-h-[280px] md:absolute md:inset-0 md:h-auto md:min-h-0">
+          {art && <Image src={art} alt="" fill priority sizes="100vw" className="object-cover" />}
+          <div className="absolute inset-0 bg-gradient-to-r from-canvas via-canvas/0 via-[70%] to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent via-50% to-canvas" />
+        </div>
 
         {/* In the flow, not pinned to the bottom, so a long title or description makes the banner taller
             instead of climbing under the bar. */}
-        <div className="gutter relative flex max-w-[calc(640px+5rem)] flex-col items-start gap-3 pb-12 pt-28">
+        <div className="gutter relative -mt-20 flex max-w-[calc(640px+5rem)] flex-col items-start gap-3 pb-10 md:mt-0 md:pb-12 md:pt-28">
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold text-accent">{KIND_LABEL[parsed.contentType]}</span>
             {!!score && <span className="text-sm font-semibold text-accent">★ {score}%</span>}
@@ -104,9 +108,9 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
             <p className="text-[13px] text-faint">{media.genres.slice(0, 4).join(" · ")}</p>
           )}
           {studios.length > 0 && <p className="text-[13px] text-faint">{studios.join(", ")}</p>}
-          <div className="flex flex-wrap gap-3 pt-2">
+          <div className="grid w-full grid-cols-2 gap-3 pt-2 sm:flex sm:w-auto sm:flex-wrap">
             {play && (
-              <Button prefetch href={watchPath(key, play.id)} icon={<Play className="size-4" />}>
+              <Button prefetch href={watchPath(key, play.id)} icon={<Play className="size-4" />} className="col-span-2">
                 {play.label}
               </Button>
             )}
@@ -116,7 +120,7 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
                 href={`https://www.youtube.com/watch?v=${trailer}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-wash-2 px-5 py-2.5 text-[15px] font-semibold text-ink transition-colors hover:bg-wash-3"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-wash-2 px-5 py-2.5 text-[14px] font-semibold text-ink transition-colors hover:bg-wash-3"
               >
                 <ExternalLink className="size-4" />
                 Trailer

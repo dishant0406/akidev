@@ -61,7 +61,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       className={cn(
-        "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink transition-[colors,transform] duration-150 ease-spring active:scale-90 hover:bg-wash-2 active:bg-wash-3 disabled:opacity-35",
+        "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink sm:size-9 transition-[colors,transform] duration-150 ease-spring active:scale-90 hover:bg-wash-2 active:bg-wash-3 disabled:opacity-35",
         className,
       )}
       {...rest}
@@ -82,7 +82,7 @@ export function Tab({
     <button
       type="button"
       className={cn(
-        "flex cursor-pointer flex-col items-center gap-1 px-1 py-1 text-sm transition-colors",
+        "flex shrink-0 cursor-pointer flex-col items-center gap-1 whitespace-nowrap px-2 py-2.5 text-sm transition-colors sm:px-1 sm:py-1",
         active ? "font-semibold text-ink" : "text-dim hover:text-ink",
         className,
       )}

@@ -24,7 +24,7 @@ export default function AppDownload({ id }: { id: string }) {
   if (!computer) {
     return (
       <Button look="secondary" href={getAppPath(id)} icon={<Download className="size-4" />}>
-        Get the app to download
+        Get the app
       </Button>
     );
   }

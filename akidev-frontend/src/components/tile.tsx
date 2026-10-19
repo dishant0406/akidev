@@ -50,6 +50,8 @@ export default function Tile({
   // Set once the pointer has rested on the tile. A link is fetched ahead in full only then: fetching
   // all two hundred on the page would be a request each for pages almost none will be opened.
   const [hot, setHot] = useState(false);
+  // A picture that does not load shows the title in its place, as a title with no picture does.
+  const [broken, setBroken] = useState(false);
   const client = useQueryClient();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,21 +80,24 @@ export default function Tile({
       onTouchStart={() => setHot(true)}
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-raised ring-1 ring-inset ring-ink/10 transition-[transform,box-shadow] duration-300 ease-spring group-hover/tile:scale-[1.03] group-hover/tile:shadow-[0_14px_36px_rgb(0_0_0/0.55)] group-active/tile:scale-[0.98] group-active/tile:duration-100">
-        {card.poster && drawn ? (
-          <Image
-            src={card.poster}
-            alt=""
-            fill
-            sizes="176px"
-            quality={65}
-            priority={priority}
-            className="object-cover"
-          />
-        ) : !card.poster ? (
+        {card.poster && !broken ? (
+          drawn && (
+            <Image
+              src={card.poster}
+              alt=""
+              fill
+              sizes="176px"
+              quality={65}
+              priority={priority}
+              className="object-cover"
+              onError={() => setBroken(true)}
+            />
+          )
+        ) : (
           <div className="flex size-full items-center justify-center p-4 text-center text-sm font-semibold text-dim">
             {card.title}
           </div>
-        ) : null}
+        )}
 
         {/* The whole tile is the link; the two round buttons sit above it. */}
         <Link href={click} prefetch={hot} aria-label={card.title} className="absolute inset-0" />
