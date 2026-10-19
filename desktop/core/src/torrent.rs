@@ -161,13 +161,13 @@ impl Engine {
         // developer's machine, then fails to start with "address already in use", and nothing
         // can be played. When the wanted port is taken the engine takes any free one instead.
         let first = match config.listen_port {
-            Some(port) => Session::new_with_opts(
-                dir.clone(),
-                options(Some(dht_on(Some(port))), Some(port)),
-            )
-            .await,
-            None => Session::new_with_opts(dir.clone(), options(Some(Default::default()), None))
-                .await,
+            Some(port) => {
+                Session::new_with_opts(dir.clone(), options(Some(dht_on(Some(port))), Some(port)))
+                    .await
+            }
+            None => {
+                Session::new_with_opts(dir.clone(), options(Some(Default::default()), None)).await
+            }
         };
         let session = match first {
             Ok(session) => session,

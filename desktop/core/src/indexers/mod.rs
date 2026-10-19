@@ -13,10 +13,10 @@ use crate::http::client;
 use crate::model::{Kind, Release};
 use crate::sources;
 use crate::template::Fill;
-use regex::Regex;
-use serde_json::Value;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use regex::Regex;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -822,7 +822,10 @@ mod tests {
             took < Duration::from_millis(2500),
             "waited {took:?} on a mirror that never answers"
         );
-        assert!(!usable(&hosts[0]), "the slow mirror rests for the next search");
+        assert!(
+            !usable(&hosts[0]),
+            "the slow mirror rests for the next search"
+        );
         assert!(usable(&hosts[1]));
     }
 
@@ -857,7 +860,10 @@ mod tests {
         assert!(saved.contains("remembered.test"));
 
         // A new run: nothing is resting in memory, and the file says what was.
-        down_until().lock().unwrap().remove("http://remembered.test");
+        down_until()
+            .lock()
+            .unwrap()
+            .remove("http://remembered.test");
         assert!(usable("http://remembered.test"));
         remember_host_health_in(&dir);
         assert!(!usable("http://remembered.test"));
