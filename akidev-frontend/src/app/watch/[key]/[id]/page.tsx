@@ -15,6 +15,7 @@ import { episodeCount, neighbour, titleLine } from "@/lib/episodes";
 import { parseMediaId } from "@/lib/media-id";
 import { playErrorMessage } from "@/lib/play";
 import { record, resumeAt } from "@/lib/progress";
+import { cameFrom, willReplace } from "@/lib/trail";
 import { useParty } from "@/providers/party";
 import { useDetail } from "@/query/use-media";
 import { usePlay } from "@/query/use-play";
@@ -79,7 +80,16 @@ export default function WatchPage() {
   const next = neighbour(data, id, 1);
   const previous = neighbour(data, id, -1);
 
-  const leave = useCallback(() => router.push(key ? titlePath(key) : ROUTES.HOME), [key, router]);
+  // Back to the title it was opened from steps back in the history. Pushing the title again would
+  // leave the player one Back away, and the two pages would take turns for ever.
+  const leave = useCallback(() => {
+    const title = key ? titlePath(key) : ROUTES.HOME;
+    if (cameFrom() === title) router.back();
+    else {
+      willReplace();
+      router.replace(title);
+    }
+  }, [key, router]);
   // Swapping episodes replaces the page, so Back still leaves the show.
   const go = useCallback((episode: string) => key && router.replace(watchPath(key, episode)), [key, router]);
 

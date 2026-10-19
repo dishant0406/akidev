@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { CATALOGUES } from "@/constants/site";
 import { ROUTES } from "@/constants/routes";
+import { cameFrom, visit } from "@/lib/trail";
 import { cn } from "@/lib/utils";
 
 import { IconButton } from "./button";
@@ -48,7 +49,10 @@ export default function TopBar() {
   }, []);
 
   // Read after each navigation: a page opened straight from a link has nothing behind it.
-  useEffect(() => setCanGoBack(window.history.length > 1 && pathname !== ROUTES.HOME), [pathname]);
+  useEffect(() => {
+    visit(pathname);
+    setCanGoBack(cameFrom() !== null && pathname !== ROUTES.HOME);
+  }, [pathname]);
 
   // Cmd-K or Ctrl-K opens search from anywhere, as it does in the app.
   useEffect(() => {
