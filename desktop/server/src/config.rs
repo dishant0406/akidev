@@ -25,6 +25,9 @@ pub struct Settings {
     /// Hosts a debrid link may point at. An entry matches that host and its subdomains.
     pub debrid_cdn_hosts: Vec<String>,
     pub archive_org_base: String,
+    /// Prowlarr's address and API key. With both set, `/v1/fallback/search` searches through it.
+    pub prowlarr_url: String,
+    pub prowlarr_api_key: String,
     pub max_torrents: usize,
     pub max_cache_bytes: u64,
     pub metadata_timeout_ms: u64,
@@ -112,6 +115,8 @@ impl Settings {
             archive_org_base: text("ARCHIVE_ORG_BASE_URL", "https://archive.org")
                 .trim_end_matches('/')
                 .to_string(),
+            prowlarr_url: text("PROWLARR_URL", ""),
+            prowlarr_api_key: text("PROWLARR_API_KEY", ""),
             max_torrents: number("MAX_TORRENTS", 2),
             max_cache_bytes: number("MAX_CACHE_BYTES", 8 * 1024 * 1024 * 1024),
             metadata_timeout_ms: number("METADATA_TIMEOUT_MS", 45_000),

@@ -15,6 +15,7 @@ A film is played by its own title id.
 ```json
 { "status": "ok", "version": "0.1.1", "ffmpeg": true, "sources": ["debrid", "torrent", "archive-org"],
   "debrid": { "configured": true, "reachable": true },
+  "fallback": { "configured": true, "reachable": true },
   "active_torrents": 0, "hls_sessions": 0, "resolving": 0, "video_bytes_sent": 0, "cache_bytes": 0 }
 ```
 
@@ -117,6 +118,22 @@ order they would be tried, then the ones with a codec that may not decode where 
 not say. `size_bytes` may be `null`. `pack` is a whole season in one torrent. `cached` is whether the
 debrid service already holds the release (it starts at once; the others wait for a swarm) and is
 `null` when there is no such service or it could not be asked.
+
+## `GET /v1/fallback/search?q=<title>[&season=<n>][&episode=<n>]`
+
+What Prowlarr finds in the torrent sites that have no API, for the apps to ask when the other indexers
+found nothing worth opening (the `prowlarr` indexer in `sources.json` has `fallback: true`). `q` is 1 to
+100 characters. `season` and `episode` are added to the text the way sites name it (`Show S01E05`); an
+episode alone is added as a number (an anime). Either may be empty. It takes up to about 13 seconds.
+
+```json
+{ "results": [{ "title": "Show S01E05 1080p", "hash": "ab12...40 hex characters",
+    "size": 1400000000, "seeders": 12, "source": "limetorrents" }] }
+```
+
+At most 100 results, best seeded first, each with a hash. A search is kept for ten minutes. `404` when
+Prowlarr is not set up (`PROWLARR_API_KEY` is empty), `502` when it did not answer, `503` (`busy`) when
+two searches are already running and none finished in time, `429` past the allowance.
 
 ## `GET /v1/subtitles?id=<episode or film id>`
 

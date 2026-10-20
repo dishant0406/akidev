@@ -3,10 +3,12 @@
 use crate::config::Settings;
 use crate::deliver::{self, Deliverer, Registry};
 use crate::dto::{DetailOut, HomeOut, PageOut, RowOut, media_list};
+use crate::fallback::{Failure, Fallback, Hit};
 use crate::hls::Hls;
 use crate::limits::{Limiter, Usage, client_of};
 use crate::party;
 use crate::play::{Outcome, Player};
+use akidev_core::indexers::FALLBACK_HEADER;
 use akidev_core::media_id;
 use akidev_core::model::{Filters, Kind, Media, Sort};
 use akidev_core::{providers, search};
@@ -36,6 +38,8 @@ pub struct AppState {
     pub images: Arc<crate::img::Images>,
     pub subs: Arc<crate::subs::Subs>,
     pub parties: Arc<crate::party::Parties>,
+    /// Absent unless Prowlarr is set up.
+    pub fallback: Option<Arc<Fallback>>,
     pub ffmpeg: bool,
 }
 
@@ -151,6 +155,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/titles/{id}", get(title))
         .route("/v1/img", get(image))
         .route("/v1/releases", get(releases))
+        .route("/v1/fallback/search", get(fallback_search))
         .route("/v1/subtitles", get(subtitle_list))
         .route("/v1/subtitles/file/{token}", get(subtitle_file))
         .route("/v1/play", post(play))
@@ -320,6 +325,10 @@ async fn health(State(state): State<AppState>) -> Response {
         Some(debrid) => json!({ "configured": true, "reachable": debrid.status().await }),
         None => json!({ "configured": false }),
     };
+    let fallback = match &state.fallback {
+        Some(fallback) => json!({ "configured": true, "reachable": fallback.reachable().await }),
+        None => json!({ "configured": false }),
+    };
     let cache = crate::hls::dir_size(&state.settings.cache_dir).await;
     Json(json!({
         "status": "ok",
@@ -327,6 +336,7 @@ async fn health(State(state): State<AppState>) -> Response {
         "ffmpeg": state.ffmpeg,
         "sources": state.player.sources(),
         "debrid": debrid,
+        "fallback": fallback,
         "active_torrents": state.engine.as_ref().map_or(0, |engine| engine.active_torrents()),
         "hls_sessions": state.hls.count(),
         "resolving": state.player.resolving(),
@@ -497,6 +507,67 @@ async fn search_route(
         Ok(results) => cached(CATALOGUE_CACHE, json!({ "results": media_list(&results) })),
         Err(_) => error(StatusCode::BAD_GATEWAY, "No catalogue answered."),
     }
+}
+
+#[derive(Deserialize)]
+struct FallbackQuery {
+    q: Option<String>,
+    season: Option<String>,
+    episode: Option<String>,
+}
+
+/// What Prowlarr finds for a title, in the shape an indexer definition reads. The apps ask it only
+/// when the other indexers found nothing worth opening, and say so with a header: an app that predates
+/// that asks on every search, and is turned away here before it costs anything.
+async fn fallback_search(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(query): Query<FallbackQuery>,
+) -> Response {
+    let Some(fallback) = &state.fallback else {
+        return error(StatusCode::NOT_FOUND, "There is no fallback search.");
+    };
+    if !headers.contains_key(FALLBACK_HEADER) {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "This search is for the apps' fallback.",
+        );
+    }
+    let term = query.q.unwrap_or_default();
+    let term = term.trim();
+    if term.is_empty() || term.chars().count() > 100 {
+        return error(StatusCode::BAD_REQUEST, "q must be 1 to 100 characters.");
+    }
+    // The apps send these empty for what has none (a film has no season).
+    let number = |text: Option<String>| text.and_then(|text| text.parse::<u32>().ok());
+    let (season, episode) = (number(query.season), number(query.episode));
+    // A search made lately costs nothing, so it is not counted against the client.
+    if let Some(results) = fallback.cached(term, season, episode) {
+        return found(results);
+    }
+    let client = client_of(&headers, Some(peer));
+    if !state.limiter.allow(
+        &client,
+        "fallback",
+        state.settings.play_limit * 3,
+        Duration::from_secs(600),
+    ) {
+        return too_many();
+    }
+    match fallback.search(term, season, episode).await {
+        Ok(results) => found(results),
+        Err(Failure::Busy) => error(StatusCode::SERVICE_UNAVAILABLE, "busy"),
+        Err(Failure::Failed) => error(StatusCode::BAD_GATEWAY, "The search failed."),
+    }
+}
+
+fn found(results: Vec<Hit>) -> Response {
+    (
+        [(header::CACHE_CONTROL, "private, max-age=300")],
+        Json(json!({ "results": results })),
+    )
+        .into_response()
 }
 
 async fn title(

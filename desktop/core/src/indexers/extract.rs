@@ -428,6 +428,22 @@ mod tests {
     }
 
     #[test]
+    fn prowlarr_reads_what_the_servers_fallback_search_answers() {
+        let body = json!({ "results": [
+            { "title": "Show S01E01 1080p", "hash": A, "size": 1000, "seeders": 7, "source": "limetorrents" },
+            { "title": "Something else", "hash": B, "size": null, "seeders": 0, "source": "dmhy" }
+        ] });
+        let found = run("prowlarr", &body, "Show");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].seeders, 7);
+        assert_eq!(found[0].size_bytes, Some(1000));
+        assert!(
+            sources::current().indexer("prowlarr").unwrap().fallback,
+            "it must only be asked when the others found nothing"
+        );
+    }
+
+    #[test]
     fn torrents_csv_keeps_only_rows_that_name_the_searched_title() {
         let body = json!({ "torrents": [
             { "name": "Gyaarah.Gyaarah.S01E01.1080p", "infohash": A, "size_bytes": 2000, "seeders": 71 },

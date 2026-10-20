@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 8,
+  "version": 9,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -610,6 +610,51 @@
               "pattern": "👤\\s*([0-9]+)"
             }
           }
+        }
+      }
+    },
+    {
+      "id": "prowlarr",
+      "name": "Prowlarr",
+      "kinds": [
+        "anime",
+        "series",
+        "movie"
+      ],
+      "fanout": "per-title",
+      "fallback": true,
+      "hosts": [
+        "https://api.akidev.live"
+      ],
+      "request": {
+        "path": "/v1/fallback/search",
+        "query": {
+          "q": "{term}",
+          "season": {
+            "$kind": {
+              "anime": "",
+              "series": "{season}",
+              "movie": ""
+            }
+          },
+          "episode": {
+            "$kind": {
+              "anime": "{episode}",
+              "series": "{episode}",
+              "movie": ""
+            }
+          }
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "results",
+        "must_contain_term": true,
+        "fields": {
+          "title": "title",
+          "hash": "hash",
+          "size": "size",
+          "seeders": "seeders"
         }
       }
     }

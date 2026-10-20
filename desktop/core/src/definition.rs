@@ -226,6 +226,10 @@ pub struct IndexerDef {
     pub hosts: Vec<String>,
     #[serde(default = "a_minute")]
     pub cooldown_secs: u64,
+    /// Asked only when the other indexers found nothing worth opening, and given longer to answer.
+    /// For a slow service that should not be paid for on every search.
+    #[serde(default)]
+    pub fallback: bool,
     pub request: RequestDef,
     pub response: ResponseDef,
 }

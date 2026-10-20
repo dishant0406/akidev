@@ -81,6 +81,12 @@ it again, publish a document without the field (or with a lower one) and a highe
   term plays no part, as with an IMDb id).
 - `hosts` are mirrors of one service, tried in order. A host that fails rests for
   `cooldown_secs`.
+- `fallback: true` makes an indexer a last resort: it is asked, with longer to answer (the
+  `fallback_timeout_ms` setting), only when the others found nothing worth opening. For a slow service
+  that should not be paid for on every search, such as the server's Prowlarr search
+  ([pipeline/PROWLARR_FALLBACK.md](../../pipeline/PROWLARR_FALLBACK.md)). Every request to one carries the
+  header `x-akidev-fallback`. An app that predates the flag asks it like any other indexer, without the
+  header, and the server's route turns that away at once.
 - In `path`, `query` and `json`, `{term}`, `{imdb}` (`tt0903747`), `{imdb_digits}` (`0903747`), `{imdb_or_term}` (the id when the search has
   one, otherwise the term),
   `{season}` and `{episode}` are filled in. A request that needs a value the search lacks (an

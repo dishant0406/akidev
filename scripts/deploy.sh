@@ -75,6 +75,12 @@ export FRONTEND_IMAGE="konflix-frontend:$IMAGE_TAG"
 export NEXT_PUBLIC_API_URL="$(read_env NEXT_PUBLIC_API_URL)"
 export NEXT_PUBLIC_POSTHOG_TOKEN="$(read_env NEXT_PUBLIC_POSTHOG_TOKEN)"
 
+# Prowlarr, for the fallback search, runs only when it has a key. Without one it is stopped, so
+# taking the secret away turns it off at the next deploy.
+if [ -n "$(read_env PROWLARR_API_KEY)" ]; then
+  export COMPOSE_PROFILES=fallback
+fi
+
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
@@ -126,6 +132,10 @@ echo "==> Starting the stack"
 # a renamed or deleted service stops running instead of lingering.
 compose up -d --remove-orphans
 
+if [ -z "${COMPOSE_PROFILES:-}" ]; then
+  compose rm -sf prowlarr > /dev/null 2>&1 || true
+fi
+
 # A changed Caddyfile is picked up without a restart, so no connection is dropped.
 compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
@@ -135,6 +145,21 @@ echo "==> Waiting for the containers to report healthy"
 wait_for_health konflix-api-1 api
 wait_for_health konflix-frontend-1 frontend
 wait_for_health konflix-caddy-1 caddy
+
+# An optional service: one that does not come up costs the fallback search, not the deploy.
+if [ -n "${COMPOSE_PROFILES:-}" ]; then
+  echo "==> Setting up Prowlarr"
+  if wait_for_health konflix-prowlarr-1 prowlarr; then
+    # Adding a site makes Prowlarr test it, which can take a while behind Cloudflare, so the sync
+    # is given five minutes and nothing it does fails the deploy. The key goes in the environment
+    # of the command and not on its command line, which any user of the host can read.
+    PROWLARR_API_KEY="$(read_env PROWLARR_API_KEY)" timeout 300 \
+      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T -e PROWLARR_API_KEY frontend node - \
+      < scripts/prowlarr-sync.js || echo "    the Prowlarr sync did not finish" >&2
+  else
+    echo "    the fallback search is not available" >&2
+  fi
+fi
 
 # Reports what is actually configured, which is the difference between "the process
 # started" and "it can do its job". Run inside the container so the host needs no node.
@@ -151,6 +176,8 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T frontend node -
       console.log('    ffmpeg:         ' + h.ffmpeg)
       const debrid = h.debrid || {}
       console.log('    debrid:         ' + (debrid.configured ? (debrid.reachable ? 'ok' : 'UNREACHABLE') : 'not configured'))
+      const fallback = h.fallback || {}
+      console.log('    fallback:       ' + (fallback.configured ? (fallback.reachable ? 'ok' : 'UNREACHABLE') : 'not configured'))
     })
     .catch((error) => {
       console.error('    could not read /health: ' + error.message)

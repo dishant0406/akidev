@@ -7,6 +7,7 @@ mod api;
 mod config;
 mod deliver;
 mod dto;
+mod fallback;
 mod hls;
 mod img;
 mod limits;
@@ -142,6 +143,8 @@ async fn run() -> anyhow::Result<()> {
         images: images.clone(),
         subs: subs.clone(),
         parties: Arc::default(),
+        fallback: fallback::Fallback::new(&settings.prowlarr_url, &settings.prowlarr_api_key)
+            .map(Arc::new),
         ffmpeg,
     };
 

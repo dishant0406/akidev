@@ -57,6 +57,9 @@ async fn rig(name: &str, tweak: impl FnOnce(&mut Settings)) -> Option<Rig> {
     settings.stream_sources = vec!["torrent".into()];
     tweak(&mut settings);
     let settings = Arc::new(settings);
+    let fallback =
+        crate::fallback::Fallback::new(&settings.prowlarr_url, &settings.prowlarr_api_key)
+            .map(Arc::new);
     let hls = Hls::new(settings.clone(), vec![]);
     let registry = Arc::new(Registry::default());
     let player = Player::new(settings.clone(), None, None, hls.clone(), registry.clone());
@@ -71,6 +74,7 @@ async fn rig(name: &str, tweak: impl FnOnce(&mut Settings)) -> Option<Rig> {
         subs: Arc::new(crate::subs::Subs::new(dir.join("subs"))),
         images: crate::img::Images::for_tests(dir.join("img"), vec!["127.0.0.1".into()]),
         parties: Arc::default(),
+        fallback,
         ffmpeg: true,
     };
     Some(Rig {
@@ -541,6 +545,60 @@ async fn health_says_what_is_running() {
     assert_eq!(json["ffmpeg"], true);
     assert_eq!(json["debrid"]["configured"], false);
     assert_eq!(json["sources"][0], "torrent");
+}
+
+/// A request to the fallback search, as an app sends it (marked) or as one that predates the flag does.
+async fn fallback_get(
+    router: &Router,
+    query: &str,
+    marked: bool,
+) -> (StatusCode, serde_json::Value) {
+    let mut request = Request::builder().uri(format!("/v1/fallback/search{query}"));
+    if marked {
+        request = request.header(akidev_core::indexers::FALLBACK_HEADER, "1");
+    }
+    let mut request = request.body(Body::empty()).unwrap();
+    request
+        .extensions_mut()
+        .insert(ConnectInfo("192.0.2.1:4000".parse::<SocketAddr>().unwrap()));
+    let response = router.clone().oneshot(request).await.unwrap();
+    let (parts, body) = response.into_parts();
+    let bytes = body.collect().await.unwrap().to_bytes();
+    (parts.status, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn the_fallback_search_is_off_until_prowlarr_is_set_up_and_checks_what_it_is_asked() {
+    let Some(off) = rig("fallback-off", |_| {}).await else {
+        return;
+    };
+    let (status, _) = fallback_get(&off.router, "?q=Show", true).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (_, _, body) = get(&off.router, "/health", None).await;
+    let health: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(health["fallback"]["configured"], false);
+
+    // Set up, but nothing answers at the address.
+    let on = rig("fallback-on", |settings| {
+        settings.prowlarr_url = "http://127.0.0.1:1".into();
+        settings.prowlarr_api_key = "key".into();
+    })
+    .await
+    .unwrap();
+    // An app that predates the flag does not send the header, and is turned away at once.
+    let (status, _) = fallback_get(&on.router, "?q=Show", false).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = fallback_get(&on.router, "", true).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = fallback_get(&on.router, &format!("?q={}", "a".repeat(101)), true).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, body) = fallback_get(&on.router, "?q=Show", true).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["error"], "The search failed.");
+    let (_, _, body) = get(&on.router, "/health", None).await;
+    let health: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(health["fallback"]["configured"], true);
+    assert_eq!(health["fallback"]["reachable"], false);
 }
 
 #[tokio::test]

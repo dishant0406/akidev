@@ -221,6 +221,7 @@ jobs:
           NEXT_PUBLIC_SITE_DOMAIN: ${{ vars.NEXT_PUBLIC_SITE_DOMAIN }}
           NEXT_PUBLIC_POSTHOG_TOKEN: ${{ secrets.POSTHOG_TOKEN }}
           TORBOX_API_KEY: ${{ secrets.TORBOX_API_KEY }}
+          PROWLARR_API_KEY: ${{ secrets.PROWLARR_API_KEY }}
           STREAM_SOURCES: ${{ vars.STREAM_SOURCES }}
           MAX_CACHE_BYTES: ${{ vars.MAX_CACHE_BYTES }}
           MAX_STREAM_BYTES_PER_DAY: ${{ vars.MAX_STREAM_BYTES_PER_DAY }}
@@ -247,6 +248,7 @@ jobs:
           MAX_CACHE_BYTES=$MAX_CACHE_BYTES
           MAX_STREAM_BYTES_PER_DAY=${MAX_STREAM_BYTES_PER_DAY:-0}
           TORBOX_API_KEY=$TORBOX_API_KEY
+          PROWLARR_API_KEY=$PROWLARR_API_KEY
           STUN_URLS=$STUN_URLS
           CF_TURN_KEY_ID=$CF_TURN_KEY_ID
           CF_TURN_TOKEN=$CF_TURN_TOKEN
@@ -510,6 +512,23 @@ jobs:
               echo "season 9 resolved: $season9" >&2
               exit 1
               ;;
+          esac
+
+          # The fallback search, when Prowlarr is set up. It is optional by design: a slow or missing
+          # Prowlarr is reported and never fails the deploy.
+          echo "Checking the fallback search"
+          fallback=$(curl -s --max-time 30 -w '\n%{http_code}' "$PUBLIC_URL/v1/fallback/search?q=Inception") || true
+          case "${fallback##*$'\n'}" in
+            200)
+              found=$(printf '%s' "$fallback" | grep -o '"hash":"[0-9a-f]\{40\}"' | wc -l || true)
+              if [ "$found" -gt 0 ]; then
+                echo "  fallback search found $found releases"
+              else
+                echo "::warning::the fallback search answered but found nothing for a well-known film"
+              fi
+              ;;
+            404) echo "  fallback search is not set up" ;;
+            *) echo "::warning::the fallback search answered ${fallback##*$'\n'}" ;;
           esac
 
           # The server must refuse what it should, and say so in JSON.

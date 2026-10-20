@@ -7,6 +7,8 @@
 #   api            the REST API and the video delivery, one Rust binary built on the same
 #                  library as the desktop app (port 9000, internal only).
 #   frontend       every site (port 3000, internal only).
+#   prowlarr       optional: searches the torrent sites that have no API, for the api's fallback search
+#                  (internal only). It runs only when PROWLARR_API_KEY is set.
 #
 # The site talks to the API directly on api.akidev.live. Video URLs name stream.akidev.live
 # when STREAM_URL is set.
@@ -99,6 +101,9 @@ services:
       # fixed disk, and the volume below is the only thing that grows, so this leaves headroom
       # for the OS and the images.
       MAX_CACHE_BYTES: ${MAX_CACHE_BYTES:-12884901888}
+      # The fallback search asks Prowlarr. Without the key it is off, and so is the route.
+      PROWLARR_URL: http://prowlarr:9696
+      PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
     volumes:
       # Named volume rather than a bind mount: the cache is scratch data, and a named volume is
       # owned by Docker rather than by whatever user happens to exist on the host. Docker
@@ -107,6 +112,34 @@ services:
       - torrent-cache:/data
     # The health check is the image's own (`akidev-server --check`), run inside the container,
     # which is the only place this port is reachable from. The api publishes only the torrent port.
+    logging: *logging
+
+  # Searches the torrent sites for the api's fallback search, and keeps their definitions up to date
+  # itself (a daily task). Nothing publishes its port and Caddy does not route to it: the api is its only
+  # client, with the API key. The limit keeps a runaway search from taking the box, which has 4 GB.
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls164
+    profiles: [fallback]
+    restart: unless-stopped
+    mem_limit: 400m
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: UTC
+      PROWLARR__AUTH__APIKEY: ${PROWLARR_API_KEY:-}
+      PROWLARR__AUTH__METHOD: External
+      PROWLARR__AUTH__REQUIRED: DisabledForLocalAddresses
+      # It sends usage data to its makers unless told not to.
+      PROWLARR__LOG__ANALYTICSENABLED: "False"
+    volumes:
+      # The indexers that were added and the definitions it downloaded.
+      - prowlarr-config:/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9696/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     logging: *logging
 
   frontend:
@@ -144,5 +177,6 @@ services:
 
 volumes:
   torrent-cache:
+  prowlarr-config:
   caddy-data:
   caddy-config:

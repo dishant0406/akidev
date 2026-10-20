@@ -60,6 +60,11 @@ fn serving(indexers: &[IndexerDef], kind: Kind) -> Vec<&IndexerDef> {
         .collect()
 }
 
+/// Sent with every request to a fallback indexer. The server's fallback search answers only requests
+/// that have it, so an app that predates the `fallback` flag, and asks every search, is turned away
+/// at once and costs nothing.
+pub const FALLBACK_HEADER: &str = "x-akidev-fallback";
+
 /// The show title without the episode or season token: "Show 001" -> "Show",
 /// "Show S01" -> "Show".
 ///
@@ -272,6 +277,9 @@ async fn ask(
         Method::Post => client().post(url),
     };
     let mut builder = builder.query(&request.query);
+    if def.fallback {
+        builder = builder.header(FALLBACK_HEADER, "1");
+    }
     if let Some(body) = &request.json {
         builder = builder.json(body);
     }
@@ -421,15 +429,55 @@ pub async fn search_all(
     options: &SearchOptions,
     enough: impl Fn(&[Release]) -> bool,
 ) -> Vec<Release> {
-    let started = Instant::now();
     let sources = sources::current();
     let chosen = serving(&sources.indexers, options.kind);
-    let pairs = plan(&chosen, terms);
-    let total = pairs.len();
+    search_in(&sources, &chosen, config, terms, options, enough).await
+}
+
+/// `search_all` over these indexers: the ones that are not fallbacks first, then the fallbacks if
+/// what came back is not enough.
+async fn search_in(
+    sources: &Arc<sources::Sources>,
+    chosen: &[&IndexerDef],
+    config: &Config,
+    terms: &[String],
+    options: &SearchOptions,
+    enough: impl Fn(&[Release]) -> bool,
+) -> Vec<Release> {
+    let (later, first): (Vec<&IndexerDef>, Vec<&IndexerDef>) =
+        chosen.iter().partition(|indexer| indexer.fallback);
     // A single slow indexer must not hold the whole search open. Every normal request is
     // well under a second; the limit only bounds the tail, per host.
-    let limit = Duration::from_millis(config.indexer_timeout_ms);
-    let ceiling = started + Duration::from_millis(config.search_ceiling_ms);
+    let quick = Duration::from_millis(config.indexer_timeout_ms);
+    let ceiling = Duration::from_millis(config.search_ceiling_ms);
+    let mut found = search_set(sources, &first, terms, options, &enough, quick, ceiling).await;
+    if !later.is_empty() && !enough(&found) {
+        let slow = Duration::from_millis(config.fallback_timeout_ms);
+        let more = search_set(sources, &later, terms, options, &enough, slow, slow).await;
+        let mut seen: HashSet<String> = found.iter().map(|r| r.info_hash.clone()).collect();
+        found.extend(
+            more.into_iter()
+                .filter(|r| seen.insert(r.info_hash.clone())),
+        );
+    }
+    found
+}
+
+/// Asks these indexers and returns what has come back: see `search_all`. `limit` bounds one request
+/// and `ceiling` the whole of it.
+async fn search_set(
+    sources: &Arc<sources::Sources>,
+    chosen: &[&IndexerDef],
+    terms: &[String],
+    options: &SearchOptions,
+    enough: &impl Fn(&[Release]) -> bool,
+    limit: Duration,
+    ceiling: Duration,
+) -> Vec<Release> {
+    let started = Instant::now();
+    let ceiling = started + ceiling;
+    let pairs = plan(chosen, terms);
+    let total = pairs.len();
 
     let slots = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
     let (send, mut receive) = tokio::sync::mpsc::unbounded_channel::<Arrival>();
@@ -556,6 +604,114 @@ mod tests {
         (id.to_string(), term.to_string())
     }
 
+    /// An indexer that reads `{"items": [{"title", "hash"}]}` from `path` on a local server.
+    fn local_indexer(id: &str, base: &str, path: &str, fallback: bool) -> IndexerDef {
+        serde_json::from_value(json!({
+            "id": id, "name": id, "kinds": ["series"], "hosts": [base], "fallback": fallback,
+            "request": { "path": path },
+            "response": { "format": "json", "rows": "items",
+                          "fields": { "title": "title", "hash": "hash" } }
+        }))
+        .unwrap()
+    }
+
+    /// A server with `/empty`, `/one` (a release) and `/broken`, and how many times `/one` was asked.
+    async fn local_server() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use axum::{Router, http::StatusCode, routing::get};
+        let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = asked.clone();
+        let app = Router::new()
+            .route(
+                "/empty",
+                get(|| async { json!({ "items": [] }).to_string() }),
+            )
+            .route(
+                "/one",
+                get(move || async move {
+                    counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    json!({ "items": [{ "title": "Show S01E01", "hash": "a".repeat(40) }] })
+                        .to_string()
+                }),
+            )
+            .route(
+                "/broken",
+                get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+            )
+            .route(
+                "/marked",
+                get(|headers: axum::http::HeaderMap| async move {
+                    if headers.contains_key(FALLBACK_HEADER) {
+                        Ok(json!({ "items": [{ "title": "Show S01E01", "hash": "b".repeat(40) }] })
+                            .to_string())
+                    } else {
+                        Err(StatusCode::BAD_REQUEST)
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (format!("http://{address}"), asked)
+    }
+
+    async fn run_search(indexers: &[IndexerDef]) -> Vec<Release> {
+        let chosen: Vec<&IndexerDef> = indexers.iter().collect();
+        search_in(
+            &definitions(),
+            &chosen,
+            &Config::default(),
+            &strings(&["Show S01E01"]),
+            &options(Kind::Series),
+            |found| !found.is_empty(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn a_fallback_is_asked_only_when_the_others_found_nothing() {
+        let (base, asked) = local_server().await;
+
+        let found = run_search(&[
+            local_indexer("first", &base, "/empty", false),
+            local_indexer("later", &base, "/one", true),
+        ])
+        .await;
+        assert_eq!(found.len(), 1);
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // With something to play already, the fallback is not asked at all.
+        asked.store(0, std::sync::atomic::Ordering::SeqCst);
+        let found = run_search(&[
+            local_indexer("first", &base, "/one", false),
+            local_indexer("later", &base, "/one?again", true),
+        ])
+        .await;
+        assert_eq!(found.len(), 1);
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn only_a_fallback_indexer_is_marked_as_one() {
+        let (base, _) = local_server().await;
+
+        // The marked request is answered; the same address asked as an ordinary indexer is refused.
+        let found = run_search(&[local_indexer("later", &base, "/marked", true)]).await;
+        assert_eq!(found.len(), 1);
+        let found = run_search(&[local_indexer("plain", &base, "/marked", false)]).await;
+        assert!(found.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failing_fallback_does_not_fail_the_search() {
+        let (base, _) = local_server().await;
+        let found = run_search(&[
+            local_indexer("first", &base, "/empty", false),
+            local_indexer("later", &base, "/broken", true),
+        ])
+        .await;
+        assert!(found.is_empty());
+    }
+
     #[test]
     fn title_of_strips_only_an_episode_number_token() {
         // Removing the last word unconditionally ate a real word from any term with no
@@ -625,7 +781,8 @@ mod tests {
                 "apibay",
                 "zilean-anime",
                 "nekobt",
-                "bangumi-moe"
+                "bangumi-moe",
+                "prowlarr"
             ]
         );
         assert_eq!(
@@ -637,7 +794,8 @@ mod tests {
                 "eztv",
                 "apibay",
                 "zilean",
-                "torrentsdb"
+                "torrentsdb",
+                "prowlarr"
             ]
         );
         assert_eq!(
@@ -649,7 +807,8 @@ mod tests {
                 "yts",
                 "apibay",
                 "zilean",
-                "torrentsdb"
+                "torrentsdb",
+                "prowlarr"
             ]
         );
     }
@@ -678,6 +837,15 @@ mod tests {
         assert_eq!(series.path, "/stream/series/tt0903747:1:5.json");
         let film = request("torrentio", "", &options(Kind::Movie)).unwrap();
         assert_eq!(film.path, "/stream/movie/tt0903747.json");
+
+        // The fallback is told the season and episode where the kind has them, and empty where it has none.
+        let query = |kind| request("prowlarr", "Show", &options(kind)).unwrap().query;
+        let pair = |name: &str, value: &str| (name.to_string(), value.to_string());
+        assert!(query(Kind::Series).contains(&pair("season", "1")));
+        assert!(query(Kind::Series).contains(&pair("episode", "5")));
+        assert!(query(Kind::Anime).contains(&pair("season", "")));
+        assert!(query(Kind::Anime).contains(&pair("episode", "5")));
+        assert!(query(Kind::Movie).contains(&pair("episode", "")));
 
         // Zilean takes the season and episode as query parameters, which a film must not send.
         let zilean = request("zilean", "", &options(Kind::Series)).unwrap();

@@ -16,6 +16,9 @@ pub struct Config {
     /// once there is something to play and a moment has passed. What is still out is not lost: it
     /// finishes in the background and the next search finds it cached.
     pub search_ceiling_ms: u64,
+    /// How long the fallback indexers, asked only when the others found nothing, are given: for one
+    /// request and for all of them.
+    pub fallback_timeout_ms: u64,
     /// Where in-progress downloads live. `None` means the app's cache directory.
     pub cache_dir: Option<PathBuf>,
     /// Upper bound on bytes held on disk by active torrents.
@@ -49,6 +52,7 @@ impl Default for Config {
         Config {
             indexer_timeout_ms: 5_000,
             search_ceiling_ms: 4_000,
+            fallback_timeout_ms: 15_000,
             cache_dir: None,
             max_cache_bytes: 8 * 1024 * 1024 * 1024,
             max_torrents: 3,
