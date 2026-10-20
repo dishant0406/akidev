@@ -517,7 +517,7 @@ jobs:
           # The fallback search, when Prowlarr is set up. It is optional by design: a slow or missing
           # Prowlarr is reported and never fails the deploy.
           echo "Checking the fallback search"
-          fallback=$(curl -s --max-time 30 -w '\n%{http_code}' "$PUBLIC_URL/v1/fallback/search?q=Inception") || true
+          fallback=$(curl -s --max-time 30 -H 'x-akidev-fallback: 1' -w '\n%{http_code}' "$PUBLIC_URL/v1/fallback/search?q=Inception") || true
           case "${fallback##*$'\n'}" in
             200)
               found=$(printf '%s' "$fallback" | grep -o '"hash":"[0-9a-f]\{40\}"' | wc -l || true)

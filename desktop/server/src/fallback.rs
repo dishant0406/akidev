@@ -163,14 +163,38 @@ impl Fallback {
         flight.await
     }
 
-    /// Whether Prowlarr answers, for the health report.
-    pub async fn reachable(&self) -> bool {
-        self.client
+    /// Whether Prowlarr answers and how many of its indexers are on and failing, for the health report.
+    pub async fn status(&self) -> serde_json::Value {
+        let reachable = self
+            .client
             .get(format!("{}/ping", self.base))
             .timeout(Duration::from_secs(2))
             .send()
             .await
-            .is_ok_and(|response| response.status().is_success())
+            .is_ok_and(|response| response.status().is_success());
+        if !reachable {
+            return serde_json::json!({ "configured": true, "reachable": false });
+        }
+        let list = |path: &'static str| async move {
+            let response = self
+                .client
+                .get(format!("{}{path}", self.base))
+                .header("X-Api-Key", &self.key)
+                .timeout(Duration::from_secs(2))
+                .send()
+                .await
+                .ok()?;
+            response.json::<Vec<serde_json::Value>>().await.ok()
+        };
+        let indexers = list("/api/v1/indexer").await.map(|all| {
+            all.iter()
+                .filter(|indexer| indexer["enable"] == true)
+                .count()
+        });
+        let failing = list("/api/v1/indexerstatus").await.map(|all| all.len());
+        serde_json::json!({
+            "configured": true, "reachable": true, "indexers": indexers, "failing": failing,
+        })
     }
 
     fn remembered(&self, key: &str) -> Option<Vec<Hit>> {
@@ -575,6 +599,34 @@ mod tests {
             None
         );
         assert_eq!(fallback.hashes.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_status_counts_the_indexers_that_are_on_and_failing() {
+        use axum::routing::get;
+        let app = Router::new()
+            .route("/ping", get(|| async { "ok" }))
+            .route(
+                "/api/v1/indexer",
+                get(|| async {
+                    Json(json!([{ "enable": true }, { "enable": true }, { "enable": false }]))
+                }),
+            )
+            .route(
+                "/api/v1/indexerstatus",
+                get(|| async { Json(json!([{ "indexerId": 2 }])) }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let status = fallback(&format!("http://{address}")).status().await;
+        assert_eq!(
+            status,
+            json!({ "configured": true, "reachable": true, "indexers": 2, "failing": 1 })
+        );
+        let down = fallback("http://127.0.0.1:1").status().await;
+        assert_eq!(down, json!({ "configured": true, "reachable": false }));
     }
 
     #[test]

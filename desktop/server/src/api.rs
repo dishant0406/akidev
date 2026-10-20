@@ -326,7 +326,7 @@ async fn health(State(state): State<AppState>) -> Response {
         None => json!({ "configured": false }),
     };
     let fallback = match &state.fallback {
-        Some(fallback) => json!({ "configured": true, "reachable": fallback.reachable().await }),
+        Some(fallback) => fallback.status().await,
         None => json!({ "configured": false }),
     };
     let cache = crate::hls::dir_size(&state.settings.cache_dir).await;
