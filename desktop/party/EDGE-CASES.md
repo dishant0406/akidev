@@ -26,7 +26,11 @@ the host is told "X is buffering"), S1, S2, S4, S5, S6 (web), S7, C2, C3 (web), 
 (no fallback), N7 (bookkeeping reset on a new role), N8 (cancel, no parallel join), N9 (names cleaned by the host),
 T1 (no-store, cache rule), T3, T5, T6, T7, T8 (code leaves the address bar), T9, T10.
 
-**Open, not part of this pass:** L7 and L8 beyond release picks (a host's in-page switch to the next
+**Also done since:** L8 (a host announces a film the moment it opens it and lists the releases it is
+trying, so guests search and join swarms in parallel), N6 (a guest follows a release change from any
+state, and a host moves the party to the next source when a guest cannot get the first).
+
+**Open, not part of this pass:** L7 beyond release picks (a host's in-page switch to the next
 episode still briefly publishes nothing before the new item), R3 (a watchdog for a guest that never
 gets `canplay`; guests now preload fully), R4, R6 (clearing a hold on a manual play), S3 (debounce a
 flapping `readyState`), C1 and C7 (control scoping, host-only mode, kick), C5 (desktop keys while

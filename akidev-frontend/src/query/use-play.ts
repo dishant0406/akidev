@@ -16,13 +16,14 @@ import { QUERY_KEYS } from "./keys";
  * A result with `available: false` is a normal outcome, not an error, so it is cached like
  * any other and rendered as an honest message.
  */
-export function usePlay(id: string | undefined, start: number | null = null, release?: string) {
+export function usePlay(id: string | undefined, start: number | null = null, release?: string, skip: string[] = []) {
   return useQuery(
-    [QUERY_KEYS.PLAY, id, release ?? null],
+    [QUERY_KEYS.PLAY, id, release ?? null, skip],
     // `start` is where the viewer means to begin, so a conversion runs that far ahead. It is read
     // when the request is made and is not part of the key: the same episode is the same source.
-    // `release` is one the viewer picked from the list; without it the server tries the best first.
-    () => post<PlayResult>("/v1/play", { id, hevc: canPlayHevc(), start: start ?? undefined, release }),
+    // `release` is one the viewer picked from the list; without it the server tries the best first,
+    // leaving out the `skip` releases, which did not play.
+    () => post<PlayResult>("/v1/play", { id, hevc: canPlayHevc(), start: start ?? undefined, release, skip: skip.length > 0 ? skip : undefined }),
     {
       enabled: Boolean(id),
       // Finding a source is expensive on the server, so a resolved episode is kept for a

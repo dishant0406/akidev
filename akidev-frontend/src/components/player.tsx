@@ -62,7 +62,8 @@ type Props = {
   /** Where to start, in seconds, when the viewer left part way. */
   startAt: number | null;
   onBack: () => void;
-  onError: (message: string) => void;
+  /** `unplayable` is a file this browser cannot decode, as opposed to a stream that failed. */
+  onError: (message: string, unplayable?: boolean) => void;
   /** Called once, the first time the picture is actually playing. */
   onStarted?: () => void;
   /** Reported every few seconds and when playback pauses, so the home page can offer to carry on. */
@@ -141,7 +142,7 @@ export default function Player({
   const isHls = streamType === "hls";
 
   const party = useParty();
-  const { publish, report, hold, held, blocked, tapToPlay, hostChoosing } = usePartyPlayback({ video, mediaId, releaseId, choosing });
+  const { publish, report, hold, held, blocked, tapToPlay, hostChoosing } = usePartyPlayback({ video, mediaId, releaseId, startAt, choosing });
 
   // Callbacks are held in refs so a caller passing inline functions cannot tear down and
   // rebuild the stream on every render.
@@ -539,7 +540,7 @@ export default function Player({
           // detail is what makes that look like a broken site.
           const code = event.currentTarget.error?.code;
           if (code === 4) {
-            callbacks.current.onError("Your browser cannot play this file. The release uses a codec it does not support.");
+            callbacks.current.onError("Your browser cannot play this file. The release uses a codec it does not support.", true);
             return;
           }
           // The element does not say why a request failed, so ask: a HEAD sends no video.

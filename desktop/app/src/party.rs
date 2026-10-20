@@ -281,6 +281,15 @@ impl Party {
             .collect()
     }
 
+    /// The names of the guests who could not find or play what the host is playing, for the host.
+    pub fn troubled(&self) -> Vec<String> {
+        self.members
+            .iter()
+            .filter(|member| !member.host && member.state == Readiness::Trouble)
+            .map(|member| member.name.clone())
+            .collect()
+    }
+
     /// What the panel says under the party: that a guest is getting back in or has lost the host, or why something failed.
     fn notice(&self) -> Option<String> {
         if self.reconnecting {

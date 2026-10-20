@@ -33,26 +33,41 @@ One JSON object per data-channel message, as text. `t` says which. The Rust list
 | `pong` | host | `id`, `sent`, `at` | The answer: `sent` as it came, `at` the host's clock. |
 | `bye` | either | | Leaving. From the host it ends the party. |
 
-`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<info hash>" }` (a media id, as
-in `desktop/server/API.md`, and the release the host plays; `release` is optional), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
+`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<info hash>", "candidates": ["<info hash>", ...] }` (a media id, as
+in `desktop/server/API.md`, the release the host plays, and, until it has one, the releases it is trying, best first; `release` and `candidates` are optional,
+and the website ignores `candidates`), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
 "cover" }` (the last three are only what a guest shows before its own copy has loaded).
 
 Everyone can ask to play, pause or seek; only the host acts, and only the host chooses what plays. A guest that presses pause sends `pause`; the host pauses
 and sends `state`, and every device, the asker included, follows it. That gives one order of
 events, so two people pressing things at once cannot leave devices disagreeing.
 
+## Starting together
+
+A host says what it is opening the moment it opens it: a `state` with the video's `id`, no `release`,
+`playing: false` and `choosing: "finding"`, repeated every 2 seconds while it searches. A guest goes to
+that film at once and searches in parallel. When the host's search has found releases it adds
+`candidates` (up to five, best first). A guest that has the list starts joining the swarm of the first
+while the host is still opening its own, and when the host names the `release` it plays, the guest
+switches to it if it is another one. A guest never opens a release the host has neither named nor
+listed. The host holds the start for the guests as before (at most 45 seconds), but their searching and
+joining no longer begins after the host's.
+
 ## The same source
 
 A video item carries the release the host is playing (its info hash). A guest asks for exactly that
-release (`release` in `POST /v1/play`, or the desktop app's `resolve_release`), so everyone watches the
-same source, always. If the release cannot be had the guest says so (its `status` is `trouble`, the
-host sees "Can't play") and offers to try again or leave; it never plays another release out of step. When the host picks
-another release, the item changes (same `id`, new `release`); guests do not change page, they switch
-release and seek to where the host is. The guest's `status` names the item by key, `id` plus `#` plus
-`release`, so a guest that was ready for the old release is loading the new one until it says so, and
-the host holds the start as it does for a new film. A device from before releases were shared says the
-plain id, which counts as ready for any release of that film. Only the host chooses the source, so a
-guest's window has no source button.
+release (`release` in `POST /v1/play`, or `Plan::only` in the desktop app), so everyone watches the
+same source, always. A guest never picks another release itself: if it cannot get the host's, its
+`status` is `trouble` and the host sees "Can't play". **The host then moves everyone on**: when a guest
+is in `trouble` for the release it plays, early in the film (the first minute), and the host did not pick
+that release by hand, the host drops it, finds the next best (the same list, without the ones that
+failed) and publishes it, at most three times for one film. Guests that were in trouble follow the new
+release like any other. When the host picks another release by hand, the item changes (same `id`, new
+`release`); guests do not change page, they switch release and seek to where the host is. The guest's
+`status` names the item by key, `id` plus `#` plus `release`, so a guest that was ready for the old
+release is loading the new one until it says so, and the host holds the start as it does for a new
+film. A device from before releases were shared says the plain id, which counts as ready for any
+release of that film. Only the host chooses the source, so a guest's window has no source button.
 
 ## Waiting while the host chooses
 

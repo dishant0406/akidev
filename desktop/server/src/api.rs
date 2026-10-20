@@ -598,7 +598,18 @@ struct PlayBody {
     /// The info hash of a release the viewer picked from `/v1/releases`. That one is played, and
     /// no other.
     release: Option<String>,
+    /// Info hashes of releases that did not play for this viewer, so the next best is found.
+    #[serde(default)]
+    skip: Vec<String>,
 }
+
+/// An info hash is 40 hex characters.
+fn is_info_hash(text: &str) -> bool {
+    text.len() == 40 && text.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The most releases a viewer may ask to skip.
+const MOST_SKIPPED: usize = 8;
 
 async fn play(
     State(state): State<AppState>,
@@ -625,17 +636,25 @@ async fn play(
         Some(parsed) if parsed.kind == Kind::Movie || parsed.episode.is_some() => {}
         _ => return error(StatusCode::BAD_REQUEST, "That is not an episode or a film."),
     }
-    if let Some(release) = &body.release
-        && !(release.len() == 40 && release.bytes().all(|b| b.is_ascii_hexdigit()))
+    if body
+        .release
+        .as_deref()
+        .is_some_and(|release| !is_info_hash(release))
     {
         return error(
             StatusCode::BAD_REQUEST,
             "release must be a 40 character info hash.",
         );
     }
+    if body.skip.len() > MOST_SKIPPED || !body.skip.iter().all(|hash| is_info_hash(hash)) {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "skip must be a short list of 40 character info hashes.",
+        );
+    }
     match state
         .player
-        .play(&body.id, body.hevc, body.start, body.release)
+        .play(&body.id, body.hevc, body.start, body.release, body.skip)
         .await
     {
         Outcome::Ready(ready) => {

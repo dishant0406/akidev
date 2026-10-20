@@ -26,11 +26,13 @@ export function usePartyPlayback({
   video,
   mediaId,
   releaseId,
+  startAt,
   choosing,
 }: {
   video: RefObject<HTMLVideoElement>;
   mediaId: string;
   releaseId: string | null;
+  startAt: number | null;
   choosing: Choosing | null;
 }) {
   const party = useParty();
@@ -60,8 +62,12 @@ export function usePartyPlayback({
   const publish = useCallback(
     (heartbeat: boolean) => {
       const element = video.current;
-      // Before the picture has loaded there is no position to give: a party must not be sent back to the start.
-      if (now.current.role !== "host" || !element || element.readyState < 1) return;
+      if (now.current.role !== "host" || !element) return;
+      // Before the picture has loaded there is no position to give: the host says where it will start, so a party is not sent back to the start.
+      if (element.readyState < 1) {
+        now.current.publish({ item: { kind: "video", id: mediaId, release: releaseId }, playing: false, position: startAt ?? 0, choosing: "finding" }, heartbeat);
+        return;
+      }
       // Playing means the picture is moving: a host that is still loading or buffering is not.
       const moving = !element.paused && element.readyState >= HAVE_FUTURE_DATA;
       now.current.publish(
@@ -74,7 +80,7 @@ export function usePartyPlayback({
         heartbeat,
       );
     },
-    [video, mediaId, releaseId],
+    [video, mediaId, releaseId, startAt],
   );
   useEffect(() => publish(false), [publish, party.role]);
 

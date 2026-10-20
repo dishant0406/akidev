@@ -27,7 +27,8 @@ pub struct Config {
     pub max_torrents: usize,
     /// How long to wait for a magnet to find peers and report its file list.
     pub metadata_timeout_ms: u64,
-    /// How many candidate releases to try before giving up.
+    /// How many candidate releases are opened at once. Every release the search found is tried
+    /// in turn, so a dead one makes room for the next.
     pub max_candidates: usize,
     /// Upper bound on resolving one episode or film, across all candidates.
     pub resolve_deadline_ms: u64,

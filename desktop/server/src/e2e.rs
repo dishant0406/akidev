@@ -1064,6 +1064,7 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
         item: Some(Item::Video {
             id: "movie-tt1".into(),
             release: Some("abc".into()),
+            candidates: Vec::new(),
         }),
         playing: true,
         position: 10.0,
@@ -1084,7 +1085,8 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
         target.playback.item,
         Some(Item::Video {
             id: "movie-tt1".into(),
-            release: Some("abc".into())
+            release: Some("abc".into()),
+            candidates: Vec::new()
         })
     );
     assert!(target.playback.playing);
@@ -1129,7 +1131,8 @@ async fn a_host_and_guests_stay_in_step_through_the_server() {
         told.playback.item,
         Some(Item::Video {
             id: "movie-tt1".into(),
-            release: Some("abc".into())
+            release: Some("abc".into()),
+            candidates: Vec::new()
         })
     );
     // While the host has a panel open, guests are told, and they get it with the paused picture.

@@ -27,6 +27,11 @@ type Pick = { episode: string; release: Release; start: number | null };
 
 /** Before this many seconds into an episode there is nothing to resume. */
 const RESUME_AFTER = 5;
+/** How many releases are given up on for one episode, and a host moves its party on only this soon after a source arrives. */
+const SOURCE_TRIES = 3;
+const SWITCH_WITHIN = 60_000;
+/** How often a host that is still finding its source says so, so its guests know it is there. */
+const FINDING_BEAT = 2000;
 
 export default function WatchPage() {
   const params = useParams();
@@ -52,22 +57,15 @@ export default function WatchPage() {
   const kept = useRef<{ id: string; release: string } | null>(null);
   if (partyRelease && id) kept.current = { id, release: partyRelease };
   const heldRelease = !pick && kept.current && kept.current.id === id ? kept.current.release : undefined;
-  const stream = usePlay(id, resumeFrom, partyRelease ?? pick?.release.id ?? heldRelease);
+  // Releases that would not play for this episode, so the next best is found instead.
+  const [skippedFor, setSkippedFor] = useState<{ episode: string; releases: string[] }>({ episode: "", releases: [] });
+  const skipped = useMemo(() => (skippedFor.episode === id ? skippedFor.releases : []), [skippedFor, id]);
+  const giveUp = useCallback(
+    (release: string) => id && setSkippedFor((was) => ({ episode: id, releases: [...(was.episode === id ? was.releases : []), release] })),
+    [id],
+  );
+  const stream = usePlay(id, resumeFrom, partyRelease ?? pick?.release.id ?? heldRelease, skipped);
   const subtitles = useSubtitles(id);
-  // A host that picks another release says so at once, while it is still finding it, so the guests
-  // start finding the same one instead of waiting. (The player says it again, playing, once it loads.)
-  const { role: partyRole, publish: publishParty } = party;
-  const pickedRelease = pick?.release.id ?? null;
-  const pickedStart = pick?.start ?? 0;
-  useEffect(() => {
-    if (partyRole !== "host" || !pickedRelease || !id) return;
-    publishParty({
-      item: { kind: "video", id, release: pickedRelease },
-      playing: false,
-      position: pickedStart,
-      choosing: "finding",
-    });
-  }, [pickedRelease]); // eslint-disable-line react-hooks/exhaustive-deps
   /** The episode whose source picker is open over the "no source" screen. */
   const [choosing, setChoosing] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<{
@@ -117,9 +115,38 @@ export default function WatchPage() {
   const { setStatus } = party;
   useEffect(() => {
     if (!id) return;
-    if (stuck) setStatus("trouble", id);
-    else if (searching) setStatus("loading", id);
-  }, [id, stuck, searching, setStatus]);
+    // Named by the release the host plays, so what is said of one release is not taken for another.
+    const key = partyRelease ? `${id}#${partyRelease}` : id;
+    if (stuck) setStatus("trouble", key);
+    else if (searching) setStatus("loading", key);
+  }, [id, partyRelease, stuck, searching, setStatus]);
+
+  // A host says what it is finding at once, and keeps saying so, so the guests start finding it too
+  // instead of waiting for the host's picture. (The player takes over once it has loaded.)
+  const { role: partyRole, publish: publishParty, members } = party;
+  const pickedRelease = pick?.release.id ?? null;
+  useEffect(() => {
+    if (partyRole !== "host" || !id || link?.available) return undefined;
+    const tell = (heartbeat: boolean) =>
+      publishParty({ item: { kind: "video", id, release: pickedRelease }, playing: false, position: resumeFrom ?? 0, choosing: searching ? "finding" : undefined }, heartbeat);
+    tell(false);
+    const timer = setInterval(() => tell(true), FINDING_BEAT);
+    return () => clearInterval(timer);
+  }, [partyRole, id, link?.available, searching, pickedRelease, resumeFrom, publishParty]);
+
+  // A host moves its party to the next source when a guest cannot get this one, soon after it
+  // arrives, a few times. Guests never choose another source alone, so everyone stays on one cut.
+  const releaseId = link?.available ? (link.release_id ?? null) : null;
+  const linkedAt = useRef(0);
+  useEffect(() => {
+    linkedAt.current = Date.now();
+  }, [releaseId]);
+  const guestInTrouble = members.some((member) => !member.host && member.state === "trouble");
+  useEffect(() => {
+    if (partyRole !== "host" || pick || !guestInTrouble || !releaseId) return;
+    if (skipped.length >= SOURCE_TRIES || Date.now() - linkedAt.current > SWITCH_WITHIN) return;
+    giveUp(releaseId);
+  }, [partyRole, pick, guestInTrouble, releaseId, skipped.length, giveUp]);
 
   // Picking a release plays that one, from where the viewer was.
   const choose = useCallback(
@@ -224,17 +251,23 @@ export default function WatchPage() {
         streamType={link.stream_type}
         subtitles={subtitles.subtitles}
         release={link.release}
-        releaseId={link.release_id ?? pick?.release.id ?? null}
+        releaseId={releaseId ?? pick?.release.id ?? null}
         subtitlesLoading={subtitles.loading}
         title={titleLine(data, id)}
         startAt={resumeFrom}
         onBack={leave}
-        onError={(message) => {
+        onError={(message, unplayable) => {
           track("playback_failed", {
             title_key: key ?? null,
             stream_type: link.stream_type,
             message,
           });
+          // A file this browser cannot decode gives way to the next best release, unless the viewer
+          // picked it or this is a guest, who plays what the host plays.
+          if (unplayable && !guest && !pick && releaseId && skipped.length < SOURCE_TRIES && Date.now() - linkedAt.current <= SWITCH_WITHIN) {
+            giveUp(releaseId);
+            return;
+          }
           if (id) setPlaybackError({ id, message });
         }}
         onStarted={() =>

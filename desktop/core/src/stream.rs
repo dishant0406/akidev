@@ -93,28 +93,6 @@ impl Streamer {
         *self.config.lock().unwrap() = config;
     }
 
-    /// Finds a playable source for one episode or film. Never fails. `fresh` is for a
-    /// retry: it drops what is cached for the releases about to be tried, so a swarm
-    /// that died is joined again instead of handing back the same dead torrent.
-    pub async fn resolve(&self, id: &str, fresh: bool) -> Resolution {
-        match self.plan(id).await {
-            Ok(plan) => self.resolve_plan(&plan, fresh).await,
-            Err(reason) => unavailable(&reason),
-        }
-    }
-
-    /// Plays the release a viewer picked from `Plan::choices`, and no other. Never fails.
-    pub async fn resolve_release(&self, id: &str, info_hash: &str) -> Resolution {
-        let plan = match self.plan(id).await {
-            Ok(plan) => plan,
-            Err(reason) => return unavailable(&reason),
-        };
-        match plan.only(info_hash) {
-            Some(only) => self.resolve_plan(&only, false).await,
-            None => unavailable("That release is no longer listed. Pick another."),
-        }
-    }
-
     /// Opens the best of a plan's releases and says where to play it.
     pub async fn resolve_plan(&self, plan: &Plan, fresh: bool) -> Resolution {
         match self.open_best(plan, fresh).await {
@@ -181,7 +159,8 @@ impl Streamer {
         let parsed = &plan.parsed;
         let started = Instant::now();
         let deadline = started + Duration::from_millis(config.resolve_deadline_ms);
-        let candidates = candidates(&plan.ranked, config.max_candidates);
+        let candidates = candidates(&plan.ranked);
+        let at_once = config.max_candidates.max(1);
 
         if candidates.is_empty() {
             let term = plan
@@ -204,7 +183,9 @@ impl Streamer {
         // it is slow. The first to be ready wins and the rest are dropped, which deletes
         // their torrents. Trying them one after another meant a dead swarm cost its whole
         // timeout before the next was even asked.
-        // A candidate also starts early once every one ahead of it has failed.
+        // A candidate also starts early once every one ahead of it has failed. Past the first
+        // `at_once`, a candidate starts only when a failure has made room, so every release the
+        // plan offers is tried, never more than `at_once` at a time.
         let (failures, failed) = tokio::sync::watch::channel(0usize);
         let failures = Arc::new(failures);
         let attempts = candidates.iter().enumerate().map(|(index, release)| {
@@ -213,11 +194,16 @@ impl Streamer {
             let failures = failures.clone();
             let mut failed = failed.clone();
             async move {
-                let _ = tokio::time::timeout(
-                    STAGGER * index as u32,
-                    failed.wait_for(|&count| count >= index),
-                )
-                .await;
+                let behind = failures_to_start(index, at_once);
+                if index < at_once {
+                    let _ = tokio::time::timeout(
+                        STAGGER * index as u32,
+                        failed.wait_for(|&count| count >= behind),
+                    )
+                    .await;
+                } else {
+                    let _ = failed.wait_for(|&count| count >= behind).await;
+                }
                 let left = deadline.saturating_duration_since(Instant::now());
                 match engine
                     .open(
@@ -278,12 +264,23 @@ pub struct Plan {
     pub extra: Vec<Release>,
 }
 
+/// How many candidates must have failed before the one at `index` starts without waiting for its
+/// turn on the clock: all those ahead of it among the first `at_once`, and past those, enough that
+/// no more than `at_once` are open.
+fn failures_to_start(index: usize, at_once: usize) -> usize {
+    if index < at_once {
+        index
+    } else {
+        index + 1 - at_once
+    }
+}
+
 /// The releases worth trying, best first. A count of zero may only mean the indexer does
 /// not know it, so releases without seeders are tried last rather than dropped.
-fn candidates(ranked: &[Release], limit: usize) -> Vec<&Release> {
+fn candidates(ranked: &[Release]) -> Vec<&Release> {
     let (seeded, unseeded): (Vec<&Release>, Vec<&Release>) =
         ranked.iter().partition(|release| release.seeders > 0);
-    seeded.into_iter().chain(unseeded).take(limit).collect()
+    seeded.into_iter().chain(unseeded).collect()
 }
 
 fn unavailable(reason: &str) -> Resolution {
@@ -504,6 +501,29 @@ impl Plan {
             .collect()
     }
 
+    /// The info hashes of the first `count` releases, in the order they are tried.
+    pub fn candidate_hashes(&self, count: usize) -> Vec<String> {
+        candidates(&self.ranked)
+            .into_iter()
+            .take(count)
+            .map(|release| release.info_hash.clone())
+            .collect()
+    }
+
+    /// The plan without the releases that already failed to play.
+    pub fn without(&self, info_hashes: &[String]) -> Plan {
+        let wanted = |release: &Release| {
+            !info_hashes
+                .iter()
+                .any(|hash| hash.eq_ignore_ascii_case(&release.info_hash))
+        };
+        Plan {
+            ranked: self.ranked.iter().filter(|r| wanted(r)).cloned().collect(),
+            extra: self.extra.iter().filter(|r| wanted(r)).cloned().collect(),
+            ..self.clone()
+        }
+    }
+
     /// The plan with only the release a viewer chose, wherever it was listed.
     pub fn only(&self, info_hash: &str) -> Option<Plan> {
         let release = self
@@ -548,29 +568,43 @@ mod tests {
             release("alive", 4),
             release("also alive", 1),
         ];
-        assert_eq!(
-            titles(candidates(&ranked, 3)),
-            ["alive", "also alive", "dead"]
-        );
-        assert_eq!(titles(candidates(&ranked, 2)), ["alive", "also alive"]);
+        assert_eq!(titles(candidates(&ranked)), ["alive", "also alive", "dead"]);
     }
 
     #[test]
     fn unseeded_releases_are_tried_when_they_are_all_there_is() {
         let ranked = [release("a", 0), release("b", 0)];
-        assert_eq!(titles(candidates(&ranked, 3)), ["a", "b"]);
+        assert_eq!(titles(candidates(&ranked)), ["a", "b"]);
     }
 
     #[test]
-    fn only_the_best_few_are_tried() {
+    fn a_candidate_starts_when_enough_ahead_have_failed() {
+        // Three at once: the first three wait for everyone ahead, the fourth for one failure.
+        let needed: Vec<usize> = (0..6).map(|index| failures_to_start(index, 3)).collect();
+        assert_eq!(needed, [0, 1, 2, 1, 2, 3]);
+    }
+
+    #[test]
+    fn every_release_is_a_candidate() {
         let ranked = [
             release("a", 9),
             release("b", 8),
             release("c", 7),
             release("d", 6),
         ];
-        assert_eq!(titles(candidates(&ranked, 2)), ["a", "b"]);
-        assert!(candidates(&[], 3).is_empty());
+        assert_eq!(titles(candidates(&ranked)), ["a", "b", "c", "d"]);
+        assert!(candidates(&[]).is_empty());
+    }
+
+    #[test]
+    fn releases_that_failed_to_play_are_left_out() {
+        let mut a = release("a", 9);
+        a.info_hash = "a".repeat(40);
+        let mut b = release("b", 8);
+        b.info_hash = "b".repeat(40);
+        let plan = plan_with(vec![a, b], Vec::new());
+        let left = plan.without(&["A".repeat(40)]);
+        assert_eq!(titles(candidates(&left.ranked)), ["b"]);
     }
 
     fn card(title: &str, variants: &[&str], year: Option<i32>) -> crate::model::Media {

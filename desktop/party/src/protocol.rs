@@ -8,12 +8,15 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Item {
     /// A film or an episode: the media id, like `series-tt0903747-s1e5`, and the release the
-    /// host is playing (its info hash), so every device plays the same source. A guest that
-    /// cannot find that release plays the best one it can.
+    /// host is playing (its info hash), so every device plays the same source. Until the host
+    /// has opened one, `candidates` lists the releases it is trying, best first, so a guest can
+    /// start on the first while the host is still finding its source.
     Video {
         id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         release: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        candidates: Vec<String>,
     },
     /// A music track: the video id on YouTube Music, with what a guest shows before it has loaded.
     Music {
@@ -40,6 +43,7 @@ impl Item {
             Item::Video {
                 id,
                 release: Some(release),
+                ..
             } => format!("{id}#{release}"),
             other => other.id().to_string(),
         }
@@ -131,6 +135,7 @@ mod tests {
             item: Some(Item::Video {
                 id: "movie-tt1".into(),
                 release: None,
+                candidates: Vec::new(),
             }),
             playing: true,
             position: 12.5,
@@ -193,6 +198,7 @@ mod tests {
             item: Some(Item::Video {
                 id: "movie-tt1".into(),
                 release: Some("abc123".into()),
+                candidates: Vec::new(),
             }),
             playing: false,
             position: 4.0,
@@ -215,6 +221,31 @@ mod tests {
         };
         assert_eq!(choosing, None);
         assert_eq!(item.unwrap().key(), "movie-tt1");
+    }
+
+    #[test]
+    fn the_releases_a_host_is_trying_travel_with_the_video_until_it_has_one() {
+        let item = Item::Video {
+            id: "movie-tt1".into(),
+            release: None,
+            candidates: vec!["aa".into(), "bb".into()],
+        };
+        let text = serde_json::to_string(&item).unwrap();
+        assert_eq!(
+            text,
+            r#"{"kind":"video","id":"movie-tt1","candidates":["aa","bb"]}"#
+        );
+        assert_eq!(serde_json::from_str::<Item>(&text).unwrap(), item);
+        // An item from a device that predates the list reads as having none.
+        let old: Item = serde_json::from_str(r#"{"kind":"video","id":"movie-tt1"}"#).unwrap();
+        assert_eq!(
+            old,
+            Item::Video {
+                id: "movie-tt1".into(),
+                release: None,
+                candidates: Vec::new()
+            }
+        );
     }
 
     #[test]
@@ -243,10 +274,12 @@ mod tests {
         let a = Item::Video {
             id: "m".into(),
             release: Some("x".into()),
+            candidates: Vec::new(),
         };
         let b = Item::Video {
             id: "m".into(),
             release: Some("y".into()),
+            candidates: Vec::new(),
         };
         assert_ne!(a.key(), b.key());
         assert_eq!(a.id(), b.id());

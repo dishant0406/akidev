@@ -19,7 +19,7 @@ use crate::runtime;
 use akidev_core::media_id::{self, MediaId, anime_episode_id};
 use akidev_core::model::{Detail, Kind};
 use akidev_core::providers;
-use akidev_core::stream::{Choice, Resolution, StreamId};
+use akidev_core::stream::{Choice, Plan, Resolution, StreamId};
 use akidev_core::subtitles::{self, Subtitle};
 use akidev_core::torrent::StreamStats;
 use akidev_party::{Item, Message, Playback, Readiness, fix};
@@ -61,6 +61,15 @@ const SEEK_JUMP: f64 = 1.;
 const DOUBLE_CLICK: Duration = Duration::from_millis(250);
 /// A host is told a guest is buffering no more often than this.
 const BUFFER_PING_EVERY: Duration = Duration::from_secs(12);
+/// How many times a page switches to another source by itself, for one film.
+const SOURCE_TRIES: u8 = 3;
+/// A page moves on to another source only this soon after the first one arrived: later, a stall is
+/// not the source's fault, and the film would restart on another cut.
+const SWITCH_WITHIN: Duration = Duration::from_secs(60);
+/// After a switch the host's list of guests is stale for a moment, so it is not believed yet.
+const SWITCH_SETTLES: Duration = Duration::from_secs(3);
+/// How many of the releases it is trying a host tells its guests, best first.
+const SHARED_CANDIDATES: usize = 5;
 const HOLD_AT_LEAST: Duration = Duration::from_secs(1);
 const HOLD_AT_MOST: Duration = Duration::from_secs(45);
 
@@ -258,6 +267,24 @@ pub struct WatchPage {
     /// The release (info hash) a guest last set out to play because the host plays it, so it is
     /// asked for once, even if it could not be found and the best one is playing instead.
     party_tried: Option<String>,
+    /// The releases found for this film, kept so switching to another does not search again.
+    plan: Option<Plan>,
+    /// The release being opened or played, when one was asked for rather than the best.
+    wanted: Option<String>,
+    /// The viewer picked `wanted` themselves, so it is never replaced without their say.
+    picked: bool,
+    /// Releases (info hashes) that opened but would not play, or that a guest could not get.
+    failed: Vec<String>,
+    /// How many times this page has moved on to another source.
+    switches: u8,
+    /// When the host last moved its party to another source.
+    switched_at: Option<Instant>,
+    /// When the source being played arrived.
+    started_at: Option<Instant>,
+    /// A guest has found the releases and waits for the host to name or list one.
+    waiting_for_host: bool,
+    /// The releases a host is trying, for its guests to start on while it is still finding one.
+    candidates: Vec<String>,
     /// The host's picture was paused because a panel opened; it starts again when the panel closes.
     panel_pause: bool,
     last_catch_up: Instant,
@@ -375,6 +402,15 @@ impl WatchPage {
             holding: None,
             speed: 1.,
             party_tried: None,
+            plan: None,
+            wanted: None,
+            picked: false,
+            failed: Vec::new(),
+            switches: 0,
+            switched_at: None,
+            started_at: None,
+            waiting_for_host: false,
+            candidates: Vec::new(),
             panel_pause: false,
             last_catch_up: Instant::now(),
             click_seq: 0,
@@ -391,6 +427,12 @@ impl WatchPage {
     /// Looks for a source and starts playing it. `fresh` forgets a torrent that already
     /// failed, for a retry.
     fn start(&mut self, fresh: bool, cx: &mut Context<Self>) {
+        if fresh {
+            self.plan = None;
+            self.failed.clear();
+            self.switches = 0;
+        }
+        self.picked = false;
         // A guest plays the very release the host plays, so everyone sees the same cut; if that is
         // gone it says so, rather than play another one out of step.
         let wanted = self.party_release(cx);
@@ -398,36 +440,151 @@ impl WatchPage {
         self.begin(wanted, fresh, cx);
     }
 
-    /// The release the party's host is playing of this very film or episode, for a guest.
-    fn party_release(&self, cx: &App) -> Option<String> {
+    /// The release the party's host plays of this very film or episode, for a guest.
+    fn host_release(&self, cx: &App) -> Option<String> {
         let party = self.party.read(cx);
         if party.role() != Role::Guest {
             return None;
         }
         match party.item() {
-            Some(Item::Video { id, release }) if *id == self.id => release.clone(),
+            Some(Item::Video { id, release, .. }) if *id == self.id => release.clone(),
             _ => None,
         }
+    }
+
+    /// What a guest sets out to play: the host's release, or while the host is still finding one,
+    /// the first it is trying, so the guest joins that swarm in the meantime.
+    fn party_release(&self, cx: &App) -> Option<String> {
+        self.host_release(cx).or_else(|| {
+            let party = self.party.read(cx);
+            match party.item() {
+                Some(Item::Video { id, candidates, .. })
+                    if party.role() == Role::Guest && *id == self.id =>
+                {
+                    candidates.first().cloned()
+                }
+                _ => None,
+            }
+        })
+    }
+
+    /// A guest follows the host to the release it plays, from where the host is: the one the host
+    /// picked, or the one it moved the party to.
+    fn follow_release(&mut self, cx: &mut Context<Self>) {
+        if !self.guest {
+            return;
+        }
+        let Some(release) = self.party_release(cx) else {
+            return;
+        };
+        if self.party_tried.as_deref() == Some(release.as_str())
+            || self
+                .stream
+                .as_ref()
+                .is_some_and(|stream| stream.info_hash.eq_ignore_ascii_case(&release))
+        {
+            return;
+        }
+        self.party_tried = Some(release.clone());
+        if let Some(target) = self.party.read(cx).target() {
+            self.resume_from = Some(target.position_now());
+        }
+        self.begin(Some(release), false, cx);
+    }
+
+    /// A guest that waits for the host to name a release stops waiting once the host is no longer
+    /// finding one: it has none to name.
+    fn give_up_waiting_for_host(&mut self, cx: &mut Context<Self>) {
+        let host_finding = self
+            .party
+            .read(cx)
+            .target()
+            .is_some_and(|target| target.playback.choosing.is_some());
+        if self.waiting_for_host && !host_finding {
+            self.waiting_for_host = false;
+            self.resolved(
+                Resolution::Unavailable {
+                    reason: "The host could not find a source either.".into(),
+                },
+                cx,
+            );
+        }
+    }
+
+    /// A host moves its party to the next source when a guest cannot get the one it plays, early in
+    /// the film, a few times. Guests never choose another source alone, so everyone stays on one cut.
+    fn switch_for_trouble(&mut self, cx: &mut Context<Self>) {
+        let party = self.party.read(cx);
+        if party.role() != Role::Host
+            || self.picked
+            || self.switches >= SOURCE_TRIES
+            || !self.is_the_party_item(cx)
+            || self
+                .switched_at
+                .is_some_and(|at| at.elapsed() < SWITCH_SETTLES)
+            || !self.is_early()
+        {
+            return;
+        }
+        let troubled = party.troubled();
+        let Some(Item::Video {
+            release: Some(release),
+            ..
+        }) = party.item().cloned()
+        else {
+            return;
+        };
+        if troubled.is_empty() {
+            return;
+        }
+        self.failed.push(release);
+        self.switches += 1;
+        self.switched_at = Some(Instant::now());
+        self.begin(None, false, cx);
+        self.say(
+            format!(
+                "{} could not load that source, trying another…",
+                troubled.join(", ")
+            ),
+            cx,
+        );
+    }
+
+    /// Whether the source has not yet been playing for long.
+    fn is_early(&self) -> bool {
+        self.started_at
+            .is_none_or(|at| at.elapsed() < SWITCH_WITHIN)
+    }
+
+    /// A source that opened but will not play is swapped for the next best, unless the viewer
+    /// picked it or this is a guest, who plays what the host plays.
+    fn try_another_source(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(stream) = &self.stream else {
+            return false;
+        };
+        if self.guest || self.picked || self.switches >= SOURCE_TRIES || !self.is_early() {
+            return false;
+        }
+        self.failed.push(stream.info_hash.clone());
+        self.switches += 1;
+        self.begin(None, false, cx);
+        self.say("That source would not play, trying another…", cx);
+        true
+    }
+
+    /// Gives up the release that was asked for, and plays the next best.
+    fn skip_wanted(&mut self, cx: &mut Context<Self>) {
+        if let Some(release) = self.wanted.take() {
+            self.failed.push(release);
+        }
+        self.picked = false;
+        self.begin(None, false, cx);
     }
 
     /// Plays the release with this info hash, from where the viewer is.
     fn play_release(&mut self, info_hash: String, cx: &mut Context<Self>) {
         self.panel = None;
-        // A host says which release it is about to play right away, so the guests start finding the
-        // same one instead of waiting for it to load here first.
-        if self.party.read(cx).role() == Role::Host && self.is_the_party_item(cx) {
-            let playback = Playback {
-                item: Some(Item::Video {
-                    id: self.id.clone(),
-                    release: Some(info_hash.clone()),
-                }),
-                playing: false,
-                position: self.state.position,
-                choosing: Some("finding".into()),
-            };
-            self.party
-                .update(cx, |party, _| party.publish(playback, false));
-        }
+        self.picked = true;
         self.begin(Some(info_hash), false, cx);
     }
 
@@ -449,35 +606,91 @@ impl WatchPage {
         self.transfer = None;
         self.state = PlayerState::default();
         self.phase = Phase::Resolving;
+        self.wanted = release.clone();
+        self.started_at = None;
+        self.waiting_for_host = false;
+        // Whatever was still being found for the last release is no longer wanted.
+        self.resolving = None;
         self.controls_visible = true;
         cx.notify();
 
-        // A copy saved in the library plays at once: no search, no swarm, no buffering.
-        if let Some(resolution) = self.saved_copy(release.as_deref(), cx) {
+        // A copy saved in the library plays at once: no search, no swarm, no buffering. Not after
+        // a source failed, or the same copy would be played again.
+        if (release.is_some() || self.failed.is_empty())
+            && let Some(resolution) = self.saved_copy(release.as_deref(), cx)
+        {
             self.resolved(resolution, cx);
             self.say("Playing from your downloads", cx);
             return;
         }
+        self.open(release, fresh, cx);
+    }
 
+    /// Finds the releases, once for the page, and opens one of them.
+    fn open(&mut self, release: Option<String>, fresh: bool, cx: &mut Context<Self>) {
         let streamer = cx.global::<Backend>().streamer.clone();
-        let id = self.id.clone();
+        let Some(plan) = self.plan.clone() else {
+            let id = self.id.clone();
+            let handle = runtime::spawn(async move {
+                let streamer = streamer
+                    .get()
+                    .await
+                    .map_err(|error| format!("Streaming could not start: {error}"))?;
+                streamer.plan(&id).await
+            });
+            self.resolving = Some(AbortOnDrop(handle.abort_handle()));
+            cx.spawn(async move |page, cx| {
+                // An aborted task means the page was left or went on to another release.
+                let Ok(found) = handle.await else { return };
+                let _ = page.update(cx, |page, cx| match found {
+                    Ok(plan) => {
+                        page.plan = Some(plan);
+                        page.open(release, fresh, cx);
+                    }
+                    Err(reason) => page.resolved(Resolution::Unavailable { reason }, cx),
+                });
+            })
+            .detach();
+            return;
+        };
+        let left = plan.without(&self.failed);
+        self.candidates = match release {
+            Some(_) => Vec::new(),
+            None => left.candidate_hashes(SHARED_CANDIDATES),
+        };
+        let wanted = match &release {
+            Some(info_hash) => plan.only(info_hash),
+            None => Some(left),
+        };
+        let Some(wanted) = wanted else {
+            // A guess at the host's release that this device never found is no failure: the host
+            // has not chosen yet.
+            if !self.guest || self.host_release(cx).is_some() {
+                self.resolved(
+                    Resolution::Unavailable {
+                        reason: "That release is no longer listed. Pick another.".into(),
+                    },
+                    cx,
+                );
+            }
+            return;
+        };
+        // A guest does not choose: until the host names a release or lists the ones it is trying,
+        // it has found them and waits.
+        if self.guest && release.is_none() {
+            self.waiting_for_host = true;
+            return;
+        }
         let handle = runtime::spawn(async move {
-            let streamer = match streamer.get().await {
-                Ok(streamer) => streamer,
-                Err(error) => {
-                    return Resolution::Unavailable {
-                        reason: format!("Streaming could not start: {error}"),
-                    };
-                }
-            };
-            match release {
-                Some(info_hash) => streamer.resolve_release(&id, &info_hash).await,
-                None => streamer.resolve(&id, fresh).await,
+            match streamer.get().await {
+                Ok(streamer) => streamer.resolve_plan(&wanted, fresh).await,
+                Err(error) => Resolution::Unavailable {
+                    reason: format!("Streaming could not start: {error}"),
+                },
             }
         });
         self.resolving = Some(AbortOnDrop(handle.abort_handle()));
         cx.spawn(async move |page, cx| {
-            // An aborted task means the page was left, so there is nobody to tell.
             let Ok(resolution) = handle.await else { return };
             let _ = page.update(cx, |page, cx| page.resolved(resolution, cx));
         })
@@ -562,6 +775,7 @@ impl WatchPage {
                 self.video = Some(cx.new(|cx| VideoView::new(player.clone(), receiver, cx)));
                 self.player = Some(player);
                 self.release = Some(release);
+                self.started_at = Some(Instant::now());
                 self.sub_delay = 0.;
                 self.rank_online();
                 self.stream = Some(stream);
@@ -594,13 +808,23 @@ impl WatchPage {
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) {
+        self.follow_release(cx);
+        self.give_up_waiting_for_host(cx);
+        self.switch_for_trouble(cx);
         self.report_readiness(cx);
         let Some(player) = self.player.clone() else {
+            // A host keeps its party told that it is finding the source.
+            if self.party.read(cx).role() == Role::Host {
+                self.tell_party(cx);
+            }
             return;
         };
         let state = player.state();
 
         if let Some(error) = &state.error {
+            if self.try_another_source(cx) {
+                return;
+            }
             self.phase = Phase::Unavailable(format!("The video could not be played: {error}"));
             self.player = None;
             self.video = None;
@@ -720,6 +944,13 @@ impl WatchPage {
     fn report_readiness(&mut self, cx: &mut Context<Self>) {
         // Named the way the host names it, release and all, so the host knows which one is ready.
         let key = match self.party.read(cx).item() {
+            // A guest that got going on a release before the host named it says which, so what it
+            // says of one release is not taken for another.
+            Some(Item::Video { id, .. })
+                if *id == self.id && self.guest && self.party_tried.is_some() =>
+            {
+                format!("{id}#{}", self.party_tried.as_deref().unwrap_or_default())
+            }
             Some(item @ Item::Video { id, .. }) if *id == self.id => item.key(),
             _ => self.id.clone(),
         };
@@ -813,14 +1044,26 @@ impl WatchPage {
 
     /// What is playing, as the party names it: the film and the release this window plays.
     fn party_item(&self) -> Item {
+        let release = match &self.stream {
+            Some(stream) => Some(stream.info_hash.clone()),
+            None => self.wanted.clone(),
+        };
         Item::Video {
             id: self.id.clone(),
-            release: self.stream.as_ref().map(|stream| stream.info_hash.clone()),
+            candidates: if release.is_none() {
+                self.candidates.clone()
+            } else {
+                Vec::new()
+            },
+            release,
         }
     }
 
     /// What the host is choosing while a panel is open, for the guests to say so.
     fn choosing(&self) -> Option<&'static str> {
+        if matches!(self.phase, Phase::Resolving) {
+            return Some("finding");
+        }
         self.panel.map(|panel| match panel {
             Panel::Sources => "source",
             Panel::Episodes => "episode",
@@ -852,16 +1095,28 @@ impl WatchPage {
     /// Tells the party what is playing when it has changed (paused, played, seeked), and every
     /// couple of seconds while it plays.
     fn tell_party(&mut self, cx: &mut Context<Self>) {
-        // Playing means the picture is moving: a host that is still buffering is not.
-        let (position, playing) = (
-            self.state.position,
-            !self.state.paused && !self.state.buffering,
-        );
+        // Playing means the picture is moving: a host that is still buffering is not, and one that
+        // is still finding its source has not started, so it says where it will.
+        let (position, playing) = match self.player {
+            Some(_) => (
+                self.state.position,
+                !self.state.paused && !self.state.buffering,
+            ),
+            None => (
+                self.resume_from
+                    .or_else(|| cx.global::<Backend>().progress.resume_at(&self.id))
+                    .unwrap_or(0.),
+                false,
+            ),
+        };
         let now = Instant::now();
+        let item = self.party_item();
+        let item_changed = self.party.read(cx).item() != Some(&item);
         let choosing = self.choosing();
         let panel_changed = self.party_sync.choosing.as_deref() != choosing;
         self.party_sync.choosing = choosing.map(str::to_string);
         let changed = panel_changed
+            || item_changed
             || match self.party_sync.looked {
                 Some((at, was, was_playing)) => {
                     let expected = if was_playing {
@@ -884,10 +1139,10 @@ impl WatchPage {
         let heartbeat = !changed && self.party_sync.told.is_some();
         self.party_sync.told = Some(now);
         let playback = Playback {
-            item: Some(self.party_item()),
+            item: Some(item),
             playing,
             position,
-            choosing: self.choosing().map(str::to_string),
+            choosing: choosing.map(str::to_string),
         };
         self.party
             .update(cx, |party, _| party.publish(playback, heartbeat));
@@ -909,22 +1164,6 @@ impl WatchPage {
             Some(Item::Video { id, .. }) if *id == self.id => {}
             // What else the party plays is another page's to show.
             Some(_) => return,
-        }
-        // The host switched to another release of this film: go to it, from where the host is.
-        if let Some(Item::Video {
-            release: Some(release),
-            ..
-        }) = &target.playback.item
-            && self.party_tried.as_deref() != Some(release.as_str())
-            && !self
-                .stream
-                .as_ref()
-                .is_some_and(|stream| stream.info_hash.eq_ignore_ascii_case(release))
-        {
-            self.party_tried = Some(release.clone());
-            self.resume_from = Some(target.position_now());
-            self.begin(Some(release.clone()), false, cx);
-            return;
         }
         // The host has a panel open, so everyone waits with the picture paused.
         if target.playback.choosing.is_some() {
@@ -1873,6 +2112,25 @@ impl WatchPage {
                             cx.listener(|page, _, _, cx| {
                                 page.party.update(cx, |party, cx| party.leave(cx))
                             }),
+                        )
+                        .into_any_element(),
+                    ]
+                } else if self.wanted.is_some() {
+                    // A release that was asked for is not replaced behind the viewer's back, so
+                    // the next best is one click away.
+                    vec![
+                        primary_button(
+                            "next-best",
+                            "Try the next best source",
+                            None,
+                            cx.listener(|page, _, _, cx| page.skip_wanted(cx)),
+                        )
+                        .into_any_element(),
+                        secondary_button(
+                            "choose-source",
+                            "Choose another source",
+                            None,
+                            cx.listener(|page, _, _, cx| page.toggle_panel(Panel::Sources, cx)),
                         )
                         .into_any_element(),
                     ]

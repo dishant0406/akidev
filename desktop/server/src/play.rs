@@ -237,12 +237,15 @@ impl Player {
         hevc: bool,
         start: Option<f64>,
         release: Option<String>,
+        skip: Vec<String>,
     ) -> Outcome {
         // A resume is part of the request, but only to the minute: it decides how far a conversion
-        // may run, not what is found.
+        // may run, not what is found. The release and what is skipped do decide it.
         let key = format!(
-            "{id}|{hevc}|{}",
-            start.map_or(0, |seconds| (seconds / 60.) as u64)
+            "{id}|{hevc}|{}|{}|{}",
+            start.map_or(0, |seconds| (seconds / 60.) as u64),
+            release.as_deref().unwrap_or(""),
+            skip.join(",")
         );
         let (player, id, release) = (self.clone(), id.to_string(), release);
         let limit = Duration::from_millis(self.settings.resolve_deadline_ms) + RESOLVE_GRACE;
@@ -254,7 +257,7 @@ impl Player {
                 move || async move {
                     match tokio::time::timeout(
                         limit,
-                        player.resolve(&id, hevc, start, release.as_deref()),
+                        player.resolve(&id, hevc, start, release.as_deref(), &skip),
                     )
                     .await
                     {
@@ -274,6 +277,7 @@ impl Player {
         hevc: bool,
         start: Option<f64>,
         release: Option<&str>,
+        skip: &[String],
     ) -> Outcome {
         let Ok(Ok(_slot)) =
             tokio::time::timeout(QUEUE_FOR, self.slots.clone().acquire_owned()).await
@@ -285,7 +289,7 @@ impl Player {
             return Outcome::Unavailable("This server has no torrent engine.".into());
         };
         let mut plan = match streamer.plan(id).await {
-            Ok(plan) => plan,
+            Ok(plan) => plan.without(skip),
             Err(reason) => return Outcome::Unavailable(reason),
         };
         // A viewer who picked a release gets that one and no other: it is what they asked for, and

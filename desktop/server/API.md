@@ -68,11 +68,13 @@ A title in full. 404 when the id is unknown.
 
 ## `POST /v1/play`
 
-Body `{ "id": "series-tt0903747-s1e1", "hevc": false, "start": 1200, "release": "<info hash>" }`. `hevc` says the browser
+Body `{ "id": "series-tt0903747-s1e1", "hevc": false, "start": 1200, "release": "<info hash>", "skip": ["<info hash>"] }`. `hevc` says the browser
 can play HEVC; the server then keeps HEVC video as it is, and converts it otherwise. `start` is
 where the viewer means to begin, in seconds, and lets a conversion run that far ahead for a
 resume. `release` is the `id` of a release the viewer picked from `GET /v1/releases`: that one is
-played, and no other (`{ "available": false }` with a reason when it cannot be). All three are optional.
+played, and no other (`{ "available": false }` with a reason when it cannot be). `skip` is up to eight
+info hashes of releases that did not play for the viewer, which are left out when the best is found.
+All of them are optional.
 
 Finding a source searches indexers and can take up to a minute, so the request stays open.
 
