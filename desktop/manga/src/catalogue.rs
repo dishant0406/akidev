@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 pub enum Catalogue {
     Definition(Box<Source>),
-    MangaDex(MangaDex),
+    MangaDex(Box<MangaDex>),
 }
 
 /// What an app needs to list a source before it asks it anything.

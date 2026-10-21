@@ -284,7 +284,7 @@ impl Engine {
         std::fs::create_dir_all(&dir).map_err(|error| failed(format!("cannot use {}: {error}", dir.display())))?;
         let store = Store::open(&dir.join("manga.db"))?;
         let engine = Engine { dir, store, themes: RwLock::default(), sources: RwLock::default() };
-        engine.sources.write().unwrap().insert(MANGADEX_ID.into(), Arc::new(Catalogue::MangaDex(MangaDex::live())));
+        engine.sources.write().unwrap().insert(MANGADEX_ID.into(), Arc::new(Catalogue::MangaDex(Box::new(MangaDex::live()))));
         for (name, theme) in engine.read_dir_json("themes") {
             engine.themes.write().unwrap().insert(&name, theme);
         }
