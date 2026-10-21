@@ -3,25 +3,29 @@
 //
 //   docker compose exec -T -e PROWLARR_API_KEY frontend node - < scripts/prowlarr-sync.js
 //
-// Prowlarr tests a site before it will add it, so one that is down or behind Cloudflare is reported
-// and left out, and the next deploy tries again. Nothing here fails the deploy. Prowlarr keeps the
-// definitions of the sites it has up to date by itself.
+// Prowlarr tests a site before it will add it, so one that is down or blocked is reported and left out,
+// and the next deploy tries again. Nothing here fails the deploy. Prowlarr keeps the definitions of the
+// sites it has up to date by itself.
+//
+// A site marked `solver` sits behind Cloudflare's challenge. It is added with a tag, and Prowlarr sends
+// the requests of every tagged site through Byparr, which opens them in a browser and solves it.
 
 // The `definitionName` of each site, as in https://github.com/Prowlarr/Indexers/tree/master/definitions/v11.
 const WANTED = [
-  "torrentkitty",
-  "dmhy",
-  "mikan",
-  "limetorrents",
-  "1337x",
-  "kickasstorrents-to",
-  "extratorrent-st",
-  "torrentdownload",
-  "torrentproject2",
-  "uindex",
+  { name: "dmhy" },
+  { name: "mikan" },
+  { name: "limetorrents" },
+  { name: "torrentkitty", solver: true },
+  { name: "1337x", solver: true },
+  { name: "kickasstorrents-to", solver: true },
+  { name: "extratorrent-st", solver: true },
+  { name: "torrentdownload", solver: true },
+  { name: "torrentproject2", solver: true },
+  { name: "uindex", solver: true },
 ];
 
 const base = process.env.PROWLARR_URL || "http://prowlarr:9696";
+const solverAddress = process.env.BYPARR_URL || "http://byparr:8191/";
 const headers = { "X-Api-Key": process.env.PROWLARR_API_KEY || "", "Content-Type": "application/json" };
 
 async function call(method, path, body) {
@@ -37,6 +41,37 @@ async function call(method, path, body) {
   return data;
 }
 
+// The id of the tag that sends a site through Byparr, once Prowlarr knows about Byparr. Null when it
+// cannot be set up, and then the sites that need it are left out.
+async function solverTag() {
+  const tags = await call("GET", "/api/v1/tag");
+  const tag = tags.find((each) => each.label === "solver") || (await call("POST", "/api/v1/tag", { label: "solver" }));
+  const proxies = await call("GET", "/api/v1/indexerProxy");
+  if (proxies.some((proxy) => proxy.name === "byparr")) return tag.id;
+
+  const schema = await call("GET", "/api/v1/indexerProxy/schema");
+  const flaresolverr = schema.find((entry) => entry.implementation === "FlareSolverr");
+  const proxy = {
+    ...flaresolverr,
+    name: "byparr",
+    tags: [tag.id],
+    fields: flaresolverr.fields.map((field) => (field.name === "host" ? { ...field, value: solverAddress } : field)),
+  };
+  // Prowlarr tests it as it saves it, and Byparr downloads its browser when it first starts, so the
+  // first answer can take a minute.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      await call("POST", "/api/v1/indexerProxy", proxy);
+      console.log("    prowlarr: Byparr set up as the Cloudflare solver");
+      return tag.id;
+    } catch (error) {
+      if (attempt === 4) console.log(`    prowlarr: the Cloudflare solver is not available: ${error.message.slice(0, 140)}`);
+      else await new Promise((resolve) => setTimeout(resolve, 20_000));
+    }
+  }
+  return null;
+}
+
 async function main() {
   const [existing, schema, profiles] = await Promise.all([
     call("GET", "/api/v1/indexer"),
@@ -44,23 +79,29 @@ async function main() {
     call("GET", "/api/v1/appprofile"),
   ]);
   const have = new Map(existing.map((indexer) => [indexer.definitionName, indexer]));
+  const missing = WANTED.filter((site) => !have.has(site.name));
+  const tag = missing.some((site) => site.solver) ? await solverTag() : null;
 
-  for (const name of WANTED) {
-    if (have.has(name)) continue;
+  for (const { name, solver } of missing) {
     const definition = schema.find((entry) => entry.definitionName === name);
     if (!definition) {
       console.log(`    prowlarr: ${name} has no definition`);
       continue;
     }
+    if (solver && tag === null) {
+      console.log(`    prowlarr: ${name} needs the Cloudflare solver, which is not available`);
+      continue;
+    }
     try {
-      await call("POST", "/api/v1/indexer", { ...definition, name, enable: true, appProfileId: profiles[0].id });
+      const tags = solver ? [tag] : [];
+      await call("POST", "/api/v1/indexer", { ...definition, name, tags, enable: true, appProfileId: profiles[0].id });
       console.log(`    prowlarr: added ${name}`);
     } catch (error) {
-      console.log(`    prowlarr: could not add ${name}: ${error.message}`);
+      console.log(`    prowlarr: could not add ${name}: ${error.message.slice(0, 140)}`);
     }
   }
   for (const [name, indexer] of have) {
-    if (WANTED.includes(name)) continue;
+    if (WANTED.some((site) => site.name === name)) continue;
     await call("DELETE", `/api/v1/indexer/${indexer.id}`);
     console.log(`    prowlarr: removed ${name}`);
   }

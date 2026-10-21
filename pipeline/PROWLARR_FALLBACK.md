@@ -22,7 +22,7 @@ date by itself, so none of them is written or translated here.
 | `desktop/server/src/api.rs` | The route, its allowance, and the `fallback` block of `/health`. |
 | `desktop/core/src/indexers/mod.rs`, `definition.rs`, `config.rs` | `fallback: true` on an indexer: asked after the others, only if `enough` says they found nothing, with `fallback_timeout_ms` (15 s) to answer, and sent with the header `x-akidev-fallback`. |
 | `desktop/sources/sources.json` | The `prowlarr` indexer, pointing at `https://api.akidev.live/v1/fallback/search`. |
-| `docker-compose.yml` | The `prowlarr` service: pinned image, 400 MB limit, no published port, profile `fallback`. |
+| `docker-compose.yml` | The `prowlarr` and `byparr` services: pinned images, memory limits, no published ports, profile `fallback`. |
 | `scripts/prowlarr-sync.js` | Makes Prowlarr's indexers match its `WANTED` list; run by the deploy. |
 | `.github/workflows/deploy.yml` | Passes the secret, and checks the route after a deploy (a warning, never a failure). |
 
@@ -55,10 +55,18 @@ Prowlarr is not published and Caddy does not route to it. Nothing but the `api` 
   magnet (ACG.RIP) cannot be used.
 - **Time.** A search takes 8-10 seconds against five sites, and the apps wait 15. It is only paid when the
   normal search found nothing. The same search again is served from memory for ten minutes.
-- **Cloudflare.** No solver is run. A site that needs one (1337x, ExtraTorrent, the Kickass mirrors answered
-  with 403 or Cloudflare errors from a home connection) fails to add. Run from the server's address
-  before spending effort on a solver (Byparr is the FlareSolverr-compatible one that is kept up).
-- **Memory.** About 210 MB idle, limited to 400 on a 4 GB box that already builds the site during deploys.
+- **Cloudflare.** From the server's address 1337x, ExtraTorrent, the Kickass mirrors, TorrentKitty, UIndex,
+  TorrentDownload and TorrentProject all answer with "blocked by CloudFlare Protection". The sites marked
+  `solver` in `scripts/prowlarr-sync.js` are added with a tag, and Prowlarr sends tagged sites through
+  **Byparr** (the `byparr` service, a FlareSolverr-compatible solver that opens the page in a patched
+  Firefox). Tried locally, ExtraTorrent went from blocked to added and then returned 50 results with hashes
+  for a film in 2-8 seconds. Byparr cannot promise a pass: Cloudflare also judges the address, and a
+  datacenter address is judged harder than a home one, so the deploy log says which sites got through.
+- **Byparr's cost.** About 250 MB idle and about 1.1 GB while solving (a browser per page), 560 MB of disk for
+  the browser (kept in the `byparr-cache` volume, downloaded once) and a 3.4 GB image. It is limited to
+  1.2 GB. A solve takes 4-12 seconds; Prowlarr keeps the clearance cookie, so later searches are faster.
+- **Memory.** Prowlarr about 210 MB idle, limited to 400, and Byparr as above, on a 4 GB box that already
+  builds the site during deploys.
 - **Old apps.** An app built before the flag existed treats the `prowlarr` entry as an ordinary indexer
   and asks it on every search. It does not send `x-akidev-fallback`, so the route answers `400` at once and
   nothing reaches Prowlarr. The indexer then rests for a minute in that app. They stop when they update.
