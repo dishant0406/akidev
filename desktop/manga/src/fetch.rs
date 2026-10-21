@@ -141,7 +141,8 @@ impl Fetcher {
                 if let Some(json) = &req.json {
                     builder = builder.json(json);
                 }
-                let response = builder.send().await.with_context(|| format!("could not reach {}", req.url))?;
+                // The address is already in the message, so the error's own copy of it is dropped.
+                let response = builder.send().await.map_err(|error| error.without_url()).with_context(|| format!("could not reach {}", req.url))?;
                 let status = response.status();
                 let body = String::from_utf8_lossy(&read_capped(response, MAX_BODY).await?).into_owned();
                 if looks_like_challenge(status.as_u16(), &body) {
