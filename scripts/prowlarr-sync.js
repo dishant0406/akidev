@@ -8,7 +8,18 @@
 // definitions of the sites it has up to date by itself.
 
 // The `definitionName` of each site, as in https://github.com/Prowlarr/Indexers/tree/master/definitions/v11.
-const WANTED = ["torrentkitty", "dmhy", "mikan", "limetorrents"];
+const WANTED = [
+  "torrentkitty",
+  "dmhy",
+  "mikan",
+  "limetorrents",
+  "1337x",
+  "kickasstorrents-to",
+  "extratorrent-st",
+  "torrentdownload",
+  "torrentproject2",
+  "uindex",
+];
 
 const base = process.env.PROWLARR_URL || "http://prowlarr:9696";
 const headers = { "X-Api-Key": process.env.PROWLARR_API_KEY || "", "Content-Type": "application/json" };
