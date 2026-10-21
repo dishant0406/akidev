@@ -9,7 +9,6 @@
 #   frontend       every site (port 3000, internal only).
 #   prowlarr       optional: searches the torrent sites that have no API, for the api's fallback search
 #                  (internal only). It runs only when PROWLARR_API_KEY is set.
-#   byparr         with it: opens the sites behind Cloudflare's challenge in a browser for Prowlarr.
 #
 # The site talks to the API directly on api.akidev.live. Video URLs name stream.akidev.live
 # when STREAM_URL is set.
@@ -143,24 +142,6 @@ services:
       start_period: 60s
     logging: *logging
 
-  # Solves Cloudflare's challenge for the sites Prowlarr reaches through it (the ones the sync tags
-  # `solver`): a real browser opens each page, which is why it is the heaviest thing here, about 1.1 GB
-  # while it solves and 250 MB idle. The limit keeps it from taking the box with it. Its browser (560 MB)
-  # is downloaded when it first starts, so it lives in a volume and is downloaded once.
-  byparr:
-    image: ghcr.io/thephaseless/byparr:3.0.4
-    profiles: [fallback]
-    restart: unless-stopped
-    mem_limit: 1200m
-    shm_size: 512m
-    environment:
-      # Without these it looks up its own address on the internet to guess them.
-      BROWSER_TIMEZONE: UTC
-      BROWSER_LOCALE: en-US
-    volumes:
-      - byparr-cache:/cache
-    logging: *logging
-
   frontend:
     image: ${FRONTEND_IMAGE}
     build:
@@ -197,6 +178,5 @@ services:
 volumes:
   torrent-cache:
   prowlarr-config:
-  byparr-cache:
   caddy-data:
   caddy-config:

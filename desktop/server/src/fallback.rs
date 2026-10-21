@@ -8,9 +8,6 @@
 //! Prowlarr answers with a redirect to a magnet after fetching the site's page: slow, so it is done
 //! for the best few results only, and remembered.
 //!
-//! The sites behind Cloudflare (tagged `solver` in Prowlarr) are searched apart from the others, and
-//! at the same time, so a slow one costs its own results and not everyone's.
-//!
 //! A search runs in a task of its own, so it finishes and is remembered even if the one who asked has
 //! gone, and the same search asked twice at once runs once.
 
@@ -27,11 +24,8 @@ use tokio::sync::Semaphore;
 const AT_ONCE: usize = 2;
 /// How long a search waits for its turn before it is given up as busy.
 const QUEUE_FOR: Duration = Duration::from_secs(5);
-/// The longest Prowlarr is given to search the sites that answer at once.
-const FAST_SEARCH: Duration = Duration::from_secs(9);
-/// The same for the sites behind Cloudflare, which a browser opens one page at a time: a cold one takes
-/// ten seconds or more.
-const SLOW_SEARCH: Duration = Duration::from_secs(12);
+/// The longest Prowlarr is given for the search itself.
+const SEARCH_TIMEOUT: Duration = Duration::from_secs(9);
 /// The longest a search takes in all, links included, a little under the 15 seconds the apps wait.
 /// Results whose hash was not found by then are left out.
 const TOTAL_TIME: Duration = Duration::from_secs(13);
@@ -63,12 +57,6 @@ pub enum Failure {
     Failed,
 }
 
-/// Prowlarr's indexers, by how quickly they answer.
-struct Tiers {
-    fast: Vec<u64>,
-    slow: Vec<u64>,
-}
-
 type Flight = Shared<BoxFuture<'static, Result<Vec<Hit>, Failure>>>;
 
 /// One result as Prowlarr's search answers it.
@@ -97,10 +85,6 @@ pub struct Fallback {
     answers: Mutex<HashMap<String, (Instant, Vec<Hit>)>>,
     hashes: Mutex<HashMap<String, (Instant, Option<String>)>>,
     running: Mutex<HashMap<String, Flight>>,
-    tiers: Mutex<Option<(Instant, Arc<Tiers>)>>,
-    fast_search: Duration,
-    slow_search: Duration,
-    total: Duration,
 }
 
 /// What is searched for: the title, with the season and episode the way sites name them (`S01E05`),
@@ -134,10 +118,6 @@ impl Fallback {
             answers: Mutex::default(),
             hashes: Mutex::default(),
             running: Mutex::default(),
-            tiers: Mutex::default(),
-            fast_search: FAST_SEARCH,
-            slow_search: SLOW_SEARCH,
-            total: TOTAL_TIME,
         })
     }
 
@@ -228,35 +208,15 @@ impl Fallback {
             .await
             .map_err(|_| Failure::Busy)?
             .map_err(|_| Failure::Failed)?;
-        let (hits, complete) = match self.tiers().await.as_deref() {
-            Some(Tiers { fast, slow }) if !fast.is_empty() && !slow.is_empty() => {
-                let (first, second) = tokio::join!(
-                    self.tier(text, Some(fast), self.fast_search),
-                    self.tier(text, Some(slow), self.slow_search)
-                );
-                match (first, second) {
-                    (Err(_), Err(_)) => return Err(Failure::Failed),
-                    // One tier failing or running out of time costs its own results only.
-                    (Ok((hits, _)), Err(_)) | (Err(_), Ok((hits, _))) => (hits, false),
-                    (Ok((mut hits, one)), Ok((more, other))) => {
-                        let mut seen: HashSet<String> =
-                            hits.iter().map(|hit| hit.hash.clone()).collect();
-                        hits.extend(more.into_iter().filter(|hit| seen.insert(hit.hash.clone())));
-                        hits.sort_by_key(|hit| std::cmp::Reverse(hit.seeders));
-                        hits.truncate(MAX_RESULTS);
-                        (hits, one && other)
-                    }
-                }
-            }
-            // Nothing to tell apart: one search of everything, given as long as the slow ones need.
-            _ => self
-                .tier(text, None, self.slow_search)
-                .await
-                .map_err(|_| Failure::Failed)?,
-        };
+        let deadline = Instant::now() + TOTAL_TIME;
+        let rows = self.ask(text).await.map_err(|error| {
+            tracing::warn!("[fallback] search for {text:?} failed: {error}");
+            Failure::Failed
+        })?;
+        let (hits, complete) = self.hits(rows, deadline).await;
         tracing::info!("[fallback] {text:?}: {} results", hits.len());
-        // An answer that is missing links or a whole tier still being worked on is not kept, so the
-        // next search for it finds what finished in the memories below.
+        // An answer that is missing links still being followed is not kept, so the next search for
+        // it finds them in the hash memory, which they fill when they finish.
         if complete {
             let mut answers = self.answers.lock().unwrap();
             if answers.len() >= MAX_ANSWERS {
@@ -267,93 +227,13 @@ impl Fallback {
         Ok(hits)
     }
 
-    /// One search of some of Prowlarr's indexers (all of them for `None`), given `search` to answer,
-    /// and then its links followed, all within the total time.
-    async fn tier(
-        self: &Arc<Self>,
-        text: &str,
-        indexers: Option<&[u64]>,
-        search: Duration,
-    ) -> anyhow::Result<(Vec<Hit>, bool)> {
-        let deadline = Instant::now() + self.total;
-        let rows = self.ask(text, indexers, search).await.map_err(|error| {
-            tracing::warn!("[fallback] search for {text:?} failed: {error}");
-            error
-        })?;
-        Ok(self.hits(rows, deadline).await)
-    }
-
-    /// Which of Prowlarr's enabled indexers answer at once and which are behind the solver (tagged
-    /// `solver`), looked up every ten minutes. `None` when that cannot be read.
-    async fn tiers(&self) -> Option<Arc<Tiers>> {
-        if let Some((when, tiers)) = &*self.tiers.lock().unwrap()
-            && when.elapsed() < ANSWER_TTL
-        {
-            return Some(tiers.clone());
-        }
-        let list = |path: &'static str| async move {
-            self.client
-                .get(format!("{}{path}", self.base))
-                .header("X-Api-Key", &self.key)
-                .timeout(Duration::from_secs(3))
-                .send()
-                .await
-                .ok()?
-                .json::<Vec<serde_json::Value>>()
-                .await
-                .ok()
-        };
-        let (indexers, tags) = tokio::join!(list("/api/v1/indexer"), list("/api/v1/tag"));
-        let solver = tags?
-            .iter()
-            .find(|tag| tag["label"] == "solver")
-            .and_then(|tag| tag["id"].as_u64());
-        let mut tiers = Tiers {
-            fast: Vec::new(),
-            slow: Vec::new(),
-        };
-        for indexer in indexers?.iter().filter(|indexer| indexer["enable"] == true) {
-            let id = indexer["id"].as_u64()?;
-            let behind_solver = solver.is_some_and(|solver| {
-                indexer["tags"]
-                    .as_array()
-                    .is_some_and(|tags| tags.iter().any(|tag| tag.as_u64() == Some(solver)))
-            });
-            if behind_solver {
-                &mut tiers.slow
-            } else {
-                &mut tiers.fast
-            }
-            .push(id);
-        }
-        let tiers = Arc::new(tiers);
-        *self.tiers.lock().unwrap() = Some((Instant::now(), tiers.clone()));
-        Some(tiers)
-    }
-
-    async fn ask(
-        &self,
-        text: &str,
-        indexers: Option<&[u64]>,
-        time: Duration,
-    ) -> anyhow::Result<Vec<Row>> {
-        let mut query = vec![
-            ("query".to_string(), text.to_string()),
-            ("type".to_string(), "search".to_string()),
-            ("limit".to_string(), "100".to_string()),
-        ];
-        query.extend(
-            indexers
-                .unwrap_or_default()
-                .iter()
-                .map(|id| ("indexerIds".to_string(), id.to_string())),
-        );
+    async fn ask(&self, text: &str) -> anyhow::Result<Vec<Row>> {
         let response = self
             .client
             .get(format!("{}/api/v1/search", self.base))
             .header("X-Api-Key", &self.key)
-            .query(&query)
-            .timeout(time)
+            .query(&[("query", text), ("type", "search"), ("limit", "100")])
+            .timeout(SEARCH_TIMEOUT)
             .send()
             .await?
             .error_for_status()?;
@@ -747,95 +627,6 @@ mod tests {
         );
         let down = fallback("http://127.0.0.1:1").status().await;
         assert_eq!(down, json!({ "configured": true, "reachable": false }));
-    }
-
-    /// A Prowlarr with a fast indexer (1) and one behind the solver (2, tagged), whose search takes
-    /// `slow` to answer. A search of both at once answers with both.
-    async fn tiered_prowlarr(slow: Duration) -> String {
-        use axum::extract::RawQuery;
-        let app = Router::new()
-            .route(
-                "/api/v1/indexer",
-                get(|| async {
-                    Json(json!([
-                        { "id": 1, "enable": true, "tags": [] },
-                        { "id": 2, "enable": true, "tags": [7] },
-                        { "id": 3, "enable": false, "tags": [] }
-                    ]))
-                }),
-            )
-            .route(
-                "/api/v1/tag",
-                get(|| async { Json(json!([{ "id": 7, "label": "solver" }])) }),
-            )
-            .route(
-                "/api/v1/search",
-                get(move |RawQuery(raw): RawQuery| async move {
-                    let raw = raw.unwrap_or_default();
-                    let fast = json!({ "title": "Fast one", "infoHash": A, "seeders": 5, "protocol": "torrent" });
-                    let slow_row = json!({ "title": "Slow one", "infoHash": C, "seeders": 9, "protocol": "torrent" });
-                    if raw.contains("indexerIds=2") {
-                        tokio::time::sleep(slow).await;
-                        Json(json!([slow_row]))
-                    } else if raw.contains("indexerIds=1") {
-                        Json(json!([fast]))
-                    } else {
-                        Json(json!([fast, slow_row]))
-                    }
-                }),
-            );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        format!("http://{address}")
-    }
-
-    fn quick(base: &str) -> Fallback {
-        let mut fallback = Fallback::new(base, KEY).unwrap();
-        fallback.fast_search = Duration::from_millis(500);
-        fallback.slow_search = Duration::from_millis(500);
-        fallback.total = Duration::from_millis(1000);
-        fallback
-    }
-
-    #[tokio::test]
-    async fn the_sites_behind_the_solver_are_searched_apart_so_a_slow_one_costs_only_itself() {
-        // The solver's sites take far longer than they are given.
-        let base = tiered_prowlarr(Duration::from_secs(5)).await;
-        let fallback = Arc::new(quick(&base));
-
-        let started = Instant::now();
-        let hits = fallback.search("Show", None, None).await.unwrap();
-
-        assert!(started.elapsed() < Duration::from_secs(3));
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].title, "Fast one");
-        // What is missing a tier is not kept, so the next search tries the slow one again.
-        assert!(fallback.cached("Show", None, None).is_none());
-    }
-
-    #[tokio::test]
-    async fn both_tiers_are_merged_and_kept_when_both_answer() {
-        let base = tiered_prowlarr(Duration::from_millis(50)).await;
-        let fallback = Arc::new(quick(&base));
-
-        let hits = fallback.search("Show", None, None).await.unwrap();
-
-        let titles: Vec<&str> = hits.iter().map(|hit| hit.title.as_str()).collect();
-        assert_eq!(titles, ["Slow one", "Fast one"], "best seeded first");
-        assert!(fallback.cached("Show", None, None).is_some());
-    }
-
-    #[tokio::test]
-    async fn without_a_list_of_indexers_everything_is_searched_at_once() {
-        // The first fake has no list of indexers, so the tiers cannot be told apart.
-        let (base, seen) = prowlarr().await;
-        let fallback = Arc::new(quick(&base));
-
-        let hits = fallback.search("Show", None, None).await.unwrap();
-
-        assert_eq!(hits.len(), 3);
-        assert_eq!(seen.searches.load(Ordering::SeqCst), 1);
     }
 
     #[test]

@@ -132,6 +132,10 @@ echo "==> Starting the stack"
 # a renamed or deleted service stops running instead of lingering.
 compose up -d --remove-orphans
 
+# Byparr was tried and taken out again. This removes what it left on the host, and can go after one deploy.
+docker volume rm konflix_byparr-cache > /dev/null 2>&1 || true
+docker image rm ghcr.io/thephaseless/byparr:3.0.4 > /dev/null 2>&1 || true
+
 if [ -z "${COMPOSE_PROFILES:-}" ]; then
   compose rm -sf prowlarr > /dev/null 2>&1 || true
 fi

@@ -22,7 +22,7 @@ date by itself, so none of them is written or translated here.
 | `desktop/server/src/api.rs` | The route, its allowance, and the `fallback` block of `/health`. |
 | `desktop/core/src/indexers/mod.rs`, `definition.rs`, `config.rs` | `fallback: true` on an indexer: asked after the others, only if `enough` says they found nothing, with `fallback_timeout_ms` (15 s) to answer, and sent with the header `x-akidev-fallback`. |
 | `desktop/sources/sources.json` | The `prowlarr` indexer, pointing at `https://api.akidev.live/v1/fallback/search`. |
-| `docker-compose.yml` | The `prowlarr` and `byparr` services: pinned images, memory limits, no published ports, profile `fallback`. |
+| `docker-compose.yml` | The `prowlarr` service: pinned image, 400 MB limit, no published port, profile `fallback`. |
 | `scripts/prowlarr-sync.js` | Makes Prowlarr's indexers match its `WANTED` list; run by the deploy. |
 | `.github/workflows/deploy.yml` | Passes the secret, and checks the route after a deploy (a warning, never a failure). |
 
@@ -56,21 +56,17 @@ Prowlarr is not published and Caddy does not route to it. Nothing but the `api` 
 - **Time.** A search takes 8-10 seconds against five sites, and the apps wait 15. It is only paid when the
   normal search found nothing. The same search again is served from memory for ten minutes.
 - **Cloudflare.** From the server's address 1337x, ExtraTorrent, the Kickass mirrors, TorrentKitty, UIndex,
-  TorrentDownload and TorrentProject all answered "blocked by CloudFlare Protection". The sites marked
-  `solver` in `scripts/prowlarr-sync.js` are added with a tag, and Prowlarr sends tagged sites through
-  **Byparr** (the `byparr` service, a FlareSolverr-compatible solver that opens the page in a patched
-  Firefox). Through it, from the server, TorrentKitty and ExtraTorrent were added; 1337x and the Kickass
-  mirror timed out, TorrentDownload stayed blocked, and TorrentProject and UIndex were not reached in the
-  deploy's time, so only the first two are kept. Cloudflare also judges the address, and a datacenter
-  address is judged harder than a home one, so the deploy log says which sites got through.
-- **Two tiers.** A site behind the solver can take ten seconds or more to answer while its cookie is cold, so
-  the sites tagged `solver` are searched apart from the others, at the same time, with their own longer
-  allowance: a slow one costs its own results and not everyone's. An answer missing a tier is not kept.
-- **Byparr's cost.** About 250 MB idle and about 1.1 GB while solving (a browser per page), 560 MB of disk for
-  the browser (kept in the `byparr-cache` volume, downloaded once) and a 3.4 GB image. It is limited to
-  1.2 GB. A solve takes 4-12 seconds; Prowlarr keeps the clearance cookie, so later searches are faster.
-- **Memory.** Prowlarr about 210 MB idle, limited to 400, and Byparr as above, on a 4 GB box that already
-  builds the site during deploys.
+  TorrentDownload and TorrentProject all answer "blocked by CloudFlare Protection", so only DMHY, Mikan and
+  LimeTorrents are used. A solver was tried (Byparr, a FlareSolverr-compatible service that opens the page in
+  a patched Firefox) and **does not work from this address**: on a home connection it added ExtraTorrent
+  and returned 50 results with hashes in a few seconds, but from the server it got two sites added once and
+  then timed out (about 65 seconds) on every search, because Cloudflare judges the address as well as the
+  browser and a datacenter address is judged harder. It also costs about 1.1 GB while solving, 560 MB of disk and
+  a 3.4 GB image, and made every fallback search wait for it. It was taken out. Trying again would need an
+  address Cloudflare trusts (a residential proxy, which Byparr supports with `PROXY_SERVER`).
+- **Why a site fails.** The deploy log, after the sync, says for each site Prowlarr has switched off what
+  testing it reports.
+- **Memory.** About 210 MB idle, limited to 400 on a 4 GB box that already builds the site during deploys.
 - **Old apps.** An app built before the flag existed treats the `prowlarr` entry as an ordinary indexer
   and asks it on every search. It does not send `x-akidev-fallback`, so the route answers `400` at once and
   nothing reaches Prowlarr. The indexer then rests for a minute in that app. They stop when they update.
