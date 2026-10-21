@@ -143,7 +143,7 @@ struct HomeView: View {
                 }.padding(18)
             }
             .frame(height: 320)
-            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
         }
     }
 

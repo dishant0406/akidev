@@ -27,8 +27,9 @@ enum Aki {
     static let dim = adaptive(0x6E6E73, 0xA1A1A8)
     static let danger = Color(hex: 0xE5484D)
 
-    static let thumbRadius: CGFloat = 14
-    static let cardRadius: CGFloat = 22
+    /// Inside a card with 10pt of padding the thumbnail's corner is the card's minus that padding, so the two curves are concentric.
+    static let cardRadius: CGFloat = 28
+    static let thumbRadius: CGFloat = 18
     static let sheetRadius: CGFloat = 32
 
     private static var scene: UIWindowScene? {
