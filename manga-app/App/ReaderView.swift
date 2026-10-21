@@ -132,7 +132,6 @@ private struct StripReader: View {
         .scrollPosition($position)
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in contentY = y }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .ignoresSafeArea()
         .scaleEffect(live)
         .simultaneousGesture(
             MagnifyGesture()
@@ -200,14 +199,12 @@ private struct PagedReader: View {
         TabView(selection: $model.pagedIndex) {
             ForEach(Array(segment.pages.images.enumerated()), id: \.offset) { index, url in
                 AkiZoomPage(url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
-                    .ignoresSafeArea()
                     .tag(index)
             }
             endPage(segment).tag(count)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
-        .ignoresSafeArea()
         .onChange(of: model.pagedIndex) { _, index in
             if index >= count {
                 model.finish(segment.chapterID)
