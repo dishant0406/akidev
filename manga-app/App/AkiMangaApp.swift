@@ -48,7 +48,8 @@ struct AkiMangaApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
-                .tint(Aki.yellow)
+                // Yellow is too light for text: alert buttons, menu rows and the cursor take the ink colour. Yellow is only ever a fill.
+                .tint(Aki.ink)
                 .fontDesign(.rounded)
                 .preferredColorScheme(model.prefs.appearance.scheme)
                 .onOpenURL { model.propose(repository: $0.absoluteString) }
