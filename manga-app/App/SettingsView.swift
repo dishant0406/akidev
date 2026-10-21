@@ -70,7 +70,10 @@ struct SettingsView: View {
                 AkiSection(title: "About") {
                     AkiCard(padding: 16) {
                         VStack(alignment: .leading, spacing: 8) {
-                            AkiText("Akidev \(model.engine.version())", .bodyStrong)
+                            HStack(spacing: 12) {
+                                AkiLogo(size: 44)
+                                AkiText("Akidev \(model.engine.version())", .bodyStrong)
+                            }
                             AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .muted)
                             AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Akidev.", .caption, tone: .muted)
                         }

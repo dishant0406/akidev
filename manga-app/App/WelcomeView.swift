@@ -9,9 +9,8 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             Spacer(minLength: 40)
-            AkiIcon("library-solid", size: 54, tone: .text)
-                .frame(width: 112, height: 112)
-                .akiGlass(.circle, tint: Aki.primary, interactive: false)
+            AkiLogo(size: 120)
+                .shadow(color: Aki.shadow, radius: 20, y: 8)
             VStack(spacing: 10) {
                 AkiText("Welcome to Akidev", .display, align: .center)
                 AkiText("Akidev is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .muted, align: .center)

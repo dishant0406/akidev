@@ -14,7 +14,10 @@ struct RepoAddSheet: View {
     var body: some View {
         ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-            AkiText("Add a repository", .title)
+            HStack(spacing: 12) {
+                AkiLogo(size: 36)
+                AkiText("Add a repository", .title)
+            }
             if let error {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } }))
             } else if let view {
