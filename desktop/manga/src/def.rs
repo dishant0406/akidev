@@ -75,6 +75,25 @@ pub enum Step {
     Map(Vec<(String, String)>),
     /// The first expression that gives something.
     Coalesce(Vec<Ex>),
+    /// Keeps the JSON nodes whose value at `path` passes: equals, differs from, is one of, or is absent.
+    Where(Where),
+    /// Drops texts already seen.
+    Unique,
+}
+
+/// A test on a JSON node, by a value inside it. All the tests given must hold.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Where {
+    pub path: String,
+    #[serde(default)]
+    pub equals: Option<String>,
+    #[serde(default)]
+    pub not_equals: Option<String>,
+    #[serde(default, rename = "in")]
+    pub one_of: Option<Vec<String>>,
+    /// True keeps nodes with nothing at `path` (or null); false keeps nodes with something there.
+    #[serde(default)]
+    pub absent: Option<bool>,
 }
 
 fn get() -> String {
@@ -95,6 +114,16 @@ pub struct Request {
     pub headers: BTreeMap<String, String>,
 }
 
+/// A request made before a section's own, whose answer gives values (`vars`) that later requests and the
+/// section's expressions use as holes: a page that holds a nonce, a lookup that gives the server to ask next.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Prepare {
+    pub request: Request,
+    #[serde(default)]
+    pub format: Format,
+    pub vars: BTreeMap<String, Ex>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CardDef {
     pub id: Ex,
@@ -113,6 +142,14 @@ pub struct ListDef {
     /// Something that exists when another page follows. Without it, a page with rows has a next one.
     #[serde(default)]
     pub next: Option<Ex>,
+    /// How many titles the source has in all (with `page_size`, this says whether another page follows).
+    #[serde(default)]
+    pub total: Option<Ex>,
+    #[serde(default)]
+    pub prepare: Vec<Prepare>,
+    /// Values read from the answer, usable as holes in the expressions below.
+    #[serde(default)]
+    pub vars: BTreeMap<String, Ex>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,6 +168,10 @@ pub struct DetailDef {
     pub tags: Option<Ex>,
     #[serde(default)]
     pub status: Option<Ex>,
+    #[serde(default)]
+    pub prepare: Vec<Prepare>,
+    #[serde(default)]
+    pub vars: BTreeMap<String, Ex>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
@@ -163,6 +204,21 @@ pub struct ChaptersDef {
     pub chapter: ChapterDef,
     #[serde(default)]
     pub order: Order,
+    /// For a source that pages its chapter list: ask again with `{offset}` raised until `total` is reached.
+    #[serde(default)]
+    pub repeat: Option<Repeat>,
+    #[serde(default)]
+    pub prepare: Vec<Prepare>,
+    #[serde(default)]
+    pub vars: BTreeMap<String, Ex>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Repeat {
+    /// Chapters asked for each time; the next request's `{offset}` is this much higher.
+    pub size: u32,
+    /// How many chapters there are in all, read from each answer.
+    pub total: Ex,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -175,8 +231,13 @@ pub struct PagesDef {
     #[serde(default)]
     pub reading: Option<String>,
     /// Headers for every image; a referer of the source's address is sent when none is given.
+    /// A header whose value is empty is left out (`"referer": ""`).
     #[serde(default)]
     pub image_headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub prepare: Vec<Prepare>,
+    #[serde(default)]
+    pub vars: BTreeMap<String, Ex>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -203,6 +264,20 @@ pub struct FilterDef {
     pub options: Vec<FilterOption>,
 }
 
+/// A choice the person makes for a source (a language, a content rating). Its value fills the hole named
+/// by its id in requests; options and the default are the definition's.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SettingDef {
+    pub id: String,
+    pub name: String,
+    pub options: Vec<FilterOption>,
+    pub default: String,
+}
+
+fn page_size() -> u32 {
+    20
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SourceDef {
     pub schema: u32,
@@ -221,6 +296,14 @@ pub struct SourceDef {
     pub rate_per_second: Option<f64>,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
+    /// Sent instead of the browser one, for a source that asks clients to say who they are.
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    /// Titles on a page, for `{offset}` (and `total`): `(page - 1) * page_size`.
+    #[serde(default = "page_size")]
+    pub page_size: u32,
+    #[serde(default)]
+    pub settings: Vec<SettingDef>,
     #[serde(default)]
     pub popular: Option<ListDef>,
     #[serde(default)]

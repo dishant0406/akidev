@@ -29,6 +29,14 @@ pub struct Ctx<'a> {
     /// A request hole: `page`, `term`, `id` or a filter.
     pub hole: &'a dyn Fn(&str) -> Option<String>,
     pub now_ms: i64,
+    /// The row an expression is being read from: `{^.path}` in a template reads a value in it.
+    pub row: Option<&'a Node>,
+}
+
+impl<'a> Ctx<'a> {
+    pub fn new(base: &'a str, hole: &'a dyn Fn(&str) -> Option<String>, now_ms: i64) -> Ctx<'a> {
+        Ctx { base, hole, now_ms, row: None }
+    }
 }
 
 pub fn parse_html(body: &str) -> Node {
@@ -94,6 +102,8 @@ fn element_text(element: ElementRef) -> String {
 pub fn text_of(node: &Node) -> String {
     match node {
         Node::Text(text) => text.clone(),
+        Node::Json(Value::String(text)) => text.clone(),
+        Node::Json(Value::Null) => String::new(),
         Node::Json(value) => scalar(value).unwrap_or_else(|| value.to_string()),
         Node::Html(document, id) => element(document, *id).map(|e| element_text(e)).unwrap_or_default(),
     }
@@ -116,7 +126,8 @@ pub fn steps(ex: &Ex, role: Role, format: Format) -> Vec<Step> {
 }
 
 pub fn eval(ex: &Ex, role: Role, format: Format, from: &Node, ctx: &Ctx) -> anyhow::Result<Vec<Node>> {
-    run(&steps(ex, role, format), format, vec![from.clone()], ctx)
+    let inner = Ctx { base: ctx.base, hole: ctx.hole, now_ms: ctx.now_ms, row: Some(from) };
+    run(&steps(ex, role, format), format, vec![from.clone()], &inner)
 }
 
 /// The first non-empty text an expression gives.
@@ -202,7 +213,16 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
         Step::Lower => texts(nodes).map(|text| Node::Text(text.to_lowercase())).collect(),
         Step::Template(template) => texts(nodes)
             .filter_map(|value| {
-                let hole = |name: &str| if name == "value" { Some(value.clone()) } else { (ctx.hole)(name) };
+                let hole = |name: &str| match name {
+                    "value" => Some(value.clone()),
+                    other => match other.strip_prefix("^.") {
+                        Some(path) => match ctx.row {
+                            Some(Node::Json(row)) => select(row, path).first().and_then(|found| scalar(found)),
+                            _ => None,
+                        },
+                        None => (ctx.hole)(other),
+                    },
+                };
                 crate::template::fill(template, &hole, false)
             })
             .map(Node::Text)
@@ -240,6 +260,11 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
                 table.iter().find(|(needle, _)| lower.contains(&needle.to_lowercase())).map(|(_, value)| Node::Text(value.clone()))
             })
             .collect(),
+        Step::Where(test) => nodes.into_iter().filter(|node| matches_where(node, test)).collect(),
+        Step::Unique => {
+            let mut seen = std::collections::HashSet::new();
+            nodes.into_iter().filter(|node| seen.insert(text_of(node))).collect()
+        }
         Step::Coalesce(options) => {
             for option in options {
                 let found = run(&steps(option, Role::Field, format), format, nodes.clone(), ctx)?;
@@ -250,6 +275,19 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
             vec![]
         }
     })
+}
+
+fn matches_where(node: &Node, test: &crate::def::Where) -> bool {
+    let Node::Json(value) = node else { return false };
+    let found = select(value, &test.path).into_iter().find(|found| !found.is_null());
+    let text = found.and_then(scalar);
+    if test.absent.is_some_and(|absent| absent != text.is_none()) {
+        return false;
+    }
+    let have = text.as_deref().unwrap_or("");
+    test.equals.as_deref().is_none_or(|want| have == want)
+        && test.not_equals.as_deref().is_none_or(|not| have != not)
+        && test.one_of.as_ref().is_none_or(|list| list.iter().any(|item| item == have))
 }
 
 /// Rejects what can be known to be wrong without a response: a bad selector, pattern or date format.
@@ -292,7 +330,7 @@ mod tests {
     use super::*;
 
     fn ctx<'a>(hole: &'a dyn Fn(&str) -> Option<String>) -> Ctx<'a> {
-        Ctx { base: "https://example.org", hole, now_ms: 0 }
+        Ctx::new("https://example.org", hole, 0)
     }
 
     fn ex(json: &str) -> Ex {

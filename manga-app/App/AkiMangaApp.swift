@@ -32,10 +32,11 @@ struct RootView: View {
     }
 
     private var tabs: some View {
-        TabView {
-            Tab("Library", systemImage: "books.vertical") { LibraryView() }
-            Tab("Browse", systemImage: "square.grid.2x2") { BrowseView() }
-            Tab("Sources", systemImage: "externaldrive.connected.to.line.below") { SourcesView() }
+        @Bindable var model = model
+        return TabView(selection: $model.tab) {
+            Tab("Library", systemImage: "books.vertical", value: AppTab.library) { LibraryView() }
+            Tab("Browse", systemImage: "square.grid.2x2", value: AppTab.browse) { BrowseView() }
+            Tab("Sources", systemImage: "puzzlepiece.extension", value: AppTab.sources) { SourcesView() }
         }
         .background(Aki.canvas)
     }

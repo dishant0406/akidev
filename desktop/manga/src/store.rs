@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -93,6 +93,17 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 source TEXT NOT NULL, series TEXT NOT NULL, other_source TEXT NOT NULL, other_series TEXT NOT NULL,
                 PRIMARY KEY (source, series, other_source, other_series));
              PRAGMA user_version = 1;",
+        )?;
+    }
+    if version < 2 {
+        db.execute_batch(
+            "CREATE TABLE repo (
+                base TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT, signed INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL);
+             CREATE TABLE installed (source TEXT PRIMARY KEY, repo TEXT, version INTEGER NOT NULL);
+             CREATE TABLE setting (
+                source TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+                PRIMARY KEY (source, key));
+             PRAGMA user_version = 2;",
         )?;
     }
     Ok(())
@@ -278,6 +289,72 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    // --- repositories and what came from them ---------------------------------------------------
+
+    /// Remembers a repository. The first key seen for it is kept, and a later index naming a different key
+    /// is refused: a signed repository cannot change hands unnoticed.
+    pub fn add_repo(&self, base: &str, name: &str, key: Option<&str>, signed: bool, now_ms: i64) -> anyhow::Result<()> {
+        let db = self.db();
+        let pinned: Option<Option<String>> = db.query_row("SELECT key FROM repo WHERE base = ?1", params![base], |row| row.get(0)).optional()?;
+        if let Some(Some(pinned)) = &pinned {
+            anyhow::ensure!(key == Some(pinned.as_str()), "this repository was added with a different key: it may have changed hands, so it is refused (remove it first to trust the new one)");
+        }
+        db.execute(
+            "INSERT INTO repo (base, name, key, signed, added_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (base) DO UPDATE SET name = ?2, key = coalesce(key, ?3), signed = ?4",
+            params![base, name, key, signed, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// (base, name, signed), oldest first.
+    pub fn repos(&self) -> anyhow::Result<Vec<(String, String, bool)>> {
+        let db = self.db();
+        let mut statement = db.prepare("SELECT base, name, signed FROM repo ORDER BY added_at, base")?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn remove_repo(&self, base: &str) -> anyhow::Result<()> {
+        let db = self.db();
+        db.execute("DELETE FROM repo WHERE base = ?1", params![base])?;
+        db.execute("UPDATE installed SET repo = NULL WHERE repo = ?1", params![base])?;
+        Ok(())
+    }
+
+    /// Where an installed source came from and which version, for updates.
+    pub fn set_origin(&self, source: &str, repo: Option<&str>, version: u64) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO installed (source, repo, version) VALUES (?1, ?2, ?3)
+             ON CONFLICT (source) DO UPDATE SET repo = ?2, version = ?3",
+            params![source, repo, version as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn origin(&self, source: &str) -> anyhow::Result<Option<(Option<String>, u64)>> {
+        Ok(self.db().query_row("SELECT repo, version FROM installed WHERE source = ?1", params![source], |row| Ok((row.get(0)?, row.get::<_, i64>(1)? as u64))).optional()?)
+    }
+
+    pub fn forget_source(&self, source: &str) -> anyhow::Result<()> {
+        let db = self.db();
+        db.execute("DELETE FROM installed WHERE source = ?1", params![source])?;
+        db.execute("DELETE FROM setting WHERE source = ?1", params![source])?;
+        Ok(())
+    }
+
+    pub fn set_setting(&self, source: &str, key: &str, value: &str) -> anyhow::Result<()> {
+        self.db().execute("INSERT INTO setting (source, key, value) VALUES (?1, ?2, ?3) ON CONFLICT (source, key) DO UPDATE SET value = ?3", params![source, key, value])?;
+        Ok(())
+    }
+
+    pub fn settings(&self, source: &str) -> anyhow::Result<Vec<(String, String)>> {
+        let db = self.db();
+        let mut statement = db.prepare("SELECT key, value FROM setting WHERE source = ?1 ORDER BY key")?;
+        let rows = statement.query_map(params![source], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn add_category(&self, name: &str) -> anyhow::Result<i64> {
         let db = self.db();
         db.execute("INSERT INTO category (name, position) VALUES (?1, (SELECT coalesce(max(position), -1) + 1 FROM category))", params![name])?;
@@ -372,6 +449,38 @@ mod tests {
         // Saving a series again does not forget when it was first saved.
         store.upsert_series("s", "a", "Alpha 2", None, None, Status::Completed).unwrap();
         assert!(store.add_to_library("s", "zzz", 1).is_err());
+    }
+
+    #[test]
+    fn a_repository_keeps_the_first_key_it_was_added_with() {
+        let store = Store::in_memory().unwrap();
+        store.add_repo("https://a/", "A", Some("key1"), true, 1).unwrap();
+        store.add_repo("https://a/", "A renamed", Some("key1"), true, 2).unwrap();
+        assert!(store.add_repo("https://a/", "A", Some("key2"), true, 3).is_err());
+        assert!(store.add_repo("https://a/", "A", None, false, 3).is_err());
+        assert_eq!(store.repos().unwrap(), vec![("https://a/".to_string(), "A renamed".to_string(), true)]);
+        // An unsigned repository can later be signed; and removing a repository forgets its key.
+        store.add_repo("https://b/", "B", None, false, 4).unwrap();
+        store.add_repo("https://b/", "B", Some("kb"), true, 5).unwrap();
+        store.remove_repo("https://a/").unwrap();
+        store.add_repo("https://a/", "A", Some("key2"), true, 6).unwrap();
+    }
+
+    #[test]
+    fn what_was_installed_and_the_settings_chosen_are_remembered_per_source() {
+        let store = Store::in_memory().unwrap();
+        store.add_repo("https://a/", "A", None, false, 1).unwrap();
+        store.set_origin("x", Some("https://a/"), 3).unwrap();
+        store.set_origin("x", Some("https://a/"), 4).unwrap();
+        assert_eq!(store.origin("x").unwrap(), Some((Some("https://a/".into()), 4)));
+        store.set_setting("x", "lang", "fr").unwrap();
+        store.set_setting("x", "lang", "es").unwrap();
+        assert_eq!(store.settings("x").unwrap(), vec![("lang".to_string(), "es".to_string())]);
+        store.remove_repo("https://a/").unwrap();
+        assert_eq!(store.origin("x").unwrap(), Some((None, 4)));
+        store.forget_source("x").unwrap();
+        assert_eq!(store.origin("x").unwrap(), None);
+        assert!(store.settings("x").unwrap().is_empty());
     }
 
     #[test]

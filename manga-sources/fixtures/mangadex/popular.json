@@ -1,0 +1,3 @@
+{"result":"ok","total":45,"data":[
+ {"id":"m1","attributes":{"title":{"ja-ro":"Ore dake","en":"Solo Leveling"}},"relationships":[{"id":"c1","type":"cover_art","attributes":{"fileName":"c1.jpg"}},{"id":"a1","type":"author"}]},
+ {"id":"m2","attributes":{"title":{"ko-ro":"Only Title"}},"relationships":[]}]}

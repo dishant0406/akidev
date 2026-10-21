@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "name": "Akidev sources",
+  "sources": [
+    {
+      "id": "mangadex",
+      "name": "MangaDex",
+      "version": 1,
+      "path": "sources/mangadex.json",
+      "sha256": "8ed2e322d4d93d11d039bf34a9eb219f6da0e405706785f288b644b358ee4320",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false
+    }
+  ],
+  "themes": [
+    {
+      "id": "madara",
+      "version": 1,
+      "path": "themes/madara.json",
+      "sha256": "5854656dd0981646f23b4d15831c77de1e7494fe2d59195e2560b9787d9c902e"
+    }
+  ]
+}

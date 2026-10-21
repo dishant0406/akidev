@@ -1,0 +1,2 @@
+{"result":"ok","data":{"id":"m1","attributes":{"title":{"ja-ro":"Ore dake","en":"Solo Leveling"},"description":{"en":"Ten years ago, the gates opened."},"status":"completed","tags":[{"attributes":{"name":{"en":"Action"}}},{"attributes":{"name":{"en":"Fantasy"}}}]},
+ "relationships":[{"id":"a1","type":"author","attributes":{"name":"Chugong"}},{"id":"a2","type":"artist","attributes":{"name":"Dubu"}},{"id":"a3","type":"artist","attributes":{"name":"Chugong"}},{"id":"c1","type":"cover_art","attributes":{"fileName":"c1.jpg"}}]}}

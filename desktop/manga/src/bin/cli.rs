@@ -1,6 +1,8 @@
 //! `akidev-manga-cli`: check a source definition against recorded pages, or ask a live site.
 //!
 //!   check <definition.json> <fixtures-dir> [--themes <dir>] [--bless]
+//!   index <repo-dir> [--key <secret-file>]     write index.json (and index.json.sig) for a repository folder
+//!   keygen <secret-file>                       make a signing key, print its public half
 //!   run   <definition.json> <popular|latest|search TERM|details ID|chapters ID|pages SERIES CHAPTER> [--themes <dir>]
 
 use akidev_manga::theme::Themes;
@@ -37,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
         (at < args.len()).then(|| args.remove(at))
     };
     let themes_dir = flag(&mut args, "--themes").map(PathBuf::from);
+    let key = flag(&mut args, "--key");
     let bless = args.iter().position(|arg| arg == "--bless").map(|at| args.remove(at)).is_some();
     match args.first().map(String::as_str) {
         Some("check") if args.len() == 3 => {
@@ -55,6 +58,29 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
+        Some("keygen") if args.len() == 2 => {
+            let (secret, public) = akidev_manga::repo::generate_key()?;
+            std::fs::write(&args[1], format!("{secret}\n"))?;
+            println!("secret key written to {} (keep it out of the repository)\npublic key: {public}", args[1]);
+        }
+        Some("index") if args.len() == 2 => {
+            let dir = Path::new(&args[1]);
+            let secret = match &key {
+                Some(path) => Some(std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?),
+                None => None,
+            };
+            let public = secret.as_deref().map(akidev_manga::repo::public_of).transpose()?;
+            let index = akidev_manga::repo::build_index(dir, public)?;
+            let text = serde_json::to_string_pretty(&index)? + "\n";
+            std::fs::write(dir.join("index.json"), &text)?;
+            match secret {
+                Some(secret) => std::fs::write(dir.join("index.json.sig"), akidev_manga::repo::sign(text.as_bytes(), &secret)? + "\n")?,
+                None => {
+                    let _ = std::fs::remove_file(dir.join("index.json.sig"));
+                }
+            }
+            println!("{}: {} sources, {} themes{}", index.name, index.sources.len(), index.themes.len(), if key.is_some() { ", signed" } else { ", unsigned" });
+        }
         Some("run") if args.len() >= 3 => {
             let source = Source::live(load(Path::new(&args[1]), themes_dir.as_deref())?)?;
             let out = match (args[2].as_str(), &args[3..]) {
@@ -68,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
             };
             println!("{}", serde_json::to_string_pretty(&out)?);
         }
-        _ => bail!("usage:\n  check <definition.json> <fixtures-dir> [--themes <dir>] [--bless]\n  run <definition.json> <op> [args] [--themes <dir>]"),
+        _ => bail!("usage:\n  index <repo-dir> [--key <secret-file>]\n  keygen <secret-file>\n  check <definition.json> <fixtures-dir> [--themes <dir>] [--bless]\n  run <definition.json> <op> [args] [--themes <dir>]"),
     }
     Ok(())
 }

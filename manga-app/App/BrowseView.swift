@@ -41,7 +41,7 @@ final class BrowseModel {
 struct BrowseView: View {
     @Environment(AppModel.self) private var model
     @State private var browse = BrowseModel()
-    @State private var source = UserDefaults.standard.string(forKey: "source") ?? "mangadex"
+    @State private var source = UserDefaults.standard.string(forKey: "source") ?? ""
     @State private var mode = BrowseModel.Mode.popular
     @State private var term = ""
     @State private var submitted = ""
@@ -51,7 +51,10 @@ struct BrowseView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if let error = browse.error, browse.items.isEmpty {
+                if model.sources.isEmpty {
+                    StateCard(title: "No sources yet", message: "Aki Manga reads what a source plugin describes, and it comes with none. Add a repository in Sources to get started.", action: ("Open Sources", { model.tab = .sources }))
+                        .frame(minHeight: 520)
+                } else if let error = browse.error, browse.items.isEmpty {
                     StateCard(title: error.title, message: error.message, action: ("Try again", { Task { await reload() } }))
                         .frame(minHeight: 420)
                 } else if browse.items.isEmpty && !browse.loading {
@@ -91,8 +94,9 @@ struct BrowseView: View {
             .onChange(of: source) { submitted = ""; term = ""; Task { await reload() } }
             .onChange(of: mode) { Task { await reload() } }
             .navigationDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
-            .task(id: model.sources.count) {
-                if !model.sources.contains(where: { $0.id == source }), let first = model.sources.first { source = first.id }
+            .task(id: model.revision) {
+                if !model.sources.contains(where: { $0.id == source }) { source = model.sources.first?.id ?? "" }
+                guard !source.isEmpty else { return }
                 await reload()
             }
         }

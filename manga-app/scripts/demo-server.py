@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """A fake Madara site for driving the app without any real site: `python3 scripts/demo-server.py [port]`.
 
-Serves the hand-written fixtures from desktop/manga/sources/fixtures/madara-example, with the page
-and cover images replaced by generated pictures on this server, plus the theme and a source
-definition under /_demo/. Start the app with `-demoServer http://127.0.0.1:8770 -source local`.
+Serves the hand-written fixtures from manga-sources/fixtures/madara-example, with the page and cover
+images replaced by generated pictures on this server, plus a repository under /_demo/repo/ (an index.json
+that lists the madara theme and a source called `local`). Start the app with
+`-demoRepo http://127.0.0.1:8770/_demo/repo/ -source local`.
 """
-import json, os, struct, sys, zlib
+import hashlib, json, os, struct, sys, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2] / "desktop/manga/sources"
+ROOT = Path(__file__).resolve().parents[2] / "manga-sources"
 FIX = ROOT / "fixtures/madara-example"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
 BASE = f"http://127.0.0.1:{PORT}"
@@ -106,6 +107,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def repo(self, inside):
+        """A repository (index.json plus the madara theme and a source called `local`), the way a GitHub repo
+        would serve it: the index names each file with its sha256."""
+        theme = (ROOT / "themes/madara.json").read_bytes()
+        source = json.dumps({"extends": "madara", "id": "local", "name": "Demo site", "version": 1, "lang": ["en"], "base_url": BASE, "rate_per_second": 20}, indent=2).encode()
+        sha = lambda data: hashlib.sha256(data).hexdigest()
+        index = {
+            "schema": 1, "name": "Demo repository",
+            "sources": [{"id": "local", "name": "Demo site", "version": 1, "path": "sources/local.json", "sha256": sha(source), "lang": ["en"], "requires": ["madara"]}],
+            "themes": [{"id": "madara", "version": json.loads(theme)["version"], "path": "themes/madara.json", "sha256": sha(theme)}],
+        }
+        files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": source}
+        if inside in files:
+            return self.reply(files[inside], "application/json")
+        self.send_response(404)
+        self.end_headers()
+
     def handle_any(self, method):
         path = self.path.split("?")[0]
         if method == "POST":
@@ -114,10 +132,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(chapter_pages(path.strip("/").split("/")[-1]))
         if (method, path) in ROUTES:
             return self.reply(fixture(ROUTES[(method, path)]))
-        if path == "/_demo/madara.json":
-            return self.reply((ROOT / "themes/madara.json").read_bytes(), "application/json")
-        if path == "/_demo/local.json":
-            return self.reply(json.dumps({"extends": "madara", "id": "local", "name": "Demo site", "version": 1, "lang": ["en"], "base_url": BASE, "rate_per_second": 20}).encode(), "application/json")
+        if path.startswith("/_demo/sources/"):
+            # The real repository folder (manga-sources), as GitHub would serve it.
+            target = (ROOT / path[len("/_demo/sources/"):]).resolve()
+            if ROOT.resolve() in target.parents and target.is_file():
+                return self.reply(target.read_bytes(), "application/json")
+        if path.startswith("/_demo/repo/"):
+            return self.repo(path[len("/_demo/repo/"):])
         if path.startswith("/solo/"):
             _, _, number, name = path.split("/")
             page = int(name.split(".")[0])

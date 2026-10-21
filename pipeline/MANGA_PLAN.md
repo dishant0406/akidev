@@ -67,7 +67,7 @@ self-hosted servers.
 │                          akidev-manga (new Rust crate)                              │
 │  catalogue  ·  library db  ·  reader prefetch  ·  downloads  ·  updates  ·  sync    │
 │  ┌─────────── source runtime ───────────┐  ┌──────── adapters ────────┐             │
-│  │ 1. declarative engine (JSON+HTML)    │  │ MangaDex (native)        │             │
+│  │ 1. declarative engine (JSON+HTML)    │  │ (none: no built-in     │             │
 │  │ 2. WASM sandbox (hard sites)         │  │ Komga / Kavita / OPDS    │             │
 │  └──────────────────────────────────────┘  │ Suwayomi (OPDS-PSE)      │             │
 │  shared with desktop/core: http, expression, template, definition, signing, cache    │
@@ -266,7 +266,8 @@ decide when we get there.
 
 ## 7. Adapters (no source files, just clients)
 
-- **MangaDex**: native Rust client, always on. Follow its rules: honest `akidev-manga/<version>` User-Agent, no
+- **MangaDex**: a plugin like any other since 2026-10-21 (`manga-sources/sources/mangadex.json`, section 16); the
+  rules below are how that definition behaves, not code in the app. Follow its rules: honest `akidev-manga/<version>` User-Agent, no
   `Via`, a 5/s per-IP limiter (a shared token bucket, with `429` backoff), at-home server URLs fetched per
   chapter and report image success and failure to their `https://api.mangadex.network/report` endpoint as
   the docs ask (**check the current docs**: 503 when fetched on 2026-10-21 so this is unverified), content
@@ -433,7 +434,7 @@ Built in `desktop/manga/` (`akidev-manga`, a workspace member that depends on `a
 Tests: 28 unit tests and one integration test pass; clippy is clean.
 
 **Not verified:** any real site. The `madara` theme and its fixtures are written from memory of Madara's
-markup and are synthetic (see `desktop/manga/sources/README.md`); the engine is proven against that shape,
+markup and are synthetic (see `manga-sources/README.md`); the engine is proven against that shape,
 not against a live Madara site. Phase 1 exit criterion "a CLI that can search, list chapters and dump page URLs
 for a definition" is met for recorded pages; against a live site it is untried.
 
@@ -546,6 +547,51 @@ stay out. Needs a network that reaches the sites, so it cannot be run from this 
 
 **In the app now:** a `Challenge` error reaches the screen as the state card "This site checks visitors first"
 with what to do instead. The facade and engine comments were corrected to match.
+
+## 16. Decision: the app is a renderer, every source is a plugin (2026-10-21)
+
+Aki Manga has **no built-in source and no default repository**. Everything it reads comes from a definition the
+person installed, from a repository they added by address (a GitHub link, or any https folder with an
+`index.json`). The hardcoded MangaDex client (`mangadex.rs`) and the `Catalogue` enum are gone; MangaDex is
+`manga-sources/sources/mangadex.json`, published like any other plugin. Sections 7 and 8 above describe the plan
+before this decision where they say the app ships with MangaDex.
+
+**What was built** (all committed, with tests):
+- **Format additions, driven by MangaDex** (documented in `manga-sources/README.md`): `vars` and `prepare`
+  (chained requests whose answers become holes), `chapters.repeat` (a paged chapter list), `total` and `page_size` with
+  `{offset}` for lists, `where` and `unique` steps (a related item of one type, a row that is not external),
+  `{^.path}` in templates (a value in the row), `settings` with holes (language, content rating),
+  `user_agent`, and `image_headers` that can remove the default referer. MangaDex's definition reads covers from
+  relationships, authors without duplicates, skips external and empty chapters, pages its chapter feed and builds page
+  addresses from the image server its answer names.
+- **Repository format** (`desktop/manga/src/repo.rs`): `index.json` lists sources and themes with version, SHA-256, languages,
+  `min_app` and `requires` (themes installed with the source). Paths cannot leave the repository, hashes are checked on
+  every file, an optional ed25519 key and `index.json.sig` sign the index, and a signed repository's key is pinned the
+  first time (a different key later is refused until the person removes and re-adds it). GitHub addresses
+  (`github.com/o/r`, `/tree/branch/folder`, raw links) resolve to the raw folder; plain http only for this machine.
+  `akidev-manga-cli index` writes the index and `keygen` makes a key; a test fails when `index.json` is stale.
+- **Facade and app:** `add_repo`, `repo_sources`, `install_from_repo` (themes first, then the source, then check that the
+  file is the source the index lists), `update_sources` (run at start), `remove_repo`, `source_settings` and
+  `set_setting` (saved, put back at launch). The app: Sources tab with Installed and Repositories, a repository page with
+  Install and Update, a "signed or not" note, a settings page per source, and a "No sources yet" state on Browse that
+  leads to Sources. SQLite schema v2 adds `repo`, `installed` and `setting`.
+
+**Run:** 35 unit tests, 4 repository tests over HTTP (hash mismatch, tampered index, wrong key, missing signature) and 2
+facade tests (add, install, browse, read, update, refused file, reopen; key swap) pass. In the simulator: a fresh app
+showed "No sources yet", an unreachable address showed a clear error, adding the demo repository by typing its address
+listed its source, Install wrote the theme and source and made Browse show titles, and installing MangaDex from the real
+`manga-sources` index (hash-checked) showed its language and content settings.
+
+**Not verified:** MangaDex itself (its definition is tested against hand-written answers; the site is unreachable from
+this network, so request shapes, query brackets and the image server flow are unproven), GitHub as the host (only a
+local server was used), a signed repository in the app (tested in Rust only), a theme update reloading installed
+sources (tested only in the facade's first install), and settings changing a live Browse (the screen reloads, the
+effect on MangaDex requests is only unit tested).
+
+**Costs and open points:** an app that opens empty needs a first-run screen and, for App Review, something to do
+without a repository (local CBZ import is planned); a plugin decides which hosts the app contacts, so the repository warning
+matters, and images load from any host a plugin names; there is still no scripting layer, so about 40% of popular sites
+stay out (section 11.1) unless one is added later.
 
 ## Sources
 
