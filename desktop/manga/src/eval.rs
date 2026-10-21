@@ -284,7 +284,7 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
 }
 
 /// Compares as people read file names: runs of digits by value, the rest by text.
-fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+pub(crate) fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     fn chunks(text: &str) -> Vec<(bool, &str)> {
         let mut out = Vec::new();
         let mut start = 0;

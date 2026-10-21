@@ -3,6 +3,7 @@
 
 use akidev_manga::repo;
 use akimanga::{Engine, MangaError, SourceState};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -96,7 +97,7 @@ async fn add_a_repository_install_browse_read_update_and_return() {
 
     let popular = engine.popular("local".into(), 1).await.unwrap();
     assert_eq!(popular.items.iter().map(|card| card.id.as_str()).collect::<Vec<_>>(), ["solo-leveling", "tower-of-god"]);
-    assert_eq!(engine.search("local".into(), "solo leveling".into(), 1).await.unwrap().items.len(), 1);
+    assert_eq!(engine.search("local".into(), "solo leveling".into(), 1, Vec::new()).await.unwrap().items.len(), 1);
     assert_eq!(engine.details("local".into(), "solo-leveling".into()).await.unwrap().title, "Solo Leveling");
     engine.set_in_library("local".into(), "solo-leveling".into(), true).await.unwrap();
     let list = engine.chapters("local".into(), "solo-leveling".into()).await.unwrap();
@@ -166,3 +167,64 @@ async fn a_signed_repository_cannot_swap_its_key_unnoticed() {
     let _ = std::fs::remove_dir_all(&temp);
 }
 
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from_the_device() {
+    let temp = std::env::temp_dir().join(format!("akimanga-backup-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    let repo_dir = temp.join("repo");
+    let address = serve(repo_dir.clone()).await;
+    make_repo(&repo_dir, &address, 1, None);
+    let link = format!("{address}/repo/");
+    let engine = Engine::new(temp.join("one").to_string_lossy().to_string()).unwrap();
+
+    // Looking at a repository keeps nothing.
+    assert_eq!(engine.preview_repo(link.clone()).await.unwrap().sources.len(), 1);
+    assert!(engine.repos().unwrap().is_empty());
+
+    let view = engine.add_repo(link).await.unwrap();
+    engine.install_from_repo(view.info.base, "local".into()).await.unwrap();
+    engine.details("local".into(), "solo-leveling".into()).await.unwrap();
+    engine.set_in_library("local".into(), "solo-leveling".into(), true).await.unwrap();
+    engine.chapters("local".into(), "solo-leveling".into()).await.unwrap();
+    engine.mark("local".into(), "solo-leveling".into(), vec!["chapter-178".into()], true).unwrap();
+    let reading = engine.add_category("Reading".into()).unwrap();
+    engine.set_category("local".into(), "solo-leveling".into(), reading, true).unwrap();
+    assert!(engine.add_category("  ".into()).is_err());
+    assert_eq!(engine.categories().unwrap()[0].count, 1);
+
+    // A comic archive from the device sits in the library beside the rest and reads from its files.
+    let archive = temp.join("Short Story.cbz");
+    let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+    for name in ["2.jpg", "1.jpg"] {
+        writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"image").unwrap();
+    }
+    writer.finish().unwrap();
+    let id = engine.import_file(archive.to_string_lossy().to_string()).unwrap();
+    assert_eq!(id, "short-story");
+    let pages = engine.pages("device".into(), id.clone(), "1".into()).await.unwrap();
+    assert_eq!(pages.images.len(), 2);
+    assert!(pages.images[0].starts_with("file://") && pages.images[0].ends_with("0000.jpg"));
+    assert_eq!(engine.library().unwrap().len(), 2);
+
+    // The backup goes into a fresh install: the library comes back, and the source is fetched again from its repository.
+    let backup = engine.backup().unwrap();
+    let fresh = Engine::new(temp.join("two").to_string_lossy().to_string()).unwrap();
+    assert!(fresh.restore("not json".into()).await.is_err());
+    let report = fresh.restore(backup).await.unwrap();
+    assert_eq!((report.series, report.sources_installed, report.sources_missing), (2, vec!["local".to_string()], Vec::<String>::new()));
+    assert_eq!(fresh.repos().unwrap().len(), 1);
+    assert_eq!(fresh.sources().len(), 1);
+    let library = fresh.library().unwrap();
+    assert!(library.iter().any(|item| item.title == "Solo Leveling" && item.categories == [fresh.categories().unwrap()[0].id]));
+    assert_eq!(fresh.cached_chapters("local".into(), "solo-leveling".into()).unwrap().len(), 0, "chapters are fetched again, not carried");
+    // The read state waits for the chapters to be fetched again, then shows.
+    let list = fresh.chapters("local".into(), "solo-leveling".into()).await.unwrap();
+    assert!(list.entries.iter().any(|entry| entry.id == "chapter-178" && entry.finished));
+
+    // Removing a series forgets all of it.
+    fresh.forget_series("local".into(), "solo-leveling".into()).unwrap();
+    assert!(fresh.library().unwrap().iter().all(|item| item.id != "solo-leveling"));
+    let _ = std::fs::remove_dir_all(&temp);
+}

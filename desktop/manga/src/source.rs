@@ -1,9 +1,9 @@
 //! A source: a definition and the means to ask its site the six questions every reader asks.
 
 use crate::date;
-use crate::def::{Ex, Format, ListDef, Order, Prepare, Request, Role, SourceDef, SCHEMA};
+use crate::def::{Ex, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SourceDef, SCHEMA};
 use crate::eval::{self, Ctx, check_ex, eval, eval_text, eval_texts};
-use crate::fetch::{Fetcher, Req};
+use crate::fetch::{Fetcher, Req, Unreachable};
 use crate::model::{Card, Chapter, Detail, Page, PageList, Reading, Status};
 use crate::template::fill;
 use anyhow::{Context, bail, ensure};
@@ -206,7 +206,7 @@ impl Source {
             };
             match self.fetcher.send(&req).await {
                 Ok(body) => return Ok((body, host)),
-                Err(error) if error.to_string().starts_with("could not reach") => last = Some(error),
+                Err(error) if error.is::<Unreachable>() => last = Some(error),
                 Err(error) => return Err(error),
             }
         }
@@ -289,8 +289,18 @@ impl Source {
         self.list(self.def.latest.as_ref(), "latest list", Holes { page, ..self.holes() }).await
     }
 
-    pub async fn search(&self, term: &str, page: u32, filters: &BTreeMap<String, String>) -> anyhow::Result<Page<Card>> {
-        let holes = Holes { page, term: Some(term.to_string()), filters: filters.clone(), ..self.holes() };
+    /// The ways a search can be narrowed.
+    pub fn filters(&self) -> &[FilterDef] {
+        &self.def.filters
+    }
+
+    pub async fn search(&self, term: &str, page: u32, chosen: &BTreeMap<String, String>) -> anyhow::Result<Page<Card>> {
+        // Each filter has the person's choice, or its default.
+        let filters = self.def.filters.iter().filter_map(|filter| {
+            let value = chosen.get(&filter.id).or(filter.default.as_ref())?;
+            Some((filter.id.clone(), value.clone()))
+        });
+        let holes = Holes { page, term: Some(term.to_string()), filters: filters.collect(), ..self.holes() };
         self.list(self.def.search.as_ref(), "search", holes).await
     }
 
@@ -484,6 +494,18 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
         ensure!(plain(&setting.id), "a setting's id is lowercase letters, digits, dashes and underscores");
         ensure!(setting.options.iter().any(|option| option.value == setting.default), "setting {}: the default is not one of its options", setting.id);
     }
+    for filter in &def.filters {
+        ensure!(plain(&filter.id), "a filter's id is lowercase letters, digits, dashes and underscores");
+        match filter.kind {
+            FilterKind::Select => {
+                ensure!(!filter.options.is_empty(), "filter {}: a select needs options", filter.id);
+                if let Some(default) = &filter.default {
+                    ensure!(filter.options.iter().any(|option| &option.value == default), "filter {}: the default is not one of its options", filter.id);
+                }
+            }
+            FilterKind::Text => ensure!(filter.options.is_empty(), "filter {}: a text filter has no options", filter.id),
+        }
+    }
     let mut requests: Vec<(&str, &Request)> = vec![("detail", &def.detail.request), ("chapters", &def.chapters.request), ("pages", &def.pages.request)];
     let mut lists: Vec<(&str, &ListDef)> = Vec::new();
     for (name, list) in [("popular", &def.popular), ("latest", &def.latest), ("search", &def.search)] {
@@ -623,6 +645,47 @@ mod tests {
         ]);
         assert!(source.popular(1).await.unwrap().has_next);
         assert!(!source.popular(2).await.unwrap().has_next);
+    }
+
+    #[tokio::test]
+    async fn filters_fall_back_to_their_defaults_and_take_the_persons_choice() {
+        let search = json!({"request": {"url": "{base}/s?q={term}&o={order}"}, "format": "json", "rows": "items", "card": {"id": "id", "title": "name"}});
+        let filters = json!([{"id": "order", "name": "Order", "kind": "select", "default": "new", "options": [{"value": "new", "name": "Newest"}, {"value": "top", "name": "Top"}]}]);
+        let source = source(json!({"search": search, "filters": filters}), &[
+            ("/s?q=a&o=new", r#"{"items":[{"id":"1","name":"newest"}]}"#),
+            ("/s?q=a&o=top", r#"{"items":[{"id":"2","name":"top"}]}"#),
+        ]);
+        assert_eq!(source.filters().len(), 1);
+        assert_eq!(source.search("a", 1, &BTreeMap::new()).await.unwrap().items[0].title, "newest");
+        let chosen = BTreeMap::from([("order".to_string(), "top".to_string())]);
+        assert_eq!(source.search("a", 1, &chosen).await.unwrap().items[0].title, "top");
+    }
+
+    #[test]
+    fn a_filter_default_must_be_one_of_its_options() {
+        let mut def = json!({
+            "schema": 1, "id": "t", "name": "T", "version": 1, "base_url": "https://t.test",
+            "popular": {"request": {"url": "{base}/x"}, "rows": "r", "card": {"id": "i", "title": "t"}},
+            "detail": {"request": {"url": "{base}/d"}, "title": "t"}, "chapters": {"request": {"url": "{base}/c"}, "rows": "r", "chapter": {"id": "i"}},
+            "pages": {"request": {"url": "{base}/p"}, "images": "i"},
+            "filters": [{"id": "order", "name": "Order", "kind": "select", "default": "zzz", "options": [{"value": "a", "name": "A"}]}]
+        });
+        assert!(validate(&serde_json::from_value(def.clone()).unwrap()).is_err());
+        def["filters"][0]["default"] = json!("a");
+        assert!(validate(&serde_json::from_value(def).unwrap()).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_site_that_cannot_be_reached_is_a_typed_error() {
+        let def = json!({
+            "schema": 1, "id": "t", "name": "T", "version": 1, "base_url": "http://127.0.0.1:1",
+            "popular": {"request": {"url": "{base}/x"}, "rows": "r", "card": {"id": "i", "title": "t"}},
+            "detail": {"request": {"url": "{base}/d"}, "title": "t"}, "chapters": {"request": {"url": "{base}/c"}, "rows": "r", "chapter": {"id": "i"}},
+            "pages": {"request": {"url": "{base}/p"}, "images": "i"}
+        });
+        let source = Source::live(serde_json::from_value(def).unwrap()).unwrap();
+        let error = source.popular(1).await.unwrap_err();
+        assert!(error.is::<Unreachable>(), "{error:#}");
     }
 
     #[test]

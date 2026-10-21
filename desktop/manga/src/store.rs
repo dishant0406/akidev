@@ -23,6 +23,27 @@ pub struct LibraryItem {
     pub unread: u32,
     pub total: u32,
     pub last_read_ms: Option<i64>,
+    pub saved_ms: i64,
+    pub categories: Vec<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Category {
+    pub id: i64,
+    pub name: String,
+    pub count: u32,
+}
+
+/// A chapter kept on the device.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DownloadRow {
+    pub source: String,
+    pub series: String,
+    pub chapter: String,
+    /// `queued`, `active`, `done` or `failed`.
+    pub state: String,
+    pub pages: u32,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +84,42 @@ pub struct HistoryItem {
     pub chapter_title: Option<String>,
     pub at_ms: i64,
     pub finished: bool,
+}
+
+/// What a backup holds of the library.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Export {
+    pub series: Vec<ExportSeries>,
+    pub progress: Vec<ExportProgress>,
+    /// Category names in order.
+    pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExportSeries {
+    pub source: String,
+    pub id: String,
+    pub title: String,
+    pub cover: Option<String>,
+    pub description: Option<String>,
+    pub status: String,
+    /// When it was saved to the library; none for a series only read.
+    pub saved_at: Option<i64>,
+    pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExportProgress {
+    pub source: String,
+    pub series: String,
+    pub chapter: String,
+    pub page: u32,
+    pub offset: f64,
+    pub finished: bool,
+    pub updated_at: i64,
+    /// Kept so a restore can say which chapter it was.
+    pub chapter_number: Option<f64>,
+    pub chapter_title: Option<String>,
 }
 
 /// What `sync_chapters` found.
@@ -284,13 +341,21 @@ impl Store {
                 (SELECT count(*) FROM chapter c WHERE c.source = s.source AND c.series = s.id),
                 (SELECT count(*) FROM chapter c WHERE c.source = s.source AND c.series = s.id
                     AND NOT EXISTS (SELECT 1 FROM progress p WHERE p.source = c.source AND p.series = c.series AND p.chapter = c.id AND p.finished = 1)),
-                (SELECT max(p.updated_at) FROM progress p WHERE p.source = s.source AND p.series = s.id)
+                (SELECT max(p.updated_at) FROM progress p WHERE p.source = s.source AND p.series = s.id),
+                s.saved_at
              FROM series s WHERE s.saved_at IS NOT NULL",
         )?;
         let rows = statement.query_map([], |row| {
-            Ok(LibraryItem { source: row.get(0)?, id: row.get(1)?, title: row.get(2)?, cover: row.get(3)?, total: row.get(4)?, unread: row.get(5)?, last_read_ms: row.get(6)? })
+            Ok(LibraryItem { source: row.get(0)?, id: row.get(1)?, title: row.get(2)?, cover: row.get(3)?, total: row.get(4)?, unread: row.get(5)?, last_read_ms: row.get(6)?, saved_ms: row.get(7)?, categories: Vec::new() })
         })?;
         let mut items: Vec<LibraryItem> = rows.collect::<Result<_, _>>()?;
+        let mut member = db.prepare("SELECT source, series, category FROM series_category")?;
+        for row in member.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)))? {
+            let (source, series, category) = row?;
+            if let Some(item) = items.iter_mut().find(|item| item.source == source && item.id == series) {
+                item.categories.push(category);
+            }
+        }
         // Most recently read first, then by title.
         items.sort_by(|a, b| b.last_read_ms.cmp(&a.last_read_ms).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())));
         Ok(items)
@@ -369,6 +434,14 @@ impl Store {
         Ok(self.db().query_row("SELECT repo, version FROM installed WHERE source = ?1", params![source], |row| Ok((row.get(0)?, row.get::<_, i64>(1)? as u64))).optional()?)
     }
 
+    /// Every installed source with where it came from, for a backup.
+    pub fn origins(&self) -> anyhow::Result<Vec<(String, Option<String>)>> {
+        let db = self.db();
+        let mut statement = db.prepare("SELECT source, repo FROM installed ORDER BY source")?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn forget_source(&self, source: &str) -> anyhow::Result<()> {
         let db = self.db();
         db.execute("DELETE FROM installed WHERE source = ?1", params![source])?;
@@ -394,6 +467,29 @@ impl Store {
         Ok(db.last_insert_rowid())
     }
 
+    pub fn rename_category(&self, id: i64, name: &str) -> anyhow::Result<()> {
+        self.db().execute("UPDATE category SET name = ?2 WHERE id = ?1", params![id, name])?;
+        Ok(())
+    }
+
+    /// Deletes a category; the series in it stay in the library.
+    pub fn delete_category(&self, id: i64) -> anyhow::Result<()> {
+        self.db().execute("DELETE FROM category WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// The categories in order, with how many series each holds.
+    pub fn categories(&self) -> anyhow::Result<Vec<Category>> {
+        let db = self.db();
+        let mut statement = db.prepare(
+            "SELECT c.id, c.name, (SELECT count(*) FROM series_category m JOIN series s ON s.source = m.source AND s.id = m.series
+                                    WHERE m.category = c.id AND s.saved_at IS NOT NULL)
+             FROM category c ORDER BY c.position, c.id",
+        )?;
+        let rows = statement.query_map([], |row| Ok(Category { id: row.get(0)?, name: row.get(1)?, count: row.get(2)? }))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn put_in_category(&self, source: &str, series: &str, category: i64, member: bool) -> anyhow::Result<()> {
         let db = self.db();
         if member {
@@ -401,6 +497,165 @@ impl Store {
         } else {
             db.execute("DELETE FROM series_category WHERE source = ?1 AND series = ?2 AND category = ?3", params![source, series, category])?;
         }
+        Ok(())
+    }
+
+    // --- backup ---------------------------------------------------------------------------------
+
+    /// Everything the person did that cannot be fetched again: saved series, read state, categories.
+    pub fn export(&self) -> anyhow::Result<Export> {
+        let db = self.db();
+        let mut series = Vec::new();
+        let mut statement = db.prepare("SELECT source, id, title, cover, description, status, saved_at FROM series WHERE saved_at IS NOT NULL OR EXISTS (SELECT 1 FROM progress p WHERE p.source = series.source AND p.series = series.id)")?;
+        for row in statement.query_map([], |row| {
+            Ok(ExportSeries { source: row.get(0)?, id: row.get(1)?, title: row.get(2)?, cover: row.get(3)?, description: row.get(4)?, status: row.get(5)?, saved_at: row.get(6)?, categories: Vec::new() })
+        })? {
+            series.push(row?);
+        }
+        let mut statement = db.prepare("SELECT m.source, m.series, c.name FROM series_category m JOIN category c ON c.id = m.category")?;
+        for row in statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))? {
+            let (source, id, name) = row?;
+            if let Some(found) = series.iter_mut().find(|found| found.source == source && found.id == id) {
+                found.categories.push(name);
+            }
+        }
+        let mut progress = Vec::new();
+        let mut statement = db.prepare(
+            "SELECT p.source, p.series, p.chapter, p.page, p.offset, p.finished, p.updated_at, c.number, c.title
+             FROM progress p LEFT JOIN chapter c ON c.source = p.source AND c.series = p.series AND c.id = p.chapter",
+        )?;
+        for row in statement.query_map([], |row| {
+            Ok(ExportProgress {
+                source: row.get(0)?,
+                series: row.get(1)?,
+                chapter: row.get(2)?,
+                page: row.get(3)?,
+                offset: row.get(4)?,
+                finished: row.get(5)?,
+                updated_at: row.get(6)?,
+                chapter_number: row.get(7)?,
+                chapter_title: row.get(8)?,
+            })
+        })? {
+            progress.push(row?);
+        }
+        let mut statement = db.prepare("SELECT name FROM category ORDER BY position, id")?;
+        let categories = statement.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
+        Ok(Export { series, progress, categories })
+    }
+
+    /// Puts an export back. A series already here keeps its newer read state; categories are matched by name.
+    pub fn import(&self, export: &Export) -> anyhow::Result<()> {
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        for name in &export.categories {
+            tx.execute("INSERT OR IGNORE INTO category (name, position) VALUES (?1, (SELECT coalesce(max(position), -1) + 1 FROM category))", params![name])?;
+        }
+        for series in &export.series {
+            tx.execute(
+                "INSERT INTO series (source, id, title, cover, description, status, saved_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (source, id) DO UPDATE SET title = ?3, cover = coalesce(?4, cover), description = coalesce(?5, description),
+                                                        saved_at = coalesce(saved_at, ?7)",
+                params![series.source, series.id, series.title, series.cover, series.description, series.status, series.saved_at],
+            )?;
+            for name in &series.categories {
+                tx.execute(
+                    "INSERT OR IGNORE INTO series_category (source, series, category) SELECT ?1, ?2, id FROM category WHERE name = ?3",
+                    params![series.source, series.id, name],
+                )?;
+            }
+        }
+        for row in &export.progress {
+            // The chapter row may not be here yet (it is fetched again later); progress is keyed by the chapter's id.
+            tx.execute(
+                "INSERT INTO progress (source, series, chapter, page, offset, finished, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT (source, series, chapter) DO UPDATE SET page = excluded.page, offset = excluded.offset, finished = excluded.finished, updated_at = excluded.updated_at
+                 WHERE excluded.updated_at > progress.updated_at",
+                params![row.source, row.series, row.chapter, row.page, row.offset, row.finished, row.updated_at],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    // --- downloads -----------------------------------------------------------------------------
+
+    pub fn set_download(&self, row: &DownloadRow) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO download (source, series, chapter, state, pages, bytes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (source, series, chapter) DO UPDATE SET state = ?4, pages = ?5, bytes = ?6",
+            params![row.source, row.series, row.chapter, row.state, row.pages, row.bytes as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn download(&self, source: &str, series: &str, chapter: &str) -> anyhow::Result<Option<DownloadRow>> {
+        Ok(self
+            .db()
+            .query_row(
+                "SELECT state, pages, bytes FROM download WHERE source = ?1 AND series = ?2 AND chapter = ?3",
+                params![source, series, chapter],
+                |row| Ok(DownloadRow { source: source.into(), series: series.into(), chapter: chapter.into(), state: row.get(0)?, pages: row.get(1)?, bytes: row.get::<_, i64>(2)? as u64 }),
+            )
+            .optional()?)
+    }
+
+    pub fn downloads(&self) -> anyhow::Result<Vec<DownloadRow>> {
+        let db = self.db();
+        let mut statement = db.prepare("SELECT source, series, chapter, state, pages, bytes FROM download ORDER BY source, series, chapter")?;
+        let rows = statement.query_map([], |row| Ok(DownloadRow { source: row.get(0)?, series: row.get(1)?, chapter: row.get(2)?, state: row.get(3)?, pages: row.get(4)?, bytes: row.get::<_, i64>(5)? as u64 }))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn delete_download(&self, source: &str, series: &str, chapter: &str) -> anyhow::Result<()> {
+        self.db().execute("DELETE FROM download WHERE source = ?1 AND series = ?2 AND chapter = ?3", params![source, series, chapter])?;
+        Ok(())
+    }
+
+    // --- moving and removing series -------------------------------------------------------------
+
+    /// Moves what the person did with a series to the same series on another source: the library entry, its
+    /// categories, and the read state of every chapter whose number the other source has too. Returns how
+    /// many chapters carried over. Reading history stays under the old series.
+    pub fn migrate(&self, from_source: &str, from_series: &str, to_source: &str, to_series: &str, now_ms: i64) -> anyhow::Result<u32> {
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        let old: Vec<(String, f64)> = {
+            let mut statement = tx.prepare("SELECT id, number FROM chapter WHERE source = ?1 AND series = ?2 AND number IS NOT NULL")?;
+            statement.query_map(params![from_source, from_series], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<_, _>>()?
+        };
+        let new: Vec<(String, f64)> = {
+            let mut statement = tx.prepare("SELECT id, number FROM chapter WHERE source = ?1 AND series = ?2 AND number IS NOT NULL")?;
+            statement.query_map(params![to_source, to_series], |row| Ok((row.get(0)?, row.get(1)?)))?.collect::<Result<_, _>>()?
+        };
+        let mut carried = 0;
+        for (old_id, number) in &old {
+            let Some((new_id, _)) = new.iter().find(|(_, other)| (other - number).abs() < 1e-6) else { continue };
+            let moved = tx.execute(
+                "INSERT INTO progress (source, series, chapter, page, offset, finished, updated_at)
+                 SELECT ?3, ?4, ?5, page, offset, finished, ?6 FROM progress WHERE source = ?1 AND series = ?2 AND chapter = ?7
+                 ON CONFLICT (source, series, chapter) DO UPDATE SET page = excluded.page, offset = excluded.offset, finished = excluded.finished, updated_at = excluded.updated_at",
+                params![from_source, from_series, to_source, to_series, new_id, now_ms, old_id],
+            )?;
+            carried += moved as u32;
+        }
+        tx.execute("UPDATE series SET saved_at = coalesce(saved_at, (SELECT saved_at FROM series WHERE source = ?1 AND id = ?2), ?5) WHERE source = ?3 AND id = ?4", params![from_source, from_series, to_source, to_series, now_ms])?;
+        tx.execute(
+            "INSERT OR IGNORE INTO series_category (source, series, category) SELECT ?3, ?4, category FROM series_category WHERE source = ?1 AND series = ?2",
+            params![from_source, from_series, to_source, to_series],
+        )?;
+        tx.execute("UPDATE series SET saved_at = NULL WHERE source = ?1 AND id = ?2", params![from_source, from_series])?;
+        tx.commit()?;
+        Ok(carried)
+    }
+
+    /// Forgets a series: its entry, chapters, progress, categories and downloads.
+    pub fn delete_series(&self, source: &str, series: &str) -> anyhow::Result<()> {
+        let db = self.db();
+        for table in ["series_category", "progress", "download", "chapter"] {
+            db.execute(&format!("DELETE FROM {table} WHERE source = ?1 AND series = ?2"), params![source, series])?;
+        }
+        db.execute("DELETE FROM series WHERE source = ?1 AND id = ?2", params![source, series])?;
         Ok(())
     }
 
@@ -516,6 +771,84 @@ mod tests {
         store.forget_source("x").unwrap();
         assert_eq!(store.origin("x").unwrap(), None);
         assert!(store.settings("x").unwrap().is_empty());
+    }
+
+    #[test]
+    fn categories_count_their_saved_series_and_show_in_the_library() {
+        let store = store_with_series();
+        let reading = store.add_category("Reading").unwrap();
+        let later = store.add_category("Later").unwrap();
+        store.put_in_category("s", "a", reading, true).unwrap();
+        let categories = store.categories().unwrap();
+        assert_eq!(categories.iter().map(|c| (c.name.as_str(), c.count)).collect::<Vec<_>>(), [("Reading", 1), ("Later", 0)]);
+        assert_eq!(store.library().unwrap()[0].categories, vec![reading]);
+        assert_eq!(store.library().unwrap()[0].saved_ms, 100);
+        store.rename_category(later, "Someday").unwrap();
+        store.delete_category(reading).unwrap();
+        assert_eq!(store.categories().unwrap()[0].name, "Someday");
+        assert!(store.library().unwrap()[0].categories.is_empty(), "the series stays in the library");
+    }
+
+    #[test]
+    fn migrating_carries_the_library_entry_categories_and_read_chapters_by_number() {
+        let store = store_with_series();
+        let reading = store.add_category("Reading").unwrap();
+        store.put_in_category("s", "a", reading, true).unwrap();
+        store.sync_chapters("s", "a", &[chapter("old3", 3.0), chapter("old2", 2.0), chapter("old1", 1.0)]).unwrap();
+        store.mark("s", "a", &["old1", "old2"], true, 5).unwrap();
+        store.set_progress("s", "a", "old3", Progress { page: 4, offset: 0.25, finished: false }, 6).unwrap();
+        store.upsert_series("t", "b", "Alpha (other source)", None, None, Status::Ongoing).unwrap();
+        // The other source has chapters 1, 2.5 and 3, under other ids.
+        store.sync_chapters("t", "b", &[chapter("n3", 3.0), chapter("n25", 2.5), chapter("n1", 1.0)]).unwrap();
+        assert_eq!(store.migrate("s", "a", "t", "b", 50).unwrap(), 2);
+
+        let rows = store.chapters("t", "b").unwrap();
+        let state = |id: &str| rows.iter().find(|row| row.chapter.id == id).map(|row| (row.finished, row.page)).unwrap();
+        assert_eq!(state("n1"), (true, None));
+        assert_eq!(state("n25"), (false, None), "2.5 has no counterpart");
+        assert_eq!(state("n3"), (false, Some(4)));
+        assert!(!store.in_library("s", "a").unwrap());
+        let library = store.library().unwrap();
+        assert_eq!((library.len(), library[0].id.as_str(), library[0].saved_ms, library[0].categories.clone()), (1, "b", 100, vec![reading]));
+    }
+
+    #[test]
+    fn an_export_restores_into_a_fresh_store_and_never_overwrites_newer_progress() {
+        let store = store_with_series();
+        let reading = store.add_category("Reading").unwrap();
+        store.put_in_category("s", "a", reading, true).unwrap();
+        store.sync_chapters("s", "a", &[chapter("c2", 2.0), chapter("c1", 1.0)]).unwrap();
+        store.mark("s", "a", &["c1"], true, 10).unwrap();
+        store.set_progress("s", "a", "c2", Progress { page: 3, offset: 0.5, finished: false }, 20).unwrap();
+        let export = store.export().unwrap();
+        assert_eq!((export.series.len(), export.progress.len(), export.categories.clone()), (1, 2, vec!["Reading".to_string()]));
+        let text = serde_json::to_string(&export).unwrap();
+
+        let fresh = Store::in_memory().unwrap();
+        fresh.import(&serde_json::from_str(&text).unwrap()).unwrap();
+        let library = fresh.library().unwrap();
+        assert_eq!((library[0].title.as_str(), library[0].saved_ms, library[0].categories.len()), ("Alpha", 100, 1));
+        assert_eq!(fresh.resume("s", "a").unwrap().unwrap().chapter, "c2");
+        assert_eq!(fresh.history(10).unwrap().len(), 2);
+
+        // Newer progress already on the device wins over an older backup.
+        fresh.set_progress("s", "a", "c2", Progress { page: 9, offset: 0.0, finished: false }, 99).unwrap();
+        fresh.import(&serde_json::from_str(&text).unwrap()).unwrap();
+        assert_eq!(fresh.resume("s", "a").unwrap().unwrap().page, 9);
+    }
+
+    #[test]
+    fn deleting_a_series_forgets_everything_about_it() {
+        let store = store_with_series();
+        store.sync_chapters("s", "a", &[chapter("c1", 1.0)]).unwrap();
+        store.mark("s", "a", &["c1"], true, 1).unwrap();
+        store.set_download(&DownloadRow { source: "s".into(), series: "a".into(), chapter: "c1".into(), state: "done".into(), pages: 3, bytes: 99 }).unwrap();
+        assert_eq!(store.download("s", "a", "c1").unwrap().unwrap().pages, 3);
+        store.delete_series("s", "a").unwrap();
+        assert!(store.library().unwrap().is_empty());
+        assert!(store.chapters("s", "a").unwrap().is_empty());
+        assert!(store.history(10).unwrap().is_empty());
+        assert!(store.downloads().unwrap().is_empty());
     }
 
     #[test]

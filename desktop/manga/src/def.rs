@@ -254,12 +254,13 @@ pub struct FilterOption {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FilterKind {
+    /// One of a list of options.
     Select,
-    Multi,
+    /// Free text.
     Text,
-    Sort,
 }
 
+/// A way to narrow a search (an order, a genre). Its value fills the hole named by its id in the search request.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FilterDef {
     pub id: String,
@@ -267,6 +268,9 @@ pub struct FilterDef {
     pub kind: FilterKind,
     #[serde(default)]
     pub options: Vec<FilterOption>,
+    /// Used when the person has not chosen: a select's option value, or a text.
+    #[serde(default)]
+    pub default: Option<String>,
 }
 
 /// A choice the person makes for a source (a language, a content rating). Its value fills the hole named

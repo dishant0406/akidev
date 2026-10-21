@@ -46,6 +46,21 @@ impl std::fmt::Display for Challenge {
 
 impl std::error::Error for Challenge {}
 
+/// The site could not be reached at all: no network, a name that does not resolve, a refused connection.
+#[derive(Debug)]
+pub struct Unreachable {
+    pub url: String,
+    pub reason: String,
+}
+
+impl std::fmt::Display for Unreachable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "could not reach {}: {}", self.url, self.reason)
+    }
+}
+
+impl std::error::Error for Unreachable {}
+
 enum Transport {
     Live,
     /// Recorded answers by `Req::key`, and the requests that were made.
@@ -157,7 +172,7 @@ impl Fetcher {
                     builder = builder.json(json);
                 }
                 // The address is already in the message, so the error's own copy of it is dropped.
-                let response = builder.send().await.map_err(|error| error.without_url()).with_context(|| format!("could not reach {}", req.url))?;
+                let response = builder.send().await.map_err(|error| Unreachable { url: req.url.clone(), reason: error.without_url().to_string() })?;
                 let status = response.status();
                 let body = String::from_utf8_lossy(&read_capped(response, MAX_BODY).await?).into_owned();
                 if looks_like_challenge(status.as_u16(), &body) {

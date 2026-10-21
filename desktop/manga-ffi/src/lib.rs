@@ -2,11 +2,12 @@
 //! database and the settings a challenge hands over. Every type here mirrors one in `akidev-manga`;
 //! uniffi cannot derive across crates, so they are converted at this edge and nowhere else.
 
-use akidev_manga::fetch::Challenge;
+use akidev_manga::fetch::{Challenge, Unreachable};
 use akidev_manga::model as m;
 use akidev_manga::repo;
 use akidev_manga::source::{Info, Source};
-use akidev_manga::store::{Progress, Store};
+use akidev_manga::store::{Export, Progress, Store};
+use akidev_manga::{downloads, local};
 use akidev_manga::theme::Themes;
 use anyhow::Context;
 use std::collections::BTreeMap;
@@ -24,6 +25,8 @@ pub enum MangaError {
     /// The site wants a check first (Cloudflare, a captcha). There is no browser in the app to pass it in, so
     /// the screen says the site is not supported from here.
     Challenge { url: String, status: u16 },
+    /// The site could not be reached at all (no network, a blocked address).
+    Offline { url: String, reason: String },
     Failed { message: String },
 }
 
@@ -31,6 +34,7 @@ impl std::fmt::Display for MangaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MangaError::Challenge { url, .. } => write!(f, "{url} wants a check before it answers"),
+            MangaError::Offline { url, reason } => write!(f, "cannot reach {url}: {reason}"),
             MangaError::Failed { message } => f.write_str(message),
         }
     }
@@ -40,10 +44,13 @@ impl std::error::Error for MangaError {}
 
 impl From<anyhow::Error> for MangaError {
     fn from(error: anyhow::Error) -> MangaError {
-        match error.downcast_ref::<Challenge>() {
-            Some(challenge) => MangaError::Challenge { url: challenge.url.clone(), status: challenge.status },
-            None => MangaError::Failed { message: format!("{error:#}") },
+        if let Some(challenge) = error.downcast_ref::<Challenge>() {
+            return MangaError::Challenge { url: challenge.url.clone(), status: challenge.status };
         }
+        if let Some(down) = error.downcast_ref::<Unreachable>() {
+            return MangaError::Offline { url: down.url.clone(), reason: down.reason.clone() };
+        }
+        MangaError::Failed { message: format!("{error:#}") }
     }
 }
 
@@ -211,6 +218,58 @@ pub struct LibraryEntry {
     pub unread: u32,
     pub total: u32,
     pub last_read_ms: Option<i64>,
+    pub saved_ms: i64,
+    /// Ids of the categories it is in.
+    pub categories: Vec<i64>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CategoryInfo {
+    pub id: i64,
+    pub name: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum FilterKind {
+    Select,
+    Text,
+}
+
+/// A way to narrow a search, with its choices.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FilterInfo {
+    pub id: String,
+    pub name: String,
+    pub kind: FilterKind,
+    pub options: Vec<SettingOption>,
+    pub default: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Choice {
+    pub id: String,
+    pub value: String,
+}
+
+/// What a restore did.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RestoreReport {
+    pub series: u32,
+    pub sources_installed: Vec<String>,
+    /// Sources the backup used that could not be brought back (the repository is gone, or it is a hand-made one).
+    pub sources_missing: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DownloadInfo {
+    pub source: String,
+    pub series: String,
+    pub chapter: String,
+    /// `queued`, `active`, `done` or `failed`.
+    pub state: String,
+    pub pages: u32,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -297,6 +356,31 @@ fn plain_name(name: &str) -> bool {
 
 fn now_ms() -> i64 {
     akidev_core::calendar::now_ms()
+}
+
+/// The source id comic archives from the device are filed under; it has no definition.
+const DEVICE: &str = "device";
+
+fn file_url(path: &std::path::Path) -> String {
+    format!("file://{}", path.display())
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Backup {
+    version: u32,
+    library: Export,
+    repos: Vec<String>,
+    sources: Vec<BackupSource>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct BackupSource {
+    id: String,
+    /// The repository it came from; none for one installed by hand.
+    repo: Option<String>,
+    /// The whole definition, kept only when there is no repository to get it from.
+    document: Option<serde_json::Value>,
+    settings: Vec<(String, String)>,
 }
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -520,6 +604,13 @@ impl Engine {
         Ok(self.view(&base, &fetched.index.name, fetched.signed, &fetched.index))
     }
 
+    /// What a repository offers, without keeping it: the "add this repository?" sheet.
+    pub async fn preview_repo(&self, link: String) -> Result<RepoView> {
+        let base = repo::base_of(&link)?;
+        let fetched = repo::fetch_index(&base).await?;
+        Ok(self.view(&base, &fetched.index.name, fetched.signed, &fetched.index))
+    }
+
     pub fn repos(&self) -> Result<Vec<RepoInfo>> {
         Ok(self.store.repos()?.into_iter().map(|(base, name, signed)| RepoInfo { base, name, signed }).collect())
     }
@@ -577,12 +668,36 @@ impl Engine {
         Ok(self.source(&source)?.latest(page).await?.into())
     }
 
-    pub async fn search(&self, source: String, term: String, page: u32) -> Result<CardPage> {
-        Ok(self.source(&source)?.search(&term, page, &BTreeMap::new()).await?.into())
+    /// The ways a source lets a search be narrowed.
+    pub fn source_filters(&self, source: String) -> Result<Vec<FilterInfo>> {
+        Ok(self
+            .source(&source)?
+            .filters()
+            .iter()
+            .map(|filter| FilterInfo {
+                id: filter.id.clone(),
+                name: filter.name.clone(),
+                kind: match filter.kind {
+                    akidev_manga::def::FilterKind::Select => FilterKind::Select,
+                    akidev_manga::def::FilterKind::Text => FilterKind::Text,
+                },
+                options: filter.options.iter().map(|option| SettingOption { value: option.value.clone(), name: option.name.clone() }).collect(),
+                default: filter.default.clone().unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    /// A search; `choices` are the filters the person set (the rest take their defaults).
+    pub async fn search(&self, source: String, term: String, page: u32, choices: Vec<Choice>) -> Result<CardPage> {
+        let chosen = choices.into_iter().map(|choice| (choice.id, choice.value)).collect();
+        Ok(self.source(&source)?.search(&term, page, &chosen).await?.into())
     }
 
     /// The series' page. Also remembers it, so it can be saved to the library.
     pub async fn details(&self, source: String, id: String) -> Result<Detail> {
+        if source == DEVICE {
+            return Err(failed("a comic on the device has no page to fetch"));
+        }
         let detail = self.source(&source)?.details(&id).await?;
         self.store.upsert_series(&source, &id, &detail.title, detail.cover.as_deref(), detail.description.as_deref(), detail.status)?;
         Ok(detail.into())
@@ -590,12 +705,20 @@ impl Engine {
 
     /// Asks the site for the chapters, keeps them, and returns them with how far each was read.
     pub async fn chapters(&self, source: String, id: String) -> Result<ChapterList> {
+        if source == DEVICE {
+            return Ok(ChapterList { entries: self.entries(&source, &id)?, new_ids: Vec::new() });
+        }
         let fetched = self.source(&source)?.chapters(&id).await?;
         let synced = self.store.sync_chapters(&source, &id, &fetched)?;
         Ok(ChapterList { entries: self.entries(&source, &id)?, new_ids: synced.new })
     }
 
     pub async fn pages(&self, source: String, series: String, chapter: String) -> Result<PageList> {
+        // A chapter on the device (imported, or downloaded) is read from its files.
+        let kept = if source == DEVICE { downloads::pages(&self.dir.join("local").join(&series)) } else { downloads::pages(&downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter)) };
+        if !kept.is_empty() {
+            return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading: Reading::Unknown, headers: Vec::new() });
+        }
         Ok(self.source(&source)?.pages(&series, &chapter).await?.into())
     }
 
@@ -626,7 +749,7 @@ impl Engine {
             .store
             .library()?
             .into_iter()
-            .map(|item| LibraryEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, total: item.total, last_read_ms: item.last_read_ms })
+            .map(|item| LibraryEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, total: item.total, last_read_ms: item.last_read_ms, saved_ms: item.saved_ms, categories: item.categories })
             .collect())
     }
 
@@ -641,6 +764,157 @@ impl Engine {
 
     pub fn resume(&self, source: String, series: String) -> Result<Option<Resume>> {
         Ok(self.store.resume(&source, &series)?.map(|resume| Resume { chapter: resume.chapter, page: resume.page, offset: resume.offset }))
+    }
+
+    // --- categories ----------------------------------------------------------------------------
+
+    pub fn categories(&self) -> Result<Vec<CategoryInfo>> {
+        Ok(self.store.categories()?.into_iter().map(|category| CategoryInfo { id: category.id, name: category.name, count: category.count }).collect())
+    }
+
+    pub fn add_category(&self, name: String) -> Result<i64> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(failed("a category needs a name"));
+        }
+        Ok(self.store.add_category(name)?)
+    }
+
+    pub fn rename_category(&self, id: i64, name: String) -> Result<()> {
+        Ok(self.store.rename_category(id, name.trim())?)
+    }
+
+    pub fn delete_category(&self, id: i64) -> Result<()> {
+        Ok(self.store.delete_category(id)?)
+    }
+
+    pub fn set_category(&self, source: String, series: String, category: i64, member: bool) -> Result<()> {
+        Ok(self.store.put_in_category(&source, &series, category, member)?)
+    }
+
+    // --- moving and removing -------------------------------------------------------------------
+
+    /// Moves a series' library entry, categories and read chapters to the same series on another source.
+    /// The other series must have been opened once (so its chapters are known). Returns the chapters carried over.
+    pub fn migrate(&self, source: String, series: String, to_source: String, to_series: String) -> Result<u32> {
+        Ok(self.store.migrate(&source, &series, &to_source, &to_series, now_ms())?)
+    }
+
+    /// Forgets a series entirely: library entry, read state and the downloads it had.
+    pub fn forget_series(&self, source: String, series: String) -> Result<()> {
+        for row in self.store.downloads()?.into_iter().filter(|row| row.source == source && row.series == series) {
+            let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &row.source, &row.series, &row.chapter));
+        }
+        Ok(self.store.delete_series(&source, &series)?)
+    }
+
+    // --- backup --------------------------------------------------------------------------------
+
+    /// Everything that is the person's, as one text: library, read state, categories, the repositories and
+    /// the sources installed (by repository where there is one, whole where there is not), and source settings.
+    pub fn backup(&self) -> Result<String> {
+        let mut sources = Vec::new();
+        for (id, repo) in self.store.origins()? {
+            let document = match &repo {
+                None => std::fs::read_to_string(self.dir.join("sources").join(format!("{id}.json"))).ok().and_then(|text| serde_json::from_str(&text).ok()),
+                Some(_) => None,
+            };
+            sources.push(BackupSource { settings: self.store.settings(&id)?, id, repo, document });
+        }
+        let backup = Backup { version: 1, library: self.store.export()?, repos: self.store.repos()?.into_iter().map(|(base, _, _)| base).collect(), sources };
+        serde_json::to_string(&backup).map_err(|error| failed(error.to_string()))
+    }
+
+    /// Puts a backup back: the library at once, then the repositories and sources as far as they can be
+    /// reached. What could not come back is reported, not hidden.
+    pub async fn restore(&self, text: String) -> Result<RestoreReport> {
+        let backup: Backup = serde_json::from_str(&text).map_err(|error| failed(format!("that is not a backup: {error}")))?;
+        if backup.version != 1 {
+            return Err(failed(format!("this backup is version {}; this app reads version 1", backup.version)));
+        }
+        self.store.import(&backup.library)?;
+        for base in &backup.repos {
+            let _ = self.add_repo(base.clone()).await;
+        }
+        let mut report = RestoreReport { series: backup.library.series.len() as u32, sources_installed: Vec::new(), sources_missing: Vec::new() };
+        for source in &backup.sources {
+            let installed = self.installed_version(&source.id).is_some();
+            let outcome = match (&source.document, &source.repo) {
+                _ if installed => Ok(()),
+                (Some(document), _) => self.install_text(&document.to_string()).map(|info| self.store.set_origin(&info.id, None, info.version)).map(|_| ()),
+                (None, Some(base)) => match repo::fetch_index(base).await {
+                    Ok(fetched) => self.install_one(base, &fetched.index, &source.id).await.map(|_| ()).map_err(MangaError::from),
+                    Err(error) => Err(error.into()),
+                },
+                (None, None) => Err(failed("no way to get it back")),
+            };
+            match outcome {
+                Ok(()) => {
+                    for (key, value) in &source.settings {
+                        let _ = self.set_setting(source.id.clone(), key.clone(), value.clone());
+                    }
+                    report.sources_installed.push(source.id.clone());
+                }
+                Err(_) => report.sources_missing.push(source.id.clone()),
+            }
+        }
+        Ok(report)
+    }
+
+    // --- comics on the device ------------------------------------------------------------------
+
+    /// Adds a comic archive (CBZ) from the device as a series of the `device` source and saves it to the library.
+    /// Returns the series id.
+    pub fn import_file(&self, path: String) -> Result<String> {
+        let imported = local::import(std::path::Path::new(&path), &self.dir.join("local"))?;
+        self.store.upsert_series(DEVICE, &imported.id, &imported.title, imported.pages.first().map(|page| file_url(page)).as_deref(), None, m::Status::Unknown)?;
+        let chapter = m::Chapter { id: "1".into(), number: Some(1.0), title: Some(imported.title.clone()), date_ms: None, scanlator: None };
+        self.store.sync_chapters(DEVICE, &imported.id, &[chapter])?;
+        self.store.add_to_library(DEVICE, &imported.id, now_ms())?;
+        Ok(imported.id)
+    }
+
+    // --- downloads -----------------------------------------------------------------------------
+
+    /// Keeps a chapter on the device. Returns when it is done; a failed one is recorded as such.
+    pub async fn download_chapter(&self, source: String, series: String, chapter: String) -> Result<()> {
+        let mut row = akidev_manga::store::DownloadRow { source: source.clone(), series: series.clone(), chapter: chapter.clone(), state: "active".into(), pages: 0, bytes: 0 };
+        self.store.set_download(&row)?;
+        let outcome = async {
+            let list = self.source(&source)?.pages(&series, &chapter).await?;
+            let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
+            let client = reqwest::Client::new();
+            let headers: Vec<(String, String)> = list.headers.into_iter().collect();
+            let bytes = downloads::fetch(&client, &list.images, &headers, &folder, |done| {
+                row.pages = done;
+                let _ = self.store.set_download(&row);
+            })
+            .await?;
+            anyhow::Ok(bytes)
+        }
+        .await;
+        match outcome {
+            Ok(bytes) => {
+                row.state = "done".into();
+                row.bytes = bytes;
+                self.store.set_download(&row)?;
+                Ok(())
+            }
+            Err(error) => {
+                row.state = "failed".into();
+                self.store.set_download(&row)?;
+                Err(error.into())
+            }
+        }
+    }
+
+    pub fn downloads(&self) -> Result<Vec<DownloadInfo>> {
+        Ok(self.store.downloads()?.into_iter().map(|row| DownloadInfo { source: row.source, series: row.series, chapter: row.chapter, state: row.state, pages: row.pages, bytes: row.bytes }).collect())
+    }
+
+    pub fn delete_download(&self, source: String, series: String, chapter: String) -> Result<()> {
+        let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter));
+        Ok(self.store.delete_download(&source, &series, &chapter)?)
     }
 
     pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
