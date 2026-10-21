@@ -23,7 +23,7 @@ struct AkiZoomPage: UIViewRepresentable {
         context.coordinator.loaded = url
         view.show(nil)
         guard let link = URL(string: url) else { return }
-        let widthPx = UIScreen.main.bounds.width * scale * 2
+        let widthPx = Aki.screenSize.width * scale * 2
         let headers = headers
         context.coordinator.task?.cancel()
         context.coordinator.task = Task { @MainActor in

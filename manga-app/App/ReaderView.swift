@@ -83,7 +83,7 @@ private struct StripReader: View {
     let model: ReaderModel
     let close: () -> Void
     @State private var position = ScrollPosition()
-    @State private var width = UIScreen.main.bounds.width
+    @State private var width = Aki.screenSize.width
     @State private var contentY: CGFloat = 0
     @State private var live: CGFloat = 1
 
@@ -159,7 +159,7 @@ private struct StripReader: View {
         }
         .frame(width: width, height: next == nil ? 220 : 96)
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { top in
-            if top < UIScreen.main.bounds.height * 0.9 { model.finish(segment.chapterID) }
+            if top < Aki.screenSize.height * 0.9 { model.finish(segment.chapterID) }
         }
     }
 

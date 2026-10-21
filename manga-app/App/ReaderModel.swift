@@ -153,8 +153,8 @@ final class ReaderModel {
     /// Loads the pictures just after `index` so they are there when the page is turned.
     func warm(_ list: PageList, from index: Int, count: Int) {
         let headers = Dictionary(list.headers.map { ($0.name, $0.value) }, uniquingKeysWith: { $1 })
-        let scale = UIScreen.main.scale
-        let width = UIScreen.main.bounds.width * (mode == .strip ? zoom : 2) * scale
+        let scale = Aki.screenScale
+        let width = Aki.screenSize.width * (mode == .strip ? zoom : 2) * scale
         for url in list.images.dropFirst(max(index, 0)).prefix(count) where warmed.insert("\(url)@\(Int(width))").inserted {
             guard let link = URL(string: url) else { continue }
             Task.detached(priority: .utility) { _ = await ImageLoader.shared.image(link, headers: headers, widthPx: width) }

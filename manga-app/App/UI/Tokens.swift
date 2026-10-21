@@ -31,9 +31,14 @@ enum Aki {
     static let cardRadius: CGFloat = 22
     static let sheetRadius: CGFloat = 32
 
-    /// The distance from the top of the screen to below the status bar.
-    static var safeTop: CGFloat {
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        return scene?.keyWindow?.safeAreaInsets.top ?? 59
+    private static var scene: UIWindowScene? {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
     }
+
+    /// The distance from the top of the screen to below the status bar.
+    static var safeTop: CGFloat { scene?.keyWindow?.safeAreaInsets.top ?? 59 }
+
+    /// The screen the app is on, in points; a phone's size until a window exists.
+    static var screenSize: CGSize { scene?.screen.bounds.size ?? CGSize(width: 393, height: 852) }
+    static var screenScale: CGFloat { scene?.screen.scale ?? 3 }
 }
