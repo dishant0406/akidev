@@ -13,7 +13,8 @@ akidev-core = { path = "../core", default-features = false }
 anyhow.workspace = true
 ego-tree = "0.11.1"
 regex.workspace = true
-reqwest.workspace = true
+# Its own version: MangaDex needs TLS 1.3, which the workspace's native-tls (macOS Security.framework 1.2) cannot speak.
+reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "form", "rustls"] }
 scraper = "0.29.0"
 serde.workspace = true
 serde_json.workspace = true

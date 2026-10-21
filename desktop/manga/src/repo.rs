@@ -13,7 +13,7 @@
 //! repository; a signed repository additionally cannot change hands without the app noticing (the app
 //! remembers the key the first time).
 
-use akidev_core::http::{client, read_capped};
+use crate::http::{client, read_capped};
 use akidev_core::sources::{decode_hex, encode_hex};
 use anyhow::{Context, bail, ensure};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};

@@ -7,6 +7,7 @@ pub mod def;
 pub mod eval;
 pub mod downloads;
 pub mod fetch;
+pub mod http;
 pub mod local;
 pub mod model;
 pub mod repo;

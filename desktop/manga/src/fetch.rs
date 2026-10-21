@@ -1,7 +1,7 @@
 //! Making the requests: a polite rate, the cookies and user agent a challenge handed over, and a
 //! stand-in that answers from recorded pages so a definition can be tested without its site.
 
-use akidev_core::http::{client, read_capped};
+use crate::http::{client, read_capped};
 use anyhow::{Context, bail};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -60,6 +60,18 @@ impl std::fmt::Display for Unreachable {
 }
 
 impl std::error::Error for Unreachable {}
+
+/// An error with everything beneath it ("error sending request: connection refused"): the top line alone says nothing.
+fn cause(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut inner = error.source();
+    while let Some(next) = inner {
+        text.push_str(": ");
+        text.push_str(&next.to_string());
+        inner = next.source();
+    }
+    text
+}
 
 enum Transport {
     Live,
@@ -172,7 +184,7 @@ impl Fetcher {
                     builder = builder.json(json);
                 }
                 // The address is already in the message, so the error's own copy of it is dropped.
-                let response = builder.send().await.map_err(|error| Unreachable { url: req.url.clone(), reason: error.without_url().to_string() })?;
+                let response = builder.send().await.map_err(|error| Unreachable { url: req.url.clone(), reason: cause(&error.without_url()) })?;
                 let status = response.status();
                 let body = String::from_utf8_lossy(&read_capped(response, MAX_BODY).await?).into_owned();
                 if looks_like_challenge(status.as_u16(), &body) {

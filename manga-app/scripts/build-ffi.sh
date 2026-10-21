@@ -11,6 +11,9 @@ trap 'rm -rf "$work"' EXIT
 profile="${PROFILE:-release}"
 flag=""; [ "$profile" = release ] && flag="--release"
 
+# The app is iOS 26 only; rustls's crypto library needs a deployment target newer than Rust's default (iOS 10).
+export IPHONEOS_DEPLOYMENT_TARGET=26.0
+
 cd "$root/desktop"
 for target in aarch64-apple-ios aarch64-apple-ios-sim; do
   cargo build $flag -p akidev-manga-ffi --lib --target "$target"
