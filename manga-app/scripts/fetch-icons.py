@@ -18,7 +18,7 @@ ICONS = {
     "bookmark-off": "bookmark-off", "check": "check-circle", "tick": "check", "clock": "clock-circle",
     "more": "menu-dots", "play": "play", "previous": "skip-previous", "next": "skip-next", "keyboard": "keyboard",
     "server": "server-2", "sparkles": "stars-minimalistic", "list": "list", "warning": "danger-triangle",
-    "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip",
+    "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip", "image": "gallery",
 }
 STYLES = {"": "linear", "-solid": "bold"}
 root = pathlib.Path(__file__).resolve().parent.parent / "App" / "Assets.xcassets"

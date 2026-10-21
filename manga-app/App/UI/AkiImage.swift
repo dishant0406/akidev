@@ -27,7 +27,7 @@ struct AkiImage: View {
                         Image(uiImage: image).resizable().scaledToFit().frame(width: geometry.size.width)
                     }
                 } else if failed {
-                    AkiIcon("photo", tone: .dim)
+                    AkiIcon("image", tone: .dim)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
