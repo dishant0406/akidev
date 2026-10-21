@@ -202,10 +202,15 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
     }
     writer.finish().unwrap();
     let id = engine.import_file(archive.to_string_lossy().to_string()).unwrap();
-    assert_eq!(id, "short-story");
+    assert!(id.starts_with("short-story-"), "{id}");
     let pages = engine.pages("device".into(), id.clone(), "1".into()).await.unwrap();
     assert_eq!(pages.images.len(), 2);
     assert!(pages.images[0].starts_with("file://") && pages.images[0].ends_with("0000.jpg"));
+    assert_eq!(engine.library().unwrap().len(), 2);
+
+    // Moving to a series that was never opened, or onto itself, is refused rather than losing the library entry.
+    assert!(engine.migrate("local".into(), "solo-leveling".into(), "local".into(), "nope".into()).is_err());
+    assert!(engine.migrate("local".into(), "solo-leveling".into(), "local".into(), "solo-leveling".into()).is_err());
     assert_eq!(engine.library().unwrap().len(), 2);
 
     // The backup goes into a fresh install: the library comes back, and the source is fetched again from its repository.

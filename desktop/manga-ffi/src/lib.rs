@@ -393,6 +393,8 @@ pub struct Engine {
     store: Store,
     themes: RwLock<Themes>,
     sources: RwLock<BTreeMap<String, Arc<Source>>>,
+    /// Chapters being downloaded now, as `source/series/chapter`, so one is never fetched twice at once.
+    downloading: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl Engine {
@@ -481,6 +483,7 @@ impl Engine {
         }
         let mut themes_changed = false;
         for theme_id in &offered.requires {
+            anyhow::ensure!(plain_name(theme_id), "{theme_id} is not a name a theme may have");
             let theme = index.themes.iter().find(|theme| &theme.id == theme_id).with_context(|| format!("the repository has no theme {theme_id}"))?;
             let text = repo::fetch_file(base, &theme.path, &theme.sha256).await?;
             serde_json::from_str::<serde_json::Value>(&text).with_context(|| format!("theme {theme_id} is not JSON"))?;
@@ -527,7 +530,9 @@ impl Engine {
         let dir = PathBuf::from(data_dir);
         std::fs::create_dir_all(&dir).map_err(|error| failed(format!("cannot use {}: {error}", dir.display())))?;
         let store = Store::open(&dir.join("manga.db"))?;
-        let engine = Engine { dir, store, themes: RwLock::default(), sources: RwLock::default() };
+        store.fail_interrupted_downloads()?;
+        downloads::clear_unfinished(&dir.join("downloads"));
+        let engine = Engine { dir, store, themes: RwLock::default(), sources: RwLock::default(), downloading: Default::default() };
         engine.reload();
         Ok(Arc::new(engine))
     }
@@ -714,10 +719,24 @@ impl Engine {
     }
 
     pub async fn pages(&self, source: String, series: String, chapter: String) -> Result<PageList> {
-        // A chapter on the device (imported, or downloaded) is read from its files.
-        let kept = if source == DEVICE { downloads::pages(&self.dir.join("local").join(&series)) } else { downloads::pages(&downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter)) };
-        if !kept.is_empty() {
-            return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading: Reading::Unknown, headers: Vec::new() });
+        // A chapter on the device (imported, or downloaded in full) is read from its files.
+        if source == DEVICE && plain_name(&series) {
+            let kept = downloads::pages(&self.dir.join("local").join(&series));
+            if !kept.is_empty() {
+                return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading: Reading::Unknown, headers: Vec::new() });
+            }
+        } else if source != DEVICE && self.store.is_downloaded(&source, &series, &chapter)? {
+            let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
+            let kept = downloads::pages(&folder);
+            if !kept.is_empty() {
+                let reading = match std::fs::read_to_string(folder.join("reading.txt")).unwrap_or_default().trim() {
+                    "long_strip" => Reading::LongStrip,
+                    "paged" => Reading::Paged,
+                    "paged_rtl" => Reading::PagedRtl,
+                    _ => Reading::Unknown,
+                };
+                return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading, headers: Vec::new() });
+            }
         }
         Ok(self.source(&source)?.pages(&series, &chapter).await?.into())
     }
@@ -805,6 +824,9 @@ impl Engine {
         for row in self.store.downloads()?.into_iter().filter(|row| row.source == source && row.series == series) {
             let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &row.source, &row.series, &row.chapter));
         }
+        if source == DEVICE && plain_name(&series) {
+            let _ = std::fs::remove_dir_all(self.dir.join("local").join(&series));
+        }
         Ok(self.store.delete_series(&source, &series)?)
     }
 
@@ -878,18 +900,47 @@ impl Engine {
 
     /// Keeps a chapter on the device. Returns when it is done; a failed one is recorded as such.
     pub async fn download_chapter(&self, source: String, series: String, chapter: String) -> Result<()> {
+        let key = format!("{source}/{series}/{chapter}");
+        if !self.downloading.lock().unwrap().insert(key.clone()) {
+            return Ok(());
+        }
+        let result = self.download_one(&source, &series, &chapter).await;
+        self.downloading.lock().unwrap().remove(&key);
+        result
+    }
+
+    pub fn downloads(&self) -> Result<Vec<DownloadInfo>> {
+        Ok(self.store.downloads()?.into_iter().map(|row| DownloadInfo { source: row.source, series: row.series, chapter: row.chapter, state: row.state, pages: row.pages, bytes: row.bytes }).collect())
+    }
+
+    pub fn delete_download(&self, source: String, series: String, chapter: String) -> Result<()> {
+        let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter));
+        Ok(self.store.delete_download(&source, &series, &chapter)?)
+    }
+}
+
+impl Engine {
+    async fn download_one(&self, source: &str, series: &str, chapter: &str) -> Result<()> {
+        let (source, series, chapter) = (source.to_string(), series.to_string(), chapter.to_string());
         let mut row = akidev_manga::store::DownloadRow { source: source.clone(), series: series.clone(), chapter: chapter.clone(), state: "active".into(), pages: 0, bytes: 0 };
         self.store.set_download(&row)?;
         let outcome = async {
             let list = self.source(&source)?.pages(&series, &chapter).await?;
             let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
-            let client = reqwest::Client::new();
+            let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(60)).connect_timeout(std::time::Duration::from_secs(15)).build().map_err(|error| anyhow::anyhow!("{error}"))?;
             let headers: Vec<(String, String)> = list.headers.into_iter().collect();
             let bytes = downloads::fetch(&client, &list.images, &headers, &folder, |done| {
                 row.pages = done;
                 let _ = self.store.set_download(&row);
             })
             .await?;
+            let reading = match list.reading {
+                m::Reading::LongStrip => "long_strip",
+                m::Reading::Paged => "paged",
+                m::Reading::PagedRtl => "paged_rtl",
+                m::Reading::Unknown => "unknown",
+            };
+            std::fs::write(folder.join("reading.txt"), reading)?;
             anyhow::Ok(bytes)
         }
         .await;
@@ -908,15 +959,10 @@ impl Engine {
         }
     }
 
-    pub fn downloads(&self) -> Result<Vec<DownloadInfo>> {
-        Ok(self.store.downloads()?.into_iter().map(|row| DownloadInfo { source: row.source, series: row.series, chapter: row.chapter, state: row.state, pages: row.pages, bytes: row.bytes }).collect())
-    }
+}
 
-    pub fn delete_download(&self, source: String, series: String, chapter: String) -> Result<()> {
-        let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter));
-        Ok(self.store.delete_download(&source, &series, &chapter)?)
-    }
-
+#[uniffi::export]
+impl Engine {
     pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
         Ok(self
             .store

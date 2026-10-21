@@ -47,8 +47,6 @@ struct SettingsView: View {
                 AkiSection(title: "Downloads") {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
-                            AkiSwitch(title: "Wi-Fi only", isOn: $prefs.wifiOnly)
-                            AkiSwitch(title: "Delete after reading", isOn: $prefs.deleteWhenRead)
                             HStack {
                                 AkiText("Kept on this device", .bodyStrong)
                                 Spacer()
@@ -83,7 +81,10 @@ struct SettingsView: View {
         .background(AkiBackdrop())
         .akiNoNavigationBar()
         .hidesTabBar()
-        .akiFileImporter(isPresented: $restoring, types: [.json]) { url in Task { await restore(url) } }
+        .akiFileImporter(isPresented: $restoring, types: [.json]) { url in
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+            Task { await restore(text) }
+        }
         .akiFileImporter(isPresented: $importing, types: [UTType(filenameExtension: "cbz") ?? .zip, .zip]) { url in importComic(url) }
         .akiAlert(message?.title ?? "", message: message?.message, isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } }))
         .onAppear { downloaded = ((try? model.engine.downloads()) ?? []).reduce(0) { $0 + $1.bytes } }
@@ -98,9 +99,9 @@ struct SettingsView: View {
         } catch { message = describe(error) }
     }
 
-    private func restore(_ url: URL) async {
+    private func restore(_ text: String) async {
         do {
-            let report = try await model.engine.restore(text: String(contentsOf: url, encoding: .utf8))
+            let report = try await model.engine.restore(text: text)
             model.refresh()
             let missing = report.sourcesMissing.isEmpty ? "" : " Could not bring back: \(report.sourcesMissing.joined(separator: ", "))."
             message = ("Restored", "\(report.series) series and \(report.sourcesInstalled.count) sources.\(missing)")

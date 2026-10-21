@@ -109,7 +109,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | **Welcome (first run)** | Launch with no source | What the app is, "Add a repository", a note that it includes no sources, "Import a file" (later) | **Partial**: Home shows an empty state with "Open Sources" |
 | **Home / Discover** | Tab | Glass search, source chips, Popular and Latest pills, featured card, grid, "Show more" | **Built** |
-| **Source filters** | Home (a filter button) | The filters a source defines (genre, status, sort) | **Missing** (the engine accepts them; no UI) |
+| **Source filters** | Home (a filter button) | The filters a source defines (genre, status, sort) | **Built** |
 | **Global search** | Home search with "All sources" | Results grouped per source, each filling in as it answers | **Missing** |
 | **Series** | Any grid or card | Hero, chips, Chapters and Details pills, chapter cards, Continue, save, more menu | **Built** |
 | **Reader** | A chapter | Strip, paged, right-to-left, zoom, resume, next chapter, glass chrome | **Built** |
@@ -255,3 +255,15 @@ Plugin readers: [Mihon docs](https://mihon.app/docs/guides/getting-started), [ca
 Webtoon platforms: [WEBTOON](https://apps.apple.com/us/app/-/id894546091), [Tapas](https://screensdesign.com/showcase/tapas-comics-and-novels), [Lezhin](https://apps.apple.com/us/app/lezhin-comics-premium-webtoons/id664973122), [platform guide](https://kcomicsbeat.com/2024/09/25/guide-to-webtoon-platforms/), [app ranking](https://unstar.app/blog/webtoon-tapas-manga-plus-tappytoon-lezhin-comic-reader-apps-ranked-2026).
 Publisher apps: [MANGA Plus](https://apps.apple.com/US/app/id1442476536), [Wikipedia](https://en.wikipedia.org/wiki/Manga_Plus), [Shonen Jump](https://apps.apple.com/us/app/-/id594237344), [K MANGA](https://apps.apple.com/app/1637040002), [Comikey](https://apps.apple.com/us/app/comikey-manga-webcomics/id1601348237).
 Self-hosted and UX: [Komga](https://komga.org/docs/introduction), [Kavita wiki](https://wiki.kavitareader.com/), [Komic](https://apps.apple.com/app/id6744676973), [comic reader UX](https://uxdesign.cc/the-best-ux-for-comics-so-far-b0c75bc76c03).
+
+## Build status (2026-10-22)
+
+Built and run in the simulator: welcome with clipboard paste, add-repository sheet and `akimanga://add-repo?url=` link,
+settings (appearance, 18+ and language filters, reader defaults, downloads, backup and restore, CBZ import, about),
+source filters sheet, library categories with sort, unread filter and long-press menu, chapter downloads read offline,
+forget series, keep-awake and tap-side swap in the reader.
+
+Not built yet: global search across sources, reader settings sheet beyond the defaults in Settings (background,
+orientation lock), source error cards beyond the challenge/offline messages, background refresh and notifications,
+migration screen (the engine call exists), Wi-Fi-only and delete-after-reading downloads, trackers and self-hosted
+server sources (both wait on owner decisions).

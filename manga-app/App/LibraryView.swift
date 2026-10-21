@@ -57,11 +57,13 @@ struct LibraryView: View {
 
     private var shown: [LibraryEntry] {
         let filtered = model.library.filter { (category < 0 || $0.categories.contains(category)) && (!onlyUnread || $0.unread > 0) }
+        func byTitle(_ a: LibraryEntry, _ b: LibraryEntry) -> Bool { a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending }
+        // Ties fall back to the title so the order never reshuffles on its own.
         switch sort {
-        case .recent: return filtered.sorted { ($0.lastReadMs ?? 0) > ($1.lastReadMs ?? 0) }
-        case .added: return filtered.sorted { $0.savedMs > $1.savedMs }
-        case .title: return filtered.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-        case .unread: return filtered.sorted { $0.unread > $1.unread }
+        case .recent: return filtered.sorted { ($0.lastReadMs ?? 0) != ($1.lastReadMs ?? 0) ? ($0.lastReadMs ?? 0) > ($1.lastReadMs ?? 0) : byTitle($0, $1) }
+        case .added: return filtered.sorted { $0.savedMs != $1.savedMs ? $0.savedMs > $1.savedMs : byTitle($0, $1) }
+        case .title: return filtered.sorted(by: byTitle)
+        case .unread: return filtered.sorted { $0.unread != $1.unread ? $0.unread > $1.unread : byTitle($0, $1) }
         }
     }
 

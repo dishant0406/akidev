@@ -10,7 +10,10 @@ extension View {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
             try? FileManager.default.removeItem(at: copy)
-            if (try? FileManager.default.copyItem(at: url, to: copy)) != nil { onPick(copy) }
+            if (try? FileManager.default.copyItem(at: url, to: copy)) != nil {
+                onPick(copy)
+                try? FileManager.default.removeItem(at: copy)
+            }
         }
     }
 }

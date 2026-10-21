@@ -22,9 +22,6 @@ final class Preferences {
     /// Swap which screen edge goes forward.
     var invertTaps: Bool { didSet { defaults.set(invertTaps, forKey: "invertTaps") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
-    var wifiOnly: Bool { didSet { defaults.set(wifiOnly, forKey: "wifiOnly") } }
-    var deleteWhenRead: Bool { didSet { defaults.set(deleteWhenRead, forKey: "deleteWhenRead") } }
-    var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
 
     init() {
         let defaults = UserDefaults.standard
@@ -34,8 +31,5 @@ final class Preferences {
         defaultMode = ReadingMode(rawValue: defaults.string(forKey: "defaultMode") ?? "") ?? .strip
         invertTaps = defaults.bool(forKey: "invertTaps")
         keepAwake = defaults.bool(forKey: "keepAwake")
-        wifiOnly = defaults.object(forKey: "wifiOnly") as? Bool ?? true
-        deleteWhenRead = defaults.bool(forKey: "deleteWhenRead")
-        notifyUpdates = defaults.bool(forKey: "notifyUpdates")
     }
 }

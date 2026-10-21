@@ -250,10 +250,12 @@ struct SeriesView: View {
 
     private func download(_ list: [ChapterEntry]) {
         Task {
+            var failed = 0
             for chapter in list.reversed() {
-                do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { problem = describe(error).message; break }
+                do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { failed += 1 }
                 loadKept()
             }
+            if failed > 0 { problem = failed == 1 ? "One chapter could not be downloaded." : "\(failed) chapters could not be downloaded." }
         }
     }
 
