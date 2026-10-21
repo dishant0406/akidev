@@ -1,0 +1,8 @@
+{
+  "extends": "madara",
+  "id": "madara-example",
+  "name": "Madara Example",
+  "version": 1,
+  "lang": ["en"],
+  "base_url": "https://madara.example"
+}

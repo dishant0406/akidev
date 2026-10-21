@@ -1,0 +1,106 @@
+{
+  "calls": [
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": "https://madara.example/wp-content/c/solo.jpg",
+            "id": "solo-leveling",
+            "title": "Solo Leveling"
+          },
+          {
+            "cover": "https://madara.example/wp-content/c/tower.jpg",
+            "id": "tower-of-god",
+            "title": "Tower of God"
+          }
+        ]
+      },
+      "op": "popular",
+      "page": 1
+    },
+    {
+      "expect": {
+        "has_next": false,
+        "items": [
+          {
+            "cover": "https://madara.example/wp-content/c/solo.jpg",
+            "id": "solo-leveling",
+            "title": "Solo Leveling"
+          }
+        ]
+      },
+      "op": "search",
+      "term": "solo leveling"
+    },
+    {
+      "expect": {
+        "authors": [
+          "Chugong",
+          "Dubu"
+        ],
+        "cover": "https://madara.example/wp-content/c/solo-big.jpg",
+        "description": "Ten years ago, the gates connecting two worlds opened.\nHe is the weakest hunter.",
+        "status": "ongoing",
+        "tags": [
+          "Action",
+          "Fantasy"
+        ],
+        "title": "Solo Leveling"
+      },
+      "id": "solo-leveling",
+      "op": "details"
+    },
+    {
+      "expect": [
+        {
+          "date_ms": 1799827200000,
+          "id": "chapter-179",
+          "number": 179.0,
+          "scanlator": null,
+          "title": "Chapter 179"
+        },
+        {
+          "date_ms": 1709596800000,
+          "id": "chapter-178-5",
+          "number": 178.5,
+          "scanlator": null,
+          "title": "Chapter 178.5 - Side Story"
+        },
+        {
+          "date_ms": 1708992000000,
+          "id": "chapter-178",
+          "number": 178.0,
+          "scanlator": null,
+          "title": "Chapter 178"
+        }
+      ],
+      "id": "solo-leveling",
+      "op": "chapters"
+    },
+    {
+      "expect": {
+        "headers": {
+          "referer": "https://madara.example/"
+        },
+        "images": [
+          "https://cdn.madara.example/solo/179/001.jpg",
+          "https://madara.example/solo/179/002.jpg",
+          "https://cdn.madara.example/solo/179/003.jpg"
+        ],
+        "reading": "long_strip"
+      },
+      "id": "chapter-179",
+      "op": "pages",
+      "series": "solo-leveling"
+    }
+  ],
+  "now_ms": 1800000000000,
+  "responses": {
+    "GET https://madara.example/manga/page/1/?m_orderby=views": "popular.html",
+    "GET https://madara.example/manga/solo-leveling/": "detail.html",
+    "GET https://madara.example/manga/solo-leveling/chapter-179/": "pages.html",
+    "GET https://madara.example/page/1/?s=solo%20leveling&post_type=wp-manga": "search.html",
+    "POST https://madara.example/manga/solo-leveling/ajax/chapters/": "chapters.html"
+  }
+}
