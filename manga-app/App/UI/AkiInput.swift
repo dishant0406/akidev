@@ -21,7 +21,7 @@ struct AkiInput: View {
                 .textInputAutocapitalization(.never)
                 .onSubmit(onSubmit)
             if !text.isEmpty {
-                Button { text = ""; onClear() } label: { AkiIcon("xmark.circle.fill", size: 16, tone: .dim) }
+                Button { text = ""; onClear() } label: { AkiIcon("close-solid", size: 16, tone: .dim) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear")
             }

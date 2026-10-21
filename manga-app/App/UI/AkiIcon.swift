@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// A symbol. The size scales with Dynamic Type.
+/// An icon from the Solar set (see scripts/fetch-icons.py): `name` is the outline, `name-solid` the filled one.
+/// The size scales with Dynamic Type.
 struct AkiIcon: View {
     let name: String
     var size: CGFloat = 18
@@ -14,8 +15,11 @@ struct AkiIcon: View {
     }
 
     var body: some View {
-        Image(systemName: name)
-            .font(.system(size: size * scale, weight: .semibold))
+        Image("solar-\(name)")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size * scale, height: size * scale)
             .foregroundStyle(tone.color)
     }
 }

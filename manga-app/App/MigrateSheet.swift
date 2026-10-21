@@ -28,7 +28,7 @@ struct MigrateSheet: View {
                     AkiEmptyState(title: "No other source", message: "Install another source that can search, then come back.")
                 } else {
                     AkiChips(items: others.map { ($0.id, $0.name) }, selection: $target)
-                    AkiInput(placeholder: "Find the series there", text: $term, icon: "magnifyingglass", onSubmit: { Task { await search() } })
+                    AkiInput(placeholder: "Find the series there", text: $term, icon: "search", onSubmit: { Task { await search() } })
                     if busy { AkiSpinner().frame(maxWidth: .infinity, minHeight: 80) }
                     else if searched && results.isEmpty { AkiText("Nothing matched on \(model.name(of: target)).", .caption, tone: .dim) }
                     ForEach(results, id: \.id) { card in

@@ -48,3 +48,9 @@ The only tint is yellow, and it marks the current choice or the main action.
 - Titles are rounded and bold; metadata is small and grey.
 - A pushed screen (a series, a repository) hides the tab bar and has its own back button.
 - Anything that scrolls under the tab bar uses `.underTabBar()`.
+
+## Icons
+
+Icons are the Solar set (480 Design, CC BY 4.0), drawn as template images in `App/Assets.xcassets` and shown only through
+`AkiIcon`: `name` is the outline, `name-solid` the bold one (used for the selected tab, saved and read states). To add one,
+put its Solar name in `scripts/fetch-icons.py` and run it; the credit is in Settings > About.

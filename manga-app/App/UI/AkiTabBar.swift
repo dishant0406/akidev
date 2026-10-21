@@ -14,7 +14,7 @@ struct AkiTabBar: View {
                     Button {
                         withAnimation(.smooth(duration: 0.32)) { selection = tab }
                     } label: {
-                        AkiIcon(tab.symbol(selected: on), size: 20, tone: on ? .onYellow : .dim)
+                        AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onYellow : .dim)
                             .frame(width: 70, height: 58)
                             .contentShape(Circle())
                             .overlay(alignment: .topTrailing) {

@@ -42,7 +42,7 @@ struct ReaderView: View {
     private var topBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "chevron.left", label: "Back") { dismiss() }
+                AkiIconButton(symbol: "back", label: "Back") { dismiss() }
                 VStack(alignment: .leading, spacing: 0) {
                     AkiText(model.ref.title, .captionStrong, tone: .onDark, lines: 1)
                     if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .dim, lines: 1) }
@@ -50,7 +50,7 @@ struct ReaderView: View {
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .akiGlass(.capsule, interactive: false)
                 Spacer(minLength: 0)
-                AkiIconButton(symbol: "slider.horizontal.3", label: "Reader settings") { settings = true }
+                AkiIconButton(symbol: "sliders", label: "Reader settings") { settings = true }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -60,14 +60,14 @@ struct ReaderView: View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 if let older = model.older(than: model.current) {
-                    AkiIconButton(symbol: "backward.end.fill", label: "Previous chapter") { Task { await model.open(older.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "previous", label: "Previous chapter") { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
                 let count = model.currentSegment?.pages.images.count ?? 0
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onDark)
                     .monospacedDigit()
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, interactive: false)
                 if let newer = model.newer(than: model.current) {
-                    AkiIconButton(symbol: "forward.end.fill", label: "Next chapter") { Task { await model.open(newer.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "next", label: "Next chapter") { Task { await model.open(newer.id, page: 0, offset: 0) } }
                 }
             }
         }

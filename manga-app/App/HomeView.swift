@@ -70,9 +70,9 @@ struct HomeView: View {
                             .frame(minHeight: 420)
                     } else {
                         HStack(spacing: 10) {
-                            AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                            AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
                             if !filters.isEmpty && !isGlobal {
-                                AkiIconButton(symbol: "slider.horizontal.3", label: "Filters", tint: choices.isEmpty ? nil : Aki.yellow) { filtering = true }
+                                AkiIconButton(symbol: "sliders", label: "Filters", tint: choices.isEmpty ? nil : Aki.yellow) { filtering = true }
                             }
                         }
                         if model.visibleSources.count > 1 { AkiChips(items: [(Self.everySource, "All")] + model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }

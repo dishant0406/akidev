@@ -29,7 +29,7 @@ struct UpdatesView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Updates", subtitle: model.unreadTotal > 0 ? "\(model.unreadTotal) unread chapters" : "All caught up") {
                         if model.refreshing { AkiSpinner().frame(width: 44, height: 44) } else {
-                            AkiIconButton(symbol: "arrow.clockwise", label: "Check for new chapters") { Task { await refresh() } }
+                            AkiIconButton(symbol: "refresh", label: "Check for new chapters") { Task { await refresh() } }
                         }
                     }
                     AkiTabs(items: [(UpdatesTab.unread, "Unread"), (UpdatesTab.recent, "Recent")], selection: $tab)

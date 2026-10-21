@@ -33,7 +33,7 @@ struct AkiBackHeader<Trailing: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            AkiIconButton(symbol: "chevron.left", label: "Back", action: back)
+            AkiIconButton(symbol: "back", label: "Back", action: back)
             AkiHeader(title: title, subtitle: subtitle, trailing: trailing)
         }
     }

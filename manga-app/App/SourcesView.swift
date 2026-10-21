@@ -15,8 +15,8 @@ struct SourcesView: View {
                     AkiHeader(title: "Sources", subtitle: "\(model.sources.count) installed") {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
-                                AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "gearshape", label: "Settings", action: {}).face }.akiGlass(.circle)
-                                AkiIconButton(symbol: "plus", label: "Add a repository", tint: Aki.yellow) { adding = true }
+                                AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "settings", label: "Settings", action: {}).face }.akiGlass(.circle)
+                                AkiIconButton(symbol: "add", label: "Add a repository", tint: Aki.yellow) { adding = true }
                             }
                         }
                     }
@@ -24,7 +24,7 @@ struct SourcesView: View {
                         if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .dim) } }
                         ForEach(model.sources, id: \.id) { source in
                             AkiLink(value: source.id) {
-                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "puzzlepiece.extension.fill" : "exclamationmark.triangle.fill", showsChevron: true)
+                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
                             }
                             .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
@@ -33,11 +33,11 @@ struct SourcesView: View {
                         if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .dim) } }
                         ForEach(model.repos, id: \.base) { repo in
                             AkiLink(value: repo) {
-                                AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "externaldrive.fill", showsChevron: true)
+                                AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
                             }
                             .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
                         }
-                        AkiButton("Add a repository", icon: "plus", fullWidth: true) { adding = true }
+                        AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
                     }
                     if let note = model.note { AkiText(note, .caption, tone: .dim) }
                 }
@@ -95,7 +95,7 @@ struct RepoScreen: View {
             switch source.state {
             case .notInstalled: AkiButton("Install", variant: .primary, size: .small) { Task { await install(source) } }
             case .updateAvailable: AkiButton("Update", variant: .primary, size: .small) { Task { await install(source) } }
-            case .installed: AkiBadge("Installed", icon: "checkmark")
+            case .installed: AkiBadge("Installed", icon: "tick")
             case .needsNewerApp: AkiBadge("Needs a newer app")
             }
         }

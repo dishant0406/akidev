@@ -9,6 +9,17 @@ struct AkiMenuItem: Identifiable {
     let action: () -> Void
 }
 
+/// One row of a menu: its icon (a tick when it is the chosen one) and its title.
+private struct AkiMenuButton: View {
+    let item: AkiMenuItem
+
+    var body: some View {
+        Button(role: item.destructive ? .destructive : nil, action: item.action) {
+            Label { Text(item.title) } icon: { Image("solar-\(item.isSelected ? "tick" : item.icon)") }
+        }
+    }
+}
+
 /// A glass round button that opens a menu.
 struct AkiMenu: View {
     let symbol: String
@@ -19,7 +30,7 @@ struct AkiMenu: View {
     var body: some View {
         Menu {
             ForEach(items) { item in
-                Button(role: item.destructive ? .destructive : nil, action: item.action) { Label(item.title, systemImage: item.isSelected ? "checkmark" : item.icon) }
+                AkiMenuButton(item: item)
             }
         } label: {
             AkiIconButton(symbol: symbol, label: label, onImage: onImage) {}.face
@@ -34,7 +45,7 @@ extension View {
     func akiContextMenu(_ items: [AkiMenuItem]) -> some View {
         contextMenu {
             ForEach(items) { item in
-                Button(role: item.destructive ? .destructive : nil, action: item.action) { Label(item.title, systemImage: item.isSelected ? "checkmark" : item.icon) }
+                AkiMenuButton(item: item)
             }
         }
     }

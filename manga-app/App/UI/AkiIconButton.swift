@@ -19,7 +19,7 @@ struct AkiIconButton: View {
 
     /// The round face alone, for a menu that supplies its own button.
     var face: some View {
-        AkiIcon(symbol, size: size * 0.38, tone: tint != nil ? .onYellow : (onImage ? .onImage : .primary))
+        AkiIcon(symbol, size: size * 0.5, tone: tint != nil ? .onYellow : (onImage ? .onImage : .primary))
             .frame(width: size, height: size)
             .contentShape(Circle())
     }

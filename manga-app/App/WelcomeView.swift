@@ -9,7 +9,7 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             Spacer(minLength: 40)
-            AkiIcon("books.vertical.fill", size: 54, tone: .primary)
+            AkiIcon("library-solid", size: 54, tone: .primary)
                 .frame(width: 112, height: 112)
                 .akiGlass(.circle, tint: Aki.yellow, interactive: false)
             VStack(spacing: 10) {

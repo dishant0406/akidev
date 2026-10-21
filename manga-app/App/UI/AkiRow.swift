@@ -22,7 +22,7 @@ struct AkiRow<Trailing: View>: View {
                 }
                 Spacer(minLength: 8)
                 trailing()
-                if showsChevron { AkiIcon("chevron.right", size: 13, tone: .dim) }
+                if showsChevron { AkiIcon("forward", size: 13, tone: .dim) }
             }
         }
     }

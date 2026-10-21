@@ -44,7 +44,7 @@ struct SeriesView: View {
             .background(Aki.canvas)
 
             if let next = resumable {
-                AkiButton(next.label, icon: "play.fill", variant: .primary, size: .large) { target = next.target }
+                AkiButton(next.label, icon: "play-solid", variant: .primary, size: .large) { target = next.target }
                     .padding(.horizontal, 24).padding(.bottom, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -83,9 +83,9 @@ struct SeriesView: View {
                 LinearGradient(colors: [.black.opacity(0.35), .clear, .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list.bullet", style: .glass) }
-                        if let status = statusText { AkiBadge(status, icon: "circle.fill", style: .glass) }
-                        AkiBadge(model.name(of: ref.source), icon: "puzzlepiece.extension", style: .glass)
+                        if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list", style: .glass) }
+                        if let status = statusText { AkiBadge(status, icon: "clock", style: .glass) }
+                        AkiBadge(model.name(of: ref.source), icon: "sources", style: .glass)
                     }
                     AkiText(detail?.title ?? ref.title, .display, tone: .onImage, lines: 3)
                     if let authors = detail?.authors, !authors.isEmpty {
@@ -106,15 +106,15 @@ struct SeriesView: View {
     private var controls: some View {
         AkiGlassGroup(spacing: 12) {
             HStack {
-                AkiIconButton(symbol: "chevron.left", label: "Back", onImage: true) { dismiss() }
+                AkiIconButton(symbol: "back", label: "Back", onImage: true) { dismiss() }
                 Spacer()
-                AkiIconButton(symbol: saved ? "bookmark.fill" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.yellow : nil, onImage: true) { Task { await toggleSaved() } }
-                AkiMenu(symbol: "ellipsis", label: "More", onImage: true, items: [
-                    AkiMenuItem(title: "Mark all as read", icon: "checkmark.circle") { markAll(read: true) },
-                    AkiMenuItem(title: "Mark all as unread", icon: "circle") { markAll(read: false) },
-                    AkiMenuItem(title: "Download unread", icon: "arrow.down.circle") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
-                    AkiMenuItem(title: "Refresh", icon: "arrow.clockwise") { Task { await load() } },
-                    AkiMenuItem(title: "Move to another source", icon: "arrow.left.arrow.right") { moving = true },
+                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.yellow : nil, onImage: true) { Task { await toggleSaved() } }
+                AkiMenu(symbol: "more", label: "More", onImage: true, items: [
+                    AkiMenuItem(title: "Mark all as read", icon: "check") { markAll(read: true) },
+                    AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
+                    AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
+                    AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load() } },
+                    AkiMenuItem(title: "Move to another source", icon: "swap") { moving = true },
                     AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
                 ])
             }
@@ -150,7 +150,7 @@ struct SeriesView: View {
                                 title: chapterName(number: chapter.number, title: chapter.title),
                                 badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
                         AkiTap(action: { toggleRead(chapter) }) {
-                            AkiIcon(chapter.finished ? "checkmark.circle.fill" : "circle", size: 22, tone: chapter.finished ? .primary : .dim)
+                            AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .primary : .dim)
                                 .frame(width: 44, height: 44)
                         }
                         .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
@@ -159,7 +159,7 @@ struct SeriesView: View {
                 .akiContextMenu([
                     kept.contains(chapter.id)
                         ? AkiMenuItem(title: "Delete download", icon: "trash", destructive: true) { removeDownload(chapter) }
-                        : AkiMenuItem(title: "Download", icon: "arrow.down.circle") { download([chapter]) },
+                        : AkiMenuItem(title: "Download", icon: "download") { download([chapter]) },
                 ])
             }
         }

@@ -14,10 +14,10 @@ enum AppTab: Hashable, CaseIterable {
 
     func symbol(selected: Bool) -> String {
         switch self {
-        case .home: selected ? "house.fill" : "house"
-        case .library: selected ? "books.vertical.fill" : "books.vertical"
-        case .updates: selected ? "tray.fill" : "tray"
-        case .sources: selected ? "puzzlepiece.extension.fill" : "puzzlepiece.extension"
+        case .home: selected ? "home-solid" : "home"
+        case .library: selected ? "library-solid" : "library"
+        case .updates: selected ? "inbox-solid" : "inbox"
+        case .sources: selected ? "sources-solid" : "sources"
         }
     }
 }

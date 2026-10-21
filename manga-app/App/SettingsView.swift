@@ -59,18 +59,19 @@ struct SettingsView: View {
                 AkiSection(title: "Your data", footer: "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories.") {
                     VStack(spacing: 12) {
                         if let backupFile {
-                            AkiShare(title: "Share the backup", icon: "square.and.arrow.up", file: backupFile)
+                            AkiShare(title: "Share the backup", icon: "share", file: backupFile)
                         } else {
-                            AkiButton("Create a backup", icon: "externaldrive", fullWidth: true) { makeBackup() }
+                            AkiButton("Create a backup", icon: "server", fullWidth: true) { makeBackup() }
                         }
-                        AkiButton("Restore from a backup", icon: "arrow.counterclockwise", fullWidth: true) { restoring = true }
-                        AkiButton("Open a comic file (CBZ)", icon: "doc.zipper", fullWidth: true) { importing = true }
+                        AkiButton("Restore from a backup", icon: "restore", fullWidth: true) { restoring = true }
+                        AkiButton("Open a comic file (CBZ)", icon: "zip", fullWidth: true) { importing = true }
                     }
                 }
                 AkiSection(title: "About") {
                     AkiCard(padding: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             AkiText("Aki Manga \(model.engine.version())", .bodyStrong)
+                            AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .dim)
                             AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Aki Manga.", .caption, tone: .dim)
                         }
                     }

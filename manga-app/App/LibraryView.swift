@@ -30,10 +30,10 @@ struct LibraryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Library", subtitle: "\(model.library.count) saved") {
-                        AkiMenu(symbol: "line.3.horizontal.decrease", label: "Sort and filter", items:
-                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "arrow.up.arrow.down", isSelected: option == sort) { sort = option } }
-                            + [AkiMenuItem(title: "Only unread", icon: "circle.fill", isSelected: onlyUnread) { onlyUnread.toggle() },
-                               AkiMenuItem(title: "New category", icon: "folder.badge.plus") { naming = true }]
+                        AkiMenu(symbol: "filter", label: "Sort and filter", items:
+                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == sort) { sort = option } }
+                            + [AkiMenuItem(title: "Only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
+                               AkiMenuItem(title: "New category", icon: "folder-add") { naming = true }]
                             + categories.map { cat in AkiMenuItem(title: "Delete “\(cat.name)”", icon: "trash", destructive: true) { deleteCategory(cat) } })
                     }
                     AkiTabs(items: [(LibraryTab.saved, "Saved"), (LibraryTab.history, "History")], selection: $tab)
@@ -95,11 +95,11 @@ struct LibraryView: View {
                 model.refresh(); loadCategories()
             }
         } + [
-            AkiMenuItem(title: "Mark all as read", icon: "checkmark.circle") {
+            AkiMenuItem(title: "Mark all as read", icon: "check") {
                 let ids = ((try? model.engine.cachedChapters(source: item.source, series: item.id)) ?? []).map(\.id)
                 try? model.engine.mark(source: item.source, series: item.id, chapters: ids, read: true); model.refresh()
             },
-            AkiMenuItem(title: "Remove from library", icon: "bookmark.slash", destructive: true) {
+            AkiMenuItem(title: "Remove from library", icon: "bookmark-off", destructive: true) {
                 Task { try? await model.engine.setInLibrary(source: item.source, id: item.id, saved: false); model.refresh(); loadCategories() }
             },
         ]
