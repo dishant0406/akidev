@@ -13,7 +13,7 @@ struct ReaderView: View {
 
     var body: some View {
         ZStack {
-            Aki.canvas.ignoresSafeArea()
+            Color.black.ignoresSafeArea()
             if !model.segments.isEmpty {
                 switch model.mode {
                 case .strip: StripReader(model: model, close: { dismiss() })
@@ -27,6 +27,7 @@ struct ReaderView: View {
         }
         .overlay(alignment: .top) { if model.chrome { topBar.transition(.opacity) } }
         .overlay(alignment: .bottom) { if model.chrome, let segment = model.currentSegment { bottomBar(segment).transition(.opacity) } }
+        .environment(\.colorScheme, .dark)
         .statusBarHidden(!model.chrome)
         .animation(.smooth(duration: 0.2), value: model.chrome)
         .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
@@ -152,12 +153,12 @@ private struct StripReader: View {
     private func chapterEnd(_ segment: Segment) -> some View {
         let next = model.newer(than: segment.chapterID)
         return VStack(spacing: 10) {
-            Eyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            ReaderEyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
             if let next {
                 Text(next.id == model.segments.last?.chapterID || model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))")
                     .font(.footnote).foregroundStyle(Aki.dim)
             } else {
-                Text("You are up to date").font(Aki.title(20)).foregroundStyle(Aki.text)
+                Text("You are up to date").font(Aki.title(20)).foregroundStyle(.white)
                 Button("Back to the series", action: close).buttonStyle(.glass).padding(.top, 6)
             }
         }
@@ -232,17 +233,26 @@ private struct PagedReader: View {
 
     private func endPage(_ segment: Segment) -> some View {
         VStack(spacing: 14) {
-            Eyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            ReaderEyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
             if let next = model.newer(than: segment.chapterID) {
                 Button { Task { await model.open(next.id, page: 0, offset: 0) } } label: {
-                    Text("Next · \(model.label(next))").frame(maxWidth: 300)
-                }.buttonStyle(.glassProminent)
+                    Text("Next · \(model.label(next))").font(.system(size: 16, weight: .bold, design: .rounded)).padding(.horizontal, 22).frame(minHeight: 52)
+                }.buttonStyle(.plain).foregroundStyle(Aki.onYellow).glassEffect(.regular.tint(Aki.yellow).interactive(), in: .capsule)
             } else {
-                Text("You are up to date").font(Aki.title(22)).foregroundStyle(Aki.text)
+                Text("You are up to date").font(Aki.title(22)).foregroundStyle(.white)
             }
             Button("Back to the series", action: close).buttonStyle(.glass)
         }
         .environment(\.layoutDirection, .leftToRight)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Small tracked capitals over the dark reader.
+struct ReaderEyebrow: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased()).font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.4).foregroundStyle(.white.opacity(0.55))
     }
 }

@@ -633,6 +633,33 @@ simulator's trust (a security change that was not made).
 no next page via a constant `total`; Pepper&Carrot translations are per episode and a language an old episode lacks gives
 broken page images; an Internet Archive page is a full-size scan (about 1 MB each at width 1100).
 
+## 18. The look: a reference chosen by the owner (2026-10-22)
+
+The owner shared a screenshot of a webtoon-style reader and asked for the app to look like it, "not like Paperback", with
+Liquid Glass used as much as possible. The shell was redone to match (`manga-app/DESIGN.md` has the analysis and the rules):
+a bright rounded design with one yellow, soft grey chapter and update cards, and glass for all chrome.
+
+**Built:** a design system (adaptive light and dark colours, rounded type, glass buttons, yellow-tinted pills that slide,
+chips, state cards); a floating glass tab bar (Home, Library, Updates, Sources) whose current tab is a yellow glass circle
+that flows to the next, with an unread badge, hidden on pushed screens; **Home** (a glass search field, source chips,
+Popular/Latest pills, a large featured card and a two-column grid); the **series page** as in the reference (full-width
+picture that stretches when pulled, glass back/save/more, chips and a white title on a gradient, a sheet with rounded
+top corners, Chapters/Details pills, a grey card per chapter with thumbnail, small label, bold title, date and scanlator
+chips and a read toggle, a floating yellow "Continue" button; Details has the description, an info card and tag chips);
+**Library** (Saved grid with unread badges, History cards); **Updates** (Unread/Recent pills, cards for series with new
+chapters, a refresh that asks every source); **Sources** in the same cards; the reader keeps its black glass chrome with the
+yellow action. History now carries each series' title and cover (store join, facade, tests).
+
+**Checked in the simulator** (iPhone 17, light): every screen above rendered as described, the glass tab bar switched
+tabs with the yellow circle following, a saved bookmark merged into its neighbour as glass does, and the reader opened in
+paged mode with the new chrome. Dark appearance follows the system and was seen once, on Home.
+
+**Where it departs from the reference, and why:** no per-episode artwork (a source gives one cover, so chapter rows reuse the
+series cover as their thumbnail); no view counts (sources do not give them), so chips show dates and scanlators; the
+download arrow became a read toggle because downloads do not exist yet; the reference's black "home" circle on the tab bar
+was read as a pressed state and not copied. **Not done:** a real device, dark-mode review of every screen, Dynamic Type,
+accessibility labels beyond the tab bar, and the Details tab and Updates refresh against a live source.
+
 ## Sources
 
 - [Paperback sources intro (extensions-common wiki)](https://github.com/Paperback-iOS/extensions-common/wiki/Intro-to-Paperback-Sources) and [function definitions](https://github.com/Paperback-iOS/extensions-common/wiki/Function-Definitions)

@@ -16,3 +16,6 @@ The values live in code and are the source of truth for numbers:
 Reuse those components and tokens instead of adding colours or button styles. Use the `apple-design` skill
 for motion, responsiveness and interaction details. The two apps should look like one product: when a
 screen changes in one, check the other.
+
+The manga app (`manga-app/`, with `desktop/manga*`) is a separate product with its own look, described in
+`manga-app/DESIGN.md`: it does not follow `design/DESIGN_PLAN.md`.

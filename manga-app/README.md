@@ -2,10 +2,10 @@
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
 engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The plan and the reasoning are in
-[pipeline/MANGA_PLAN.md](../pipeline/MANGA_PLAN.md); the look follows [design/DESIGN_PLAN.md](../design/DESIGN_PLAN.md).
+[pipeline/MANGA_PLAN.md](../pipeline/MANGA_PLAN.md); the look is described in [DESIGN.md](DESIGN.md) (bright, rounded, yellow, glass; not the dark look of the website).
 
 ```
-App/                    the SwiftUI app (Library, Browse, Series, Reader, Sources)
+App/                    the SwiftUI app (Home, Library, Updates, Series, Reader, Sources)
 Packages/AkiManga/      the Swift package: the generated bindings and the xcframework (both generated)
 scripts/build-ffi.sh    builds the Rust engine for device and simulator and fills the package
 scripts/demo-server.py  a fake Madara site for driving the app with no real site

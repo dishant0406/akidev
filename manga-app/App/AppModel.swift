@@ -2,15 +2,16 @@ import AkiManga
 import Foundation
 import Observation
 
-enum AppTab: Hashable { case library, browse, sources }
-
 @MainActor @Observable
 final class AppModel {
     let engine: Engine
     var sources: [SourceInfo] = []
     var repos: [RepoInfo] = []
     var library: [LibraryEntry] = []
-    var tab: AppTab = .library
+    var tab: AppTab = .home
+    /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
+    var barHiders = 0
+    var tabBarHidden: Bool { barHiders > 0 }
     /// Bumped when a source is installed, removed, updated or changed, so screens that show one reload.
     var revision = 0
     /// What the last start said about a demo repository, for the Sources screen.
@@ -36,6 +37,9 @@ final class AppModel {
         library = (try? engine.library()) ?? []
         revision += 1
     }
+
+    /// Chapters not read, across the library: the Updates badge.
+    var unreadTotal: Int { library.reduce(0) { $0 + Int($1.unread) } }
 
     func name(of source: String) -> String {
         sources.first { $0.id == source }?.name ?? source

@@ -224,8 +224,13 @@ pub struct Resume {
 pub struct HistoryEntry {
     pub source: String,
     pub series: String,
+    pub title: String,
+    pub cover: Option<String>,
     pub chapter: String,
+    pub chapter_number: Option<f64>,
+    pub chapter_title: Option<String>,
     pub at_ms: i64,
+    pub finished: bool,
 }
 
 impl From<m::Card> for Card {
@@ -639,7 +644,22 @@ impl Engine {
     }
 
     pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
-        Ok(self.store.history(limit)?.into_iter().map(|(source, series, chapter, at_ms)| HistoryEntry { source, series, chapter, at_ms }).collect())
+        Ok(self
+            .store
+            .history(limit)?
+            .into_iter()
+            .map(|item| HistoryEntry {
+                source: item.source,
+                series: item.series,
+                title: item.title,
+                cover: item.cover,
+                chapter: item.chapter,
+                chapter_number: item.chapter_number,
+                chapter_title: item.chapter_title,
+                at_ms: item.at_ms,
+                finished: item.finished,
+            })
+            .collect())
     }
 }
 

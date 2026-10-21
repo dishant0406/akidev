@@ -50,6 +50,21 @@ pub struct Resume {
     pub offset: f64,
 }
 
+/// A chapter someone read, with the series it belongs to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HistoryItem {
+    pub source: String,
+    pub series: String,
+    /// The series' title (its id when it was never fetched).
+    pub title: String,
+    pub cover: Option<String>,
+    pub chapter: String,
+    pub chapter_number: Option<f64>,
+    pub chapter_title: Option<String>,
+    pub at_ms: i64,
+    pub finished: bool,
+}
+
 /// What `sync_chapters` found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Synced {
@@ -281,11 +296,29 @@ impl Store {
         Ok(items)
     }
 
-    /// The series read most recently, newest first.
-    pub fn history(&self, limit: u32) -> anyhow::Result<Vec<(String, String, String, i64)>> {
+    /// What was read most recently, newest first, with what to show for it.
+    pub fn history(&self, limit: u32) -> anyhow::Result<Vec<HistoryItem>> {
         let db = self.db();
-        let mut statement = db.prepare("SELECT source, series, chapter, updated_at FROM progress ORDER BY updated_at DESC LIMIT ?1")?;
-        let rows = statement.query_map(params![limit], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?;
+        let mut statement = db.prepare(
+            "SELECT p.source, p.series, coalesce(s.title, p.series), s.cover, p.chapter, c.number, c.title, p.updated_at, p.finished
+             FROM progress p
+             LEFT JOIN series s ON s.source = p.source AND s.id = p.series
+             LEFT JOIN chapter c ON c.source = p.source AND c.series = p.series AND c.id = p.chapter
+             ORDER BY p.updated_at DESC LIMIT ?1",
+        )?;
+        let rows = statement.query_map(params![limit], |row| {
+            Ok(HistoryItem {
+                source: row.get(0)?,
+                series: row.get(1)?,
+                title: row.get(2)?,
+                cover: row.get(3)?,
+                chapter: row.get(4)?,
+                chapter_number: row.get(5)?,
+                chapter_title: row.get(6)?,
+                at_ms: row.get(7)?,
+                finished: row.get(8)?,
+            })
+        })?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -442,7 +475,9 @@ mod tests {
         store.sync_chapters("s", "a", &[chapter("c2", 2.0), chapter("c1", 1.0)]).unwrap();
         store.set_progress("s", "a", "c1", Progress { page: 3, offset: 0.0, finished: false }, 5).unwrap();
         store.sync_chapters("s", "a", &[chapter("c2", 2.0)]).unwrap();
-        assert_eq!(store.history(10).unwrap().len(), 1);
+        let history = store.history(10).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!((history[0].title.as_str(), history[0].cover.as_deref(), history[0].chapter.as_str()), ("Alpha", Some("c.jpg"), "c1"));
         store.remove_from_library("s", "a").unwrap();
         assert!(!store.in_library("s", "a").unwrap());
         assert!(store.library().unwrap().is_empty());
