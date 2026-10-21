@@ -104,6 +104,21 @@ async function main() {
   }
   const now = await call("GET", "/api/v1/indexer");
   console.log(`    prowlarr: ${now.length} of ${WANTED.length} indexers set up`);
+  await reportFailures(now);
+}
+
+// Prowlarr turns a site off for a while after it fails. Says which ones, and what testing each says
+// is wrong, so the deploy log shows why a site is not giving results.
+async function reportFailures(indexers) {
+  const failing = new Set((await call("GET", "/api/v1/indexerstatus")).map((status) => status.indexerId));
+  for (const indexer of indexers.filter((each) => failing.has(each.id))) {
+    try {
+      await call("POST", "/api/v1/indexer/test", indexer);
+      console.log(`    prowlarr: ${indexer.name} was failing, and now passes its test`);
+    } catch (error) {
+      console.log(`    prowlarr: ${indexer.name} is failing: ${error.message.slice(0, 140)}`);
+    }
+  }
 }
 
 main().catch((error) => console.log(`    prowlarr: could not sync: ${error.message}`));
