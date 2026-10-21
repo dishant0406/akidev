@@ -8,6 +8,18 @@ enum Appearance: String, CaseIterable {
     var scheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
 }
 
+enum ReaderBackground: String, CaseIterable {
+    case black, grey
+    var title: String { self == .black ? "Black" : "Dark grey" }
+    var color: Color { self == .black ? .black : Color(white: 0.11) }
+}
+
+enum OrientationLock: String, CaseIterable {
+    case auto, portrait, landscape
+    var title: String { rawValue.capitalized }
+    var mask: UIInterfaceOrientationMask { self == .portrait ? .portrait : self == .landscape ? .landscape : .allButUpsideDown }
+}
+
 /// What the person chose in Settings, kept in UserDefaults so it survives launches.
 @MainActor @Observable
 final class Preferences {
@@ -21,6 +33,8 @@ final class Preferences {
     var defaultMode: ReadingMode { didSet { defaults.set(defaultMode.rawValue, forKey: "defaultMode") } }
     /// Swap which screen edge goes forward.
     var invertTaps: Bool { didSet { defaults.set(invertTaps, forKey: "invertTaps") } }
+    var readerBackground: ReaderBackground { didSet { defaults.set(readerBackground.rawValue, forKey: "readerBackground") } }
+    var orientation: OrientationLock { didSet { defaults.set(orientation.rawValue, forKey: "orientation") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
 
     init() {
@@ -30,6 +44,8 @@ final class Preferences {
         languages = defaults.stringArray(forKey: "languages") ?? []
         defaultMode = ReadingMode(rawValue: defaults.string(forKey: "defaultMode") ?? "") ?? .strip
         invertTaps = defaults.bool(forKey: "invertTaps")
+        readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .black
+        orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
     }
 }

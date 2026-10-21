@@ -25,7 +25,10 @@ final class AppModel {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AkiManga")
         engine = try! Engine(dataDir: base.path)
         refresh()
-        Task { await updateSources() }
+        Task {
+            await updateSources()
+            await refreshLibrary()
+        }
         #if DEBUG
         // `-demoRepo http://127.0.0.1:8770/_demo/repo/` adds that repository and installs its `local` source at
         // start, so the app can be driven without any real site (see scripts/demo-server.py).
@@ -58,6 +61,40 @@ final class AppModel {
         pendingRepo = PendingRepo(address: address)
     }
 
+    /// Why a source is not working right now, by source id; cleared when it answers again.
+    var sourceProblems: [String: String] = [:]
+    /// Series the last refresh could not check, with why.
+    var updateFailures: [UpdateFailure] = []
+    var refreshing = false
+    private var lastRefresh: Date?
+
+    func report(_ source: String, _ error: Error?) {
+        sourceProblems[source] = error.map { describe($0).message }
+    }
+
+    /// Asks each source for the chapters of the series saved from it. Skipped when done in the last half hour
+    /// unless `force` is set (a pull or a tap).
+    func refreshLibrary(force: Bool = false) async {
+        if refreshing || (!force && (lastRefresh.map { Date.now.timeIntervalSince($0) < 1800 } ?? false)) { return }
+        refreshing = true
+        defer { refreshing = false }
+        let engine = engine
+        let results = await withTaskGroup(of: (LibraryEntry, Error?).self) { group in
+            for entry in library {
+                group.addTask {
+                    do { _ = try await engine.chapters(source: entry.source, id: entry.id); return (entry, nil) } catch { return (entry, error) }
+                }
+            }
+            var all: [(LibraryEntry, Error?)] = []
+            for await result in group { all.append(result) }
+            return all
+        }
+        updateFailures = results.compactMap { entry, error in error.map { UpdateFailure(title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
+        for (entry, error) in results { report(entry.source, error) }
+        lastRefresh = .now
+        refresh()
+    }
+
     /// Chapters not read, across the library: the Updates badge.
     var unreadTotal: Int { library.reduce(0) { $0 + Int($1.unread) } }
 
@@ -87,6 +124,13 @@ final class AppModel {
         refresh()
     }
     #endif
+}
+
+struct UpdateFailure: Identifiable {
+    let title: String
+    let source: String
+    let message: String
+    var id: String { "\(source)/\(title)" }
 }
 
 struct PendingRepo: Identifiable {

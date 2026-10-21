@@ -110,7 +110,7 @@ flowchart TD
 | **Welcome (first run)** | Launch with no source | What the app is, "Add a repository", a note that it includes no sources, "Import a file" (later) | **Partial**: Home shows an empty state with "Open Sources" |
 | **Home / Discover** | Tab | Glass search, source chips, Popular and Latest pills, featured card, grid, "Show more" | **Built** |
 | **Source filters** | Home (a filter button) | The filters a source defines (genre, status, sort) | **Built** |
-| **Global search** | Home search with "All sources" | Results grouped per source, each filling in as it answers | **Missing** |
+| **Global search** | Home search with "All sources" | Results grouped per source, each filling in as it answers | **Built** |
 | **Series** | Any grid or card | Hero, chips, Chapters and Details pills, chapter cards, Continue, save, more menu | **Built** |
 | **Reader** | A chapter | Strip, paged, right-to-left, zoom, resume, next chapter, glass chrome | **Built** |
 | **Reader settings sheet** | Reader chrome | Mode, tap zones and inversion, background, orientation lock, keep awake, brightness link | **Partial**: mode only |
@@ -119,7 +119,7 @@ flowchart TD
 | **Categories** | Library, long-press a series | Create, assign, reorder; filter the grid by category | **Missing** |
 | **Library sort and filter** | Library | Sort (title, last read, unread, added), filter (unread, source), grid size | **Missing** |
 | **Updates** | Tab | Unread and Recent cards, refresh | **Built** (no background refresh) |
-| **Update errors** | Updates | Series whose source failed, with the reason | **Missing** |
+| **Update errors** | Updates | Series whose source failed, with the reason | **Built** |
 | **Sources, Installed / Repositories** | Tab | Cards, add, remove | **Built** |
 | **Repository page** | Sources | Its sources with Install, Update, signed or not | **Built** |
 | **Source settings** | Source row | The source's settings (language, content), remove | **Built** |
@@ -259,11 +259,11 @@ Self-hosted and UX: [Komga](https://komga.org/docs/introduction), [Kavita wiki](
 ## Build status (2026-10-22)
 
 Built and run in the simulator: welcome with clipboard paste, add-repository sheet and `akimanga://add-repo?url=` link,
-settings (appearance, 18+ and language filters, reader defaults, downloads, backup and restore, CBZ import, about),
-source filters sheet, library categories with sort, unread filter and long-press menu, chapter downloads read offline,
-forget series, keep-awake and tap-side swap in the reader.
+settings (appearance, 18+ and language filters, reader defaults, backup and restore, CBZ import, about), source filters
+sheet, global search across sources, library categories with sort, unread filter and long-press menu, chapter downloads
+read offline, forget series, move a series to another source, reader settings sheet (mode, background, orientation,
+tap sides, keep awake), per-source problems shown in Sources, update errors in Updates, refresh on open and a
+best-effort background refresh.
 
-Not built yet: global search across sources, reader settings sheet beyond the defaults in Settings (background,
-orientation lock), source error cards beyond the challenge/offline messages, background refresh and notifications,
-migration screen (the engine call exists), Wi-Fi-only and delete-after-reading downloads, trackers and self-hosted
-server sources (both wait on owner decisions).
+Not built: local notifications for new chapters, Wi-Fi-only and delete-after-reading downloads, trackers and
+self-hosted server sources (the last two wait on owner decisions).

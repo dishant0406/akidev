@@ -1,7 +1,44 @@
+import BackgroundTasks
 import SwiftUI
+
+/// Holds what only a delegate can: the orientations the reader allows, and the background refresh task.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    static let refreshTask = "live.akidev.manga.refresh"
+    nonisolated(unsafe) private static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
+    /// What the background task runs, set by the app model.
+    @MainActor static var refresh: (() async -> Void)?
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTask, using: nil) { task in
+            Self.schedule()
+            let work = Task { @MainActor in
+                await Self.refresh?()
+                task.setTaskCompleted(success: true)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
+        return true
+    }
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask { Self.orientations }
+
+    /// Asks the system to wake the app in the next hour or so to look for new chapters; it decides when.
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: refreshTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    @MainActor static func lock(_ mask: UIInterfaceOrientationMask) {
+        orientations = mask
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.forEach { $0.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) }
+    }
+}
 
 @main
 struct AkiMangaApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @Environment(\.scenePhase) private var phase
     @State private var model = AppModel()
 
     var body: some Scene {
@@ -12,6 +49,11 @@ struct AkiMangaApp: App {
                 .fontDesign(.rounded)
                 .preferredColorScheme(model.prefs.appearance.scheme)
                 .onOpenURL { model.propose(repository: $0.absoluteString) }
+                .task { AppDelegate.refresh = { await model.refreshLibrary(force: true) } }
+                .onChange(of: phase) { _, new in
+                    if new == .background { AppDelegate.schedule() }
+                    if new == .active { Task { await model.refreshLibrary() } }
+                }
         }
     }
 }

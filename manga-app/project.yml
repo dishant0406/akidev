@@ -30,6 +30,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh]
         CFBundleURLTypes:
           - CFBundleURLName: live.akidev.manga
             CFBundleURLSchemes: [akimanga]

@@ -7,7 +7,6 @@ enum UpdatesTab: Hashable { case unread, recent }
 struct UpdatesView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = UpdatesTab.unread
-    @State private var refreshing = false
 
     private struct Row: Identifiable {
         let entry: LibraryEntry
@@ -29,11 +28,12 @@ struct UpdatesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Updates", subtitle: model.unreadTotal > 0 ? "\(model.unreadTotal) unread chapters" : "All caught up") {
-                        if refreshing { AkiSpinner().frame(width: 44, height: 44) } else {
+                        if model.refreshing { AkiSpinner().frame(width: 44, height: 44) } else {
                             AkiIconButton(symbol: "arrow.clockwise", label: "Check for new chapters") { Task { await refresh() } }
                         }
                     }
                     AkiTabs(items: [(UpdatesTab.unread, "Unread"), (UpdatesTab.recent, "Recent")], selection: $tab)
+                    if !model.updateFailures.isEmpty { failures }
                     let list = rows
                     if list.isEmpty {
                         AkiEmptyState(title: tab == .unread ? "All caught up" : "No series saved", message: tab == .unread ? "New chapters of the series you saved appear here." : "Save a series and its chapters show up here.", action: tab == .unread ? ("Check for new chapters", { Task { await refresh() } }) : nil)
@@ -63,16 +63,16 @@ struct UpdatesView: View {
         .onAppear { model.refresh() }
     }
 
-    /// Asks every source for the chapters of the series you saved.
-    private func refresh() async {
-        refreshing = true
-        defer { refreshing = false }
-        let entries = model.library
-        await withTaskGroup(of: Void.self) { group in
-            for entry in entries {
-                group.addTask { _ = try? await model.engine.chapters(source: entry.source, id: entry.id) }
+    private var failures: some View {
+        AkiCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                AkiText("Could not check \(model.updateFailures.count) series", .bodyStrong)
+                ForEach(model.updateFailures) { failure in
+                    AkiText("\(failure.title) (\(failure.source)): \(failure.message)", .caption, tone: .dim, lines: 2)
+                }
             }
         }
-        model.refresh()
     }
+
+    private func refresh() async { await model.refreshLibrary(force: true) }
 }

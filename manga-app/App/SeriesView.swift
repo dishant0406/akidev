@@ -26,6 +26,7 @@ struct SeriesView: View {
     @State private var expanded = false
     @State private var kept: Set<String> = []
     @State private var forgetting = false
+    @State private var moving = false
     @State private var problem: String?
 
     private let heroHeight: CGFloat = 470
@@ -58,6 +59,7 @@ struct SeriesView: View {
             #endif
         }
         .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiSheet(isPresented: $moving) { MigrateSheet(ref: ref) { dismiss() } }
         .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $forgetting) {
             try? model.engine.forgetSeries(source: ref.source, series: ref.id)
             model.refresh()
@@ -112,6 +114,7 @@ struct SeriesView: View {
                     AkiMenuItem(title: "Mark all as unread", icon: "circle") { markAll(read: false) },
                     AkiMenuItem(title: "Download unread", icon: "arrow.down.circle") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "arrow.clockwise") { Task { await load() } },
+                    AkiMenuItem(title: "Move to another source", icon: "arrow.left.arrow.right") { moving = true },
                     AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
                 ])
             }

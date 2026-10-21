@@ -11,7 +11,7 @@ final class BrowseModel {
     private var page: UInt32 = 0
     private var key = ""
 
-    func load(_ engine: Engine, source: String, mode: Mode, term: String, choices: [Choice] = [], reset: Bool) async {
+    func load(_ engine: Engine, report: (String, Error?) -> Void, source: String, mode: Mode, term: String, choices: [Choice] = [], reset: Bool) async {
         let newKey = "\(source)|\(mode)|\(term)|\(choices.map { "\($0.id)=\($0.value)" })"
         if reset || newKey != key { items = []; page = 0; hasNext = false; key = newKey; error = nil }
         guard !loading else { return }
@@ -28,11 +28,13 @@ final class BrowseModel {
                 result = try await engine.popular(source: source, page: next)
             }
             guard key == newKey else { return }
+            report(source, nil)
             page = next
             items += result.items.filter { new in !items.contains { $0.id == new.id } }
             hasNext = result.hasNext
         } catch {
             guard key == newKey else { return }
+            report(source, error)
             self.error = describe(error)
         }
     }
@@ -49,6 +51,9 @@ struct HomeView: View {
     @State private var filters: [FilterInfo] = []
     @State private var choices: [String: String] = [:]
     @State private var filtering = false
+    @State private var global = GlobalSearchModel()
+    private static let everySource = "*"
+    private var isGlobal: Bool { source == Self.everySource }
 
     private var info: SourceInfo? { model.sources.first { $0.id == source } }
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
@@ -57,7 +62,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Discover", subtitle: info?.name)
+                    AkiHeader(title: "Discover", subtitle: isGlobal ? "All sources" : info?.name)
                     if model.sources.isEmpty && model.repos.isEmpty {
                         WelcomeView()
                     } else if model.visibleSources.isEmpty {
@@ -65,16 +70,16 @@ struct HomeView: View {
                             .frame(minHeight: 420)
                     } else {
                         HStack(spacing: 10) {
-                            AkiInput(placeholder: "Search \(info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
-                            if !filters.isEmpty {
+                            AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                            if !filters.isEmpty && !isGlobal {
                                 AkiIconButton(symbol: "slider.horizontal.3", label: "Filters", tint: choices.isEmpty ? nil : Aki.yellow) { filtering = true }
                             }
                         }
-                        if model.visibleSources.count > 1 { AkiChips(items: model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
-                        if info?.canLatest == true && submitted.isEmpty && choices.isEmpty {
+                        if model.visibleSources.count > 1 { AkiChips(items: [(Self.everySource, "All")] + model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
+                        if !isGlobal && info?.canLatest == true && submitted.isEmpty && choices.isEmpty {
                             AkiTabs(items: BrowseModel.Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode)
                         }
-                        results
+                        if isGlobal { globalResults } else { results }
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
@@ -84,15 +89,23 @@ struct HomeView: View {
             .background(AkiBackdrop())
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
-            .onChange(of: source) { submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
+            .onChange(of: source) { UserDefaults.standard.set(source, forKey: "source"); submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
             .akiSheet(isPresented: $filtering) { FiltersSheet(filters: filters, choices: $choices) { Task { await reload() } } }
             .onChange(of: mode) { Task { await reload() } }
             .task(id: model.revision) {
-                if !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
+                if !isGlobal && !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
                 filters = (try? model.engine.sourceFilters(source: source)) ?? []
                 await reload()
             }
+        }
+    }
+
+    @ViewBuilder private var globalResults: some View {
+        if submitted.isEmpty {
+            AkiEmptyState(title: "Search every source", message: "Type a title and every installed source is asked at once; each answers when it is ready.").frame(minHeight: 320)
+        } else {
+            GlobalSearchResults(model: global)
         }
     }
 
@@ -134,10 +147,16 @@ struct HomeView: View {
         }
     }
 
-    private func reload() async { await load(reset: true) }
+    private func reload() async {
+        if isGlobal {
+            if !submitted.isEmpty { await global.search(model.engine, sources: model.visibleSources, term: submitted, report: model.report) }
+        } else {
+            await load(reset: true)
+        }
+    }
 
     private func load(reset: Bool) async {
-        await browse.load(model.engine, source: source, mode: mode, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
+        await browse.load(model.engine, report: model.report, source: source, mode: mode, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
     }
 }
 

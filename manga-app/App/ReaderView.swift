@@ -7,6 +7,7 @@ struct ReaderView: View {
     @State private var model: ReaderModel
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var app
+    @State private var settings = false
 
     init(model: ReaderModel) {
         _model = State(initialValue: model)
@@ -14,7 +15,7 @@ struct ReaderView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            app.prefs.readerBackground.color.ignoresSafeArea()
             if !model.segments.isEmpty {
                 switch model.mode {
                 case .strip: StripReader(model: model, close: { dismiss() })
@@ -32,8 +33,10 @@ struct ReaderView: View {
         .statusBarHidden(!model.chrome)
         .animation(.smooth(duration: 0.2), value: model.chrome)
         .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake }
-        .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false }
+        .akiSheet(isPresented: $settings) { ReaderSettingsSheet(model: model) }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; AppDelegate.lock(app.prefs.orientation.mask) }
+        .onChange(of: app.prefs.orientation) { _, new in AppDelegate.lock(new.mask) }
+        .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false; AppDelegate.lock(OrientationLock.auto.mask) }
     }
 
     private var topBar: some View {
@@ -47,9 +50,7 @@ struct ReaderView: View {
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .akiGlass(.capsule, interactive: false)
                 Spacer(minLength: 0)
-                AkiMenu(symbol: model.mode.symbol, label: "Reading mode", items: ReadingMode.allCases.map { mode in
-                    AkiMenuItem(title: mode.title, icon: mode.symbol, isSelected: mode == model.mode) { model.setMode(mode) }
-                })
+                AkiIconButton(symbol: "slider.horizontal.3", label: "Reader settings") { settings = true }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)

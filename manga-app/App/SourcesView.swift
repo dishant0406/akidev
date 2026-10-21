@@ -24,7 +24,7 @@ struct SourcesView: View {
                         if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .dim) } }
                         ForEach(model.sources, id: \.id) { source in
                             AkiLink(value: source.id) {
-                                AkiRow(title: source.name, subtitle: "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: "puzzlepiece.extension.fill", showsChevron: true)
+                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "puzzlepiece.extension.fill" : "exclamationmark.triangle.fill", showsChevron: true)
                             }
                             .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
@@ -52,11 +52,6 @@ struct SourcesView: View {
             .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
     }
-}
-
-extension RepoInfo: @retroactive Hashable {
-    public func hash(into hasher: inout Hasher) { hasher.combine(base) }
-    public static func == (lhs: RepoInfo, rhs: RepoInfo) -> Bool { lhs.base == rhs.base }
 }
 
 /// What a repository offers, with install and update.
