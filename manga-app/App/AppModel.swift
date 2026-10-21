@@ -5,6 +5,10 @@ import Observation
 @MainActor @Observable
 final class AppModel {
     let engine: Engine
+    let prefs = Preferences()
+    /// An address to add as a repository, waiting for the person to confirm (a pasted link or an opened one).
+    var pendingRepo: PendingRepo?
+    /// Everything installed; `visibleSources` is what the person's content settings let through.
     var sources: [SourceInfo] = []
     var repos: [RepoInfo] = []
     var library: [LibraryEntry] = []
@@ -38,6 +42,22 @@ final class AppModel {
         revision += 1
     }
 
+    var visibleSources: [SourceInfo] {
+        sources.filter { source in
+            (prefs.showAdult || !source.nsfw) && (prefs.languages.isEmpty || source.languages.isEmpty || !Set(source.languages).isDisjoint(with: prefs.languages))
+        }
+    }
+
+    /// Opens the add-repository confirmation for an address; a bare address or an `akimanga://add-repo?url=` link.
+    func propose(repository text: String) {
+        var address = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: address), url.scheme == "akimanga", let found = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "url" })?.value {
+            address = found
+        }
+        guard !address.isEmpty else { return }
+        pendingRepo = PendingRepo(address: address)
+    }
+
     /// Chapters not read, across the library: the Updates badge.
     var unreadTotal: Int { library.reduce(0) { $0 + Int($1.unread) } }
 
@@ -69,11 +89,17 @@ final class AppModel {
     #endif
 }
 
+struct PendingRepo: Identifiable {
+    let address: String
+    var id: String { address }
+}
+
 /// What a screen needs to say about a failed call.
 func describe(_ error: Error) -> (title: String, message: String) {
     if let error = error as? MangaError {
         switch error {
         case .Challenge(let url, _): return ("This site checks visitors first", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Aki Manga has no browser to pass it in. Try another source, or read this one through a Suwayomi or Komga server you run.")
+        case .Offline(let url, _): return ("No connection", "Could not reach \(URL(string: url)?.host ?? url). Check your network and try again.")
         case .Failed(let message): return ("That did not work", message)
         }
     }

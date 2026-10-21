@@ -30,6 +30,13 @@ extension View {
         }
     }
 
+    /// The same sheet for something chosen by value (an address waiting to be confirmed).
+    func akiSheet<Item: Identifiable, Sheet: View>(item: Binding<Item?>, @ViewBuilder content: @escaping (Item) -> Sheet) -> some View {
+        sheet(item: item) { value in
+            content(value).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(.regularMaterial)
+        }
+    }
+
     /// A screen that covers everything: the reader.
     func akiFullScreen<Item: Identifiable, Cover: View>(item: Binding<Item?>, onDismiss: @escaping () -> Void = {}, @ViewBuilder content: @escaping (Item) -> Cover) -> some View {
         fullScreenCover(item: item, onDismiss: onDismiss, content: content)

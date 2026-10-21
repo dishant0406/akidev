@@ -7,15 +7,18 @@ struct SourcesView: View {
     @Environment(AppModel.self) private var model
     @State private var adding = false
     @State private var link = ""
-    @State private var busy = false
-    @State private var problem: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Sources", subtitle: "\(model.sources.count) installed") {
-                        AkiIconButton(symbol: "plus", label: "Add a repository", tint: Aki.yellow) { adding = true }
+                        AkiGlassGroup(spacing: 10) {
+                            HStack(spacing: 10) {
+                                AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "gearshape", label: "Settings", action: {}).face }.akiGlass(.circle)
+                                AkiIconButton(symbol: "plus", label: "Add a repository", tint: Aki.yellow) { adding = true }
+                            }
+                        }
                     }
                     AkiSection(title: "Installed") {
                         if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .dim) } }
@@ -43,23 +46,11 @@ struct SourcesView: View {
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()
-            .akiDestination(for: RepoInfo.self) { RepoView(repo: $0) }
+            .akiDestination(for: RepoInfo.self) { RepoScreen(repo: $0) }
             .akiDestination(for: String.self) { SourceSettingsView(source: $0) }
-            .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Add", text: $link, isPresented: $adding) { Task { await add() } }
-            .akiAlert("That did not work", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
-            .overlay { if busy { AkiSpinner().padding(24).akiGlass(.card, interactive: false) } }
+            .akiDestination(for: SettingsRoute.self) { _ in SettingsView() }
+            .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
-    }
-
-    private func add() async {
-        let address = link
-        link = ""
-        busy = true
-        defer { busy = false }
-        do {
-            _ = try await model.engine.addRepo(link: address)
-            model.refresh()
-        } catch { problem = describe(error).message }
     }
 }
 
@@ -69,7 +60,7 @@ extension RepoInfo: @retroactive Hashable {
 }
 
 /// What a repository offers, with install and update.
-struct RepoView: View {
+struct RepoScreen: View {
     let repo: RepoInfo
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss

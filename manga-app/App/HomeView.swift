@@ -21,7 +21,7 @@ final class BrowseModel {
             let next = page + 1
             let result: CardPage
             if !term.isEmpty {
-                result = try await engine.search(source: source, term: term, page: next)
+                result = try await engine.search(source: source, term: term, page: next, choices: [])
             } else if mode == .latest {
                 result = try await engine.latest(source: source, page: next)
             } else {
@@ -55,12 +55,14 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Discover", subtitle: info?.name)
-                    if model.sources.isEmpty {
-                        AkiEmptyState(title: "No sources yet", message: "Aki Manga reads what a source plugin describes, and it comes with none. Add a repository in Sources to get started.", action: ("Open Sources", { model.tab = .sources }))
+                    if model.sources.isEmpty && model.repos.isEmpty {
+                        WelcomeView()
+                    } else if model.visibleSources.isEmpty {
+                        AkiEmptyState(title: model.sources.isEmpty ? "No sources installed" : "Nothing to show", message: model.sources.isEmpty ? "Install a source from your repository in Sources to start reading." : "Your content settings hide every installed source.", action: ("Open Sources", { model.tab = .sources }))
                             .frame(minHeight: 420)
                     } else {
                         AkiInput(placeholder: "Search \(info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
-                        if model.sources.count > 1 { AkiChips(items: model.sources.map { ($0.id, $0.name) }, selection: $source) }
+                        if model.visibleSources.count > 1 { AkiChips(items: model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
                         if info?.canLatest == true && submitted.isEmpty {
                             AkiTabs(items: BrowseModel.Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode)
                         }
@@ -77,7 +79,7 @@ struct HomeView: View {
             .onChange(of: source) { submitted = ""; term = ""; Task { await reload() } }
             .onChange(of: mode) { Task { await reload() } }
             .task(id: model.revision) {
-                if !model.sources.contains(where: { $0.id == source }) { source = model.sources.first?.id ?? "" }
+                if !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
                 await reload()
             }

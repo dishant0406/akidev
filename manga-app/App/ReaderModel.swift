@@ -113,7 +113,7 @@ final class ReaderModel {
             let list = try await pageList(chapterID)
             let at = min(max(page, 0), max(list.images.count - 1, 0))
             if UserDefaults.standard.string(forKey: "mode.\(ref.source).\(ref.id)") == nil {
-                mode = list.reading == .pagedRtl ? .rtl : list.reading == .paged ? .paged : .strip
+                mode = list.reading == .pagedRtl ? .rtl : list.reading == .paged ? .paged : list.reading == .longStrip ? .strip : ReadingMode(rawValue: UserDefaults.standard.string(forKey: "defaultMode") ?? "") ?? .strip
             }
             current = chapterID
             self.page = at

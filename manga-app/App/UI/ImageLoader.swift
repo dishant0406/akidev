@@ -12,6 +12,8 @@ actor ImageLoader {
         cache.totalCostLimit = 160 * 1024 * 1024
     }
 
+    func clear() { cache.removeAllObjects() }
+
     func image(_ url: URL, headers: [String: String], widthPx: CGFloat) async -> UIImage? {
         let key = "\(url.absoluteString)@\(Int(widthPx))"
         if let hit = cache.object(forKey: key as NSString) { return hit }

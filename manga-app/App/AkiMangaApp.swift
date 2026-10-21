@@ -10,6 +10,8 @@ struct AkiMangaApp: App {
                 .environment(model)
                 .tint(Aki.yellow)
                 .fontDesign(.rounded)
+                .preferredColorScheme(model.prefs.appearance.scheme)
+                .onOpenURL { model.propose(repository: $0.absoluteString) }
         }
     }
 }
@@ -48,6 +50,7 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.3), value: model.tabBarHidden)
         .background(Aki.canvas)
+        .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
     }
 }
 

@@ -27,3 +27,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: live.akidev.manga
         # Sources are served over plain http only from a developer's machine (the demo server).
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: live.akidev.manga
+            CFBundleURLSchemes: [akimanga]

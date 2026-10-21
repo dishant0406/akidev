@@ -5,7 +5,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../App"
-patterns='\bText\(|\bButton\(|\bTextField\(|\bSecureField\(|\bImage\(|\bToggle\(|\bPicker\(|\bMenu\b|\bLabel\(|\bProgressView\(|\bList\b|\bForm\b|\bSection\(|\bDivider\(|\bSlider\(|\bStepper\(|\bTextEditor\(|\bLink\(|NavigationLink|\.alert\(|\.sheet\(|\.fullScreenCover\(|\.confirmationDialog\(|\.contextMenu\(|\.font\(|\.foregroundStyle\(|\.glassEffect\(|\.buttonStyle\('
+patterns='\bText\(|\bButton\(|\bTextField\(|\bSecureField\(|\bImage\(|\bToggle\(|\bPicker\(|\bMenu\b|\bLabel\(|\bProgressView\(|\bList\b|\bForm\b|\bSection\(|\bDivider\(|\bSlider\(|\bStepper\(|\bTextEditor\(|\bLink\(|NavigationLink|\.alert\(|\.sheet\(|\.fullScreenCover\(|\.confirmationDialog\(|\.contextMenu\(|\.font\(|\.foregroundStyle\(|\.glassEffect\(|\.buttonStyle\(|\bPasteButton|\bShareLink|\.fileImporter\(|\.fileExporter\('
 
 found=$(grep -rnE "$patterns" --include='*.swift' . | grep -v '^\./UI/' || true)
 if [ -n "$found" ]; then
