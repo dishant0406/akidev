@@ -56,12 +56,16 @@ Prowlarr is not published and Caddy does not route to it. Nothing but the `api` 
 - **Time.** A search takes 8-10 seconds against five sites, and the apps wait 15. It is only paid when the
   normal search found nothing. The same search again is served from memory for ten minutes.
 - **Cloudflare.** From the server's address 1337x, ExtraTorrent, the Kickass mirrors, TorrentKitty, UIndex,
-  TorrentDownload and TorrentProject all answer with "blocked by CloudFlare Protection". The sites marked
+  TorrentDownload and TorrentProject all answered "blocked by CloudFlare Protection". The sites marked
   `solver` in `scripts/prowlarr-sync.js` are added with a tag, and Prowlarr sends tagged sites through
   **Byparr** (the `byparr` service, a FlareSolverr-compatible solver that opens the page in a patched
-  Firefox). Tried locally, ExtraTorrent went from blocked to added and then returned 50 results with hashes
-  for a film in 2-8 seconds. Byparr cannot promise a pass: Cloudflare also judges the address, and a
-  datacenter address is judged harder than a home one, so the deploy log says which sites got through.
+  Firefox). Through it, from the server, TorrentKitty and ExtraTorrent were added; 1337x and the Kickass
+  mirror timed out, TorrentDownload stayed blocked, and TorrentProject and UIndex were not reached in the
+  deploy's time, so only the first two are kept. Cloudflare also judges the address, and a datacenter
+  address is judged harder than a home one, so the deploy log says which sites got through.
+- **Two tiers.** A site behind the solver can take ten seconds or more to answer while its cookie is cold, so
+  the sites tagged `solver` are searched apart from the others, at the same time, with their own longer
+  allowance: a slow one costs its own results and not everyone's. An answer missing a tier is not kept.
 - **Byparr's cost.** About 250 MB idle and about 1.1 GB while solving (a browser per page), 560 MB of disk for
   the browser (kept in the `byparr-cache` volume, downloaded once) and a 3.4 GB image. It is limited to
   1.2 GB. A solve takes 4-12 seconds; Prowlarr keeps the clearance cookie, so later searches are faster.

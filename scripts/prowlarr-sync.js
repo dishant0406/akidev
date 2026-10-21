@@ -16,13 +16,10 @@ const WANTED = [
   { name: "mikan" },
   { name: "limetorrents" },
   { name: "torrentkitty", solver: true },
-  { name: "1337x", solver: true },
-  { name: "kickasstorrents-to", solver: true },
   { name: "extratorrent-st", solver: true },
-  { name: "torrentdownload", solver: true },
-  { name: "torrentproject2", solver: true },
-  { name: "uindex", solver: true },
 ];
+// Tried from the server through the solver and left out: 1337x and the Kickass mirror time out,
+// TorrentDownload is still blocked, and each one tried costs a deploy a minute or more.
 
 const base = process.env.PROWLARR_URL || "http://prowlarr:9696";
 const solverAddress = process.env.BYPARR_URL || "http://byparr:8191/";
