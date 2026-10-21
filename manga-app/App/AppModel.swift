@@ -50,9 +50,11 @@ final class AppModel {
     private func installDemo(from link: String) async {
         do {
             let view = try await engine.addRepo(link: link)
-            let wanted = UserDefaults.standard.string(forKey: "demoInstall") ?? "local"
-            if !sources.contains(where: { $0.id == wanted }) {
-                _ = try await engine.installFromRepo(base: view.info.base, source: wanted)
+            // `-demoInstall a,b` installs several; the default is the demo server's `local`.
+            let wanted = (UserDefaults.standard.string(forKey: "demoInstall") ?? "local").split(separator: ",").map(String.init)
+            for id in wanted where !sources.contains(where: { $0.id == id }) {
+                _ = try await engine.installFromRepo(base: view.info.base, source: id)
+                refresh()
             }
             note = "Demo repository added from \(link)"
         } catch {

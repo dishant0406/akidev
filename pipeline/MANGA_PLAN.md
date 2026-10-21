@@ -593,6 +593,46 @@ without a repository (local CBZ import is planned); a plugin decides which hosts
 matters, and images load from any host a plugin names; there is still no scripting layer, so about 40% of popular sites
 stay out (section 11.1) unless one is added later.
 
+## 17. More sources: research, what was published, what was tried (2026-10-21)
+
+**Rule for our repository:** only sources that are legal to read: a public API that welcomes third-party readers, or work released
+under an open licence. Other sources are other people's repositories (section 8).
+
+**Candidates checked** (reachability from this network, then whether they fit):
+
+| Candidate | Result |
+| --- | --- |
+| xkcd | JSON endpoints (`/info.0.json`, `/{n}/info.0.json`) and an archive page; CC BY-NC 2.5. **Published.** |
+| Pepper&Carrot | An official episode index (`0_sources/episodes-v1.json`, documented in its API page) and images at `0_sources/{episode}/{low-res or hi-res}/{lang}_{file}`; CC BY 4.0, 39 episodes, 70 languages. **Published.** |
+| Internet Archive | `advancedsearch.php`, `metadata/{id}`, a book's `*_scandata.xml` (leaf numbers) and page images at `download/{id}/page/n{N}_w{W}.jpg`, covers at `services/img/{id}`. Searched with `licenseurl:*publicdomain*` and a scandata file so every result can be read (839 items). **Published.** The licence mark is the uploader's claim, and the plain collections (Manga Library, comics inbox) are full of copyrighted uploads, so they are not used. |
+| MangaDex | Already published; unreachable from this network (503), so only hand-written fixtures. |
+| Webtoons, Viz, Tapas | Official free-to-read sites with no third-party API; their terms restrict automated access. **Not published** (another repository's call). Webtoons and Viz answer from here; Tapas does not. |
+| MangaPlus | Protobuf and an XOR image step: not expressible in a definition. |
+| Digital Comic Museum, Comic Book Plus | Public-domain comic sites; answer 403 and 406 to a script from here. A candidate for later with another user agent. |
+| AniList, Jikan | Metadata only, no pages. |
+| Komga, Kavita, Suwayomi | Self-hosted: the address and login are the person's. **Needs the format to take a server address and credentials as settings** (and cover requests that carry them): the next format addition, and the most useful one for people with their own library. |
+
+**What the engine gained for these:** the CLI's `record` command (asks the live site for named calls and saves the answers
+as fixtures, then writes the expected answers), `sort` (natural order for file names), `plain_text` (markup in a JSON
+field), `where` values with holes (`"equals": "{id}"`), and `{base}` as a hole in expressions.
+
+**Result against the live sites:** from the Mac (the CLI), all three read real data on the first run: xkcd listed its 3,313
+comics with dates and gave the image of #614; Pepper&Carrot listed 39 episodes titled and numbered correctly with the
+cover and pages in order; the Internet Archive search, the details, the chapter and the 421 page addresses of *Little Nemo*
+came from the real scandata. Their fixtures in `manga-sources/fixtures` are the real answers (xkcd's archive trimmed to
+the newest 60). The repository was published (`d09d350` in `dishant0406/manga-sources`) and the app, with a fresh
+install, added it by `github.com/dishant0406/manga-sources` and installed all three, hash-checked.
+
+**Not seen in the app:** these sources' content on screen. In the simulator every request to these sites fails with "the
+certificate was not trusted": this network decrypts TLS (the certificates are issued by `Groww-Decryption-*`, a company
+CA that macOS trusts and the simulator does not), except for GitHub. MangaDex, Tapas and others are also blocked by the same
+filter. The app itself is not at fault; it needs a network without that, a device, or the company CA added to the
+simulator's trust (a security change that was not made).
+
+**Weaknesses found:** xkcd has no search (so no search box result), a single-series source shows one card and says there is
+no next page via a constant `total`; Pepper&Carrot translations are per episode and a language an old episode lacks gives
+broken page images; an Internet Archive page is a full-size scan (about 1 MB each at width 1100).
+
 ## Sources
 
 - [Paperback sources intro (extensions-common wiki)](https://github.com/Paperback-iOS/extensions-common/wiki/Intro-to-Paperback-Sources) and [function definitions](https://github.com/Paperback-iOS/extensions-common/wiki/Function-Definitions)
