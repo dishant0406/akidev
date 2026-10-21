@@ -1,7 +1,7 @@
-# Aki Manga: user flow
+# Akidev: user flow
 
 How people move through the app: every screen, the flows between them, and what is built. It rests on research
-into existing manga and manhwa apps (section 1) and on what Aki Manga is: a **renderer** with **no sources of its own**,
+into existing manga and manhwa apps (section 1) and on what Akidev is: a **renderer** with **no sources of its own**,
 which reads plugins people install from repositories they add by address. The look is in [DESIGN.md](DESIGN.md).
 
 ## 0. The product in one paragraph
@@ -148,7 +148,7 @@ Each flow is the path a person takes, with the states they can land in. The bold
 
 ### 4.2 One-tap add from a link (how people really add repositories)
 
-A repository's page offers an **Add to Aki Manga** link. It opens the app on a confirmation sheet showing the repository's name, its address, whether it is signed, how many sources it lists, and the warning that a plugin decides which sites the app contacts. Confirm, and flow 4.1 continues at step 4. *Missing:* the URL scheme and the confirmation sheet.
+A repository's page offers an **Add to Akidev** link. It opens the app on a confirmation sheet showing the repository's name, its address, whether it is signed, how many sources it lists, and the warning that a plugin decides which sites the app contacts. Confirm, and flow 4.1 continues at step 4. *Missing:* the URL scheme and the confirmation sheet.
 
 ### 4.3 Find something to read
 
@@ -174,7 +174,7 @@ States: loading, empty ("No results"), source unreachable (Try again), source ne
 1. Bookmark on the series page saves it to **Library**.
 2. **Updates** shows saved series with unread chapters, newest first, with a badge on the tab icon.
 3. Refresh (pull or the button) asks every source for the saved series' chapters; a series whose source failed is listed with the reason under **Update errors** (planned).
-4. iOS cannot promise background checks, so the app also refreshes when it opens and says so in settings: "Aki Manga checks for new chapters when you open it".
+4. iOS cannot promise background checks, so the app also refreshes when it opens and says so in settings: "Akidev checks for new chapters when you open it".
 
 *Built:* 1 to 3 (no error list). *Missing:* refresh on open, a best-effort background task, update errors.
 
@@ -198,7 +198,7 @@ Long-press a series for a menu (Open, Mark read, Move to category, Remove). **Ca
 | No network | "No connection" | Try again |
 | Site did not answer or changed its pages | "This source did not work" + the reason (has the site changed?) | Try again, Check for a source update |
 | Site wants a check (Cloudflare, captcha) | "This site checks visitors first": the app has no browser to pass it | Try another source, or read it through a server you run (later) |
-| Source needs a newer app | "Needs Aki Manga N or newer" | Update the app |
+| Source needs a newer app | "Needs Akidev N or newer" | Update the app |
 | Repository changed hands (key) | "This repository now uses a different key" | Remove it and add it again if you trust it |
 | File does not match the index | "A file was not what the repository listed" | Try again later; tell the repository's owner |
 | Adult source and adult content off | The source is listed but marked "18+, hidden in settings" (never silently absent, Mihon's hidden-source complaint) | Open settings |

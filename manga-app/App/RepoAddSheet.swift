@@ -27,7 +27,7 @@ struct RepoAddSheet: View {
                         }
                     }
                 }
-                AkiText("Aki Manga does not include, offer or endorse any repository. Only add one you trust.", .caption, tone: .muted)
+                AkiText("Akidev does not include, offer or endorse any repository. Only add one you trust.", .caption, tone: .muted)
                 AkiButton("Add repository", variant: .primary, size: .large, fullWidth: true) { Task { await add(view) } }
             } else {
                 AkiSpinner().frame(maxWidth: .infinity, minHeight: 160)

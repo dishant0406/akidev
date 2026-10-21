@@ -13,8 +13,8 @@ struct WelcomeView: View {
                 .frame(width: 112, height: 112)
                 .akiGlass(.circle, tint: Aki.primary, interactive: false)
             VStack(spacing: 10) {
-                AkiText("Welcome to Aki Manga", .display, align: .center)
-                AkiText("Aki Manga is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .muted, align: .center)
+                AkiText("Welcome to Akidev", .display, align: .center)
+                AkiText("Akidev is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .muted, align: .center)
             }
             VStack(spacing: 12) {
                 AkiPasteButton { model.propose(repository: $0) }

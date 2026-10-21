@@ -1,4 +1,4 @@
-# Aki Manga
+# Akidev
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
 engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The plan and the reasoning are in
@@ -44,6 +44,6 @@ picks the reading mode. `DEMO_LOG=1 python3 scripts/demo-server.py` prints every
 
 ## What the app ships with
 
-Nothing. Aki Manga is a renderer: every source is a plugin, installed from a repository the person adds by address
+Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address
 (Sources tab). It has no built-in source, no default repository, and offers and endorses none. The repository that
 holds the plugins we write is [manga-sources](../manga-sources/README.md).

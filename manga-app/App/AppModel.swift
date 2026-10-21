@@ -201,7 +201,7 @@ struct PendingRepo: Identifiable {
 func describe(_ error: Error) -> (title: String, message: String) {
     if let error = error as? MangaError {
         switch error {
-        case .Challenge(let url, _): return ("This site checks visitors first", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Aki Manga has no browser to pass it in. Try another source, or read this one through a Suwayomi or Komga server you run.")
+        case .Challenge(let url, _): return ("This site checks visitors first", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Akidev has no browser to pass it in. Try another source, or read this one through a Suwayomi or Komga server you run.")
         case .Offline(let url, _): return ("No connection", "Could not reach \(URL(string: url)?.host ?? url). Check your network and try again.")
         case .Failed(let message): return ("That did not work", message)
         }

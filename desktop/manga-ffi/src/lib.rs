@@ -504,7 +504,7 @@ impl Engine {
     async fn install_one(&self, base: &str, index: &repo::Index, source_id: &str) -> anyhow::Result<SourceInfo> {
         let offered = index.sources.iter().find(|offered| offered.id == source_id).with_context(|| format!("the repository has no source called {source_id}"))?;
         if let Some(wanted) = &offered.min_app {
-            anyhow::ensure!(repo::app_at_least(APP_VERSION, wanted), "{} needs Aki Manga {wanted} or newer (this is {APP_VERSION})", offered.name);
+            anyhow::ensure!(repo::app_at_least(APP_VERSION, wanted), "{} needs Akidev {wanted} or newer (this is {APP_VERSION})", offered.name);
         }
         let mut themes_changed = false;
         for theme_id in &offered.requires {

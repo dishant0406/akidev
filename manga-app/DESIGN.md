@@ -1,4 +1,4 @@
-# Aki Manga design
+# Akidev design
 
 The app follows a reference the owner chose (a webtoon-style reader: bright, rounded, one yellow, soft grey cards,
 a floating tab bar) and uses Liquid Glass for everything that floats or is touched. It is its own product and does

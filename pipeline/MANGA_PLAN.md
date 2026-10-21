@@ -523,7 +523,7 @@ challenge hook planned in 5.3 and tried in spike 5, now removed from the plan.)
 
 **What that costs, said plainly.** A site behind Cloudflare's JavaScript challenge or a captcha cannot be passed by
 a native HTTP client; that is what the challenge is for. The census counted about 24% of popular sources as
-needing a web view or a solver. Those sources are **not supported** by Aki Manga, and the app says so instead of
+needing a web view or a solver. Those sources are **not supported** by Akidev, and the app says so instead of
 showing an empty list. MangaDex (no challenge), plain sites, JSON APIs and every themed site that is not behind a
 check are unaffected.
 
@@ -550,7 +550,7 @@ with what to do instead. The facade and engine comments were corrected to match.
 
 ## 16. Decision: the app is a renderer, every source is a plugin (2026-10-21)
 
-Aki Manga has **no built-in source and no default repository**. Everything it reads comes from a definition the
+Akidev has **no built-in source and no default repository**. Everything it reads comes from a definition the
 person installed, from a repository they added by address (a GitHub link, or any https folder with an
 `index.json`). The hardcoded MangaDex client (`mangadex.rs`) and the `Catalogue` enum are gone; MangaDex is
 `manga-sources/sources/mangadex.json`, published like any other plugin. Sections 7 and 8 above describe the plan

@@ -1,7 +1,7 @@
 import AkiManga
 import SwiftUI
 
-/// Aki Manga is a renderer: it ships with no source. Sources are plugins that come from repositories the
+/// Akidev is a renderer: it ships with no source. Sources are plugins that come from repositories the
 /// person adds by address (a GitHub link, say); this screen is where that happens.
 struct SourcesView: View {
     @Environment(AppModel.self) private var model
@@ -29,7 +29,7 @@ struct SourcesView: View {
                             .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
                     }
-                    AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Aki Manga does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
+                    AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
                         if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
                         ForEach(model.repos, id: \.base) { repo in
                             AkiLink(value: repo) {

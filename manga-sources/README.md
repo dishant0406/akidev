@@ -1,7 +1,7 @@
-# Aki Manga sources
+# Akidev sources
 
-This folder is a **repository** of source plugins for Aki Manga, laid out the way any repository must be, and
-the place the format is documented. Aki Manga is a renderer: it has no source of its own, and reads whatever a
+This folder is a **repository** of source plugins for Akidev, laid out the way any repository must be, and
+the place the format is documented. Akidev is a renderer: it has no source of its own, and reads whatever a
 definition says. A definition says which requests to make to a site and how to read the answer. Nothing in it
 is code. The engine is `desktop/manga` (`src/source.rs`); the reasoning is in `pipeline/MANGA_PLAN.md`.
 
