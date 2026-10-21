@@ -1,0 +1,33 @@
+import SwiftUI
+
+/// A glass text field with an icon and a clear button.
+struct AkiInput: View {
+    let placeholder: String
+    @Binding var text: String
+    var icon: String?
+    var isURL = false
+    var onSubmit: () -> Void = {}
+    var onClear: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let icon { AkiIcon(icon, size: 16, tone: .dim) }
+            TextField(placeholder, text: $text)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(Aki.ink)
+                .submitLabel(isURL ? .go : .search)
+                .keyboardType(isURL ? .URL : .default)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onSubmit(onSubmit)
+            if !text.isEmpty {
+                Button { text = ""; onClear() } label: { AkiIcon("xmark.circle.fill", size: 16, tone: .dim) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear")
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 52)
+        .akiGlass(.capsule, interactive: false)
+    }
+}

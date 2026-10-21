@@ -4,7 +4,7 @@ import UIKit
 /// One page of the paged reader: the image fitted to the screen, pinch to zoom up to 4×, double tap to
 /// zoom in on a point and out again, drag to move around when zoomed. A single tap reports where on the
 /// screen it landed (0 to 1 across), so the reader can turn the page or show its controls.
-struct ZoomablePage: UIViewRepresentable {
+struct AkiZoomPage: UIViewRepresentable {
     let url: String
     let headers: [String: String]
     let onTap: (CGFloat) -> Void
@@ -36,10 +36,10 @@ struct ZoomablePage: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, UIScrollViewDelegate {
-        var parent: ZoomablePage
+        var parent: AkiZoomPage
         var loaded: String?
         var task: Task<Void, Never>?
-        init(_ parent: ZoomablePage) { self.parent = parent }
+        init(_ parent: AkiZoomPage) { self.parent = parent }
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { (scrollView as? ZoomScrollView)?.imageView }
         func scrollViewDidZoom(_ scrollView: UIScrollView) { (scrollView as? ZoomScrollView)?.centre() }
         deinit { task?.cancel() }

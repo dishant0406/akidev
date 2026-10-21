@@ -79,3 +79,11 @@ func describe(_ error: Error) -> (title: String, message: String) {
     }
     return ("That did not work", error.localizedDescription)
 }
+
+/// A series being opened: the source it comes from and its id.
+struct SeriesRef: Hashable {
+    let source: String
+    let id: String
+    let title: String
+    let cover: String?
+}

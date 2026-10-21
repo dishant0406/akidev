@@ -9,7 +9,7 @@ struct ReaderTarget: Identifiable, Hashable {
     var id: String { chapterID }
 }
 
-enum SeriesTab: Hashable { case episodes, details }
+enum SeriesTab: Hashable { case chapters, details }
 
 /// A series: a full-width picture with its title, and a sheet that rises over it with the chapters.
 struct SeriesView: View {
@@ -22,7 +22,7 @@ struct SeriesView: View {
     @State private var loading = true
     @State private var error: (title: String, message: String)?
     @State private var target: ReaderTarget?
-    @State private var tab = SeriesTab.episodes
+    @State private var tab = SeriesTab.chapters
     @State private var expanded = false
 
     private let heroHeight: CGFloat = 470
@@ -40,13 +40,13 @@ struct SeriesView: View {
             .background(Aki.canvas)
 
             if let next = resumable {
-                YellowGlassButton(title: next.label, symbol: "play.fill") { target = next.target }
+                AkiButton(next.label, icon: "play.fill", variant: .primary, size: .large) { target = next.target }
                     .padding(.horizontal, 24).padding(.bottom, 12)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.smooth(duration: 0.3), value: resumable?.label)
-        .toolbar(.hidden, for: .navigationBar)
+        .akiNoNavigationBar()
         .hidesTabBar()
         .task {
             await load()
@@ -54,7 +54,7 @@ struct SeriesView: View {
             if UserDefaults.standard.bool(forKey: "autoContinue"), target == nil { target = resumable?.target }
             #endif
         }
-        .fullScreenCover(item: $target, onDismiss: { Task { await refreshProgress() } }) { target in
+        .akiFullScreen(item: $target, onDismiss: { Task { await refreshProgress() } }) { target in
             ReaderView(model: ReaderModel(engine: model.engine, ref: ref, chapters: chapters, start: target))
         }
     }
@@ -67,19 +67,18 @@ struct SeriesView: View {
             // Pulled down, the picture grows with the pull; pushed up it scrolls away as normal.
             let stretch = max(minY, 0)
             ZStack(alignment: .bottomLeading) {
-                RemoteImage(url: detail?.cover ?? ref.cover, placeholder: 1.4, fill: true, free: true)
+                AkiImage(url: detail?.cover ?? ref.cover, placeholder: 1.4, fill: true, free: true)
                     .frame(width: geo.size.width, height: heroHeight + stretch)
                 LinearGradient(colors: [.black.opacity(0.35), .clear, .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        if !chapters.isEmpty { Chip(text: "\(chapters.count) chapters", symbol: "list.bullet", onImage: true) }
-                        if let status = statusText { Chip(text: status, symbol: "circle.fill", onImage: true) }
-                        Chip(text: model.name(of: ref.source), symbol: "puzzlepiece.extension", onImage: true)
+                        if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list.bullet", style: .glass) }
+                        if let status = statusText { AkiBadge(status, icon: "circle.fill", style: .glass) }
+                        AkiBadge(model.name(of: ref.source), icon: "puzzlepiece.extension", style: .glass)
                     }
-                    Text(detail?.title ?? ref.title).font(Aki.title(28)).foregroundStyle(.white)
-                        .lineLimit(3).shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                    AkiText(detail?.title ?? ref.title, .display, tone: .onImage, lines: 3)
                     if let authors = detail?.authors, !authors.isEmpty {
-                        Text(authors.joined(separator: ", ")).font(.system(size: 14, weight: .medium, design: .rounded)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                        AkiText(authors.joined(separator: ", "), .caption, tone: .onImage, lines: 1)
                     }
                 }
                 .padding(.horizontal, 20).padding(.bottom, 46)
@@ -94,18 +93,16 @@ struct SeriesView: View {
 
     /// Back, save and more: glass circles over the picture.
     private var controls: some View {
-        GlassEffectContainer(spacing: 12) {
+        AkiGlassGroup(spacing: 12) {
             HStack {
-                GlassIconButton(symbol: "chevron.left", onImage: true) { dismiss() }
+                AkiIconButton(symbol: "chevron.left", label: "Back", onImage: true) { dismiss() }
                 Spacer()
-                GlassIconButton(symbol: saved ? "bookmark.fill" : "bookmark", tint: saved ? Aki.yellow : nil, onImage: true) { Task { await toggleSaved() } }
-                Menu {
-                    Button("Mark all as read", systemImage: "checkmark.circle") { markAll(read: true) }
-                    Button("Mark all as unread", systemImage: "circle") { markAll(read: false) }
-                    Button("Refresh", systemImage: "arrow.clockwise") { Task { await load() } }
-                } label: {
-                    GlassIconButton(symbol: "ellipsis", onImage: true) {}.icon.glassEffect(.regular.interactive(), in: .circle)
-                }
+                AkiIconButton(symbol: saved ? "bookmark.fill" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.yellow : nil, onImage: true) { Task { await toggleSaved() } }
+                AkiMenu(symbol: "ellipsis", label: "More", onImage: true, items: [
+                    AkiMenuItem(title: "Mark all as read", icon: "checkmark.circle") { markAll(read: true) },
+                    AkiMenuItem(title: "Mark all as unread", icon: "circle") { markAll(read: false) },
+                    AkiMenuItem(title: "Refresh", icon: "arrow.clockwise") { Task { await load() } },
+                ])
             }
         }
         .padding(.horizontal, 16).padding(.top, Aki.safeTop + 4)
@@ -115,10 +112,10 @@ struct SeriesView: View {
 
     private var sheet: some View {
         VStack(spacing: 18) {
-            PillTabs(items: [(SeriesTab.episodes, "Chapters"), (SeriesTab.details, "Details")], selection: $tab)
+            AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.details, "Details")], selection: $tab)
             if let error, chapters.isEmpty {
-                StateCard(title: error.title, message: error.message, action: ("Try again", { Task { await load() } })).frame(minHeight: 260)
-            } else if tab == .episodes {
+                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } })).frame(minHeight: 260)
+            } else if tab == .chapters {
                 chapterList
             } else {
                 details
@@ -126,69 +123,69 @@ struct SeriesView: View {
         }
         .padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 120)
         .frame(maxWidth: .infinity)
-        .background(Aki.canvas, in: UnevenRoundedRectangle(topLeadingRadius: Aki.sheet, topTrailingRadius: Aki.sheet, style: .continuous))
+        .background(Aki.canvas, in: UnevenRoundedRectangle(topLeadingRadius: Aki.sheetRadius, topTrailingRadius: Aki.sheetRadius, style: .continuous))
         .offset(y: -30)
     }
 
     private var chapterList: some View {
         LazyVStack(spacing: 12) {
-            if chapters.isEmpty && loading { ProgressView().padding(40) }
+            if chapters.isEmpty && loading { AkiSpinner().padding(40) }
             ForEach(chapters, id: \.id) { chapter in
-                HStack(spacing: 8) {
-                    Button { target = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0)) } label: {
-                        InboxRow(thumbnail: detail?.cover ?? ref.cover,
-                                 label: chapter.finished ? "Read" : (chapter.page != nil ? "Page \(chapter.page! + 1)" : (chapter.title.map { !$0.localizedCaseInsensitiveContains(numberLabel(chapter)) } == true ? numberLabel(chapter) : "Unread")),
-                                 title: chapterName(number: chapter.number, title: chapter.title),
-                                 chips: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 },
-                                 dimmed: chapter.finished)
-                    }.buttonStyle(.plain)
-                }
-                .overlay(alignment: .trailing) {
-                    Button { toggleRead(chapter) } label: {
-                        Image(systemName: chapter.finished ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 22)).foregroundStyle(chapter.finished ? Aki.yellow : Aki.dim)
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.buttonStyle(.plain).padding(.trailing, 10)
+                AkiTap(action: { target = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0)) }) {
+                    AkiListCard(thumbnail: detail?.cover ?? ref.cover, label: label(chapter),
+                                title: chapterName(number: chapter.number, title: chapter.title),
+                                badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
+                        AkiTap(action: { toggleRead(chapter) }) {
+                            AkiIcon(chapter.finished ? "checkmark.circle.fill" : "circle", size: 22, tone: chapter.finished ? .primary : .dim)
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
+                    }
                 }
             }
         }
     }
 
-    private func numberLabel(_ chapter: ChapterEntry) -> String {
-        chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" } ?? "Chapter"
+    /// The small line over a chapter's title: where you are in it, or what it is.
+    private func label(_ chapter: ChapterEntry) -> String {
+        if chapter.finished { return "Read" }
+        if let page = chapter.page { return "Page \(page + 1)" }
+        let number = chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" }
+        if let number, chapter.title.map({ !$0.localizedCaseInsensitiveContains(number) }) == true { return number }
+        return "Unread"
     }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 18) {
             if let description = detail?.description {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(description).font(.system(size: 15, design: .rounded)).foregroundStyle(Aki.ink).lineLimit(expanded ? nil : 6)
-                    Button(expanded ? "Show less" : "Read more") { withAnimation(.smooth) { expanded.toggle() } }
-                        .font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(Aki.ink)
+                AkiCard(padding: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        AkiText(description, .body, lines: expanded ? nil : 6)
+                        AkiButton(expanded ? "Show less" : "Read more", variant: .ghost, size: .small) { withAnimation(.smooth) { expanded.toggle() } }
+                    }
                 }
-                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Aki.card, in: RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
             }
-            VStack(spacing: 0) {
-                info("Status", statusText ?? "Unknown")
-                info("Author", detail?.authors.joined(separator: ", ") ?? "—")
-                info("Source", model.name(of: ref.source))
-                info("Chapters", "\(chapters.count)")
+            AkiCard(padding: 4) {
+                VStack(spacing: 0) {
+                    info("Status", statusText ?? "Unknown")
+                    info("Author", detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : "—")
+                    info("Source", model.name(of: ref.source))
+                    info("Chapters", "\(chapters.count)")
+                }
             }
-            .background(Aki.card, in: RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
             if let tags = detail?.tags, !tags.isEmpty {
-                FlowLayout(spacing: 8) { ForEach(tags, id: \.self) { Chip(text: $0) } }
+                AkiFlow(spacing: 8) { ForEach(tags, id: \.self) { AkiBadge($0) } }
             }
         }
     }
 
-    private func info(_ label: String, _ value: String) -> some View {
+    private func info(_ name: String, _ value: String) -> some View {
         HStack {
-            Text(label).font(.system(size: 14, weight: .medium, design: .rounded)).foregroundStyle(Aki.dim)
+            AkiText(name, .caption, tone: .dim)
             Spacer()
-            Text(value).font(.system(size: 14, weight: .bold, design: .rounded)).foregroundStyle(Aki.ink).multilineTextAlignment(.trailing)
+            AkiText(value, .bodyStrong, align: .trailing)
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 12).padding(.vertical, 12)
     }
 
     private var statusText: String? {

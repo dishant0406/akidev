@@ -41,7 +41,7 @@ struct RootView: View {
                 Tab(value: AppTab.sources) { SourcesView().toolbarVisibility(.hidden, for: .tabBar) }
             }
             if !model.tabBarHidden {
-                FloatingTabBar(selection: $model.tab, badge: [.updates: model.unreadTotal])
+                AkiTabBar(selection: $model.tab, badge: [.updates: model.unreadTotal])
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -49,11 +49,6 @@ struct RootView: View {
         .animation(.smooth(duration: 0.3), value: model.tabBarHidden)
         .background(Aki.canvas)
     }
-}
-
-/// Added to a screen that scrolls under the floating tab bar, so its last row can be reached.
-extension View {
-    func underTabBar() -> some View { contentMargins(.bottom, 104, for: .scrollContent) }
 }
 
 /// A screen pushed over a tab that hides the tab bar while it is on screen.

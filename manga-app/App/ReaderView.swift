@@ -20,13 +20,13 @@ struct ReaderView: View {
                 case .paged, .rtl: PagedReader(model: model, close: { dismiss() })
                 }
             } else if let error = model.error {
-                StateCard(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
+                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
             } else {
-                ProgressView()
+                AkiSpinner()
             }
         }
         .overlay(alignment: .top) { if model.chrome { topBar.transition(.opacity) } }
-        .overlay(alignment: .bottom) { if model.chrome, let segment = model.currentSegment { bottomBar(segment).transition(.opacity) } }
+        .overlay(alignment: .bottom) { if model.chrome, model.currentSegment != nil { bottomBar.transition(.opacity) } }
         .environment(\.colorScheme, .dark)
         .statusBarHidden(!model.chrome)
         .animation(.smooth(duration: 0.2), value: model.chrome)
@@ -35,43 +35,36 @@ struct ReaderView: View {
     }
 
     private var topBar: some View {
-        GlassEffectContainer(spacing: 12) {
+        AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                Button { dismiss() } label: { Image(systemName: "chevron.left").padding(6) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                AkiIconButton(symbol: "chevron.left", label: "Back") { dismiss() }
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(model.ref.title).font(.footnote.weight(.semibold)).lineLimit(1)
-                    if let chapter = model.chapter(model.current) {
-                        Text(model.label(chapter)).font(.caption2).foregroundStyle(Aki.dim).lineLimit(1)
-                    }
+                    AkiText(model.ref.title, .captionStrong, tone: .onDark, lines: 1)
+                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .dim, lines: 1) }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
-                .glassEffect(.regular, in: .capsule)
+                .akiGlass(.capsule, interactive: false)
                 Spacer(minLength: 0)
-                Menu {
-                    Picker("Reading mode", selection: Binding(get: { model.mode }, set: { model.setMode($0) })) {
-                        ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
-                    }
-                } label: { Image(systemName: model.mode.symbol).padding(6) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                AkiMenu(symbol: model.mode.symbol, label: "Reading mode", items: ReadingMode.allCases.map { mode in
+                    AkiMenuItem(title: mode.title, icon: mode.symbol, isSelected: mode == model.mode) { model.setMode(mode) }
+                })
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
     }
 
-    private func bottomBar(_ segment: Segment) -> some View {
-        GlassEffectContainer(spacing: 12) {
+    private var bottomBar: some View {
+        AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 if let older = model.older(than: model.current) {
-                    Button { Task { await model.open(older.id, page: 0, offset: 0) } } label: { Image(systemName: "backward.end.fill").padding(6) }
-                        .buttonStyle(.glass).buttonBorderShape(.circle)
+                    AkiIconButton(symbol: "backward.end.fill", label: "Previous chapter") { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
                 let count = model.currentSegment?.pages.images.count ?? 0
-                Text("\(min(model.page + 1, max(count, 1))) / \(count)").font(.footnote.monospacedDigit())
-                    .padding(.horizontal, 18).padding(.vertical, 12).glassEffect(.regular, in: .capsule)
+                AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onDark)
+                    .monospacedDigit()
+                    .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, interactive: false)
                 if let newer = model.newer(than: model.current) {
-                    Button { Task { await model.open(newer.id, page: 0, offset: 0) } } label: { Image(systemName: "forward.end.fill").padding(6) }
-                        .buttonStyle(.glass).buttonBorderShape(.circle)
+                    AkiIconButton(symbol: "forward.end.fill", label: "Next chapter") { Task { await model.open(newer.id, page: 0, offset: 0) } }
                 }
             }
         }
@@ -118,7 +111,7 @@ private struct StripReader: View {
                 ForEach(items) { item in
                     switch item.kind {
                     case .page(let index, let url, let headers):
-                        RemoteImage(url: url, headers: headers, placeholder: 1.4, onAspect: { model.aspects[url] = $0 })
+                        AkiImage(url: url, headers: headers, placeholder: 1.4, onAspect: { model.aspects[url] = $0 })
                             .frame(width: width * model.zoom)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { frame in
                                 if frame.minY <= 1, frame.maxY > 1 {
@@ -153,13 +146,12 @@ private struct StripReader: View {
     private func chapterEnd(_ segment: Segment) -> some View {
         let next = model.newer(than: segment.chapterID)
         return VStack(spacing: 10) {
-            ReaderEyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onDark)
             if let next {
-                Text(next.id == model.segments.last?.chapterID || model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))")
-                    .font(.footnote).foregroundStyle(Aki.dim)
+                AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .dim)
             } else {
-                Text("You are up to date").font(Aki.title(20)).foregroundStyle(.white)
-                Button("Back to the series", action: close).buttonStyle(.glass).padding(.top, 6)
+                AkiText("You are up to date", .title, tone: .onDark)
+                AkiButton("Back to the series", action: close).padding(.top, 6)
             }
         }
         .frame(width: width, height: next == nil ? 220 : 96)
@@ -202,7 +194,7 @@ private struct PagedReader: View {
         let rtl = model.mode == .rtl
         TabView(selection: $model.pagedIndex) {
             ForEach(Array(segment.pages.images.enumerated()), id: \.offset) { index, url in
-                ZoomablePage(url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
+                AkiZoomPage(url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
                     .ignoresSafeArea()
                     .tag(index)
             }
@@ -233,26 +225,15 @@ private struct PagedReader: View {
 
     private func endPage(_ segment: Segment) -> some View {
         VStack(spacing: 14) {
-            ReaderEyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onDark)
             if let next = model.newer(than: segment.chapterID) {
-                Button { Task { await model.open(next.id, page: 0, offset: 0) } } label: {
-                    Text("Next · \(model.label(next))").font(.system(size: 16, weight: .bold, design: .rounded)).padding(.horizontal, 22).frame(minHeight: 52)
-                }.buttonStyle(.plain).foregroundStyle(Aki.onYellow).glassEffect(.regular.tint(Aki.yellow).interactive(), in: .capsule)
+                AkiButton("Next · \(model.label(next))", variant: .primary, size: .large) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {
-                Text("You are up to date").font(Aki.title(22)).foregroundStyle(.white)
+                AkiText("You are up to date", .title, tone: .onDark)
             }
-            Button("Back to the series", action: close).buttonStyle(.glass)
+            AkiButton("Back to the series", action: close)
         }
         .environment(\.layoutDirection, .leftToRight)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// Small tracked capitals over the dark reader.
-struct ReaderEyebrow: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-    var body: some View {
-        Text(text.uppercased()).font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.4).foregroundStyle(.white.opacity(0.55))
     }
 }
