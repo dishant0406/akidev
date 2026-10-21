@@ -15,10 +15,13 @@ pub mod music;
 pub mod providers;
 pub mod releases;
 pub mod search;
+#[cfg(feature = "streaming")]
 pub mod serve;
 pub mod sources;
+#[cfg(feature = "streaming")]
 pub mod stream;
 pub mod subtitles;
 pub mod template;
+#[cfg(feature = "streaming")]
 pub mod torrent;
 pub mod update;

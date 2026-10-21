@@ -9,6 +9,10 @@ name = "akidev-sources"
 path = "src/bin/sources.rs"
 
 [features]
+# Torrent streaming and the loopback server: desktop and server only. A phone build (the manga app) turns it off,
+# because librqbit does not compile for iOS.
+default = ["streaming"]
+streaming = ["dep:librqbit", "dep:axum", "dep:tokio-util"]
 # YouTube Music and Audius, played by the desktop app. The server does not turn it on.
 music = ["dep:ytmapi-rs", "dep:zip", "tokio/process"]
 
@@ -24,9 +28,12 @@ zip = { version = "7", default-features = false, features = ["deflate"], optiona
 ytmapi-rs = { path = "../vendor/ytmapi-rs", default-features = false, features = ["default-tls", "simplified-queries"], optional = true }
 tracing.workspace = true
 toml = "0.8"
-librqbit = "9.0.1"
-axum = "0.8"
-tokio-util = { version = "0.7.20", features = ["io"] }
-getrandom = "0.3"
+librqbit = { version = "9.0.1", optional = true }
+axum = { version = "0.8", optional = true }
+tokio-util = { version = "0.7.20", features = ["io"], optional = true }
+getrandom = { version = "0.3", features = ["std"] }
 ed25519-dalek = "2"
 sha2 = "0.10"
+
+[dev-dependencies]
+axum = "0.8"
