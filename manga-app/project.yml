@@ -30,6 +30,9 @@ targets:
     info:
       path: App/Info.plist
       properties:
+        CFBundleDisplayName: Aki Manga
+        # Without a launch screen iOS runs the app letterboxed instead of full screen.
+        UILaunchScreen: {}
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh]
         CFBundleURLTypes:
