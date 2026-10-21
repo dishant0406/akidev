@@ -6,22 +6,35 @@ import ImageIO
 actor ImageLoader {
     static let shared = ImageLoader()
     private let cache = NSCache<NSString, UIImage>()
+    /// Covers and pages keep their address for good, so what was fetched once is read from disk next time (and next launch).
+    private let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 400 * 1024 * 1024)
+        configuration.requestCachePolicy = .returnCacheDataElseLoad
+        configuration.httpMaximumConnectionsPerHost = 6
+        return URLSession(configuration: configuration)
+    }()
     private var inflight: [String: Task<UIImage?, Never>] = [:]
 
     init() {
         cache.totalCostLimit = 160 * 1024 * 1024
     }
 
-    func clear() { cache.removeAllObjects() }
+    func clear() {
+        cache.removeAllObjects()
+        session.configuration.urlCache?.removeAllCachedResponses()
+    }
 
     func image(_ url: URL, headers: [String: String], widthPx: CGFloat) async -> UIImage? {
         let key = "\(url.absoluteString)@\(Int(widthPx))"
         if let hit = cache.object(forKey: key as NSString) { return hit }
         if let running = inflight[key] { return await running.value }
-        let task = Task<UIImage?, Never> {
+        // Detached: a task made here would run on this actor, and decoding would take turns, one image at a time.
+        let session = session
+        let task = Task.detached(priority: .userInitiated) { () -> UIImage? in
             var request = URLRequest(url: url)
             for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
+            guard let (data, response) = try? await session.data(for: request),
                   (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true else { return nil }
             return Self.downsample(data, widthPx: widthPx)
         }

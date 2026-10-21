@@ -12,6 +12,10 @@ final class AppModel {
     var sources: [SourceInfo] = []
     var repos: [RepoInfo] = []
     var library: [LibraryEntry] = []
+    /// The Updates screen's rows, read in one go with the library.
+    var updates: [UpdateEntry] = []
+    private var loadingLibrary = false
+    private var libraryChanged = false
     var tab: AppTab = .home
     /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
     var barHiders = 0
@@ -39,10 +43,36 @@ final class AppModel {
         #endif
     }
 
+    /// Re-reads what is installed (a few rows) at once, and the library off the main thread: it grows with the person's
+    /// collection, and a screen must never wait for it.
     func refresh() {
-        sources = engine.sources().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        repos = (try? engine.repos()) ?? []
-        library = (try? engine.library()) ?? []
+        // Only a real change is published, so screens do not redraw for the same answer.
+        let installed = engine.sources().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        if installed != sources { sources = installed }
+        let added = (try? engine.repos()) ?? []
+        if added != repos { repos = added }
+        reloadLibrary()
+    }
+
+    func readLibrary() async {
+        let engine = engine
+        let (library, updates) = await Task.detached(priority: .userInitiated) { ((try? engine.library()) ?? [], (try? engine.updates()) ?? []) }.value
+        if library != self.library { self.library = library }
+        if updates != self.updates { self.updates = updates }
+    }
+
+    private func reloadLibrary() {
+        // One read at a time; a change that arrives during one asks for another when it ends.
+        if loadingLibrary { return libraryChanged = true }
+        loadingLibrary = true
+        Task {
+            await readLibrary()
+            loadingLibrary = false
+            if libraryChanged {
+                libraryChanged = false
+                reloadLibrary()
+            }
+        }
     }
 
     var visibleSources: [SourceInfo] {
@@ -75,25 +105,44 @@ final class AppModel {
         sourceProblems[source] = error.map { describe($0).message }
     }
 
-    /// Asks each source for the chapters of the series saved from it. Skipped when done in the last half hour
-    /// unless `force` is set (a pull or a tap).
+    /// Asks the sites for the chapters of saved series that are due (not asked in the last hour, a finished series not in
+    /// the last day), four at a time. Skipped when done in the last half hour unless `force` is set (a pull or a tap),
+    /// which asks about every series not asked in the last minute.
     func refreshLibrary(force: Bool = false) async {
         if refreshing || (!force && (lastRefresh.map { Date.now.timeIntervalSince($0) < 1800 } ?? false)) { return }
         refreshing = true
         defer { refreshing = false }
+        await readLibrary()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let due = library.filter { entry in
+            guard let checked = entry.checkedMs else { return true }
+            let age = now - checked
+            return force ? age > 60_000 : age > (entry.completed ? 86_400_000 : 3_600_000)
+        }
         let engine = engine
         let results = await withTaskGroup(of: (LibraryEntry, Error?).self) { group in
-            for entry in library {
+            func ask(_ entry: LibraryEntry) {
                 group.addTask {
-                    do { _ = try await engine.chapters(source: entry.source, id: entry.id); return (entry, nil) } catch { return (entry, error) }
+                    do { _ = try await engine.chapters(source: entry.source, id: entry.id); return (entry, nil) } catch {
+                        try? engine.noteFailedCheck(source: entry.source, series: entry.id)
+                        return (entry, error)
+                    }
                 }
             }
+            var waiting = due.makeIterator()
+            for _ in 0..<4 { if let entry = waiting.next() { ask(entry) } }
             var all: [(LibraryEntry, Error?)] = []
-            for await result in group { all.append(result) }
+            for await result in group {
+                all.append(result)
+                if !Task.isCancelled, let entry = waiting.next() { ask(entry) }
+            }
             return all
         }
         guard !Task.isCancelled else { return }
-        updateFailures = results.compactMap { entry, error in error.map { UpdateFailure(title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
+        // What failed before and was not asked this time stays on the list.
+        let asked = Set(results.map { "\($0.0.source)/\($0.0.id)" })
+        let stillFailing = updateFailures.filter { !asked.contains($0.key) }
+        updateFailures = stillFailing + results.compactMap { entry, error in error.map { UpdateFailure(key: "\(entry.source)/\(entry.id)", title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
         // A source is "not working" when any of its series failed this time; one that is gone loses its mark.
         let failedSources = Set(results.filter { $0.1 != nil }.map(\.0.source))
         for source in Set(results.map(\.0.source)) { sourceProblems[source] = nil }
@@ -135,10 +184,12 @@ final class AppModel {
 }
 
 struct UpdateFailure: Identifiable {
+    /// `source/series`, which also keeps two series with one title apart.
+    let key: String
     let title: String
     let source: String
     let message: String
-    var id: String { "\(source)/\(title)" }
+    var id: String { key }
 }
 
 struct PendingRepo: Identifiable {
@@ -164,4 +215,8 @@ struct SeriesRef: Hashable {
     let id: String
     let title: String
     let cover: String?
+}
+
+extension UpdateEntry {
+    var key: String { "\(source)/\(id)" }
 }

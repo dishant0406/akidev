@@ -221,6 +221,23 @@ pub struct LibraryEntry {
     pub saved_ms: i64,
     /// Ids of the categories it is in.
     pub categories: Vec<i64>,
+    /// When its chapters were last asked of the site.
+    pub checked_ms: Option<i64>,
+    /// A finished series: worth checking rarely.
+    pub completed: bool,
+}
+
+/// A saved series with its newest chapter.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct UpdateEntry {
+    pub source: String,
+    pub id: String,
+    pub title: String,
+    pub cover: Option<String>,
+    pub unread: u32,
+    pub latest_number: Option<f64>,
+    pub latest_title: Option<String>,
+    pub latest_date_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -398,6 +415,14 @@ pub struct Engine {
 }
 
 impl Engine {
+    fn keep_first_page(&self, source: &str, kind: &str, page: u32, found: &m::Page<m::Card>) {
+        if page == 1
+            && let Ok(body) = serde_json::to_string(found)
+        {
+            let _ = self.store.keep_listing(source, kind, &body, now_ms());
+        }
+    }
+
     fn source(&self, id: &str) -> Result<Arc<Source>> {
         self.sources.read().unwrap().get(id).cloned().ok_or_else(|| failed(format!("there is no source called {id}")))
     }
@@ -666,11 +691,21 @@ impl Engine {
     // --- asking a source -----------------------------------------------------------------------
 
     pub async fn popular(&self, source: String, page: u32) -> Result<CardPage> {
-        Ok(self.source(&source)?.popular(page).await?.into())
+        let found = self.source(&source)?.popular(page).await?;
+        self.keep_first_page(&source, "popular", page, &found);
+        Ok(found.into())
     }
 
     pub async fn latest(&self, source: String, page: u32) -> Result<CardPage> {
-        Ok(self.source(&source)?.latest(page).await?.into())
+        let found = self.source(&source)?.latest(page).await?;
+        self.keep_first_page(&source, "latest", page, &found);
+        Ok(found.into())
+    }
+
+    /// What `popular` or `latest` gave last time for page one, with no network: shown at once while the fresh page loads.
+    pub fn remembered_listing(&self, source: String, latest: bool) -> Option<CardPage> {
+        let body = self.store.listing(&source, if latest { "latest" } else { "popular" }).ok()??;
+        serde_json::from_str::<m::Page<m::Card>>(&body).ok().map(CardPage::from)
     }
 
     /// The ways a source lets a search be narrowed.
@@ -715,6 +750,7 @@ impl Engine {
         }
         let fetched = self.source(&source)?.chapters(&id).await?;
         let synced = self.store.sync_chapters(&source, &id, &fetched)?;
+        self.store.set_checked(&source, &id, now_ms())?;
         Ok(ChapterList { entries: self.entries(&source, &id)?, new_ids: synced.new })
     }
 
@@ -768,8 +804,28 @@ impl Engine {
             .store
             .library()?
             .into_iter()
-            .map(|item| LibraryEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, total: item.total, last_read_ms: item.last_read_ms, saved_ms: item.saved_ms, categories: item.categories })
+            .map(|item| LibraryEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, total: item.total, last_read_ms: item.last_read_ms, saved_ms: item.saved_ms, categories: item.categories, checked_ms: item.checked_ms, completed: item.completed })
             .collect())
+    }
+
+    /// Every saved series with its newest chapter, in one read: the Updates screen.
+    pub fn updates(&self) -> Result<Vec<UpdateEntry>> {
+        Ok(self
+            .store
+            .updates()?
+            .into_iter()
+            .map(|item| UpdateEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, latest_number: item.latest_number, latest_title: item.latest_title, latest_date_ms: item.latest_date_ms })
+            .collect())
+    }
+
+    /// When a series' chapters were last asked of its site, to skip asking again at once.
+    pub fn chapters_checked_ms(&self, source: String, series: String) -> Result<Option<i64>> {
+        Ok(self.store.checked(&source, &series)?)
+    }
+
+    /// Notes an attempt to ask a site for a series' chapters that failed, so the next refresh waits instead of asking again at once.
+    pub fn note_failed_check(&self, source: String, series: String) -> Result<()> {
+        Ok(self.store.set_checked(&source, &series, now_ms())?)
     }
 
     pub fn set_progress(&self, source: String, series: String, chapter: String, page: u32, offset: f64, finished: bool) -> Result<()> {

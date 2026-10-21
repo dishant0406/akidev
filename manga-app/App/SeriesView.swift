@@ -18,6 +18,8 @@ struct SeriesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var detail: Detail?
     @State private var chapters: [ChapterEntry] = []
+    /// Where Continue goes, worked out when the chapters or progress change, not on every redraw.
+    @State private var resumable: Resumable?
     @State private var saved = false
     @State private var loading = true
     @State private var error: (title: String, message: String)?
@@ -122,7 +124,7 @@ struct SeriesView: View {
                     AkiMenuItem(title: "Mark all as read", icon: "check") { markAll(read: true) },
                     AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
                     AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
-                    AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load() } },
+                    AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
                     AkiMenuItem(title: "Move to another source", icon: "swap") { moving = true },
                     AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
                 ])
@@ -137,7 +139,7 @@ struct SeriesView: View {
         VStack(spacing: 18) {
             AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.details, "Details")], selection: $tab)
             if let error, chapters.isEmpty {
-                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } })).frame(minHeight: 260)
+                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load(force: true) } })).frame(minHeight: 260)
             } else if tab == .chapters && chapters.isEmpty && !loading {
                 AkiEmptyState(title: "Nothing to read here", message: "\(model.name(of: ref.source)) lists this series but has no chapters it can show in your language. Licensed series are often only linked to the publisher's own site. Try another source, or another language in the source's settings.")
                     .frame(minHeight: 280)
@@ -237,26 +239,34 @@ struct SeriesView: View {
         let label: String
     }
 
-    private var resumable: Resumable? {
-        guard !chapters.isEmpty else { return nil }
-        let resume = try? model.engine.resume(source: ref.source, series: ref.id)
-        let started = chapters.contains { $0.finished || $0.page != nil }
-        guard let resume, let index = chapters.firstIndex(where: { $0.id == resume.chapter }) else { return nil }
-        let name = chapterName(number: chapters[index].number, title: chapters[index].title)
-        return Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? "Continue · \(name)" : "Start · \(name)")
+    private func setChapters(_ list: [ChapterEntry]) {
+        chapters = list
+        guard !list.isEmpty, let resume = try? model.engine.resume(source: ref.source, series: ref.id),
+              let chapter = list.first(where: { $0.id == resume.chapter }) else { return resumable = nil }
+        let started = list.contains { $0.finished || $0.page != nil }
+        let name = chapterName(number: chapter.number, title: chapter.title)
+        resumable = Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? "Continue · \(name)" : "Start · \(name)")
     }
 
-    private func load() async {
-        loading = true
+    /// Shows what is stored at once, then asks the site. The chapter list is not asked again within ten minutes of the
+    /// last time (going back and forth between a series and the reader, say) unless `force` is set.
+    private func load(force: Bool = false) async {
         error = nil
         saved = (try? model.engine.inLibrary(source: ref.source, id: ref.id)) ?? false
-        chapters = (try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? []
-        async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
-        async let fetchedChapters = model.engine.chapters(source: ref.source, id: ref.id)
-        do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
-        do { chapters = try await fetchedChapters.entries } catch { if chapters.isEmpty { self.error = describe(error) } }
-        loading = false
+        setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? [])
+        let checked = (try? model.engine.chaptersCheckedMs(source: ref.source, series: ref.id)).flatMap { $0 }
+        let fresh = !force && !chapters.isEmpty && checked.map { Date().timeIntervalSince1970 * 1000 - Double($0) < 600_000 } == true
+        loading = !fresh
         loadKept()
+        async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
+        if fresh {
+            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
+        } else {
+            async let fetchedChapters = model.engine.chapters(source: ref.source, id: ref.id)
+            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
+            do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error) } }
+        }
+        loading = false
     }
 
     private func loadKept() {
@@ -281,7 +291,7 @@ struct SeriesView: View {
     }
 
     private func refreshProgress() async {
-        chapters = (try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters
+        setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters)
         model.refresh()
     }
 
@@ -296,13 +306,13 @@ struct SeriesView: View {
 
     private func toggleRead(_ chapter: ChapterEntry) {
         try? model.engine.mark(source: ref.source, series: ref.id, chapters: [chapter.id], read: !chapter.finished)
-        chapters = (try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters
+        setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters)
         model.refresh()
     }
 
     private func markAll(read: Bool) {
         try? model.engine.mark(source: ref.source, series: ref.id, chapters: chapters.map(\.id), read: read)
-        chapters = (try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters
+        setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters)
         model.refresh()
     }
 }

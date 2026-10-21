@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -25,6 +25,23 @@ pub struct LibraryItem {
     pub last_read_ms: Option<i64>,
     pub saved_ms: i64,
     pub categories: Vec<i64>,
+    /// When its chapters were last asked of the site.
+    pub checked_ms: Option<i64>,
+    /// A finished series: it is checked for new chapters rarely.
+    pub completed: bool,
+}
+
+/// A saved series with its newest chapter, for the Updates screen.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdateItem {
+    pub source: String,
+    pub id: String,
+    pub title: String,
+    pub cover: Option<String>,
+    pub unread: u32,
+    pub latest_number: Option<f64>,
+    pub latest_title: Option<String>,
+    pub latest_date_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -176,6 +193,14 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 source TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
                 PRIMARY KEY (source, key));
              PRAGMA user_version = 2;",
+        )?;
+    }
+    if version < 3 {
+        db.execute_batch(
+            "ALTER TABLE series ADD COLUMN checked_at INTEGER;
+             CREATE TABLE listing (source TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (source, kind));
+             CREATE INDEX series_saved ON series (saved_at) WHERE saved_at IS NOT NULL;
+             PRAGMA user_version = 3;",
         )?;
     }
     Ok(())
@@ -341,31 +366,90 @@ impl Store {
         db.query_row("SELECT 1 FROM progress WHERE source = ?1 AND series = ?2 LIMIT 1", params![source, series], |_| Ok(())).optional().ok().flatten().is_some()
     }
 
+    /// Counts of chapters and of finished ones for every series, read once (a query per series would grow with the library).
+    const COUNTS: &'static str = "
+        LEFT JOIN (SELECT source, series, count(*) AS total FROM chapter GROUP BY source, series) c ON c.source = s.source AND c.series = s.id
+        LEFT JOIN (SELECT p.source, p.series, count(*) AS done FROM progress p
+                   JOIN chapter ch ON ch.source = p.source AND ch.series = p.series AND ch.id = p.chapter
+                   WHERE p.finished = 1 GROUP BY p.source, p.series) d ON d.source = s.source AND d.series = s.id";
+
     pub fn library(&self) -> anyhow::Result<Vec<LibraryItem>> {
         let db = self.db();
-        let mut statement = db.prepare(
-            "SELECT s.source, s.id, s.title, s.cover,
-                (SELECT count(*) FROM chapter c WHERE c.source = s.source AND c.series = s.id),
-                (SELECT count(*) FROM chapter c WHERE c.source = s.source AND c.series = s.id
-                    AND NOT EXISTS (SELECT 1 FROM progress p WHERE p.source = c.source AND p.series = c.series AND p.chapter = c.id AND p.finished = 1)),
+        let mut statement = db.prepare(&format!(
+            "SELECT s.source, s.id, s.title, s.cover, coalesce(c.total, 0), coalesce(c.total, 0) - coalesce(d.done, 0),
                 (SELECT max(p.updated_at) FROM progress p WHERE p.source = s.source AND p.series = s.id),
-                s.saved_at
-             FROM series s WHERE s.saved_at IS NOT NULL",
-        )?;
+                s.saved_at, s.checked_at, s.status IN ('completed', 'cancelled')
+             FROM series s {} WHERE s.saved_at IS NOT NULL",
+            Store::COUNTS
+        ))?;
         let rows = statement.query_map([], |row| {
-            Ok(LibraryItem { source: row.get(0)?, id: row.get(1)?, title: row.get(2)?, cover: row.get(3)?, total: row.get(4)?, unread: row.get(5)?, last_read_ms: row.get(6)?, saved_ms: row.get(7)?, categories: Vec::new() })
+            Ok(LibraryItem {
+                source: row.get(0)?,
+                id: row.get(1)?,
+                title: row.get(2)?,
+                cover: row.get(3)?,
+                total: row.get(4)?,
+                unread: row.get(5)?,
+                last_read_ms: row.get(6)?,
+                saved_ms: row.get(7)?,
+                categories: Vec::new(),
+                checked_ms: row.get(8)?,
+                completed: row.get(9)?,
+            })
         })?;
         let mut items: Vec<LibraryItem> = rows.collect::<Result<_, _>>()?;
+        let mut position = std::collections::HashMap::new();
+        for (at, item) in items.iter().enumerate() {
+            position.insert((item.source.clone(), item.id.clone()), at);
+        }
         let mut member = db.prepare("SELECT source, series, category FROM series_category")?;
         for row in member.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)))? {
             let (source, series, category) = row?;
-            if let Some(item) = items.iter_mut().find(|item| item.source == source && item.id == series) {
-                item.categories.push(category);
+            if let Some(at) = position.get(&(source, series)) {
+                items[*at].categories.push(category);
             }
         }
         // Most recently read first, then by title.
         items.sort_by(|a, b| b.last_read_ms.cmp(&a.last_read_ms).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())));
         Ok(items)
+    }
+
+    /// Every saved series with its newest chapter, newest chapter first: the Updates screen, in one query.
+    pub fn updates(&self) -> anyhow::Result<Vec<UpdateItem>> {
+        let db = self.db();
+        let mut statement = db.prepare(&format!(
+            "SELECT s.source, s.id, s.title, s.cover, coalesce(c.total, 0) - coalesce(d.done, 0), l.number, l.title, l.date_ms
+             FROM series s {} LEFT JOIN chapter l ON l.source = s.source AND l.series = s.id AND l.position = 0
+             WHERE s.saved_at IS NOT NULL ORDER BY l.date_ms DESC",
+            Store::COUNTS
+        ))?;
+        let rows = statement.query_map([], |row| {
+            Ok(UpdateItem { source: row.get(0)?, id: row.get(1)?, title: row.get(2)?, cover: row.get(3)?, unread: row.get(4)?, latest_number: row.get(5)?, latest_title: row.get(6)?, latest_date_ms: row.get(7)? })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Remembers that a series' chapters were just asked of the site.
+    pub fn set_checked(&self, source: &str, series: &str, now_ms: i64) -> anyhow::Result<()> {
+        self.db().execute("UPDATE series SET checked_at = ?3 WHERE source = ?1 AND id = ?2", params![source, series, now_ms])?;
+        Ok(())
+    }
+
+    pub fn checked(&self, source: &str, series: &str) -> anyhow::Result<Option<i64>> {
+        Ok(self.db().query_row("SELECT checked_at FROM series WHERE source = ?1 AND id = ?2", params![source, series], |row| row.get(0)).optional()?.flatten())
+    }
+
+    /// The last first page of a listing (`popular`, `latest`) a source gave, to show at once while a fresh one is fetched.
+    pub fn listing(&self, source: &str, kind: &str) -> anyhow::Result<Option<String>> {
+        Ok(self.db().query_row("SELECT body FROM listing WHERE source = ?1 AND kind = ?2", params![source, kind], |row| row.get(0)).optional()?)
+    }
+
+    pub fn keep_listing(&self, source: &str, kind: &str, body: &str, now_ms: i64) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO listing (source, kind, body, at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (source, kind) DO UPDATE SET body = ?3, at = ?4",
+            params![source, kind, body, now_ms],
+        )?;
+        Ok(())
     }
 
     /// What was read most recently, newest first, with what to show for it.
@@ -453,6 +537,7 @@ impl Store {
         let db = self.db();
         db.execute("DELETE FROM installed WHERE source = ?1", params![source])?;
         db.execute("DELETE FROM setting WHERE source = ?1", params![source])?;
+        db.execute("DELETE FROM listing WHERE source = ?1", params![source])?;
         Ok(())
     }
 
@@ -845,6 +930,34 @@ mod tests {
         fresh.set_progress("s", "a", "c2", Progress { page: 9, offset: 0.0, finished: false }, 99).unwrap();
         fresh.import(&serde_json::from_str(&text).unwrap()).unwrap();
         assert_eq!(fresh.resume("s", "a").unwrap().unwrap().page, 9);
+    }
+
+    #[test]
+    fn updates_show_each_saved_series_with_its_newest_chapter_and_unread_count_in_one_read() {
+        let store = store_with_series();
+        store.sync_chapters("s", "a", &[chapter("c3", 3.0), chapter("c2", 2.0), chapter("c1", 1.0)]).unwrap();
+        store.mark("s", "a", &["c1"], true, 5).unwrap();
+        let updates = store.updates().unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!((updates[0].unread, updates[0].latest_number), (2, Some(3.0)));
+        let item = &store.library().unwrap()[0];
+        assert_eq!((item.total, item.unread, item.checked_ms, item.completed), (3, 2, None, false));
+        store.set_checked("s", "a", 777).unwrap();
+        assert_eq!(store.checked("s", "a").unwrap(), Some(777));
+        assert_eq!(store.library().unwrap()[0].checked_ms, Some(777));
+    }
+
+    #[test]
+    fn the_last_first_page_of_a_listing_is_kept_per_source_and_kind() {
+        let store = Store::in_memory().unwrap();
+        assert_eq!(store.listing("s", "popular").unwrap(), None);
+        store.keep_listing("s", "popular", "one", 1).unwrap();
+        store.keep_listing("s", "popular", "two", 2).unwrap();
+        store.keep_listing("s", "latest", "late", 3).unwrap();
+        assert_eq!(store.listing("s", "popular").unwrap().as_deref(), Some("two"));
+        assert_eq!(store.listing("s", "latest").unwrap().as_deref(), Some("late"));
+        store.forget_source("s").unwrap();
+        assert_eq!(store.listing("s", "popular").unwrap(), None);
     }
 
     #[test]

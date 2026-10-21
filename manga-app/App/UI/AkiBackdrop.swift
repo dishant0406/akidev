@@ -8,6 +8,8 @@ struct AkiBackdrop: View {
             Circle().fill(Aki.accent).frame(width: 420).blur(radius: 100).offset(x: 170, y: -300)
             Circle().fill(Aki.accentSoft).frame(width: 360).blur(radius: 100).offset(x: -190, y: 320)
         }
+        // Drawn once into one picture: two large blurs are otherwise redone while the glass above samples them.
+        .drawingGroup()
         .ignoresSafeArea()
     }
 }

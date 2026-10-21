@@ -17,6 +17,11 @@ final class BrowseModel {
         guard !loading else { return }
         loading = true
         defer { loading = false }
+        // The first page of Popular and Latest shows at once from the last time, while the fresh one is fetched.
+        if page == 0, items.isEmpty, term.isEmpty, choices.isEmpty, let kept = engine.rememberedListing(source: source, latest: mode == .latest) {
+            items = kept.items
+            hasNext = kept.hasNext
+        }
         do {
             let next = page + 1
             let result: CardPage
@@ -30,7 +35,12 @@ final class BrowseModel {
             guard key == newKey else { return }
             report(source, nil)
             page = next
-            items += result.items.filter { new in !items.contains { $0.id == new.id } }
+            if next == 1 {
+                items = result.items
+            } else {
+                let known = Set(items.map(\.id))
+                items += result.items.filter { !known.contains($0.id) }
+            }
             hasNext = result.hasNext
         } catch {
             guard key == newKey else { return }

@@ -95,12 +95,18 @@ async fn add_a_repository_install_browse_read_update_and_return() {
     assert_eq!(engine.repo_sources(view.info.base.clone()).await.unwrap().sources[0].state, SourceState::Installed);
     assert!(engine.install_from_repo(view.info.base.clone(), "nope".into()).await.is_err());
 
+    assert!(engine.remembered_listing("local".into(), false).is_none(), "nothing is remembered before the first load");
     let popular = engine.popular("local".into(), 1).await.unwrap();
+    let remembered = engine.remembered_listing("local".into(), false).unwrap();
+    assert_eq!(remembered.items.iter().map(|card| card.id.as_str()).collect::<Vec<_>>(), ["solo-leveling", "tower-of-god"]);
     assert_eq!(popular.items.iter().map(|card| card.id.as_str()).collect::<Vec<_>>(), ["solo-leveling", "tower-of-god"]);
     assert_eq!(engine.search("local".into(), "solo leveling".into(), 1, Vec::new()).await.unwrap().items.len(), 1);
     assert_eq!(engine.details("local".into(), "solo-leveling".into()).await.unwrap().title, "Solo Leveling");
     engine.set_in_library("local".into(), "solo-leveling".into(), true).await.unwrap();
+    assert_eq!(engine.chapters_checked_ms("local".into(), "solo-leveling".into()).unwrap(), None);
     let list = engine.chapters("local".into(), "solo-leveling".into()).await.unwrap();
+    assert!(engine.chapters_checked_ms("local".into(), "solo-leveling".into()).unwrap().is_some());
+    assert_eq!(engine.updates().unwrap().len(), 1);
     assert_eq!(list.entries.len(), 3);
     assert!(list.new_ids.is_empty(), "the first fetch has no news");
     assert_eq!(engine.pages("local".into(), "solo-leveling".into(), "chapter-179".into()).await.unwrap().images.len(), 3);

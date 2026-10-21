@@ -8,19 +8,8 @@ struct UpdatesView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = UpdatesTab.unread
 
-    private struct Row: Identifiable {
-        let entry: LibraryEntry
-        let latest: ChapterEntry?
-        var id: String { entry.key }
-    }
-
-    private var rows: [Row] {
-        let all = model.library.map { entry -> Row in
-            let chapters = (try? model.engine.cachedChapters(source: entry.source, series: entry.id)) ?? []
-            return Row(entry: entry, latest: chapters.first)
-        }
-        let shown = tab == .unread ? all.filter { $0.entry.unread > 0 } : all
-        return shown.sorted { ($0.latest?.dateMs ?? 0) > ($1.latest?.dateMs ?? 0) }
+    private var rows: [UpdateEntry] {
+        tab == .unread ? model.updates.filter { $0.unread > 0 } : model.updates
     }
 
     var body: some View {
@@ -40,13 +29,13 @@ struct UpdatesView: View {
                             .frame(minHeight: 340)
                     } else {
                         LazyVStack(spacing: 12) {
-                            ForEach(list) { row in
-                                AkiLink(value: SeriesRef(source: row.entry.source, id: row.entry.id, title: row.entry.title, cover: row.entry.cover)) {
-                                    AkiListCard(thumbnail: row.entry.cover,
-                                                label: row.entry.unread > 0 ? "\(row.entry.unread) new chapter\(row.entry.unread == 1 ? "" : "s")" : "Up to date",
-                                                title: row.entry.title,
-                                                badges: [row.latest.map { chapterName(number: $0.number, title: $0.title) }, shortDate(row.latest?.dateMs)].compactMap { $0 },
-                                                dimmed: row.entry.unread == 0)
+                            ForEach(list, id: \.key) { row in
+                                AkiLink(value: SeriesRef(source: row.source, id: row.id, title: row.title, cover: row.cover)) {
+                                    AkiListCard(thumbnail: row.cover,
+                                                label: row.unread > 0 ? "\(row.unread) new chapter\(row.unread == 1 ? "" : "s")" : "Up to date",
+                                                title: row.title,
+                                                badges: [row.latestNumber == nil && row.latestTitle == nil ? nil : chapterName(number: row.latestNumber, title: row.latestTitle), shortDate(row.latestDateMs)].compactMap { $0 },
+                                                dimmed: row.unread == 0)
                                 }
                             }
                         }

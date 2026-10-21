@@ -175,6 +175,8 @@ final class ReaderModel {
     /// The row at the top of the strip, or the page on screen: where the person is.
     func report(chapter: String, page: Int, offset: Double) {
         guard !restoring else { return }
+        // Called on every frame of a scroll; the work ahead only changes when the page does.
+        let moved = chapter != current || self.page != page
         if chapter != current {
             // Reading on into the next chapter finishes the one before.
             if let at = chapters.firstIndex(where: { $0.id == chapter }), let was = chapters.firstIndex(where: { $0.id == current }), at < was {
@@ -186,7 +188,7 @@ final class ReaderModel {
         if self.page != page { self.page = page }
         latest = (chapter, page, offset)
         scheduleSave()
-        if let segment = segments.first(where: { $0.chapterID == chapter }) {
+        if moved, let segment = segments.first(where: { $0.chapterID == chapter }) {
             warm(segment.pages, from: page + 1, count: 3)
             if mode == .strip, page >= segment.pages.images.count - 3 { Task { await appendNewerIfNeeded() } }
         }
