@@ -20,7 +20,7 @@ struct AkiBadge: View {
     }
 
     var body: some View {
-        let tone: AkiTone = style == .glass ? .onImage : .dim
+        let tone: AkiTone = style == .glass ? .onMedia : .muted
         let label = HStack(spacing: 4) {
             if let icon { AkiIcon(icon, size: 10, tone: tone) }
             AkiText(text, .captionStrong, tone: tone, lines: 1)
@@ -28,8 +28,8 @@ struct AkiBadge: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         switch style {
-        case .flat: label.background(Aki.chip, in: Capsule())
-        case .glass: label.akiGlass(.capsule, tint: Aki.veil, interactive: false)
+        case .flat: label.background(Aki.secondary, in: Capsule())
+        case .glass: label.akiGlass(.capsule, tint: Aki.scrim, interactive: false)
         }
     }
 }
@@ -40,10 +40,10 @@ struct AkiCount: View {
     var tinted = true
 
     var body: some View {
-        AkiText("\(min(value, 99))", .captionStrong, tone: tinted ? .onYellow : .onImage)
+        AkiText("\(min(value, 99))", .captionStrong, tone: tinted ? .onPrimary : .onMedia)
             .monospacedDigit()
             .padding(.horizontal, 9)
             .frame(minWidth: 26, minHeight: 26)
-            .akiGlass(.capsule, tint: tinted ? Aki.yellow : Aki.danger, interactive: false)
+            .akiGlass(.capsule, tint: tinted ? Aki.primary : Aki.destructive, interactive: false)
     }
 }

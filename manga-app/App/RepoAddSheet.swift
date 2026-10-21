@@ -19,7 +19,7 @@ struct RepoAddSheet: View {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } }))
             } else if let view {
                 AkiText(view.info.name, .heading)
-                AkiText(view.info.signed ? "Signed, so the app notices if it ever changes hands." : "Not signed: you are trusting this address.", .caption, tone: .dim)
+                AkiText(view.info.signed ? "Signed, so the app notices if it ever changes hands." : "Not signed: you are trusting this address.", .caption, tone: .muted)
                 AkiCard(padding: 4) {
                     VStack(spacing: 0) {
                         ForEach(view.sources, id: \.id) { source in
@@ -27,7 +27,7 @@ struct RepoAddSheet: View {
                         }
                     }
                 }
-                AkiText("Aki Manga does not include, offer or endorse any repository. Only add one you trust.", .caption, tone: .dim)
+                AkiText("Aki Manga does not include, offer or endorse any repository. Only add one you trust.", .caption, tone: .muted)
                 AkiButton("Add repository", variant: .primary, size: .large, fullWidth: true) { Task { await add(view) } }
             } else {
                 AkiSpinner().frame(maxWidth: .infinity, minHeight: 160)

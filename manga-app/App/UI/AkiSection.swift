@@ -10,7 +10,7 @@ struct AkiSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             AkiText(title, .heading)
             content()
-            if let footer { AkiText(footer, .caption, tone: .dim) }
+            if let footer { AkiText(footer, .caption, tone: .muted) }
         }
     }
 }

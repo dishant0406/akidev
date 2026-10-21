@@ -11,17 +11,17 @@ struct AkiInput: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if let icon { AkiIcon(icon, size: 16, tone: .dim) }
+            if let icon { AkiIcon(icon, size: 16, tone: .muted) }
             TextField(placeholder, text: $text)
                 .font(.system(.body, design: .rounded))
-                .foregroundStyle(Aki.ink)
+                .foregroundStyle(Aki.text)
                 .submitLabel(isURL ? .go : .search)
                 .keyboardType(isURL ? .URL : .default)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
                 .onSubmit(onSubmit)
             if !text.isEmpty {
-                Button { text = ""; onClear() } label: { AkiIcon("close-solid", size: 16, tone: .dim) }
+                Button { text = ""; onClear() } label: { AkiIcon("close-solid", size: 16, tone: .muted) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear")
             }

@@ -44,8 +44,8 @@ struct ReaderView: View {
             HStack(spacing: 12) {
                 AkiIconButton(symbol: "back", label: "Back") { dismiss() }
                 VStack(alignment: .leading, spacing: 0) {
-                    AkiText(model.ref.title, .captionStrong, tone: .onDark, lines: 1)
-                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .dim, lines: 1) }
+                    AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
+                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .muted, lines: 1) }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .akiGlass(.capsule, interactive: false)
@@ -63,7 +63,7 @@ struct ReaderView: View {
                     AkiIconButton(symbol: "previous", label: "Previous chapter") { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
                 let count = model.currentSegment?.pages.images.count ?? 0
-                AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onDark)
+                AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia)
                     .monospacedDigit()
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, interactive: false)
                 if let newer = model.newer(than: model.current) {
@@ -149,11 +149,11 @@ private struct StripReader: View {
     private func chapterEnd(_ segment: Segment) -> some View {
         let next = model.newer(than: segment.chapterID)
         return VStack(spacing: 10) {
-            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onDark)
+            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
             if let next {
-                AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .dim)
+                AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .muted)
             } else {
-                AkiText("You are up to date", .title, tone: .onDark)
+                AkiText("You are up to date", .title, tone: .onMedia)
                 AkiButton("Back to the series", action: close).padding(.top, 6)
             }
         }
@@ -231,11 +231,11 @@ private struct PagedReader: View {
 
     private func endPage(_ segment: Segment) -> some View {
         VStack(spacing: 14) {
-            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onDark)
+            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
             if let next = model.newer(than: segment.chapterID) {
                 AkiButton("Next · \(model.label(next))", variant: .primary, size: .large) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {
-                AkiText("You are up to date", .title, tone: .onDark)
+                AkiText("You are up to date", .title, tone: .onMedia)
             }
             AkiButton("Back to the series", action: close)
         }

@@ -50,7 +50,7 @@ struct SettingsView: View {
                             HStack {
                                 AkiText("Kept on this device", .bodyStrong)
                                 Spacer()
-                                AkiText(ByteCountFormatter.string(fromByteCount: Int64(downloaded), countStyle: .file), .body, tone: .dim)
+                                AkiText(ByteCountFormatter.string(fromByteCount: Int64(downloaded), countStyle: .file), .body, tone: .muted)
                             }
                             AkiButton("Clear image cache", icon: "trash", fullWidth: true) { Task { await ImageLoader.shared.clear() } }
                         }
@@ -71,8 +71,8 @@ struct SettingsView: View {
                     AkiCard(padding: 16) {
                         VStack(alignment: .leading, spacing: 8) {
                             AkiText("Aki Manga \(model.engine.version())", .bodyStrong)
-                            AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .dim)
-                            AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Aki Manga.", .caption, tone: .dim)
+                            AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .muted)
+                            AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Aki Manga.", .caption, tone: .muted)
                         }
                     }
                 }

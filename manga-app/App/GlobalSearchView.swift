@@ -60,9 +60,9 @@ struct GlobalSearchResults: View {
                     case .loading:
                         AkiSpinner().frame(maxWidth: .infinity, minHeight: 60)
                     case .failed(let message):
-                        AkiCard(padding: 14) { AkiText(message, .caption, tone: .dim, lines: 3) }
+                        AkiCard(padding: 14) { AkiText(message, .caption, tone: .muted, lines: 3) }
                     case .done(let cards) where cards.isEmpty:
-                        AkiText("No results here", .caption, tone: .dim)
+                        AkiText("No results here", .caption, tone: .muted)
                     case .done(let cards):
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 14) {

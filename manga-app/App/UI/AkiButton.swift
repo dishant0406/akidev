@@ -49,14 +49,14 @@ struct AkiButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .akiGlassIf(variant != .ghost, tint: variant == .primary ? Aki.yellow : nil)
+        .akiGlassIf(variant != .ghost, tint: variant == .primary ? Aki.primary : nil)
     }
 
     private var tone: AkiTone {
         switch variant {
-        case .primary: .onYellow
-        case .destructive: .danger
-        case .glass, .ghost: .primary
+        case .primary: .onPrimary
+        case .destructive: .destructive
+        case .glass, .ghost: .text
         }
     }
 }

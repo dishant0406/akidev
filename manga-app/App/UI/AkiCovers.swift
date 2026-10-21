@@ -15,7 +15,7 @@ struct AkiCoverCard: View {
                     if let badge, badge > 0 { AkiCount(value: badge).padding(8) }
                 }
             AkiText(title, .heading, lines: 2)
-            if let subtitle { AkiText(subtitle, .caption, tone: .dim, lines: 1) }
+            if let subtitle { AkiText(subtitle, .caption, tone: .muted, lines: 1) }
         }
     }
 }
@@ -36,7 +36,7 @@ struct AkiListCard<Trailing: View>: View {
                     .frame(width: 66)
                     .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
                 VStack(alignment: .leading, spacing: 6) {
-                    AkiText(label, .caption, tone: .dim, lines: 1)
+                    AkiText(label, .caption, tone: .muted, lines: 1)
                     AkiText(title, .heading, lines: 2)
                     if !badges.isEmpty {
                         HStack(spacing: 6) { ForEach(badges, id: \.self) { AkiBadge($0) } }

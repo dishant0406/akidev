@@ -16,12 +16,12 @@ struct SourcesView: View {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
                                 AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "settings", label: "Settings", action: {}).face }.akiGlass(.circle)
-                                AkiIconButton(symbol: "add", label: "Add a repository", tint: Aki.yellow) { adding = true }
+                                AkiIconButton(symbol: "add", label: "Add a repository", tint: Aki.primary) { adding = true }
                             }
                         }
                     }
                     AkiSection(title: "Installed") {
-                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .dim) } }
+                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .muted) } }
                         ForEach(model.sources, id: \.id) { source in
                             AkiLink(value: source.id) {
                                 AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
@@ -30,7 +30,7 @@ struct SourcesView: View {
                         }
                     }
                     AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Aki Manga does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
-                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .dim) } }
+                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
                         ForEach(model.repos, id: \.base) { repo in
                             AkiLink(value: repo) {
                                 AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
@@ -39,7 +39,7 @@ struct SourcesView: View {
                         }
                         AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
                     }
-                    if let note = model.note { AkiText(note, .caption, tone: .dim) }
+                    if let note = model.note { AkiText(note, .caption, tone: .muted) }
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
             }
@@ -77,7 +77,7 @@ struct RepoScreen: View {
                     ForEach(sources, id: \.id) { source in
                         AkiRow(title: source.name, subtitle: "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")") { action(for: source) }
                     }
-                    AkiText(signed ? "This repository signs its index, so the app notices if it ever changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .dim)
+                    AkiText(signed ? "This repository signs its index, so the app notices if it ever changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .muted)
                 }
             }
             .padding(.horizontal, 20).padding(.top, 8)
@@ -134,7 +134,7 @@ struct SourceSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 AkiBackHeader(title: model.name(of: source), subtitle: "Settings", back: { dismiss() })
-                if settings.isEmpty { AkiText("This source has no settings.", tone: .dim) }
+                if settings.isEmpty { AkiText("This source has no settings.", tone: .muted) }
                 ForEach(settings, id: \.id) { setting in
                     AkiCard(padding: 16) {
                         AkiSelect(title: setting.name, selection: Binding(

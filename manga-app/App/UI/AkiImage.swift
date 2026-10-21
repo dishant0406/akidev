@@ -19,7 +19,7 @@ struct AkiImage: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Aki.chip
+                Aki.secondary
                 if let image {
                     if fill || free {
                         Image(uiImage: image).resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()
@@ -27,7 +27,7 @@ struct AkiImage: View {
                         Image(uiImage: image).resizable().scaledToFit().frame(width: geometry.size.width)
                     }
                 } else if failed {
-                    AkiIcon("image", tone: .dim)
+                    AkiIcon("image", tone: .muted)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)

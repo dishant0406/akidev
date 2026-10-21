@@ -30,7 +30,7 @@ struct MigrateSheet: View {
                     AkiChips(items: others.map { ($0.id, $0.name) }, selection: $target)
                     AkiInput(placeholder: "Find the series there", text: $term, icon: "search", onSubmit: { Task { await search() } })
                     if busy { AkiSpinner().frame(maxWidth: .infinity, minHeight: 80) }
-                    else if searched && results.isEmpty { AkiText("Nothing matched on \(model.name(of: target)).", .caption, tone: .dim) }
+                    else if searched && results.isEmpty { AkiText("Nothing matched on \(model.name(of: target)).", .caption, tone: .muted) }
                     ForEach(results, id: \.id) { card in
                         AkiTap(action: { chosenTarget = target; chosen = card }) { AkiListCard(thumbnail: card.cover, label: model.name(of: target), title: card.title) }
                     }

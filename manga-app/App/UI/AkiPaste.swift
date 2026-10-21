@@ -11,6 +11,6 @@ struct AkiPasteButton: View {
         .labelStyle(.titleAndIcon)
         .buttonBorderShape(.capsule)
         .controlSize(.large)
-        .tint(Aki.ink)
+        .tint(Aki.text)
     }
 }

@@ -10,7 +10,7 @@ struct AkiHeader<Trailing: View>: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
                 AkiText(title, .display)
-                if let subtitle { AkiText(subtitle, .caption, tone: .dim) }
+                if let subtitle { AkiText(subtitle, .caption, tone: .muted) }
             }
             Spacer()
             trailing()

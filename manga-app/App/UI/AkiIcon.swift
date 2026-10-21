@@ -5,10 +5,10 @@ import SwiftUI
 struct AkiIcon: View {
     let name: String
     var size: CGFloat = 18
-    var tone: AkiTone = .primary
+    var tone: AkiTone = .text
     @ScaledMetric private var scale: CGFloat = 1
 
-    init(_ name: String, size: CGFloat = 18, tone: AkiTone = .primary) {
+    init(_ name: String, size: CGFloat = 18, tone: AkiTone = .text) {
         self.name = name
         self.size = size
         self.tone = tone

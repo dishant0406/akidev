@@ -24,7 +24,7 @@ private struct AkiMenuButton: View {
 struct AkiMenu: View {
     let symbol: String
     let label: String
-    var onImage = false
+    var onMedia = false
     let items: [AkiMenuItem]
 
     var body: some View {
@@ -33,9 +33,9 @@ struct AkiMenu: View {
                 AkiMenuButton(item: item)
             }
         } label: {
-            AkiIconButton(symbol: symbol, label: label, onImage: onImage) {}.face
+            AkiIconButton(symbol: symbol, label: label, onMedia: onMedia) {}.face
         }
-        .akiGlass(.circle, tint: onImage ? Aki.veil : nil)
+        .akiGlass(.circle, tint: onMedia ? Aki.scrim : nil)
         .accessibilityLabel(label)
     }
 }

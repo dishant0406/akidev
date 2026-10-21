@@ -16,8 +16,8 @@ struct AkiSelect<Value: Hashable>: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .dim, lines: 1)
-                    AkiIcon("sort", size: 11, tone: .dim)
+                    AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .muted, lines: 1)
+                    AkiIcon("sort", size: 11, tone: .muted)
                 }
             }
         }

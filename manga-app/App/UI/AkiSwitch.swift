@@ -10,10 +10,10 @@ struct AkiSwitch: View {
         Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 2) {
                 AkiText(title, .bodyStrong)
-                if let subtitle { AkiText(subtitle, .caption, tone: .dim) }
+                if let subtitle { AkiText(subtitle, .caption, tone: .muted) }
             }
         }
-        .tint(Aki.yellow)
+        .tint(Aki.primary)
         .akiHaptic(trigger: isOn)
     }
 }

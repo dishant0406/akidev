@@ -68,7 +68,7 @@ struct UpdatesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 AkiText("Could not check \(model.updateFailures.count) series", .bodyStrong)
                 ForEach(model.updateFailures) { failure in
-                    AkiText("\(failure.title) (\(failure.source)): \(failure.message)", .caption, tone: .dim, lines: 2)
+                    AkiText("\(failure.title) (\(failure.source)): \(failure.message)", .caption, tone: .muted, lines: 2)
                 }
             }
         }

@@ -11,7 +11,7 @@ enum Appearance: String, CaseIterable {
 enum ReaderBackground: String, CaseIterable {
     case pitch = "black", slate = "grey"
     var title: String { self == .pitch ? "Black" : "Dark grey" }
-    var color: Color { self == .pitch ? Aki.readerBlack : Aki.readerGrey }
+    var color: Color { self == .pitch ? Aki.stage : Aki.stageAlt }
 }
 
 enum OrientationLock: String, CaseIterable {

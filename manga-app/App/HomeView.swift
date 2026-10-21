@@ -72,7 +72,7 @@ struct HomeView: View {
                         HStack(spacing: 10) {
                             AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
                             if !filters.isEmpty && !isGlobal {
-                                AkiIconButton(symbol: "sliders", label: "Filters", tint: choices.isEmpty ? nil : Aki.yellow) { filtering = true }
+                                AkiIconButton(symbol: "sliders", label: "Filters", tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
                             }
                         }
                         if model.visibleSources.count > 1 { AkiChips(items: [(Self.everySource, "All")] + model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
@@ -136,10 +136,10 @@ struct HomeView: View {
         AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
             ZStack(alignment: .bottomLeading) {
                 AkiImage(url: card.cover, placeholder: 1.1, fill: true, free: true)
-                LinearGradient(colors: [.clear, Aki.fadeFeatured], startPoint: .center, endPoint: .bottom)
+                LinearGradient(colors: [.clear, Aki.scrimStrong], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 8) {
                     AkiBadge(mode == .latest ? "New" : "Popular", icon: "sparkles", style: .glass)
-                    AkiText(card.title, .title, tone: .onImage, lines: 2)
+                    AkiText(card.title, .title, tone: .onMedia, lines: 2)
                 }.padding(18)
             }
             .frame(height: 320)

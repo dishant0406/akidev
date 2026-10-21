@@ -10,7 +10,7 @@ struct AkiCard<Content: View>: View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Aki.card, in: RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
+            .background(Aki.surface, in: RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
             .opacity(dimmed ? 0.62 : 1)
     }
 }

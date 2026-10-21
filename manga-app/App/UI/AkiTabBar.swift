@@ -18,7 +18,7 @@ struct AkiTabBar: View {
                     Button {
                         withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab }
                     } label: {
-                        AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onYellow : .dim)
+                        AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onPrimary : .muted)
                             .frame(width: 70, height: 58)
                             .contentShape(RoundedRectangle(cornerRadius: inner, style: .continuous))
                             .overlay(alignment: .topTrailing) {
@@ -27,7 +27,7 @@ struct AkiTabBar: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(tab.title)
-                    .akiGlassIf(on, .rounded(inner), tint: Aki.yellow)
+                    .akiGlassIf(on, .rounded(inner), tint: Aki.primary)
                     .glassEffectID(tab, in: space)
                 }
             }

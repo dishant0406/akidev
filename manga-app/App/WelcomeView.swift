@@ -9,19 +9,19 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             Spacer(minLength: 40)
-            AkiIcon("library-solid", size: 54, tone: .primary)
+            AkiIcon("library-solid", size: 54, tone: .text)
                 .frame(width: 112, height: 112)
-                .akiGlass(.circle, tint: Aki.yellow, interactive: false)
+                .akiGlass(.circle, tint: Aki.primary, interactive: false)
             VStack(spacing: 10) {
                 AkiText("Welcome to Aki Manga", .display, align: .center)
-                AkiText("Aki Manga is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .dim, align: .center)
+                AkiText("Aki Manga is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .muted, align: .center)
             }
             VStack(spacing: 12) {
                 AkiPasteButton { model.propose(repository: $0) }
                 AkiButton("Type an address", icon: "keyboard", fullWidth: true) { typing = true }
             }
             .padding(.top, 8)
-            AkiText("Only add repositories you trust.", .caption, tone: .dim, align: .center)
+            AkiText("Only add repositories you trust.", .caption, tone: .muted, align: .center)
             Spacer(minLength: 40)
         }
         .padding(.horizontal, 28)

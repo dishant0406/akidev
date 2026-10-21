@@ -5,17 +5,15 @@ enum AkiTextStyle {
 }
 
 enum AkiTone {
-    case primary, dim, onImage, onYellow, danger
-    /// For the black reader.
-    case onDark
+    case text, muted, onPrimary, onMedia, destructive
 
     var color: Color {
         switch self {
-        case .primary: Aki.ink
-        case .dim: Aki.dim
-        case .onImage, .onDark: Aki.onImage
-        case .onYellow: Aki.onYellow
-        case .danger: Aki.danger
+        case .text: Aki.text
+        case .muted: Aki.textMuted
+        case .onMedia: Aki.onMedia
+        case .onPrimary: Aki.onPrimary
+        case .destructive: Aki.destructive
         }
     }
 }
@@ -24,11 +22,11 @@ enum AkiTone {
 struct AkiText: View {
     let text: String
     var style: AkiTextStyle = .body
-    var tone: AkiTone = .primary
+    var tone: AkiTone = .text
     var lines: Int?
     var align: TextAlignment = .leading
 
-    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .primary, lines: Int? = nil, align: TextAlignment = .leading) {
+    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .text, lines: Int? = nil, align: TextAlignment = .leading) {
         self.text = text
         self.style = style
         self.tone = tone

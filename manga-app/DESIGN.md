@@ -57,7 +57,17 @@ put its Solar name in `scripts/fetch-icons.py` and run it; the credit is in Sett
 
 ## Colours
 
-Every colour and corner radius is a token in `App/UI/Tokens.swift` (`Aki.*`): the palette (`yellow`, `canvas`, `card`, `chip`,
-`ink`, `dim`, `danger`), what goes over pictures (`onImage`, `veil`, the `fade*` gradients), the shadow, the two background glows
-and the reader's backdrops. Screens never write a colour: `scripts/check-ui.sh` fails on `Color(`, `.white`, `.black` and `.gray`
-outside `App/UI`. The one exception inside `UI` is the tokens file itself.
+Every colour and corner radius is a token in `App/UI/Tokens.swift` (`Aki.*`), named for its job and never for its hue:
+
+| Token | Used for |
+| --- | --- |
+| `background`, `surface`, `secondary` | the screen, cards, chips and fields |
+| `text`, `textMuted` | body and quiet text |
+| `primary`, `onPrimary` | the one accent (chosen item, main action) and what is written on it |
+| `destructive` | removing things, errors |
+| `accent`, `accentSoft` | the soft glows behind every screen, drawn from `primary` |
+| `onMedia`, `scrim`, `scrimTop`, `scrimBottom`, `scrimStrong` | text over a picture, and the darkening under it |
+| `shadow`, `stage`, `stageAlt` | the tab bar's shadow, the reader's two backdrops |
+
+Screens never write a colour: `scripts/check-ui.sh` fails on `Color(`, `.white`, `.black` and `.gray` outside `App/UI`. Text
+colours are `AkiTone` (`text`, `muted`, `onPrimary`, `onMedia`, `destructive`). To retheme, change the values in the tokens file.

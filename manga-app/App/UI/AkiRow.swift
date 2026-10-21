@@ -12,17 +12,17 @@ struct AkiRow<Trailing: View>: View {
         AkiCard {
             HStack(spacing: 14) {
                 if let icon {
-                    AkiIcon(icon, size: 18, tone: .onYellow)
+                    AkiIcon(icon, size: 18, tone: .onPrimary)
                         .frame(width: 46, height: 46)
-                        .background(Aki.yellow, in: RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
+                        .background(Aki.primary, in: RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     AkiText(title, .heading, lines: 1)
-                    if let subtitle { AkiText(subtitle, .caption, tone: .dim, lines: 1) }
+                    if let subtitle { AkiText(subtitle, .caption, tone: .muted, lines: 1) }
                 }
                 Spacer(minLength: 8)
                 trailing()
-                if showsChevron { AkiIcon("forward", size: 13, tone: .dim) }
+                if showsChevron { AkiIcon("forward", size: 13, tone: .muted) }
             }
         }
     }

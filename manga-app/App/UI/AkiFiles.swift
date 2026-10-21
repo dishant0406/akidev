@@ -27,11 +27,11 @@ struct AkiShare: View {
     var body: some View {
         ShareLink(item: file) {
             HStack(spacing: 8) {
-                AkiIcon(icon, size: 15, tone: .onYellow)
-                AkiText(title, .bodyStrong, tone: .onYellow)
+                AkiIcon(icon, size: 15, tone: .onPrimary)
+                AkiText(title, .bodyStrong, tone: .onPrimary)
             }
             .padding(.horizontal, 22).frame(height: 50)
-            .background(Aki.yellow, in: Capsule())
+            .background(Aki.primary, in: Capsule())
         }
     }
 }

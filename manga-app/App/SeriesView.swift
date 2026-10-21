@@ -45,7 +45,7 @@ struct SeriesView: View {
             }
             .ignoresSafeArea(edges: .top)
             .scrollIndicators(.hidden)
-            .background(Aki.canvas)
+            .background(Aki.background)
 
             if let next = resumable {
                 AkiButton(next.label, icon: "play-solid", variant: .primary, size: .large) { target = next.target }
@@ -87,16 +87,16 @@ struct SeriesView: View {
             ZStack(alignment: .bottomLeading) {
                 AkiImage(url: detail?.cover ?? ref.cover, placeholder: 1.4, fill: true, free: true)
                     .frame(width: geo.size.width, height: heroHeight + stretch)
-                LinearGradient(colors: [Aki.fadeTop, .clear, Aki.fadeBottom], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [Aki.scrimTop, .clear, Aki.scrimBottom], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list", style: .glass) }
                         if let status = statusText { AkiBadge(status, icon: "clock", style: .glass) }
                         AkiBadge(model.name(of: ref.source), icon: "sources", style: .glass)
                     }
-                    AkiText(detail?.title ?? ref.title, .display, tone: .onImage, lines: 3)
+                    AkiText(detail?.title ?? ref.title, .display, tone: .onMedia, lines: 3)
                     if let authors = detail?.authors, !authors.isEmpty {
-                        AkiText(authors.joined(separator: ", "), .caption, tone: .onImage, lines: 1)
+                        AkiText(authors.joined(separator: ", "), .caption, tone: .onMedia, lines: 1)
                     }
                 }
                 .padding(.horizontal, 20).padding(.bottom, 46)
@@ -113,10 +113,10 @@ struct SeriesView: View {
     private var controls: some View {
         AkiGlassGroup(spacing: 12) {
             HStack {
-                AkiIconButton(symbol: "back", label: "Back", onImage: true) { dismiss() }
+                AkiIconButton(symbol: "back", label: "Back", onMedia: true) { dismiss() }
                 Spacer()
-                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.yellow : nil, onImage: true) { Task { await toggleSaved() } }
-                AkiMenu(symbol: "more", label: "More", onImage: true, items: [
+                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.primary : nil, onMedia: true) { Task { await toggleSaved() } }
+                AkiMenu(symbol: "more", label: "More", onMedia: true, items: [
                     AkiMenuItem(title: "Mark all as read", icon: "check") { markAll(read: true) },
                     AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
                     AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
@@ -144,7 +144,7 @@ struct SeriesView: View {
         }
         .padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 120)
         .frame(maxWidth: .infinity)
-        .background(Aki.canvas, in: UnevenRoundedRectangle(topLeadingRadius: Aki.sheetRadius, topTrailingRadius: Aki.sheetRadius, style: .continuous))
+        .background(Aki.background, in: UnevenRoundedRectangle(topLeadingRadius: Aki.sheetRadius, topTrailingRadius: Aki.sheetRadius, style: .continuous))
         .offset(y: -30)
     }
 
@@ -157,7 +157,7 @@ struct SeriesView: View {
                                 title: chapterName(number: chapter.number, title: chapter.title),
                                 badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
                         AkiTap(action: { toggleRead(chapter) }) {
-                            AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .primary : .dim)
+                            AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .text : .muted)
                                 .frame(width: 44, height: 44)
                         }
                         .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
@@ -208,7 +208,7 @@ struct SeriesView: View {
 
     private func info(_ name: String, _ value: String) -> some View {
         HStack {
-            AkiText(name, .caption, tone: .dim)
+            AkiText(name, .caption, tone: .muted)
             Spacer()
             AkiText(value, .bodyStrong, align: .trailing)
         }

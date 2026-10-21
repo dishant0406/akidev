@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AkiSpinner: View {
-    var body: some View { ProgressView().tint(Aki.dim) }
+    var body: some View { ProgressView().tint(Aki.textMuted) }
 }
 
 /// A bar that fills: a download.
@@ -11,8 +11,8 @@ struct AkiProgressBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(Aki.chip)
-                Capsule().fill(Aki.yellow).frame(width: geo.size.width * min(max(fraction, 0), 1))
+                Capsule().fill(Aki.secondary)
+                Capsule().fill(Aki.primary).frame(width: geo.size.width * min(max(fraction, 0), 1))
             }
         }
         .frame(height: 6)

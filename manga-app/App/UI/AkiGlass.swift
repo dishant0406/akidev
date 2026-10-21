@@ -30,10 +30,10 @@ private struct AkiGlassModifier: ViewModifier {
     func body(content: Content) -> some View {
         if reduceTransparency {
             switch shape {
-            case .capsule: content.background(tint ?? Aki.chip, in: .capsule)
-            case .circle: content.background(tint ?? Aki.chip, in: .circle)
-            case .card: content.background(tint ?? Aki.card, in: .rect(cornerRadius: Aki.cardRadius))
-            case .rounded(let radius): content.background(tint ?? Aki.chip, in: .rect(cornerRadius: radius))
+            case .capsule: content.background(tint ?? Aki.secondary, in: .capsule)
+            case .circle: content.background(tint ?? Aki.secondary, in: .circle)
+            case .card: content.background(tint ?? Aki.surface, in: .rect(cornerRadius: Aki.cardRadius))
+            case .rounded(let radius): content.background(tint ?? Aki.secondary, in: .rect(cornerRadius: radius))
             }
         } else {
             let base: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
