@@ -29,7 +29,7 @@ struct AkiBadge: View {
         .padding(.vertical, 5)
         switch style {
         case .flat: label.background(Aki.chip, in: Capsule())
-        case .glass: label.akiGlass(.capsule, tint: .overImage, interactive: false)
+        case .glass: label.akiGlass(.capsule, tint: Aki.veil, interactive: false)
         }
     }
 }

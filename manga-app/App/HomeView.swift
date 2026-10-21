@@ -136,7 +136,7 @@ struct HomeView: View {
         AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
             ZStack(alignment: .bottomLeading) {
                 AkiImage(url: card.cover, placeholder: 1.1, fill: true, free: true)
-                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
+                LinearGradient(colors: [.clear, Aki.fadeFeatured], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 8) {
                     AkiBadge(mode == .latest ? "New" : "Popular", icon: "sparkles", style: .glass)
                     AkiText(card.title, .title, tone: .onImage, lines: 2)

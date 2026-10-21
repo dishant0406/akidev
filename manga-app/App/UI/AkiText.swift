@@ -13,7 +13,7 @@ enum AkiTone {
         switch self {
         case .primary: Aki.ink
         case .dim: Aki.dim
-        case .onImage, .onDark: .white
+        case .onImage, .onDark: Aki.onImage
         case .onYellow: Aki.onYellow
         case .danger: Aki.danger
         }

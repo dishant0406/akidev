@@ -5,8 +5,8 @@ struct AkiBackdrop: View {
     var body: some View {
         ZStack {
             Aki.canvas
-            Circle().fill(Aki.yellow.opacity(0.30)).frame(width: 420).blur(radius: 100).offset(x: 170, y: -300)
-            Circle().fill(Aki.yellow.opacity(0.16)).frame(width: 360).blur(radius: 100).offset(x: -190, y: 320)
+            Circle().fill(Aki.glowStrong).frame(width: 420).blur(radius: 100).offset(x: 170, y: -300)
+            Circle().fill(Aki.glowSoft).frame(width: 360).blur(radius: 100).offset(x: -190, y: 320)
         }
         .ignoresSafeArea()
     }

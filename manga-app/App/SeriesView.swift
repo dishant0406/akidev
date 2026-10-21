@@ -87,7 +87,7 @@ struct SeriesView: View {
             ZStack(alignment: .bottomLeading) {
                 AkiImage(url: detail?.cover ?? ref.cover, placeholder: 1.4, fill: true, free: true)
                     .frame(width: geo.size.width, height: heroHeight + stretch)
-                LinearGradient(colors: [.black.opacity(0.35), .clear, .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [Aki.fadeTop, .clear, Aki.fadeBottom], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list", style: .glass) }

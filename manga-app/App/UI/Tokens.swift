@@ -27,6 +27,22 @@ enum Aki {
     static let dim = adaptive(0x6E6E73, 0xA1A1A8)
     static let danger = Color(hex: 0xE5484D)
 
+    /// Text and icons over a picture or the black reader.
+    static let onImage = Color.white
+    /// Darkening laid over a picture so `onImage` stays readable: a flat veil under glass, and the fades under titles.
+    static let veil = Color.black.opacity(0.35)
+    static let fadeTop = Color.black.opacity(0.35)
+    static let fadeBottom = Color.black.opacity(0.78)
+    static let fadeFeatured = Color.black.opacity(0.7)
+    /// Under floating chrome (the tab bar).
+    static let shadow = Color.black.opacity(0.12)
+    /// The two soft yellow glows behind every screen.
+    static let glowStrong = yellow.opacity(0.30)
+    static let glowSoft = yellow.opacity(0.16)
+    /// The reader's two backdrops.
+    static let readerBlack = Color.black
+    static let readerGrey = Color(white: 0.11)
+
     /// Inside a card with 10pt of padding the thumbnail's corner is the card's minus that padding, so the two curves are concentric.
     static let cardRadius: CGFloat = 28
     static let thumbRadius: CGFloat = 18

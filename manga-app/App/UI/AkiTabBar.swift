@@ -34,7 +34,7 @@ struct AkiTabBar: View {
             .padding(padding)
             .akiGlass(.card, interactive: false)
         }
-        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+        .shadow(color: Aki.shadow, radius: 20, y: 8)
         .akiHaptic(trigger: selection)
     }
 }

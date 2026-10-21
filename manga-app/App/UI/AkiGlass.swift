@@ -20,11 +20,6 @@ extension View {
     }
 }
 
-/// The darkening glass gets over a picture, so white text and icons stay readable on a light cover.
-extension Color {
-    static let overImage = Color.black.opacity(0.35)
-}
-
 /// Glass, or a plain fill when the person asked to reduce transparency.
 private struct AkiGlassModifier: ViewModifier {
     let shape: AkiShape

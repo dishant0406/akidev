@@ -54,3 +54,10 @@ The only tint is yellow, and it marks the current choice or the main action.
 Icons are the Solar set (480 Design, CC BY 4.0), drawn as template images in `App/Assets.xcassets` and shown only through
 `AkiIcon`: `name` is the outline, `name-solid` the bold one (used for the selected tab, saved and read states). To add one,
 put its Solar name in `scripts/fetch-icons.py` and run it; the credit is in Settings > About.
+
+## Colours
+
+Every colour and corner radius is a token in `App/UI/Tokens.swift` (`Aki.*`): the palette (`yellow`, `canvas`, `card`, `chip`,
+`ink`, `dim`, `danger`), what goes over pictures (`onImage`, `veil`, the `fade*` gradients), the shadow, the two background glows
+and the reader's backdrops. Screens never write a colour: `scripts/check-ui.sh` fails on `Color(`, `.white`, `.black` and `.gray`
+outside `App/UI`. The one exception inside `UI` is the tokens file itself.

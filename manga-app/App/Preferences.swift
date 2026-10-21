@@ -9,9 +9,9 @@ enum Appearance: String, CaseIterable {
 }
 
 enum ReaderBackground: String, CaseIterable {
-    case black, grey
-    var title: String { self == .black ? "Black" : "Dark grey" }
-    var color: Color { self == .black ? .black : Color(white: 0.11) }
+    case pitch = "black", slate = "grey"
+    var title: String { self == .pitch ? "Black" : "Dark grey" }
+    var color: Color { self == .pitch ? Aki.readerBlack : Aki.readerGrey }
 }
 
 enum OrientationLock: String, CaseIterable {
@@ -44,7 +44,7 @@ final class Preferences {
         languages = defaults.stringArray(forKey: "languages") ?? []
         defaultMode = ReadingMode(rawValue: defaults.string(forKey: "defaultMode") ?? "") ?? .strip
         invertTaps = defaults.bool(forKey: "invertTaps")
-        readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .black
+        readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
     }

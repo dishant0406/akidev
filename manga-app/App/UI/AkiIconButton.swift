@@ -14,7 +14,7 @@ struct AkiIconButton: View {
         Button(action: action) { face }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
-            .akiGlass(.circle, tint: tint ?? (onImage ? .overImage : nil))
+            .akiGlass(.circle, tint: tint ?? (onImage ? Aki.veil : nil))
     }
 
     /// The round face alone, for a menu that supplies its own button.
