@@ -47,6 +47,9 @@ struct SeriesView: View {
             .scrollIndicators(.hidden)
             .background(Aki.background)
 
+            // Pinned over the scrolling page, so back is always there and always takes the tap.
+            VStack { controls; Spacer() }
+
             if let next = resumable {
                 AkiButton(next.label, icon: "play-solid", variant: .primary, size: .large) { target = next.target }
                     .padding(.horizontal, 24).padding(.bottom, 12)
@@ -104,7 +107,6 @@ struct SeriesView: View {
             .frame(width: geo.size.width, height: heroHeight + stretch, alignment: .bottom)
             .clipped()
             .offset(y: -stretch)
-            .overlay(alignment: .top) { controls.offset(y: -stretch) }
         }
         .frame(height: heroHeight)
     }
@@ -126,7 +128,7 @@ struct SeriesView: View {
                 ])
             }
         }
-        .padding(.horizontal, 16).padding(.top, Aki.safeTop + 4)
+        .padding(.horizontal, 16).padding(.top, 4)
     }
 
     // MARK: sheet
