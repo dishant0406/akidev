@@ -444,6 +444,35 @@ for a definition" is met for recorded pages; against a live site it is untried.
 network that reaches the sites is available. Next phase (2): uniffi facade over this crate and the store, and
 the Swift shell.
 
+## 13. Phase 2 status (facade and Swift shell), 2026-10-21
+
+- **Facade** (`desktop/manga-ffi`, lib `akimanga`): one `Engine` object over the sources, the SQLite store and the
+  settings a challenge hands over. Installs themes and sources (kept in its folder across launches, a source
+  that no longer loads is skipped), asks a source (popular, latest, search, details, chapters, pages), keeps
+  chapters and progress (`chapters` syncs the store and names new chapters), library, resume, history, and
+  `set_cookies`/`set_user_agent` for the challenge hook. Errors reach Swift as `Challenge {url, status}` or
+  `Failed {message}`. `tests/engine.rs` runs the whole path against a local server answering with the madara
+  fixtures, including a challenge answer and reopening the folder in a new engine.
+- **Swift package and shell** (`manga-app/`): `scripts/build-ffi.sh` builds both iOS targets, generates the
+  bindings from the library's own metadata and makes the xcframework. The app has Library (grid with unread
+  badges), Browse (source picker, popular/latest, search, show more, state cards for empty and error),
+  Series (cover, authors, tags, description, Continue/Start, chapter list with read state and dates, save),
+  the long-strip Reader (images loaded with the source's headers and downsampled to the screen width, glass
+  top and bottom bars that hide on tap, page counter, next and previous chapter, an end-of-chapter card,
+  progress saved as the person scrolls and a chapter finished when its end card is reached) and Sources (list,
+  add by address, remove). Palette and radii are the Akidev ones; titles are a serif.
+- **Driven in the simulator** (iPhone 17, iOS 27.1) against `scripts/demo-server.py`: Browse listed titles and
+  covers read through the engine, the Series page showed details and the chapters with correct dates and
+  numbers, the reader opened a chapter and scrolled, progress and the library were written to SQLite, and after
+  leaving the reader the series page showed the finished chapter and "Continue" at the next one. A page the
+  server did not have showed the error card and Try again recovered.
+- **Not done or not verified:** a real device; a real site (the demo server serves the same synthetic
+  fixtures); MangaDex through the app (unreachable here); the web view that clears a challenge (the app only
+  says a site wants a check); paged and right-to-left reading; zoom; prefetching the next chapter and the
+  seamless join; saving the position inside a page; downloads; the library search, categories and the updates
+  tab; Dynamic Type and VoiceOver passes; the UIKit reader fallback (spike 6 left that open). The Rust image
+  pipeline is not used: images load through `URLSession` in Swift.
+
 ## Sources
 
 - [Paperback sources intro (extensions-common wiki)](https://github.com/Paperback-iOS/extensions-common/wiki/Intro-to-Paperback-Sources) and [function definitions](https://github.com/Paperback-iOS/extensions-common/wiki/Function-Definitions)

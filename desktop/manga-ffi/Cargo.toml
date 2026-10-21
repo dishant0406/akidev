@@ -14,9 +14,8 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
 akidev-core = { path = "../core", default-features = false }
+akidev-manga = { path = "../manga" }
 anyhow.workspace = true
-reqwest.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 uniffi = { version = "0.32", features = ["cli", "tokio"] }

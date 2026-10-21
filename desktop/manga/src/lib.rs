@@ -1,6 +1,7 @@
 //! The manga engine: source definitions, the six questions a reader asks of a source, and the
 //! means to test a definition against recorded pages.
 
+pub mod catalogue;
 pub mod check;
 pub mod date;
 pub mod def;

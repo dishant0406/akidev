@@ -230,9 +230,8 @@ name = "akidev-manga-ffi"
 version = "0.1.25"
 dependencies = [
  "akidev-core",
+ "akidev-manga",
  "anyhow",
- "reqwest 0.12.28",
- "serde",
  "serde_json",
  "tokio",
  "uniffi",

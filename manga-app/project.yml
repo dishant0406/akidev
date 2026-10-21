@@ -1,0 +1,30 @@
+name: AkiManga
+options:
+  deploymentTarget:
+    iOS: "26.0"
+  bundleIdPrefix: live.akidev
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+    INFOPLIST_KEY_CFBundleDisplayName: Aki Manga
+    CODE_SIGNING_ALLOWED: NO
+packages:
+  AkiManga:
+    path: Packages/AkiManga
+targets:
+  # Named apart from the AkiManga package so the two schemes do not collide.
+  AkiMangaApp:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: AkiManga
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: live.akidev.manga
+        # Sources are served over plain http only from a developer's machine (the demo server).
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES

@@ -7,7 +7,7 @@ use anyhow::{Context, bail};
 use serde_json::Value;
 use std::collections::HashMap;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Themes(HashMap<String, Value>);
 
 impl Themes {
