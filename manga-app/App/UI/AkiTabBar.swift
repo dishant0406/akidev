@@ -5,6 +5,9 @@ struct AkiTabBar: View {
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]
     @Namespace private var space
+    /// The bar has the corner radius of a card; the selected item sits inside it with the padding taken off, so the curves are concentric.
+    private let padding: CGFloat = 6
+    private var inner: CGFloat { Aki.cardRadius - padding }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -17,19 +20,19 @@ struct AkiTabBar: View {
                     } label: {
                         AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onYellow : .dim)
                             .frame(width: 70, height: 58)
-                            .contentShape(Circle())
+                            .contentShape(RoundedRectangle(cornerRadius: inner, style: .continuous))
                             .overlay(alignment: .topTrailing) {
                                 if let count = badge[tab], count > 0 { AkiCount(value: count, tinted: false).offset(x: -2, y: 2) }
                             }
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(tab.title)
-                    .akiGlassIf(on, .circle, tint: Aki.yellow)
+                    .akiGlassIf(on, .rounded(inner), tint: Aki.yellow)
                     .glassEffectID(tab, in: space)
                 }
             }
-            .padding(6)
-            .akiGlass(.capsule, interactive: false)
+            .padding(padding)
+            .akiGlass(.card, interactive: false)
         }
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .akiHaptic(trigger: selection)

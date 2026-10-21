@@ -3,6 +3,8 @@ import SwiftUI
 enum AkiShape {
     case capsule, circle
     case card
+    /// A rounded rectangle of the given corner radius.
+    case rounded(CGFloat)
 }
 
 extension View {
@@ -31,6 +33,7 @@ private struct AkiGlassModifier: ViewModifier {
             case .capsule: content.background(tint ?? Aki.chip, in: .capsule)
             case .circle: content.background(tint ?? Aki.chip, in: .circle)
             case .card: content.background(tint ?? Aki.card, in: .rect(cornerRadius: Aki.cardRadius))
+            case .rounded(let radius): content.background(tint ?? Aki.chip, in: .rect(cornerRadius: radius))
             }
         } else {
             let base: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
@@ -39,6 +42,7 @@ private struct AkiGlassModifier: ViewModifier {
             case .capsule: content.glassEffect(glass, in: .capsule)
             case .circle: content.glassEffect(glass, in: .circle)
             case .card: content.glassEffect(glass, in: .rect(cornerRadius: Aki.cardRadius))
+            case .rounded(let radius): content.glassEffect(glass, in: .rect(cornerRadius: radius))
             }
         }
     }
