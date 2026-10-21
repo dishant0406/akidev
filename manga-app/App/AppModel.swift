@@ -77,7 +77,7 @@ enum InstallError: LocalizedError {
 func describe(_ error: Error) -> (title: String, message: String) {
     if let error = error as? MangaError {
         switch error {
-        case .Challenge(let url, _): return ("This site wants a check", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers. Passing it from the app comes in a later version.")
+        case .Challenge(let url, _): return ("This site checks visitors first", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Aki Manga has no browser to pass it in. Try another source, or read this one through a Suwayomi or Komga server you run.")
         case .Failed(let message): return ("That did not work", message)
         }
     }

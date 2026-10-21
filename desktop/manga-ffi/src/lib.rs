@@ -21,8 +21,8 @@ uniffi::setup_scaffolding!();
 
 #[derive(Debug, uniffi::Error)]
 pub enum MangaError {
-    /// The site wants a check first (Cloudflare, a captcha): open `url` in a web view, let the person
-    /// pass it, then hand the cookies and the web view's user agent to `set_cookies`/`set_user_agent`.
+    /// The site wants a check first (Cloudflare, a captcha). There is no browser in the app to pass it in, so
+    /// the screen says the site is not supported from here.
     Challenge { url: String, status: u16 },
     Failed { message: String },
 }
@@ -349,7 +349,8 @@ impl Engine {
         Ok(())
     }
 
-    /// After a check was passed in a web view: the cookies and the user agent the site now expects.
+    /// Cookies a source needs (a login, or a clearance the person already holds). Nothing in the app gets them
+    /// from a browser.
     pub fn set_cookies(&self, source: String, cookies: Vec<Cookie>) -> Result<()> {
         self.catalogue(&source)?.fetcher().set_cookies(cookies.into_iter().map(|cookie| (cookie.name, cookie.value)));
         Ok(())

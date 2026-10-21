@@ -62,8 +62,8 @@ self-hosted servers.
 ┌──────────────────────── Swift app (SwiftUI, Liquid Glass) ───────────────────────┐
 │ Library · Browse · Search · Updates · History · Reader · Settings · Sources       │
 └───────────────▲──────────────────────────────────────────────────────────────────┘
-                │ uniffi (async, typed Swift API)         WKWebView only for
-┌───────────────┴────────── akidev-manga-ffi (thin facade) ────── challenges ───────┐
+                │ uniffi (async, typed Swift API)         nothing else: no web view
+┌───────────────┴────────── akidev-manga-ffi (thin facade) ──────── native only ─────┐
 │                          akidev-manga (new Rust crate)                              │
 │  catalogue  ·  library db  ·  reader prefetch  ·  downloads  ·  updates  ·  sync    │
 │  ┌─────────── source runtime ───────────┐  ┌──────── adapters ────────┐             │
@@ -170,11 +170,10 @@ sources share `template`, `regex`, `coalesce`, `map`, `plain_text`, `scale`):
   fixed or per-page seed), done in Rust after download, so no code is needed. Sites that need more go to WASM.
 
 Requests: the existing `url`, `method`, `query`, `json` and `{? ?}` rules stay. Add `cookies`, `form`, a
-`headers` map with the same templates, `rate` (per source token bucket), and **`challenge`**: what to do on a
-Cloudflare or anti-bot page: `"webview"` hands the URL to a hidden `WKWebView`, waits for the clearance
-cookie, and copies the cookies and user agent into the Rust client. This must be a host callback in the FFI
-(the engine asks the app), since the engine itself cannot render a page. Some challenges will still fail:
-the source shows a "this site needs a check" state, it is not silently empty.
+`headers` map with the same templates and `rate` (per source token bucket). **There is no web view, anywhere in
+the app** (decided 2026-10-21, see section 15): a site that answers with a Cloudflare or anti-bot page makes the
+engine return a typed `Challenge` error, and the app shows a "this site checks visitors first" state with the
+native ways round it, never a blank list.
 
 Validation at install (as `sources.rs` does now): schema, limits, regexes compile, every URL starts with the
 declared base or a mirror (a definition cannot send a request anywhere else: the same rule as `{base}/` in
@@ -306,7 +305,7 @@ decide when we get there.
 | **1. Engine** | 3 | `akidev-manga` crate: the HTML ops, requests with cookies and rate limit, the six operations, fixtures + `check`, the MangaDex adapter, SQLite schema. Command-line tool (`akidev-manga-cli`) that can search, list chapters and dump page URLs for a definition. Nothing visual yet. |
 | **2. FFI and shell** | 2 | uniffi facade, xcframework build script, a Swift package, an Xcode app with Browse → Series → Reader working on MangaDex, plain styling. |
 | **3. Reader and library** | 4 | The reader (long strip first, then paged), image pipeline, library, history, progress, downloads, categories, Liquid Glass chrome and Aki design module. |
-| **4. Sources** | 3 | Source lists, install, update, validation UI, theme layer, 10 to 15 definitions across 3 themes, the `challenge` webview hook, server clients (Komga, OPDS). WASM runtime and ABI v1 can land here or in 6 depending on spike 4. |
+| **4. Sources** | 3 | Source lists, install, update, validation UI, theme layer, 10 to 15 definitions across 3 themes, server clients (Komga, OPDS). WASM runtime and ABI v1 can land here or in 6 depending on spike 4. |
 | **5. Polish and release** | 2 | Updates and background refresh, trackers (AniList), backup, accessibility pass, design review against `DESIGN_PLAN.md`, TestFlight. |
 | 6. Later | | WASM authoring kit and book, MAL, sync, macOS target, Paperback/Aidoku backup import, optional JS layer. |
 
@@ -324,9 +323,8 @@ source corpus are where the time goes, not the shell.
    WASM carries and which ops matter. Do this by reading definitions, not by contacting the sites.
 4. **WASM host.** `wasmi` on iOS: cold start, memory, call overhead on a 500 KB HTML parse; compare with
    parsing in the host. Decide whether v1 includes it.
-5. **Challenge hook.** A `WKWebView` that clears a typical Cloudflare interstitial from a phone on a home
-   connection and hands cookies to the Rust client. Pass/fail: 3 of 5 protected sites load afterwards. If it
-   fails, those sources are marked unsupported and we say so.
+5. ~~Challenge hook (a `WKWebView` that clears a Cloudflare interstitial).~~ **Dropped: the app is fully native,
+   no web view** (section 15). Replaced by a native-fingerprint spike, below.
 6. **Reader perf.** A 40-image, 800×12,000 px strip in SwiftUI `ScrollView`+`LazyVStack` vs a
    `UICollectionView`/UIKit-backed reader via `UIViewRepresentable`; measure memory and dropped frames on a
    real device. My prior: SwiftUI alone will not hold 60 fps for long strips, so plan the reader as UIKit
@@ -360,7 +358,7 @@ Decisions taken: iOS 26 only, TestFlight and sideload first, declarative sources
 | **2. uniffi hello** | **Pass on macOS, builds for iOS.** New crate `desktop/manga-ffi` (`akidev-manga-ffi`, lib name `akimanga`, uniffi 0.32 proc-macros, tokio). One `async popular(limit)` call returns typed records and a typed error to Swift: generated bindings, a Swift program with top-level `await` printed titles from a local fake of the MangaDex response in 6 ms. Static libs build for both iOS targets (about 45 MB each before the linker strips) and `xcodebuild -create-xcframework` accepts them. **Not tested:** a call on an iOS simulator or device, and cancellation (uniffi has none; a cancel handle is still to be designed). |
 | **MangaDex reachable?** | **Not from this machine.** `api.mangadex.org` answers `503` with an HTML login page (looks like a network filter, not MangaDex). Everything that touches it needs a different network; the engine takes `AKI_MANGADEX_BASE` for tests. |
 | **3. Source census** | **Done, and it corrects the plan: see 11.1.** |
-| **5. Challenge hook** | **Mechanism passes, real Cloudflare untested.** A hidden-app `WKWebView` loaded a local page that sets a `cf_clearance` cookie after 2 s; the host read it from `WKHTTPCookieStore` after 3.8 s and read `navigator.userAgent`, so the cookie-plus-UA handoff to the Rust client is possible. **Not shown:** that a real Cloudflare interstitial clears in a `WKWebView` (this network filters outside sites and the simulator is not a home connection), and the pass criterion (3 of 5 protected sites) is still open. Note the UA the webview reports (`iPhone OS 18_7`) must be the one the Rust client sends, or the clearance cookie is rejected. |
+| **5. Challenge hook** | **Dropped, see section 15 (no web view).** What was run: mechanism passed, real Cloudflare untested.** A hidden-app `WKWebView` loaded a local page that sets a `cf_clearance` cookie after 2 s; the host read it from `WKHTTPCookieStore` after 3.8 s and read `navigator.userAgent`, so the cookie-plus-UA handoff to the Rust client is possible. **Not shown:** that a real Cloudflare interstitial clears in a `WKWebView` (this network filters outside sites and the simulator is not a home connection), and the pass criterion (3 of 5 protected sites) is still open. Note the UA the webview reports (`iPhone OS 18_7`) must be the one the Rust client sends, or the clearance cookie is rejected. |
 | **6. Reader perf** | **Inconclusive: simulator only.** 40 JPEG pages of 1000×10000 px, programmatic scroll at 2,500 pt/s for 25 s, iPhone 17 simulator (iOS 27.1). `UICollectionView` reader: 0 frames over 25 ms, p99 16.7 ms, peak footprint 361 MB (247 MB at the end). SwiftUI `LazyVStack`, views kept: 0 hitches, peak 127 MB; with the image dropped on `onDisappear`: 2 hitches (max 55 ms), peak 125 MB. A screenshot at 12 s shows SwiftUI rendering the right pages while decode catches up (a blurred placeholder at the top). **Nothing separates them on a Mac GPU**, and the SwiftUI lazy stack did not hoard memory as I had feared, so my prior that the reader must be UIKit is **not confirmed**. The memory numbers are not comparable either: both paths decode a page at 1179×11790 px (about 55 MB), a size to avoid in the real reader (tile or cap it). Real answer needs an iPhone, a long run and Instruments. Default: SwiftUI reader, keep the UIKit one as the fallback. |
 | **7. Glass legibility** | **Pass, with one design note.** `GlassEffectContainer` with `.glass`, `.glassProminent`, an interactive circle and a capsule is legible over white, grey and black strips and over the dark canvas. On the dark canvas the pills render as **light grey**, which is bright against the warm-ink look in `design/DESIGN_PLAN.md`; the reader chrome needs a tint or a forced dark scheme. Two oddities seen on the dark screen: the container drew two dark arched shapes behind the controls when glass morphing grouped them (needs a look with a spacing value that does not merge them). Cost on an older device is not measured. |
 
@@ -467,8 +465,7 @@ the Swift shell.
   leaving the reader the series page showed the finished chapter and "Continue" at the next one. A page the
   server did not have showed the error card and Try again recovered.
 - **Not done or not verified:** a real device; a real site (the demo server serves the same synthetic
-  fixtures); MangaDex through the app (unreachable here); the web view that clears a challenge (the app only
-  says a site wants a check); paged and right-to-left reading; zoom; prefetching the next chapter and the
+  fixtures); MangaDex through the app (unreachable here); clearing a challenge (the app says a site wants a check and offers the native ways round it, section 15); paged and right-to-left reading; zoom; prefetching the next chapter and the
   seamless join; saving the position inside a page; downloads; the library search, categories and the updates
   tab; Dynamic Type and VoiceOver passes; the UIKit reader fallback (spike 6 left that open). The Rust image
   pipeline is not used: images load through `URLSession` in Swift.
@@ -516,6 +513,39 @@ far down is only as exact as that estimate); the position inside a page in paged
 not saved; Dynamic Type and VoiceOver; low-memory behaviour with many chapters appended (the strip never drops
 earlier chapters); the old `sizes` problem of decoding a full-width image per row stays: images are decoded at
 the zoomed width, not tiled.
+
+## 15. Decision: no web view, fully native (2026-10-21)
+
+The app has no `WKWebView`, no `SFSafariViewController` and no embedded browser of any kind: everything on screen is
+SwiftUI, everything that fetches is the Rust engine. (The app already was this; the only web view was the
+challenge hook planned in 5.3 and tried in spike 5, now removed from the plan.)
+
+**What that costs, said plainly.** A site behind Cloudflare's JavaScript challenge or a captcha cannot be passed by
+a native HTTP client; that is what the challenge is for. The census counted about 24% of popular sources as
+needing a web view or a solver. Those sources are **not supported** by Aki Manga, and the app says so instead of
+showing an empty list. MangaDex (no challenge), plain sites, JSON APIs and every themed site that is not behind a
+check are unaffected.
+
+**The native ways round it, in order of preference:**
+1. **A server the person already runs.** Komga, Kavita and Suwayomi adapters (planned, section 7) read sources
+   that do their own bypass (Suwayomi supports FlareSolverr). The person adds the server's address; the app reads
+   OPDS or its REST API. Nothing in the app loads a page.
+2. **A lighter check can be met natively.** Many sites only turn away clients whose TLS handshake or header
+   order does not look like a browser's (no JavaScript challenge). The engine can look more like Safari there:
+   a browser user agent (done), header order and a Safari-like TLS fingerprint (not done: a spike, below).
+   This does not pass JavaScript challenges or captchas, and a site may block it again tomorrow.
+3. **Cookies the person already has.** `Engine.set_cookies` and `set_user_agent` stay in the facade (a source
+   may need a login cookie), but nothing in the app collects them from a browser. A text field for pasting a
+   `cf_clearance` cookie and its user agent is possible and is native; whether to offer it is open, since
+   the clearance is tied to the IP and the browser's fingerprint and expires within hours.
+
+**Spike 5 (new): native TLS fingerprint.** Find out whether a Safari-like handshake (BoringSSL based crates such as
+`wreq`, or `reqwest` with `rustls` and a hand-built ClientHello) builds for iOS, and whether it gets 3 of 5
+fingerprint-only protected sites to answer. Pass/fail is that count; JavaScript-challenged sites are expected to
+stay out. Needs a network that reaches the sites, so it cannot be run from this machine.
+
+**In the app now:** a `Challenge` error reaches the screen as the state card "This site checks visitors first"
+with what to do instead. The facade and engine comments were corrected to match.
 
 ## Sources
 

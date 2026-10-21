@@ -61,5 +61,5 @@ lists them oldest first). A chapter's number is read from its title when no `num
 ## Not here yet
 
 Filters are parsed but only passed through to a request's holes; the filter UI, ajax chapter lists that
-need a nonce from the page, `aes`, `xor` and tile descrambling steps, the `challenge` web view hook (a site
-that wants a check returns a `fetch::Challenge` error the app can act on), and signed source lists.
+need a nonce from the page, `aes`, `xor` and tile descrambling steps, a way past a check (there is no web view: a site
+that wants a check returns a `fetch::Challenge` error and the app says it is not supported from here), and signed source lists.

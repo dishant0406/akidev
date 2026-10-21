@@ -10,9 +10,8 @@ use std::time::{Duration, Instant};
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
 
-/// A browser user agent: most of these sites turn away anything that says it is a script. When a
-/// challenge is solved in a web view, the app sets this to the web view's own, which the clearance
-/// cookie is tied to.
+/// A browser user agent: most of these sites turn away anything that says it is a script. A clearance cookie
+/// the person pastes in is tied to the user agent it was issued to, so `set_user_agent` can match it.
 pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
 
 #[derive(Debug, Clone)]
@@ -31,8 +30,8 @@ impl Req {
     }
 }
 
-/// The site asked for a check (Cloudflare, a captcha) instead of answering. The app should open
-/// `url` in a web view, let the person pass it, and hand the cookies back with `Fetcher::set_cookies`.
+/// The site asked for a check (Cloudflare, a captcha) instead of answering. The app has no browser to pass it
+/// in, so it says the site is not supported from here and points to a server that can (see pipeline/MANGA_PLAN.md).
 #[derive(Debug)]
 pub struct Challenge {
     pub url: String,
