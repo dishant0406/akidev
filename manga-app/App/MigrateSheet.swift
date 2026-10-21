@@ -13,7 +13,9 @@ struct MigrateSheet: View {
     @State private var results: [Card] = []
     @State private var searched = false
     @State private var busy = false
+    @State private var didMove = false
     @State private var chosen: Card?
+    @State private var chosenTarget = ""
     @State private var message: (title: String, message: String)?
 
     private var others: [SourceInfo] { model.visibleSources.filter { $0.id != ref.source && $0.canSearch } }
@@ -30,12 +32,13 @@ struct MigrateSheet: View {
                     if busy { AkiSpinner().frame(maxWidth: .infinity, minHeight: 80) }
                     else if searched && results.isEmpty { AkiText("Nothing matched on \(model.name(of: target)).", .caption, tone: .dim) }
                     ForEach(results, id: \.id) { card in
-                        AkiTap(action: { chosen = card }) { AkiListCard(thumbnail: card.cover, label: model.name(of: target), title: card.title) }
+                        AkiTap(action: { chosenTarget = target; chosen = card }) { AkiListCard(thumbnail: card.cover, label: model.name(of: target), title: card.title) }
                     }
                 }
             }
             .padding(24)
         }
+        .onDisappear { if didMove { moved() } }
         .onAppear { term = ref.title; target = others.first?.id ?? "" }
         .onChange(of: target) { results = []; searched = false }
         .akiConfirm("Move to “\(chosen?.title ?? "")”?", message: "It leaves \(model.name(of: ref.source)); your shelves and read chapters carry over.", confirm: "Move", isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } })) {
@@ -45,15 +48,20 @@ struct MigrateSheet: View {
     }
 
     private func search() async {
+        let asked = target
         busy = true
         defer { busy = false }
         do {
-            results = try await model.engine.search(source: target, term: term, page: 1, choices: []).items
+            let found = try await model.engine.search(source: asked, term: term, page: 1, choices: []).items
+            guard asked == target else { return }
+            results = found
             searched = true
         } catch { message = describe(error) }
     }
 
     private func move(to card: Card) async {
+        guard !busy else { return }
+        let target = chosenTarget
         busy = true
         defer { busy = false }
         do {
@@ -62,8 +70,8 @@ struct MigrateSheet: View {
             _ = try await model.engine.chapters(source: target, id: card.id)
             _ = try model.engine.migrate(source: ref.source, series: ref.id, toSource: target, toSeries: card.id)
             model.refresh()
+            didMove = true
             dismiss()
-            moved()
         } catch { message = describe(error) }
     }
 }

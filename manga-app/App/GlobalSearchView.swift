@@ -14,8 +14,23 @@ final class GlobalSearchModel {
 
     var groups: [Group] = []
     private var term = ""
+    private var running: Task<Void, Never>?
 
+    /// Starts a search, dropping the one still running.
     func search(_ engine: Engine, sources: [SourceInfo], term: String, report: @escaping (String, Error?) -> Void) async {
+        running?.cancel()
+        let task = Task { await run(engine, sources: sources, term: term, report: report) }
+        running = task
+        await task.value
+    }
+
+    func clear() {
+        running?.cancel()
+        term = ""
+        groups = []
+    }
+
+    private func run(_ engine: Engine, sources: [SourceInfo], term: String, report: @escaping (String, Error?) -> Void) async {
         self.term = term
         groups = sources.filter(\.canSearch).map { Group(source: $0, state: .loading) }
         await withTaskGroup(of: (String, State, Error?).self) { group in

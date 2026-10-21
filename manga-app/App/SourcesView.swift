@@ -142,7 +142,7 @@ struct SourceSettingsView: View {
                             set: { value in
                                 try? model.engine.setSetting(source: source, id: setting.id, value: value)
                                 settings = (try? model.engine.sourceSettings(source: source)) ?? settings
-                                model.revision += 1
+                                model.settingsRevision += 1
                             }
                         ), options: setting.options.map { ($0.value, $0.name) })
                     }

@@ -12,8 +12,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTask, using: nil) { task in
             Self.schedule()
             let work = Task { @MainActor in
-                await Self.refresh?()
-                task.setTaskCompleted(success: true)
+                guard let refresh = Self.refresh else { return task.setTaskCompleted(success: false) }
+                await refresh()
+                task.setTaskCompleted(success: !Task.isCancelled)
             }
             task.expirationHandler = { work.cancel() }
         }
@@ -31,7 +32,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     @MainActor static func lock(_ mask: UIInterfaceOrientationMask) {
         orientations = mask
-        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.forEach { $0.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) }
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.forEach { scene in
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
+        }
     }
 }
 
@@ -49,7 +52,6 @@ struct AkiMangaApp: App {
                 .fontDesign(.rounded)
                 .preferredColorScheme(model.prefs.appearance.scheme)
                 .onOpenURL { model.propose(repository: $0.absoluteString) }
-                .task { AppDelegate.refresh = { await model.refreshLibrary(force: true) } }
                 .onChange(of: phase) { _, new in
                     if new == .background { AppDelegate.schedule() }
                     if new == .active { Task { await model.refreshLibrary() } }

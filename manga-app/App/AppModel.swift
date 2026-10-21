@@ -16,8 +16,8 @@ final class AppModel {
     /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
     var barHiders = 0
     var tabBarHidden: Bool { barHiders > 0 }
-    /// Bumped when a source is installed, removed, updated or changed, so screens that show one reload.
-    var revision = 0
+    /// Bumped when a source's own settings change, so Discover asks it again.
+    var settingsRevision = 0
     /// What the last start said about a demo repository, for the Sources screen.
     var note: String?
 
@@ -25,6 +25,7 @@ final class AppModel {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AkiManga")
         engine = try! Engine(dataDir: base.path)
         refresh()
+        AppDelegate.refresh = { [weak self] in await self?.refreshLibrary(force: true) }
         Task {
             await updateSources()
             await refreshLibrary()
@@ -42,7 +43,6 @@ final class AppModel {
         sources = engine.sources().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         repos = (try? engine.repos()) ?? []
         library = (try? engine.library()) ?? []
-        revision += 1
     }
 
     var visibleSources: [SourceInfo] {
@@ -68,6 +68,9 @@ final class AppModel {
     var refreshing = false
     private var lastRefresh: Date?
 
+    /// Changes when a source is installed, removed or updated (not when the library changes).
+    var sourcesKey: String { sources.map { "\($0.id)@\($0.version)" }.joined(separator: ",") + "#\(settingsRevision)" }
+
     func report(_ source: String, _ error: Error?) {
         sourceProblems[source] = error.map { describe($0).message }
     }
@@ -89,9 +92,14 @@ final class AppModel {
             for await result in group { all.append(result) }
             return all
         }
+        guard !Task.isCancelled else { return }
         updateFailures = results.compactMap { entry, error in error.map { UpdateFailure(title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
-        for (entry, error) in results { report(entry.source, error) }
-        lastRefresh = .now
+        // A source is "not working" when any of its series failed this time; one that is gone loses its mark.
+        let failedSources = Set(results.filter { $0.1 != nil }.map(\.0.source))
+        for source in Set(results.map(\.0.source)) { sourceProblems[source] = nil }
+        for (entry, error) in results where error != nil && failedSources.contains(entry.source) { report(entry.source, error) }
+        sourceProblems = sourceProblems.filter { problem in sources.contains { $0.id == problem.key } }
+        if results.isEmpty || results.contains(where: { $0.1 == nil }) { lastRefresh = .now }
         refresh()
     }
 

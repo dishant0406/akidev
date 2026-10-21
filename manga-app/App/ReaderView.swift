@@ -36,7 +36,7 @@ struct ReaderView: View {
         .akiSheet(isPresented: $settings) { ReaderSettingsSheet(model: model) }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; AppDelegate.lock(app.prefs.orientation.mask) }
         .onChange(of: app.prefs.orientation) { _, new in AppDelegate.lock(new.mask) }
-        .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false; AppDelegate.lock(OrientationLock.auto.mask) }
+        .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false; AppDelegate.lock(.portrait); AppDelegate.lock(OrientationLock.auto.mask) }
     }
 
     private var topBar: some View {

@@ -12,13 +12,6 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         case .rtl: "Pages, right to left"
         }
     }
-    var symbol: String {
-        switch self {
-        case .strip: "rectangle.split.1x2"
-        case .paged: "book"
-        case .rtl: "book.closed"
-        }
-    }
 }
 
 struct Segment: Identifiable {

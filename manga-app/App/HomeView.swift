@@ -92,7 +92,7 @@ struct HomeView: View {
             .onChange(of: source) { UserDefaults.standard.set(source, forKey: "source"); submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
             .akiSheet(isPresented: $filtering) { FiltersSheet(filters: filters, choices: $choices) { Task { await reload() } } }
             .onChange(of: mode) { Task { await reload() } }
-            .task(id: model.revision) {
+            .task(id: model.sourcesKey) {
                 if !isGlobal && !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
                 filters = (try? model.engine.sourceFilters(source: source)) ?? []
@@ -149,7 +149,7 @@ struct HomeView: View {
 
     private func reload() async {
         if isGlobal {
-            if !submitted.isEmpty { await global.search(model.engine, sources: model.visibleSources, term: submitted, report: model.report) }
+            if submitted.isEmpty { global.clear() } else { await global.search(model.engine, sources: model.visibleSources, term: submitted, report: model.report) }
         } else {
             await load(reset: true)
         }
