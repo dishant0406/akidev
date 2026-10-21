@@ -5,7 +5,7 @@ enum AppTab: Hashable, CaseIterable {
 
     var title: String {
         switch self {
-        case .home: "Home"
+        case .home: "Discover"
         case .library: "Library"
         case .updates: "Updates"
         case .sources: "Sources"

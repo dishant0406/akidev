@@ -92,7 +92,7 @@ struct RootView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.3), value: model.tabBarHidden)
+        .akiAnimation(value: model.tabBarHidden)
         .background(Aki.canvas)
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
     }

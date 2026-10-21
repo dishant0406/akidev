@@ -5,6 +5,7 @@ struct AkiTabBar: View {
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]
     @Namespace private var space
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         AkiGlassGroup(spacing: 8) {
@@ -12,7 +13,7 @@ struct AkiTabBar: View {
                 ForEach(AppTab.allCases, id: \.self) { tab in
                     let on = tab == selection
                     Button {
-                        withAnimation(.smooth(duration: 0.32)) { selection = tab }
+                        withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab }
                     } label: {
                         AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onYellow : .dim)
                             .frame(width: 70, height: 58)
@@ -31,5 +32,6 @@ struct AkiTabBar: View {
             .akiGlass(.capsule, interactive: false)
         }
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+        .akiHaptic(trigger: selection)
     }
 }

@@ -13,9 +13,9 @@ enum AkiButtonSize {
 
     var height: CGFloat {
         switch self {
-        case .small: 38
-        case .regular: 46
-        case .large: 54
+        case .small: 44
+        case .regular: 48
+        case .large: 56
         }
     }
 }

@@ -7,21 +7,40 @@ enum AkiShape {
 
 extension View {
     /// Liquid Glass on a control or a bar. A tint (the yellow) marks the current choice or the main action.
-    @ViewBuilder
     func akiGlass(_ shape: AkiShape = .capsule, tint: Color? = nil, interactive: Bool = true) -> some View {
-        let base: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
-        let glass = interactive ? base.interactive() : base
-        switch shape {
-        case .capsule: glassEffect(glass, in: .capsule)
-        case .circle: glassEffect(glass, in: .circle)
-        case .card: glassEffect(glass, in: .rect(cornerRadius: Aki.cardRadius))
-        }
+        modifier(AkiGlassModifier(shape: shape, tint: tint, interactive: interactive))
     }
 
     /// Glass only when `on`: the current tab or pill is a glass shape of its own, the others are not.
     @ViewBuilder
     func akiGlassIf(_ on: Bool, _ shape: AkiShape = .capsule, tint: Color? = nil) -> some View {
         if on { akiGlass(shape, tint: tint) } else { glassEffect(.identity, in: .capsule) }
+    }
+}
+
+/// Glass, or a plain fill when the person asked to reduce transparency.
+private struct AkiGlassModifier: ViewModifier {
+    let shape: AkiShape
+    let tint: Color?
+    let interactive: Bool
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            switch shape {
+            case .capsule: content.background(tint ?? Aki.chip, in: .capsule)
+            case .circle: content.background(tint ?? Aki.chip, in: .circle)
+            case .card: content.background(tint ?? Aki.card, in: .rect(cornerRadius: Aki.cardRadius))
+            }
+        } else {
+            let base: Glass = tint.map { Glass.regular.tint($0) } ?? .regular
+            let glass = interactive ? base.interactive() : base
+            switch shape {
+            case .capsule: content.glassEffect(glass, in: .capsule)
+            case .circle: content.glassEffect(glass, in: .circle)
+            case .card: content.glassEffect(glass, in: .rect(cornerRadius: Aki.cardRadius))
+            }
+        }
     }
 }
 

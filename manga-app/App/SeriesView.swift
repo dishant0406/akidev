@@ -24,8 +24,12 @@ struct SeriesView: View {
     @State private var target: ReaderTarget?
     @State private var tab = SeriesTab.chapters
     @State private var expanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var kept: Set<String> = []
     @State private var forgetting = false
+    /// Counters that only change on something the person did, so a haptic never fires just from opening the page.
+    @State private var savedTaps = 0
+    @State private var downloadsDone = 0
     @State private var moving = false
     @State private var problem: String?
 
@@ -49,7 +53,7 @@ struct SeriesView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.3), value: resumable?.label)
+        .akiAnimation(value: resumable?.label)
         .akiNoNavigationBar()
         .hidesTabBar()
         .task {
@@ -58,6 +62,9 @@ struct SeriesView: View {
             if UserDefaults.standard.bool(forKey: "autoContinue"), target == nil { target = resumable?.target }
             #endif
         }
+        .akiHaptic(.impact(weight: .medium), trigger: savedTaps)
+        .akiHaptic(.success, trigger: downloadsDone)
+        .akiHaptic(.error, trigger: problem)
         .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiSheet(isPresented: $moving) { MigrateSheet(ref: ref) { dismiss() } }
         .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $forgetting) {
@@ -181,7 +188,7 @@ struct SeriesView: View {
                 AkiCard(padding: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         AkiText(description, .body, lines: expanded ? nil : 6)
-                        AkiButton(expanded ? "Show less" : "Read more", variant: .ghost, size: .small) { withAnimation(.smooth) { expanded.toggle() } }
+                        AkiButton(expanded ? "Show less" : "Read more", variant: .ghost, size: .small) { withAnimation(AkiMotion.settle(reduceMotion)) { expanded.toggle() } }
                     }
                 }
             }
@@ -258,6 +265,7 @@ struct SeriesView: View {
                 do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { failed += 1 }
                 loadKept()
             }
+            if failed == 0 { downloadsDone += 1 }
             if failed > 0 { problem = failed == 1 ? "One chapter could not be downloaded." : "\(failed) chapters could not be downloaded." }
         }
     }
@@ -276,6 +284,7 @@ struct SeriesView: View {
         do {
             try await model.engine.setInLibrary(source: ref.source, id: ref.id, saved: !saved)
             saved.toggle()
+            savedTaps += 1
             model.refresh()
         } catch { self.error = describe(error) }
     }

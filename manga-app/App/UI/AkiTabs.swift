@@ -5,6 +5,7 @@ struct AkiTabs<ID: Hashable & Sendable>: View {
     let items: [(id: ID, title: String)]
     @Binding var selection: ID
     @Namespace private var space
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         AkiGlassGroup(spacing: 10) {
@@ -12,7 +13,7 @@ struct AkiTabs<ID: Hashable & Sendable>: View {
                 ForEach(items, id: \.id) { item in
                     let on = item.id == selection
                     Button {
-                        withAnimation(.smooth(duration: 0.3)) { selection = item.id }
+                        withAnimation(AkiMotion.settle(reduceMotion)) { selection = item.id }
                     } label: {
                         AkiText(item.title, on ? .bodyStrong : .caption, tone: on ? .onYellow : .dim, lines: 1)
                             .frame(maxWidth: .infinity)
@@ -25,6 +26,7 @@ struct AkiTabs<ID: Hashable & Sendable>: View {
                 }
             }
         }
+        .akiHaptic(trigger: selection)
     }
 }
 
@@ -32,6 +34,7 @@ struct AkiTabs<ID: Hashable & Sendable>: View {
 struct AkiChips<ID: Hashable & Sendable>: View {
     let items: [(id: ID, title: String)]
     @Binding var selection: ID
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -40,11 +43,11 @@ struct AkiChips<ID: Hashable & Sendable>: View {
                     ForEach(items, id: \.id) { item in
                         let on = item.id == selection
                         Button {
-                            withAnimation(.smooth(duration: 0.25)) { selection = item.id }
+                            withAnimation(AkiMotion.settle(reduceMotion)) { selection = item.id }
                         } label: {
                             AkiText(item.title, on ? .bodyStrong : .caption, tone: on ? .onYellow : .primary, lines: 1)
                                 .padding(.horizontal, 16)
-                                .frame(height: 38)
+                                .frame(height: 44)
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
@@ -54,5 +57,6 @@ struct AkiChips<ID: Hashable & Sendable>: View {
             }
         }
         .scrollClipDisabled()
+        .akiHaptic(trigger: selection)
     }
 }

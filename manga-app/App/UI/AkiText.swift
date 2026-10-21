@@ -39,10 +39,23 @@ struct AkiText: View {
     var body: some View {
         Text(style == .eyebrow ? text.uppercased() : text)
             .font(font)
-            .tracking(style == .eyebrow ? 1.4 : 0)
+            .tracking(tracking)
+            .lineSpacing(style == .display ? -2 : 0)
             .foregroundStyle(tone.color.opacity(style == .eyebrow ? 0.7 : 1))
             .lineLimit(lines)
             .multilineTextAlignment(align)
+    }
+
+    /// Big text sits tighter, small text a little looser: letters read too far apart as they grow.
+    private var tracking: CGFloat {
+        switch style {
+        case .display: -0.8
+        case .title: -0.4
+        case .heading: -0.15
+        case .body, .bodyStrong: 0
+        case .caption, .captionStrong: 0.1
+        case .eyebrow: 1.4
+        }
     }
 
     private var font: Font {

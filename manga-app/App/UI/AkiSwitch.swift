@@ -14,5 +14,6 @@ struct AkiSwitch: View {
             }
         }
         .tint(Aki.yellow)
+        .akiHaptic(trigger: isOn)
     }
 }

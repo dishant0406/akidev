@@ -6,7 +6,7 @@ struct AkiLink<Value: Hashable, Label: View>: View {
     @ViewBuilder var label: () -> Label
 
     var body: some View {
-        NavigationLink(value: value, label: label).buttonStyle(.plain)
+        NavigationLink(value: value, label: label).buttonStyle(AkiPressStyle())
     }
 }
 
@@ -16,7 +16,7 @@ struct AkiTap<Label: View>: View {
     @ViewBuilder var label: () -> Label
 
     var body: some View {
-        Button(action: action, label: label).buttonStyle(.plain)
+        Button(action: action, label: label).buttonStyle(AkiPressStyle())
     }
 }
 
@@ -27,7 +27,11 @@ extension View {
     }
 
     /// The tab bar floats above content: scrolling content leaves room for it.
-    func underTabBar() -> some View { contentMargins(.bottom, 104, for: .scrollContent) }
+    func underTabBar() -> some View {
+        contentMargins(.bottom, 104, for: .scrollContent)
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+    }
 
     /// A custom header replaces the navigation bar.
     func akiNoNavigationBar() -> some View { toolbar(.hidden, for: .navigationBar) }

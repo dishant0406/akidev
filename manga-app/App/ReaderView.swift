@@ -31,7 +31,7 @@ struct ReaderView: View {
         .overlay(alignment: .bottom) { if model.chrome, model.currentSegment != nil { bottomBar.transition(.opacity) } }
         .environment(\.colorScheme, .dark)
         .statusBarHidden(!model.chrome)
-        .animation(.smooth(duration: 0.2), value: model.chrome)
+        .akiAnimation(quick: true, value: model.chrome)
         .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
         .akiSheet(isPresented: $settings) { ReaderSettingsSheet(model: model) }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; AppDelegate.lock(app.prefs.orientation.mask) }
@@ -189,6 +189,7 @@ private struct StripReader: View {
 private struct PagedReader: View {
     @Bindable var model: ReaderModel
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let close: () -> Void
 
     var body: some View {
@@ -224,7 +225,7 @@ private struct PagedReader: View {
         guard let step else { return model.chrome.toggle() }
         let next = model.pagedIndex + step
         if (0...count).contains(next) {
-            withAnimation(.smooth(duration: 0.25)) { model.pagedIndex = next }
+            withAnimation(AkiMotion.quick(reduceMotion)) { model.pagedIndex = next }
         }
     }
 
