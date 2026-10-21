@@ -92,6 +92,12 @@ impl Source {
         Source::new(def, fetcher)
     }
 
+    /// A source that asks its site for real and keeps the answers (see `Fetcher::taken`).
+    pub fn recording(def: SourceDef) -> anyhow::Result<Source> {
+        let fetcher = Fetcher::recording(def.rate_per_second);
+        Source::new(def, fetcher)
+    }
+
     /// Fixes "now", for tests of relative dates.
     pub fn at(mut self, now_ms: i64) -> Source {
         self.now_ms = Some(now_ms);
@@ -212,7 +218,7 @@ impl Source {
         if vars.is_empty() {
             return Ok(Vec::new());
         }
-        let lookup = |name: &str| holes.lookup(name);
+        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, format)?;
         let mut found = Vec::new();
@@ -246,7 +252,7 @@ impl Source {
     fn read_list(&self, list: &ListDef, body: &str, host: &str, mut holes: Holes) -> anyhow::Result<Page<Card>> {
         let found = self.read_vars(&list.vars, list.format, body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| holes.lookup(name);
+        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, list.format)?;
         let rows = eval(&list.rows, Role::Rows, list.format, &root, &ctx)?;
@@ -297,7 +303,7 @@ impl Source {
         let (body, host) = self.ask(&def.request, &holes).await?;
         let found = self.read_vars(&def.vars, def.format, &body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| holes.lookup(name);
+        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(&body, def.format)?;
         let one = |ex: &Option<Ex>| -> anyhow::Result<Option<String>> {
@@ -353,7 +359,7 @@ impl Source {
         let def = &self.def.chapters;
         let found = self.read_vars(&def.vars, def.format, body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| holes.lookup(name);
+        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, def.format)?;
         let rows = eval(&def.rows, Role::Rows, def.format, &root, &ctx)?;
@@ -394,7 +400,7 @@ impl Source {
         let (body, host) = self.ask(&def.request, &holes).await?;
         let found = self.read_vars(&def.vars, def.format, &body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| holes.lookup(name);
+        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(&body, def.format)?;
         let images: Vec<String> = eval_texts(&def.images, def.format, &root, &ctx)?.iter().filter_map(|link| absolute(host, link)).collect();

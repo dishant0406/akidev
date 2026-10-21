@@ -260,7 +260,13 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
                 table.iter().find(|(needle, _)| lower.contains(&needle.to_lowercase())).map(|(_, value)| Node::Text(value.clone()))
             })
             .collect(),
-        Step::Where(test) => nodes.into_iter().filter(|node| matches_where(node, test)).collect(),
+        Step::Where(test) => nodes.into_iter().filter(|node| matches_where(node, test, ctx)).collect(),
+        Step::PlainText => texts(nodes).map(|text| Node::Text(text_of(&parse_fragment(&text)))).collect(),
+        Step::Sort => {
+            let mut all: Vec<String> = texts(nodes).collect();
+            all.sort_by(|a, b| natural_cmp(a, b));
+            all.into_iter().map(Node::Text).collect()
+        }
         Step::Unique => {
             let mut seen = std::collections::HashSet::new();
             nodes.into_iter().filter(|node| seen.insert(text_of(node))).collect()
@@ -277,7 +283,40 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
     })
 }
 
-fn matches_where(node: &Node, test: &crate::def::Where) -> bool {
+/// Compares as people read file names: runs of digits by value, the rest by text.
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    fn chunks(text: &str) -> Vec<(bool, &str)> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        let bytes = text.as_bytes();
+        while start < bytes.len() {
+            let digit = bytes[start].is_ascii_digit();
+            let mut end = start;
+            while end < bytes.len() && bytes[end].is_ascii_digit() == digit {
+                end += 1;
+            }
+            out.push((digit, &text[start..end]));
+            start = end;
+        }
+        out
+    }
+    let (left, right) = (chunks(a), chunks(b));
+    for (x, y) in left.iter().zip(&right) {
+        let order = match (x.0, y.0) {
+            (true, true) => {
+                let (nx, ny) = (x.1.trim_start_matches('0'), y.1.trim_start_matches('0'));
+                nx.len().cmp(&ny.len()).then_with(|| nx.cmp(ny))
+            }
+            _ => x.1.cmp(y.1),
+        };
+        if order != std::cmp::Ordering::Equal {
+            return order;
+        }
+    }
+    left.len().cmp(&right.len())
+}
+
+fn matches_where(node: &Node, test: &crate::def::Where, ctx: &Ctx) -> bool {
     let Node::Json(value) = node else { return false };
     let found = select(value, &test.path).into_iter().find(|found| !found.is_null());
     let text = found.and_then(scalar);
@@ -285,9 +324,11 @@ fn matches_where(node: &Node, test: &crate::def::Where) -> bool {
         return false;
     }
     let have = text.as_deref().unwrap_or("");
-    test.equals.as_deref().is_none_or(|want| have == want)
-        && test.not_equals.as_deref().is_none_or(|not| have != not)
-        && test.one_of.as_ref().is_none_or(|list| list.iter().any(|item| item == have))
+    // A wanted value may name a hole of the request ("{id}").
+    let fill = |wanted: &str| if wanted.contains('{') { crate::template::fill(wanted, ctx.hole, false).unwrap_or_default() } else { wanted.to_string() };
+    test.equals.as_deref().is_none_or(|want| have == fill(want))
+        && test.not_equals.as_deref().is_none_or(|not| have != fill(not))
+        && test.one_of.as_ref().is_none_or(|list| list.iter().any(|item| *item == have || fill(item) == have))
 }
 
 /// Rejects what can be known to be wrong without a response: a bad selector, pattern or date format.
@@ -397,6 +438,18 @@ mod tests {
         let root = parse_html("<div id=d><p>One <b>bo</b>ld.</p><p>Two.</p><br>Three</div>");
         let found = eval_text(&ex(r##""#d""##), Format::Html, &root, &ctx).unwrap();
         assert_eq!(found.as_deref(), Some("One bold.\nTwo.\nThree"));
+    }
+
+    #[test]
+    fn files_sort_the_way_people_read_them_and_where_can_name_a_hole() {
+        let hole = |name: &str| (name == "id").then(|| "ep2".to_string());
+        let ctx = ctx(&hole);
+        let from = Node::Json(serde_json::json!({"files": ["p10.jpg", "p2.jpg", "p1.jpg", "cover.jpg"]}));
+        let sorted = eval(&ex(r#"[{"path":"files"},"sort"]"#), Role::Field, Format::Json, &from, &ctx).unwrap();
+        assert_eq!(sorted.iter().map(text_of).collect::<Vec<_>>(), ["cover.jpg", "p1.jpg", "p2.jpg", "p10.jpg"]);
+        let rows = Node::Json(serde_json::json!([{"name": "ep1", "t": "one"}, {"name": "ep2", "t": "two"}]));
+        let found = eval(&ex(r#"[{"path":""},{"where":{"path":"name","equals":"{id}"}},{"path":"t"}]"#), Role::Field, Format::Json, &rows, &ctx).unwrap();
+        assert_eq!(found.iter().map(text_of).collect::<Vec<_>>(), ["two"]);
     }
 
     #[test]

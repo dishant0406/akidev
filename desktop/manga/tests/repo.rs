@@ -74,7 +74,7 @@ async fn a_file_that_is_not_what_the_index_says_is_refused() {
     let tampered = HashMap::from([("sources/mangadex.json".to_string(), b"{\"schema\":1}".to_vec())]);
     let base = serve(dir.clone(), tampered).await;
     let fetched = fetch_index(&base).await.unwrap();
-    let source = &fetched.index.sources[0];
+    let source = fetched.index.sources.iter().find(|source| source.id == "mangadex").unwrap();
     let error = fetch_file(&base, &source.path, &source.sha256).await.unwrap_err().to_string();
     assert!(error.contains("hash differs"), "{error}");
     assert!(fetch_file(&base, "../etc/passwd", &source.sha256).await.is_err());

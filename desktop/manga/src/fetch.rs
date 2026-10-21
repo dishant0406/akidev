@@ -50,6 +50,8 @@ enum Transport {
     Live,
     /// Recorded answers by `Req::key`, and the requests that were made.
     Recorded { answers: HashMap<String, String>, seen: Mutex<Vec<String>> },
+    /// Asks the site for real and keeps every answer, to make fixtures from.
+    Recording { taken: Mutex<Vec<(String, String)>> },
 }
 
 pub struct Fetcher {
@@ -73,6 +75,19 @@ impl Fetcher {
         Fetcher::new(Transport::Live, rate_per_second)
     }
 
+    /// A live fetcher that remembers each answer (see `taken`).
+    pub fn recording(rate_per_second: Option<f64>) -> Fetcher {
+        Fetcher::new(Transport::Recording { taken: Mutex::new(Vec::new()) }, rate_per_second)
+    }
+
+    /// What a recording fetcher was answered, as (request key, body) in the order asked, once each.
+    pub fn taken(&self) -> Vec<(String, String)> {
+        match &self.transport {
+            Transport::Recording { taken } => taken.lock().unwrap().clone(),
+            _ => Vec::new(),
+        }
+    }
+
     pub fn recorded(answers: HashMap<String, String>) -> Fetcher {
         Fetcher::new(Transport::Recorded { answers, seen: Mutex::new(Vec::new()) }, None)
     }
@@ -94,7 +109,7 @@ impl Fetcher {
     pub fn seen(&self) -> Vec<String> {
         match &self.transport {
             Transport::Recorded { seen, .. } => seen.lock().unwrap().clone(),
-            Transport::Live => Vec::new(),
+            _ => Vec::new(),
         }
     }
 
@@ -124,7 +139,7 @@ impl Fetcher {
                     None => bail!("no recorded answer for {} (have: {})", req.key(), answers.keys().cloned().collect::<Vec<_>>().join(", ")),
                 }
             }
-            Transport::Live => {
+            Transport::Live | Transport::Recording { .. } => {
                 self.wait_turn().await;
                 let method = reqwest::Method::from_bytes(req.method.as_bytes()).context("bad method")?;
                 let mut builder = client().request(method, &req.url).header("user-agent", self.user_agent.lock().unwrap().clone());
@@ -150,6 +165,12 @@ impl Fetcher {
                 }
                 if !status.is_success() {
                     bail!("{} answered {}", req.url, status);
+                }
+                if let Transport::Recording { taken } = &self.transport {
+                    let mut taken = taken.lock().unwrap();
+                    if !taken.iter().any(|(key, _)| *key == req.key()) {
+                        taken.push((req.key(), body.clone()));
+                    }
                 }
                 Ok(body)
             }

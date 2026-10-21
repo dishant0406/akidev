@@ -15,6 +15,18 @@ examples/<id>.json     sources used only to test the engine: not in the index
 fixtures/<id>/         recorded pages and fixtures.json for a source or an example
 ```
 
+## What is in it
+
+Only sources that are legal to read: a public API that welcomes third-party readers, or work released under an open
+licence. Nothing that republishes copyrighted chapters without the publisher's leave.
+
+| Source | What it reads | Licence / terms |
+| --- | --- | --- |
+| `mangadex` | MangaDex's public API: titles, covers, chapters in a chosen language, pages from its image servers | Their API terms (an honest user agent, 5 requests a second at most) |
+| `xkcd` | xkcd's JSON endpoints and its archive page | CC BY-NC 2.5 |
+| `pepper-and-carrot` | Pepper&Carrot's published episode list and images, in 7 languages | CC BY 4.0 |
+| `internet-archive-comics` | The Internet Archive's search and book-reader endpoints, restricted to items carrying a public-domain licence mark | Whatever the item says: the mark is the uploader's claim, not the Archive's |
+
 ## Adding this repository to the app
 
 Sources tab, Add a repository, paste the address: `github.com/<owner>/<repo>`, or
@@ -55,14 +67,21 @@ cargo run -p akidev-manga --bin akidev-manga-cli -- check ... --bless     # writ
 cargo run -p akidev-manga --bin akidev-manga-cli -- run manga-sources/sources/mangadex.json popular   # live
 ```
 
+`record` asks the live site for the calls you name and saves its answers as fixtures in one go:
+
+```
+cargo run -p akidev-manga --bin akidev-manga-cli -- record manga-sources/sources/xkcd.json manga-sources/fixtures/xkcd \
+  popular details=xkcd chapters=xkcd pages=xkcd,614        # also: latest, search=TERM, pages=SERIES,CHAPTER
+```
+
 `--bless` writes whatever the definition returns: read the result before committing it. A definition is also
 validated when it is loaded (selectors and patterns compile, every request starts with `{base}`, date formats
 have a year, settings have valid defaults).
 
-**The fixtures for `madara-example` are hand-written to look like Madara's markup, and the ones for `mangadex`
-are hand-written to look like MangaDex's API answers. Neither was recorded from the live site** (none was
-reachable when they were written). They prove the engine reads those shapes; they do not prove a real site
-matches them. Replace them with recorded answers when there is a network that reaches the site.
+**Fixtures recorded from the live sites (2026-10-21, with `record`):** `xkcd` (its archive page trimmed to the newest 60
+comics), `pepper-and-carrot` and `internet-archive-comics`. **Fixtures written by hand:** `madara-example` (to look like
+Madara's markup) and `mangadex` (to look like MangaDex's API answers; the site was not reachable when they were written).
+Hand-written fixtures prove the engine reads those shapes, not that a real site matches them.
 
 ## Format (schema 1)
 
@@ -92,8 +111,10 @@ A value is read by an expression. Short forms: HTML `"h3"` (the text of the matc
 | `{"const": t}`, `{"default": t}`, `"non_empty"`, `"exists"`, `{"map": [["ongoing","ongoing"]]}` | constants and tests |
 | `{"coalesce": [ex, ex]}` | the first expression that gives something |
 | `{"where": {"path": p, "equals"/"not_equals"/"in"/"absent": ...}}` | keeps the JSON nodes whose value at `path` passes (a related item of one type, a row that is not external) |
-| `"unique"` | drops texts already seen |
+| `"unique"`, `"sort"` | drops texts already seen; orders texts the way file names read (`p2` before `p10`) |
+| `"plain_text"` | HTML inside a text (a JSON field that holds markup) as plain text |
 
+`"where"` values may hold holes (`"equals": "{id}"` picks the row for the id asked about). `{base}` is the source's address.
 `{value}` in a template is the node being read; `{^.path}` is a value in the row the expression started from
 (`"{^.id}"` in a cover address); `{name}` is a hole of the request, a setting or a var.
 

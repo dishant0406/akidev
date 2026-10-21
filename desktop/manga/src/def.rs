@@ -79,9 +79,14 @@ pub enum Step {
     Where(Where),
     /// Drops texts already seen.
     Unique,
+    /// HTML in a text (a JSON field that holds markup) as plain text: tags gone, blocks on their own lines.
+    PlainText,
+    /// Orders texts the way people read file names: runs of digits by their value (`p2` before `p10`).
+    Sort,
 }
 
-/// A test on a JSON node, by a value inside it. All the tests given must hold.
+/// A test on a JSON node, by a value inside it. All the tests given must hold. A value may hold request
+/// holes (`"equals": "{id}"`: the row for the id being asked about).
 #[derive(Debug, Clone, Deserialize)]
 pub struct Where {
     pub path: String,

@@ -1,0 +1,337 @@
+{
+  "calls": [
+    {
+      "expect": {
+        "has_next": false,
+        "items": [
+          {
+            "cover": "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01.jpg",
+            "id": "pepper-and-carrot",
+            "title": "Pepper&Carrot"
+          }
+        ]
+      },
+      "op": "popular",
+      "page": 1
+    },
+    {
+      "expect": {
+        "authors": [
+          "David Revoy"
+        ],
+        "cover": "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01.jpg",
+        "description": "The comedy of a young witch, Pepper, and her cat Carrot, by David Revoy: a free (libre) and open-source webcomic, licensed CC BY 4.0, translated by volunteers.",
+        "status": "ongoing",
+        "tags": [
+          "Fantasy",
+          "Comedy"
+        ],
+        "title": "Pepper&Carrot"
+      },
+      "id": "pepper-and-carrot",
+      "op": "details"
+    },
+    {
+      "expect": [
+        {
+          "date_ms": null,
+          "id": "ep39_The-Tavern",
+          "number": 39.0,
+          "scanlator": null,
+          "title": "Episode 39: The Tavern"
+        },
+        {
+          "date_ms": null,
+          "id": "ep38_The-Healer",
+          "number": 38.0,
+          "scanlator": null,
+          "title": "Episode 38: The Healer"
+        },
+        {
+          "date_ms": null,
+          "id": "ep37_The-Tears-of-the-Phoenix",
+          "number": 37.0,
+          "scanlator": null,
+          "title": "Episode 37: The Tears of the Phoenix"
+        },
+        {
+          "date_ms": null,
+          "id": "ep36_The-Surprise-Attack",
+          "number": 36.0,
+          "scanlator": null,
+          "title": "Episode 36: The Surprise Attack"
+        },
+        {
+          "date_ms": null,
+          "id": "ep35_The-Reflection",
+          "number": 35.0,
+          "scanlator": null,
+          "title": "Episode 35: The Reflection"
+        },
+        {
+          "date_ms": null,
+          "id": "ep34_The-Knighting-of-Shichimi",
+          "number": 34.0,
+          "scanlator": null,
+          "title": "Episode 34: The Knighting of Shichimi"
+        },
+        {
+          "date_ms": null,
+          "id": "ep33_Spell-of-War",
+          "number": 33.0,
+          "scanlator": null,
+          "title": "Episode 33: Spell of War"
+        },
+        {
+          "date_ms": null,
+          "id": "ep32_The-Battlefield",
+          "number": 32.0,
+          "scanlator": null,
+          "title": "Episode 32: The Battlefield"
+        },
+        {
+          "date_ms": null,
+          "id": "ep31_The-Fight",
+          "number": 31.0,
+          "scanlator": null,
+          "title": "Episode 31: The Fight"
+        },
+        {
+          "date_ms": null,
+          "id": "ep30_Need-a-Hug",
+          "number": 30.0,
+          "scanlator": null,
+          "title": "Episode 30: Need a Hug"
+        },
+        {
+          "date_ms": null,
+          "id": "ep29_Destroyer-of-Worlds",
+          "number": 29.0,
+          "scanlator": null,
+          "title": "Episode 29: Destroyer of Worlds"
+        },
+        {
+          "date_ms": null,
+          "id": "ep28_The-Festivities",
+          "number": 28.0,
+          "scanlator": null,
+          "title": "Episode 28: The Festivities"
+        },
+        {
+          "date_ms": null,
+          "id": "ep27_Coriander-s-Invention",
+          "number": 27.0,
+          "scanlator": null,
+          "title": "Episode 27: Coriander s Invention"
+        },
+        {
+          "date_ms": null,
+          "id": "ep26_Books-Are-Great",
+          "number": 26.0,
+          "scanlator": null,
+          "title": "Episode 26: Books Are Great"
+        },
+        {
+          "date_ms": null,
+          "id": "ep25_There-are-no-Shortcuts",
+          "number": 25.0,
+          "scanlator": null,
+          "title": "Episode 25: There are no Shortcuts"
+        },
+        {
+          "date_ms": null,
+          "id": "ep24_The-Unity-Tree",
+          "number": 24.0,
+          "scanlator": null,
+          "title": "Episode 24: The Unity Tree"
+        },
+        {
+          "date_ms": null,
+          "id": "ep23_Take-a-Chance",
+          "number": 23.0,
+          "scanlator": null,
+          "title": "Episode 23: Take a Chance"
+        },
+        {
+          "date_ms": null,
+          "id": "ep22_The-Voting-System",
+          "number": 22.0,
+          "scanlator": null,
+          "title": "Episode 22: The Voting System"
+        },
+        {
+          "date_ms": null,
+          "id": "ep21_The-Magic-Contest",
+          "number": 21.0,
+          "scanlator": null,
+          "title": "Episode 21: The Magic Contest"
+        },
+        {
+          "date_ms": null,
+          "id": "ep20_The-Picnic",
+          "number": 20.0,
+          "scanlator": null,
+          "title": "Episode 20: The Picnic"
+        },
+        {
+          "date_ms": null,
+          "id": "ep19_Pollution",
+          "number": 19.0,
+          "scanlator": null,
+          "title": "Episode 19: Pollution"
+        },
+        {
+          "date_ms": null,
+          "id": "ep18_The-Encounter",
+          "number": 18.0,
+          "scanlator": null,
+          "title": "Episode 18: The Encounter"
+        },
+        {
+          "date_ms": null,
+          "id": "ep17_A-Fresh-Start",
+          "number": 17.0,
+          "scanlator": null,
+          "title": "Episode 17: A Fresh Start"
+        },
+        {
+          "date_ms": null,
+          "id": "ep16_The-Sage-of-the-Mountain",
+          "number": 16.0,
+          "scanlator": null,
+          "title": "Episode 16: The Sage of the Mountain"
+        },
+        {
+          "date_ms": null,
+          "id": "ep15_The-Crystal-Ball",
+          "number": 15.0,
+          "scanlator": null,
+          "title": "Episode 15: The Crystal Ball"
+        },
+        {
+          "date_ms": null,
+          "id": "ep14_The-Dragon-s-Tooth",
+          "number": 14.0,
+          "scanlator": null,
+          "title": "Episode 14: The Dragon s Tooth"
+        },
+        {
+          "date_ms": null,
+          "id": "ep13_The-Pyjama-Party",
+          "number": 13.0,
+          "scanlator": null,
+          "title": "Episode 13: The Pyjama Party"
+        },
+        {
+          "date_ms": null,
+          "id": "ep12_Autumn-Clearout",
+          "number": 12.0,
+          "scanlator": null,
+          "title": "Episode 12: Autumn Clearout"
+        },
+        {
+          "date_ms": null,
+          "id": "ep11_The-Witches-of-Chaosah",
+          "number": 11.0,
+          "scanlator": null,
+          "title": "Episode 11: The Witches of Chaosah"
+        },
+        {
+          "date_ms": null,
+          "id": "ep10_Summer-Special",
+          "number": 10.0,
+          "scanlator": null,
+          "title": "Episode 10: Summer Special"
+        },
+        {
+          "date_ms": null,
+          "id": "ep09_The-Remedy",
+          "number": 9.0,
+          "scanlator": null,
+          "title": "Episode 9: The Remedy"
+        },
+        {
+          "date_ms": null,
+          "id": "ep08_Pepper-s-Birthday-Party",
+          "number": 8.0,
+          "scanlator": null,
+          "title": "Episode 8: Pepper s Birthday Party"
+        },
+        {
+          "date_ms": null,
+          "id": "ep07_The-Wish",
+          "number": 7.0,
+          "scanlator": null,
+          "title": "Episode 7: The Wish"
+        },
+        {
+          "date_ms": null,
+          "id": "ep06_The-Potion-Contest",
+          "number": 6.0,
+          "scanlator": null,
+          "title": "Episode 6: The Potion Contest"
+        },
+        {
+          "date_ms": null,
+          "id": "ep05_Special-holiday-episode",
+          "number": 5.0,
+          "scanlator": null,
+          "title": "Episode 5: Special holiday episode"
+        },
+        {
+          "date_ms": null,
+          "id": "ep04_Stroke-of-genius",
+          "number": 4.0,
+          "scanlator": null,
+          "title": "Episode 4: Stroke of genius"
+        },
+        {
+          "date_ms": null,
+          "id": "ep03_The-secret-ingredients",
+          "number": 3.0,
+          "scanlator": null,
+          "title": "Episode 3: The secret ingredients"
+        },
+        {
+          "date_ms": null,
+          "id": "ep02_Rainbow-potions",
+          "number": 2.0,
+          "scanlator": null,
+          "title": "Episode 2: Rainbow potions"
+        },
+        {
+          "date_ms": null,
+          "id": "ep01_Potion-of-Flight",
+          "number": 1.0,
+          "scanlator": null,
+          "title": "Episode 1: Potion of Flight"
+        }
+      ],
+      "id": "pepper-and-carrot",
+      "op": "chapters"
+    },
+    {
+      "expect": {
+        "headers": {
+          "referer": "https://www.peppercarrot.com/"
+        },
+        "images": [
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01.jpg",
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01P00.jpg",
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01P01.jpg",
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01P02.jpg",
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01P03.jpg",
+          "https://www.peppercarrot.com/0_sources/ep01_Potion-of-Flight/low-res/en_Pepper-and-Carrot_by-David-Revoy_E01P04.jpg"
+        ],
+        "reading": "paged"
+      },
+      "id": "ep01_Potion-of-Flight",
+      "op": "pages",
+      "series": "pepper-and-carrot"
+    }
+  ],
+  "now_ms": 1792604089340,
+  "responses": {
+    "GET https://www.peppercarrot.com/0_sources/episodes-v1.json": "r1.json"
+  }
+}
