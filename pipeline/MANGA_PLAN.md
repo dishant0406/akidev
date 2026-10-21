@@ -660,6 +660,15 @@ download arrow became a read toggle because downloads do not exist yet; the refe
 was read as a pressed state and not copied. **Not done:** a real device, dark-mode review of every screen, Dynamic Type,
 accessibility labels beyond the tab bar, and the Details tab and Updates refresh against a live source.
 
+## 19. User flow (2026-10-22)
+
+Researched the flows of the plugin readers (Mihon and forks, Aidoku, Paperback, Kotatsu, Suwayomi, Cubari), the official webtoon
+platforms, the publisher manga apps and the self-hosted readers, and wrote the screen map, the flows and the build order in
+`manga-app/USER_FLOW.md`. Evidence is uneven (many official help pages did not load; unverified items are marked in the
+document). Main findings for us: the first minute (empty app, add a repository, install a source) is the most important flow
+and has no Welcome screen or one-tap add link yet; app settings, a reader settings sheet and an error vocabulary are table
+stakes; global search, filters, categories and backup are the next tier.
+
 ## Sources
 
 - [Paperback sources intro (extensions-common wiki)](https://github.com/Paperback-iOS/extensions-common/wiki/Intro-to-Paperback-Sources) and [function definitions](https://github.com/Paperback-iOS/extensions-common/wiki/Function-Definitions)

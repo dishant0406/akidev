@@ -2,7 +2,7 @@
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
 engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The plan and the reasoning are in
-[pipeline/MANGA_PLAN.md](../pipeline/MANGA_PLAN.md); the look is described in [DESIGN.md](DESIGN.md) (bright, rounded, yellow, glass; not the dark look of the website).
+[pipeline/MANGA_PLAN.md](../pipeline/MANGA_PLAN.md); the look is described in [DESIGN.md](DESIGN.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
 
 ```
 App/                    the SwiftUI app (Home, Library, Updates, Series, Reader, Sources)
