@@ -330,10 +330,10 @@ impl Engine {
         if !plain_name(&info.id) || info.id == MANGADEX_ID {
             return Err(failed(format!("{} is not an id a source may have", info.id)));
         }
-        if let Some(have) = self.sources.read().unwrap().get(&info.id) {
-            if have.info().version > info.version {
-                return Err(failed(format!("{} {} is installed; this is the older {}", info.name, have.info().version, info.version)));
-            }
+        if let Some(have) = self.sources.read().unwrap().get(&info.id)
+            && have.info().version > info.version
+        {
+            return Err(failed(format!("{} {} is installed; this is the older {}", info.name, have.info().version, info.version)));
         }
         std::fs::create_dir_all(self.dir.join("sources")).and_then(|()| std::fs::write(self.dir.join("sources").join(format!("{}.json", info.id)), json)).map_err(|error| failed(error.to_string()))?;
         self.sources.write().unwrap().insert(info.id.clone(), Arc::new(catalogue));
