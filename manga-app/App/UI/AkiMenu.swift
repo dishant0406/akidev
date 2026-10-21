@@ -35,7 +35,7 @@ struct AkiMenu: View {
         } label: {
             AkiIconButton(symbol: symbol, label: label, onImage: onImage) {}.face
         }
-        .akiGlass(.circle)
+        .akiGlass(.circle, tint: onImage ? .overImage : nil)
         .accessibilityLabel(label)
     }
 }
