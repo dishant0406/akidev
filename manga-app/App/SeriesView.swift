@@ -24,6 +24,9 @@ struct SeriesView: View {
     @State private var target: ReaderTarget?
     @State private var tab = SeriesTab.chapters
     @State private var expanded = false
+    @State private var kept: Set<String> = []
+    @State private var forgetting = false
+    @State private var problem: String?
 
     private let heroHeight: CGFloat = 470
 
@@ -53,6 +56,12 @@ struct SeriesView: View {
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "autoContinue"), target == nil { target = resumable?.target }
             #endif
+        }
+        .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $forgetting) {
+            try? model.engine.forgetSeries(source: ref.source, series: ref.id)
+            model.refresh()
+            dismiss()
         }
         .akiFullScreen(item: $target, onDismiss: { Task { await refreshProgress() } }) { target in
             ReaderView(model: ReaderModel(engine: model.engine, ref: ref, chapters: chapters, start: target))
@@ -101,7 +110,9 @@ struct SeriesView: View {
                 AkiMenu(symbol: "ellipsis", label: "More", onImage: true, items: [
                     AkiMenuItem(title: "Mark all as read", icon: "checkmark.circle") { markAll(read: true) },
                     AkiMenuItem(title: "Mark all as unread", icon: "circle") { markAll(read: false) },
+                    AkiMenuItem(title: "Download unread", icon: "arrow.down.circle") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "arrow.clockwise") { Task { await load() } },
+                    AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
                 ])
             }
         }
@@ -142,13 +153,19 @@ struct SeriesView: View {
                         .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
                     }
                 }
+                .akiContextMenu([
+                    kept.contains(chapter.id)
+                        ? AkiMenuItem(title: "Delete download", icon: "trash", destructive: true) { removeDownload(chapter) }
+                        : AkiMenuItem(title: "Download", icon: "arrow.down.circle") { download([chapter]) },
+                ])
             }
         }
     }
 
     /// The small line over a chapter's title: where you are in it, or what it is.
     private func label(_ chapter: ChapterEntry) -> String {
-        if chapter.finished { return "Read" }
+        if chapter.finished { return kept.contains(chapter.id) ? "Read · Downloaded" : "Read" }
+        if kept.contains(chapter.id) { return "Downloaded" }
         if let page = chapter.page { return "Page \(page + 1)" }
         let number = chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" }
         if let number, chapter.title.map({ !$0.localizedCaseInsensitiveContains(number) }) == true { return number }
@@ -224,6 +241,25 @@ struct SeriesView: View {
         do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
         do { chapters = try await fetchedChapters.entries } catch { if chapters.isEmpty { self.error = describe(error) } }
         loading = false
+        loadKept()
+    }
+
+    private func loadKept() {
+        kept = Set(((try? model.engine.downloads()) ?? []).filter { $0.source == ref.source && $0.series == ref.id && $0.state == "done" }.map(\.chapter))
+    }
+
+    private func download(_ list: [ChapterEntry]) {
+        Task {
+            for chapter in list.reversed() {
+                do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { problem = describe(error).message; break }
+                loadKept()
+            }
+        }
+    }
+
+    private func removeDownload(_ chapter: ChapterEntry) {
+        try? model.engine.deleteDownload(source: ref.source, series: ref.id, chapter: chapter.id)
+        loadKept()
     }
 
     private func refreshProgress() async {

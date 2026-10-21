@@ -11,8 +11,8 @@ final class BrowseModel {
     private var page: UInt32 = 0
     private var key = ""
 
-    func load(_ engine: Engine, source: String, mode: Mode, term: String, reset: Bool) async {
-        let newKey = "\(source)|\(mode)|\(term)"
+    func load(_ engine: Engine, source: String, mode: Mode, term: String, choices: [Choice] = [], reset: Bool) async {
+        let newKey = "\(source)|\(mode)|\(term)|\(choices.map { "\($0.id)=\($0.value)" })"
         if reset || newKey != key { items = []; page = 0; hasNext = false; key = newKey; error = nil }
         guard !loading else { return }
         loading = true
@@ -20,8 +20,8 @@ final class BrowseModel {
         do {
             let next = page + 1
             let result: CardPage
-            if !term.isEmpty {
-                result = try await engine.search(source: source, term: term, page: next, choices: [])
+            if !term.isEmpty || !choices.isEmpty {
+                result = try await engine.search(source: source, term: term, page: next, choices: choices)
             } else if mode == .latest {
                 result = try await engine.latest(source: source, page: next)
             } else {
@@ -46,6 +46,9 @@ struct HomeView: View {
     @State private var mode = BrowseModel.Mode.popular
     @State private var term = ""
     @State private var submitted = ""
+    @State private var filters: [FilterInfo] = []
+    @State private var choices: [String: String] = [:]
+    @State private var filtering = false
 
     private var info: SourceInfo? { model.sources.first { $0.id == source } }
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
@@ -61,9 +64,14 @@ struct HomeView: View {
                         AkiEmptyState(title: model.sources.isEmpty ? "No sources installed" : "Nothing to show", message: model.sources.isEmpty ? "Install a source from your repository in Sources to start reading." : "Your content settings hide every installed source.", action: ("Open Sources", { model.tab = .sources }))
                             .frame(minHeight: 420)
                     } else {
-                        AkiInput(placeholder: "Search \(info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                        HStack(spacing: 10) {
+                            AkiInput(placeholder: "Search \(info?.name ?? "")", text: $term, icon: "magnifyingglass", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                            if !filters.isEmpty {
+                                AkiIconButton(symbol: "slider.horizontal.3", label: "Filters", tint: choices.isEmpty ? nil : Aki.yellow) { filtering = true }
+                            }
+                        }
                         if model.visibleSources.count > 1 { AkiChips(items: model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
-                        if info?.canLatest == true && submitted.isEmpty {
+                        if info?.canLatest == true && submitted.isEmpty && choices.isEmpty {
                             AkiTabs(items: BrowseModel.Mode.allCases.map { ($0, $0.rawValue) }, selection: $mode)
                         }
                         results
@@ -76,11 +84,13 @@ struct HomeView: View {
             .background(AkiBackdrop())
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
-            .onChange(of: source) { submitted = ""; term = ""; Task { await reload() } }
+            .onChange(of: source) { submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
+            .akiSheet(isPresented: $filtering) { FiltersSheet(filters: filters, choices: $choices) { Task { await reload() } } }
             .onChange(of: mode) { Task { await reload() } }
             .task(id: model.revision) {
                 if !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
+                filters = (try? model.engine.sourceFilters(source: source)) ?? []
                 await reload()
             }
         }
@@ -94,9 +104,9 @@ struct HomeView: View {
         } else if browse.items.isEmpty {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 240)
         } else {
-            if submitted.isEmpty, let first = browse.items.first { featured(first) }
+            if submitted.isEmpty && choices.isEmpty, let first = browse.items.first { featured(first) }
             LazyVGrid(columns: columns, spacing: 22) {
-                ForEach(submitted.isEmpty ? Array(browse.items.dropFirst()) : browse.items, id: \.id) { card in
+                ForEach(submitted.isEmpty && choices.isEmpty ? Array(browse.items.dropFirst()) : browse.items, id: \.id) { card in
                     AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
                         AkiCoverCard(title: card.title, cover: card.cover, subtitle: info?.name)
                     }
@@ -127,6 +137,43 @@ struct HomeView: View {
     private func reload() async { await load(reset: true) }
 
     private func load(reset: Bool) async {
-        await browse.load(model.engine, source: source, mode: mode, term: submitted, reset: reset)
+        await browse.load(model.engine, source: source, mode: mode, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
+    }
+}
+
+/// The ways a source lets a search be narrowed (an order, a genre, a status).
+struct FiltersSheet: View {
+    let filters: [FilterInfo]
+    @Binding var choices: [String: String]
+    let apply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AkiText("Filters", .title)
+                ForEach(filters, id: \.id) { filter in
+                    AkiCard(padding: 16) {
+                        switch filter.kind {
+                        case .select:
+                            AkiSelect(title: filter.name, selection: binding(filter), options: filter.options.map { ($0.value, $0.name) })
+                        case .text:
+                            VStack(alignment: .leading, spacing: 8) {
+                                AkiText(filter.name, .bodyStrong)
+                                AkiInput(placeholder: filter.name, text: binding(filter))
+                            }
+                        }
+                    }
+                }
+                AkiButton("Show results", variant: .primary, size: .large, fullWidth: true) { dismiss(); apply() }
+                AkiButton("Reset", variant: .ghost, fullWidth: true) { choices = [:]; dismiss(); apply() }
+            }
+            .padding(24)
+        }
+    }
+
+    /// A choice equal to the filter's default is not a choice.
+    private func binding(_ filter: FilterInfo) -> Binding<String> {
+        Binding(get: { choices[filter.id] ?? filter.default }, set: { choices[filter.id] = $0 == filter.default ? nil : $0 })
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 struct ReaderView: View {
     @State private var model: ReaderModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
 
     init(model: ReaderModel) {
         _model = State(initialValue: model)
@@ -31,7 +32,8 @@ struct ReaderView: View {
         .statusBarHidden(!model.chrome)
         .animation(.smooth(duration: 0.2), value: model.chrome)
         .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
-        .onDisappear { model.flush() }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake }
+        .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false }
     }
 
     private var topBar: some View {
@@ -185,6 +187,7 @@ private struct StripReader: View {
 /// reading, the left edge in right-to-left). Double tap or pinch to zoom.
 private struct PagedReader: View {
     @Bindable var model: ReaderModel
+    @Environment(AppModel.self) private var app
     let close: () -> Void
 
     var body: some View {
@@ -215,7 +218,8 @@ private struct PagedReader: View {
 
     private func tap(_ x: CGFloat, count: Int, rtl: Bool) {
         // x is 0 at the left edge of the screen whatever the reading direction.
-        let step: Int? = x > 0.7 ? (rtl ? -1 : 1) : x < 0.3 ? (rtl ? 1 : -1) : nil
+        let flipped = rtl != app.prefs.invertTaps
+        let step: Int? = x > 0.7 ? (flipped ? -1 : 1) : x < 0.3 ? (flipped ? 1 : -1) : nil
         guard let step else { return model.chrome.toggle() }
         let next = model.pagedIndex + step
         if (0...count).contains(next) {
