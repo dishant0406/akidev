@@ -473,6 +473,50 @@ the Swift shell.
   tab; Dynamic Type and VoiceOver passes; the UIKit reader fallback (spike 6 left that open). The Rust image
   pipeline is not used: images load through `URLSession` in Swift.
 
+## 14. Phase 3 status (the reader), 2026-10-21
+
+Built in `manga-app/App` (`ReaderModel.swift`, `ReaderView.swift`, `ZoomableImage.swift`):
+
+- **Three reading modes**, chosen per series from a menu in the reader and remembered: long strip, pages left to
+  right, pages right to left (a series' `reading` hint picks the first one). Switching keeps the chapter and page.
+  A page much taller than the screen is fitted to the width and scrolled in page mode.
+- **Pinch zoom.** Pages: a `UIScrollView` per page (pinch to 4×, double tap to zoom on a point, pan when zoomed,
+  a single tap turns the page at the edges or toggles the controls; the edge that goes on follows the reading
+  direction). Strip: pinch scales the strip's width up to 3× and snaps on release, with horizontal drag when zoomed.
+- **Seamless chapters** in the strip: the next chapter's pages are appended under a thin "end of chapter" row when
+  the reader is within three pages of the end, the title and counter follow whichever chapter is at the top,
+  and reading into the next chapter finishes the one before.
+- **Prefetch:** as soon as a chapter opens, the next one's page list is fetched and its first three images are
+  loaded, and the three images after the current page are warmed as the person reads. The "next chapter" button
+  then opens from the cached page list with no request for it.
+- **Position inside a page:** the strip reports the page at the top and how far down it (0 to 1 of its height),
+  saved 350 ms after scrolling stops and on leaving; reopening scrolls to the page, waits for its shape to be
+  known and then to the saved offset. Saving is held back while the strip is being put back so its own layout does
+  not overwrite the position.
+
+Driven in the simulator (iPhone 17, iOS 27.1) against `manga-app/scripts/demo-server.py`, whose pages are now
+labelled with chapter, page and distance down so a screenshot shows what is on screen:
+- reopening a chapter at page 3, 0.678 down put the screen where it was (same band at the top) and kept the saved
+  value; the counter showed 3 / 6;
+- reaching the end of chapter 178 joined 178.5 below it, the title changed to 178.5, 178 was marked finished and
+  178.5's offset was recorded;
+- right-to-left: opened at the saved page, a tap on the left edge went on (saved page 2), a right swipe went on
+  (page 3); left-to-right: a tap on the right edge went on;
+- pinch zoomed a page to about 4× and the strip to about 3×;
+- the server log showed chapter 179's page list and first three images requested right after 178.5 opened, and
+  the next-chapter button then made no request for the page list.
+
+**Bugs found on the way, fixed:** strip rows had to be one `ForEach` of string ids (a nested `ForEach` with `.id`
+modifiers made `scrollTo(id:)` do nothing); `scrollTargetLayout` is needed for it; the first laid-out rows
+overwrote the saved position before it was restored.
+
+**Not verified:** a real device or finger (all input here is synthetic, so pinch feel, momentum and zoomed-strip
+panning are untested); long chapters (the strip estimates the height of unrealised rows, so restoring to a page
+far down is only as exact as that estimate); the position inside a page in paged mode (page only); zoom level is
+not saved; Dynamic Type and VoiceOver; low-memory behaviour with many chapters appended (the strip never drops
+earlier chapters); the old `sizes` problem of decoding a full-width image per row stays: images are decoded at
+the zoomed width, not tiled.
+
 ## Sources
 
 - [Paperback sources intro (extensions-common wiki)](https://github.com/Paperback-iOS/extensions-common/wiki/Intro-to-Paperback-Sources) and [function definitions](https://github.com/Paperback-iOS/extensions-common/wiki/Function-Definitions)

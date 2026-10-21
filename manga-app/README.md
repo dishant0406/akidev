@@ -35,6 +35,10 @@ xcrun simctl launch booted live.akidev.manga -demoServer http://127.0.0.1:8770 -
 `-source local` opens Browse on it. The pages are generated pictures; the HTML is the hand-written fixtures in
 `desktop/manga/sources/fixtures/madara-example`.
 
+Other debug-only launch arguments for scripted runs: `-autoSeries "local|solo-leveling|Title"` opens straight on
+a series, `-autoContinue YES` then opens the reader where it left off, and `-mode.<source>.<series> strip|paged|rtl`
+picks the reading mode. `DEMO_LOG=1 python3 scripts/demo-server.py` prints every request.
+
 ## What the app ships with
 
 MangaDex and nothing else. Other sources are added by the address of a definition (Sources tab, plus). The

@@ -5,7 +5,7 @@ Serves the hand-written fixtures from desktop/manga/sources/fixtures/madara-exam
 and cover images replaced by generated pictures on this server, plus the theme and a source
 definition under /_demo/. Start the app with `-demoServer http://127.0.0.1:8770 -source local`.
 """
-import json, struct, sys, zlib
+import json, os, struct, sys, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -15,20 +15,73 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
 BASE = f"http://127.0.0.1:{PORT}"
 
 
-def png(width, height, seed):
-    """A tall strip of coloured panels, as a PNG made with the standard library."""
-    rows = bytearray()
+GLYPHS = {
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+    "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+    "C": ["01110", "10001", "10000", "10000", "10000", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+    "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+    " ": ["00000"] * 7,
+}
+
+
+def png(width, height, chapter, page):
+    """A strip of coloured bands, each labelled with its chapter, page and distance down (Y in hundreds
+    of pixels), so a screenshot shows exactly which part of which page is on screen. Standard library only."""
+    scale = 14
+    band = 400
+    rows = []
     for y in range(height):
-        panel = (y // 160 + seed) % 7
-        band = 200 if (y % 160) < 8 else 0
-        r, g, b = [(40 + panel * 30 + c * 17) % 256 for c in (0, 3, 6)]
-        rows.append(0)
-        line = bytes([max(r - band, 0), max(g - band, 0), max(b - band, 0)]) * width
-        rows += line
+        index = y // band
+        hue = (page * 3 + index) % 7
+        base = [(60 + hue * 25 + c * 40) % 200 + 30 for c in (0, 3, 6)]
+        rows.append(bytearray(bytes(base) * width))
+    for index in range(height // band + 1):
+        text = f"C{chapter} P{page} Y{index * 4}"
+        top = index * band + 30
+        for gi, ch in enumerate(text):
+            glyph = GLYPHS.get(ch, GLYPHS[" "])
+            for gy, line in enumerate(glyph):
+                for gx, bit in enumerate(line):
+                    if bit == "1":
+                        for dy in range(scale):
+                            yy = top + gy * scale + dy
+                            if yy >= height:
+                                continue
+                            x0 = 30 + (gi * 6 + gx) * scale
+                            for dx in range(scale):
+                                if x0 + dx < width:
+                                    rows[yy][(x0 + dx) * 3:(x0 + dx) * 3 + 3] = b"\xff\xff\xff"
+        if index * band < height:
+            rows[min(index * band, height - 1)][:] = b"\x00" * (width * 3)
+    raw = bytearray()
+    for line in rows:
+        raw.append(0)
+        raw += line
+
     def chunk(kind, data):
         body = kind + data
         return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(bytes(rows), 1)) + chunk(b"IEND", b"")
+
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(bytes(raw), 1)) + chunk(b"IEND", b"")
+
+
+def chapter_pages(slug):
+    """A chapter's page list: decimal chapters are tall webtoon strips, the rest are portrait manga pages."""
+    number = slug.replace("chapter-", "")
+    tall = "-" in number
+    count = 3 if tall else 6
+    images = "".join(f'<div class="page-break"><img data-src="{BASE}/solo/{number}/{n:03d}.png" class="wp-manga-chapter-img"></div>' for n in range(1, count + 1))
+    return f'<html><body><div class="reading-content">{images}</div></body></html>'.encode()
 
 
 def fixture(name):
@@ -58,16 +111,20 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST":
             self.rfile.read(int(self.headers.get("content-length") or 0))
         if method == "GET" and path.startswith("/manga/solo-leveling/chapter-"):
-            return self.reply(fixture("pages.html"))
+            return self.reply(chapter_pages(path.strip("/").split("/")[-1]))
         if (method, path) in ROUTES:
             return self.reply(fixture(ROUTES[(method, path)]))
         if path == "/_demo/madara.json":
             return self.reply((ROOT / "themes/madara.json").read_bytes(), "application/json")
         if path == "/_demo/local.json":
             return self.reply(json.dumps({"extends": "madara", "id": "local", "name": "Demo site", "version": 1, "lang": ["en"], "base_url": BASE, "rate_per_second": 20}).encode(), "application/json")
-        if path.startswith(("/wp-content/", "/solo/")):
-            tall = path.startswith("/solo/")
-            return self.reply(png(800, 6400, len(path)) if tall else png(300, 450, len(path)), "image/png")
+        if path.startswith("/solo/"):
+            _, _, number, name = path.split("/")
+            page = int(name.split(".")[0])
+            tall = "-" in number
+            return self.reply(png(800, 4000, number, page) if tall else png(800, 1200, number, page), "image/png")
+        if path.startswith("/wp-content/"):
+            return self.reply(png(300, 450, "COVER", len(path) % 9), "image/png")
         self.send_response(404)
         self.end_headers()
 
@@ -77,8 +134,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.handle_any("POST")
 
-    def log_message(self, *args):
-        pass
+    def log_message(self, fmt, *args):
+        # DEMO_LOG=1 prints each request, to see what the app asks for and when.
+        if os.environ.get("DEMO_LOG"):
+            print(self.command, self.path, flush=True)
 
 
 print(f"demo site on {BASE}")

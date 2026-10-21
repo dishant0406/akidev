@@ -56,6 +56,8 @@ struct RemoteImage: View {
     var headers: [String: String] = [:]
     var placeholder: CGFloat = 1.5
     var fill = false
+    /// Told the width-to-height ratio once the image is known (the reader needs it to restore a position).
+    var onAspect: ((CGFloat) -> Void)?
     @State private var image: UIImage?
     @State private var failed = false
     @Environment(\.displayScale) private var scale
@@ -84,6 +86,11 @@ struct RemoteImage: View {
         guard let url, let parsed = URL(string: url) else { failed = true; return }
         failed = false
         let loaded = await ImageLoader.shared.image(parsed, headers: headers, widthPx: max(widthPoints, 1) * scale)
-        if let loaded { image = loaded } else { failed = true }
+        if let loaded {
+            image = loaded
+            onAspect?(loaded.size.width / loaded.size.height)
+        } else {
+            failed = true
+        }
     }
 }

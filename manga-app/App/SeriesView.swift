@@ -4,6 +4,8 @@ import SwiftUI
 struct ReaderTarget: Identifiable, Hashable {
     let chapterID: String
     let page: Int
+    /// How far down that page, 0 to 1.
+    var offset: Double = 0
     var id: String { chapterID }
 }
 
@@ -41,9 +43,14 @@ struct SeriesView: View {
                 Button(saved ? "Saved" : "Save", systemImage: saved ? "bookmark.fill" : "bookmark") { Task { await toggleSaved() } }
             }
         }
-        .task { await load() }
+        .task {
+            await load()
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "autoContinue"), target == nil { target = resumable?.target }
+            #endif
+        }
         .fullScreenCover(item: $target, onDismiss: { Task { await refreshProgress() } }) { target in
-            ReaderView(ref: ref, chapters: chapters, start: target)
+            ReaderView(model: ReaderModel(engine: model.engine, ref: ref, chapters: chapters, start: target))
         }
     }
 
@@ -129,7 +136,7 @@ struct SeriesView: View {
         let started = chapters.contains { $0.finished || $0.page != nil }
         guard let resume, let index = chapters.firstIndex(where: { $0.id == resume.chapter }) else { return nil }
         let name = label(chapters[index])
-        return Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page)), label: started ? "Continue · \(name)" : "Start · \(name)")
+        return Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? "Continue · \(name)" : "Start · \(name)")
     }
 
     private func load() async {

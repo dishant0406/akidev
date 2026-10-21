@@ -1,156 +1,248 @@
 import AkiManga
 import SwiftUI
 
-/// The long-strip reader: pages one under another with no gaps, the position kept as the person
-/// scrolls, the next chapter one tap away. Chrome is glass and hides on tap.
+/// The reader: a long strip, or pages turned left to right or right to left, with pinch zoom. Chrome is
+/// glass and hides on tap. Where the person is (chapter, page, how far down it) is saved as they read.
 struct ReaderView: View {
-    let ref: SeriesRef
-    /// Newest first, as the engine returns them: the next chapter to read is the one before.
-    let chapters: [ChapterEntry]
-    @State var start: ReaderTarget
-
-    @Environment(AppModel.self) private var model
+    @State private var model: ReaderModel
     @Environment(\.dismiss) private var dismiss
-    @State private var index = 0
-    @State private var pages: PageList?
-    @State private var error: (title: String, message: String)?
-    @State private var current: Int?
-    @State private var chrome = true
-    @State private var loadedFor: String?
 
-    private var chapter: ChapterEntry? { chapters.indices.contains(index) ? chapters[index] : nil }
-    private var headers: [String: String] { Dictionary(uniqueKeysWithValues: (pages?.headers ?? []).map { ($0.name, $0.value) }) }
-    private var newer: ChapterEntry? { index > 0 ? chapters[index - 1] : nil }
-
-    init(ref: SeriesRef, chapters: [ChapterEntry], start: ReaderTarget) {
-        self.ref = ref
-        self.chapters = chapters
-        _start = State(initialValue: start)
+    init(model: ReaderModel) {
+        _model = State(initialValue: model)
     }
 
     var body: some View {
         ZStack {
             Aki.canvas.ignoresSafeArea()
-            if let pages {
-                strip(pages)
-            } else if let error {
-                StateCard(title: error.title, message: error.message, action: ("Try again", { Task { await load(chapter: start.chapterID, page: start.page) } }))
+            if !model.segments.isEmpty {
+                switch model.mode {
+                case .strip: StripReader(model: model, close: { dismiss() })
+                case .paged, .rtl: PagedReader(model: model, close: { dismiss() })
+                }
+            } else if let error = model.error {
+                StateCard(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
             } else {
                 ProgressView()
             }
         }
-        .overlay(alignment: .top) { if chrome { topBar.transition(.opacity) } }
-        .overlay(alignment: .bottom) { if chrome, let pages { bottomBar(pages).transition(.opacity) } }
-        .statusBarHidden(!chrome)
-        .animation(.smooth(duration: 0.2), value: chrome)
-        .task {
-            index = chapters.firstIndex { $0.id == start.chapterID } ?? 0
-            await load(chapter: start.chapterID, page: start.page)
-        }
-    }
-
-    private func strip(_ pages: PageList) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(pages.images.enumerated()), id: \.offset) { offset, url in
-                    RemoteImage(url: url, headers: headers, placeholder: 1.4).id(offset)
-                }
-                endCard.id(pages.images.count)
-            }
-            .scrollTargetLayout()
-        }
-        .scrollPosition(id: $current, anchor: .top)
-        .ignoresSafeArea()
-        .contentShape(Rectangle())
-        .onTapGesture { chrome.toggle() }
-        .onChange(of: current) { _, page in saveProgress(page: page, of: pages.images.count) }
-    }
-
-    private var endCard: some View {
-        VStack(spacing: 12) {
-            Eyebrow("End of chapter")
-            if let newer {
-                Button { Task { await open(newer) } } label: {
-                    Text("Next · \(label(newer))").frame(maxWidth: 320)
-                }.buttonStyle(.glassProminent)
-            } else {
-                Text("You are up to date").font(Aki.title(20)).foregroundStyle(Aki.text)
-            }
-            Button("Back to the series") { dismiss() }.buttonStyle(.glass)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, 80)
+        .overlay(alignment: .top) { if model.chrome { topBar.transition(.opacity) } }
+        .overlay(alignment: .bottom) { if model.chrome, let segment = model.currentSegment { bottomBar(segment).transition(.opacity) } }
+        .statusBarHidden(!model.chrome)
+        .animation(.smooth(duration: 0.2), value: model.chrome)
+        .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
+        .onDisappear { model.flush() }
     }
 
     private var topBar: some View {
-        GlassEffectContainer {
+        GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
                 Button { dismiss() } label: { Image(systemName: "chevron.left").padding(6) }
                     .buttonStyle(.glass).buttonBorderShape(.circle)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(ref.title).font(.footnote.weight(.semibold)).lineLimit(1)
-                    if let chapter { Text(label(chapter)).font(.caption2).foregroundStyle(Aki.dim).lineLimit(1) }
+                    Text(model.ref.title).font(.footnote.weight(.semibold)).lineLimit(1)
+                    if let chapter = model.chapter(model.current) {
+                        Text(model.label(chapter)).font(.caption2).foregroundStyle(Aki.dim).lineLimit(1)
+                    }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .glassEffect(.regular, in: .capsule)
                 Spacer(minLength: 0)
+                Menu {
+                    Picker("Reading mode", selection: Binding(get: { model.mode }, set: { model.setMode($0) })) {
+                        ForEach(ReadingMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
+                    }
+                } label: { Image(systemName: model.mode.symbol).padding(6) }
+                    .buttonStyle(.glass).buttonBorderShape(.circle)
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
     }
 
-    private func bottomBar(_ pages: PageList) -> some View {
+    private func bottomBar(_ segment: Segment) -> some View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
-                if index + 1 < chapters.count {
-                    Button { Task { await open(chapters[index + 1]) } } label: { Image(systemName: "backward.end.fill").padding(6) }
+                if let older = model.older(than: model.current) {
+                    Button { Task { await model.open(older.id, page: 0, offset: 0) } } label: { Image(systemName: "backward.end.fill").padding(6) }
                         .buttonStyle(.glass).buttonBorderShape(.circle)
                 }
-                let page = min((current ?? 0) + 1, pages.images.count)
-                Text("\(page) / \(pages.images.count)").font(.footnote.monospacedDigit())
+                let count = model.currentSegment?.pages.images.count ?? 0
+                Text("\(min(model.page + 1, max(count, 1))) / \(count)").font(.footnote.monospacedDigit())
                     .padding(.horizontal, 18).padding(.vertical, 12).glassEffect(.regular, in: .capsule)
-                if let newer {
-                    Button { Task { await open(newer) } } label: { Image(systemName: "forward.end.fill").padding(6) }
+                if let newer = model.newer(than: model.current) {
+                    Button { Task { await model.open(newer.id, page: 0, offset: 0) } } label: { Image(systemName: "forward.end.fill").padding(6) }
                         .buttonStyle(.glass).buttonBorderShape(.circle)
                 }
             }
         }
         .padding(.bottom, 24)
     }
+}
 
-    private func label(_ chapter: ChapterEntry) -> String {
-        if let title = chapter.title { return title }
-        if let number = chapter.number { return "Chapter \(number.formatted(.number.precision(.fractionLength(0...2))))" }
-        return "Chapter"
+// MARK: long strip
+
+/// Pages one under another with no gap, the next chapter joined on as the end nears. Pinch to zoom the
+/// width (it snaps back to the screen width below 1×); when zoomed, drag sideways too.
+private struct StripReader: View {
+    let model: ReaderModel
+    let close: () -> Void
+    @State private var position = ScrollPosition()
+    @State private var width = UIScreen.main.bounds.width
+    @State private var contentY: CGFloat = 0
+    @State private var live: CGFloat = 1
+
+    /// Every row of every chapter laid out so far, each with an id the scroll position can name.
+    private struct Item: Identifiable {
+        enum Kind {
+            case page(Int, String, [String: String])
+            case end(Segment)
+        }
+        let id: String
+        let chapter: String
+        let kind: Kind
     }
 
-    private func open(_ chapter: ChapterEntry) async {
-        guard let at = chapters.firstIndex(where: { $0.id == chapter.id }) else { return }
-        index = at
-        start = ReaderTarget(chapterID: chapter.id, page: 0)
-        await load(chapter: chapter.id, page: 0)
-    }
-
-    private func load(chapter id: String, page: Int) async {
-        pages = nil
-        error = nil
-        current = nil
-        loadedFor = nil
-        do {
-            let list = try await model.engine.pages(source: ref.source, series: ref.id, chapter: id)
-            pages = list
-            loadedFor = id
-            // Let the strip lay out, then go to where the person left off.
-            try? await Task.sleep(for: .milliseconds(150))
-            current = min(page, max(list.images.count - 1, 0))
-        } catch {
-            self.error = describe(error)
+    private var items: [Item] {
+        model.segments.flatMap { segment -> [Item] in
+            let headers = segment.headers
+            let pages = segment.pages.images.enumerated().map { index, url in
+                Item(id: "\(segment.chapterID)|\(index)", chapter: segment.chapterID, kind: .page(index, url, headers))
+            }
+            return pages + [Item(id: "\(segment.chapterID)|end", chapter: segment.chapterID, kind: .end(segment))]
         }
     }
 
-    private func saveProgress(page: Int?, of count: Int) {
-        guard let page, let id = loadedFor, count > 0 else { return }
-        // Finished is the end card reaching the top, not the last page: the last page is still to be read.
-        let finished = page >= count
-        try? model.engine.setProgress(source: ref.source, series: ref.id, chapter: id, page: UInt32(min(page, count - 1)), offset: 0, finished: finished)
+    var body: some View {
+        ScrollView(model.zoom > 1 ? [.vertical, .horizontal] : [.vertical]) {
+            LazyVStack(spacing: 0) {
+                ForEach(items) { item in
+                    switch item.kind {
+                    case .page(let index, let url, let headers):
+                        RemoteImage(url: url, headers: headers, placeholder: 1.4, onAspect: { model.aspects[url] = $0 })
+                            .frame(width: width * model.zoom)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { frame in
+                                if frame.minY <= 1, frame.maxY > 1 {
+                                    model.report(chapter: item.chapter, page: index, offset: min(max(-frame.minY / max(frame.height, 1), 0), 1))
+                                }
+                            }
+                    case .end(let segment):
+                        chapterEnd(segment)
+                    }
+                }
+            }
+            .scrollTargetLayout()
+            .frame(width: width * model.zoom)
+        }
+        .scrollPosition($position)
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in contentY = y }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .ignoresSafeArea()
+        .scaleEffect(live)
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { live = min(max($0.magnification, 0.6), 3 / max(model.zoom, 1)) }
+                .onEnded { value in
+                    model.zoom = min(max(model.zoom * value.magnification, 1), 3)
+                    live = 1
+                }
+        )
+        .onTapGesture { model.chrome.toggle() }
+        .task(id: model.restoreToken) { await restore() }
+    }
+
+    private func chapterEnd(_ segment: Segment) -> some View {
+        let next = model.newer(than: segment.chapterID)
+        return VStack(spacing: 10) {
+            Eyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            if let next {
+                Text(next.id == model.segments.last?.chapterID || model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))")
+                    .font(.footnote).foregroundStyle(Aki.dim)
+            } else {
+                Text("You are up to date").font(Aki.title(20)).foregroundStyle(Aki.text)
+                Button("Back to the series", action: close).buttonStyle(.glass).padding(.top, 6)
+            }
+        }
+        .frame(width: width, height: next == nil ? 220 : 96)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { top in
+            if top < UIScreen.main.bounds.height * 0.9 { model.finish(segment.chapterID) }
+        }
+    }
+
+    /// Puts the strip back where it was: the page, and how far down it, once that page's shape is known.
+    private func restore() async {
+        guard let target = model.restore, let segment = model.segments.first(where: { $0.chapterID == target.chapter }) else { return }
+        model.restoring = true
+        defer { model.restoring = false }
+        try? await Task.sleep(for: .milliseconds(120))
+        position.scrollTo(id: "\(target.chapter)|\(target.page)", anchor: .top)
+        model.restore = nil
+        guard target.offset > 0.001, segment.pages.images.indices.contains(target.page) else { return }
+        let url = segment.pages.images[target.page]
+        for _ in 0..<40 where model.aspects[url] == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .milliseconds(200))
+        if let aspect = model.aspects[url] {
+            position.scrollTo(y: contentY + CGFloat(target.offset) * (width * model.zoom / aspect))
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+}
+
+// MARK: pages
+
+/// One page at a time, turned by swiping or by tapping the edges (the right edge goes on in left-to-right
+/// reading, the left edge in right-to-left). Double tap or pinch to zoom.
+private struct PagedReader: View {
+    @Bindable var model: ReaderModel
+    let close: () -> Void
+
+    var body: some View {
+        let segment = model.currentSegment ?? model.segments[0]
+        let headers = segment.headers
+        let count = segment.pages.images.count
+        let rtl = model.mode == .rtl
+        TabView(selection: $model.pagedIndex) {
+            ForEach(Array(segment.pages.images.enumerated()), id: \.offset) { index, url in
+                ZoomablePage(url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
+                    .ignoresSafeArea()
+                    .tag(index)
+            }
+            endPage(segment).tag(count)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
+        .ignoresSafeArea()
+        .onChange(of: model.pagedIndex) { _, index in
+            if index >= count {
+                model.finish(segment.chapterID)
+            } else {
+                model.report(chapter: segment.chapterID, page: index, offset: 0)
+            }
+        }
+        .onAppear { model.restoring = false }
+    }
+
+    private func tap(_ x: CGFloat, count: Int, rtl: Bool) {
+        // x is 0 at the left edge of the screen whatever the reading direction.
+        let step: Int? = x > 0.7 ? (rtl ? -1 : 1) : x < 0.3 ? (rtl ? 1 : -1) : nil
+        guard let step else { return model.chrome.toggle() }
+        let next = model.pagedIndex + step
+        if (0...count).contains(next) {
+            withAnimation(.smooth(duration: 0.25)) { model.pagedIndex = next }
+        }
+    }
+
+    private func endPage(_ segment: Segment) -> some View {
+        VStack(spacing: 14) {
+            Eyebrow("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")")
+            if let next = model.newer(than: segment.chapterID) {
+                Button { Task { await model.open(next.id, page: 0, offset: 0) } } label: {
+                    Text("Next · \(model.label(next))").frame(maxWidth: 300)
+                }.buttonStyle(.glassProminent)
+            } else {
+                Text("You are up to date").font(Aki.title(22)).foregroundStyle(Aki.text)
+            }
+            Button("Back to the series", action: close).buttonStyle(.glass)
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
