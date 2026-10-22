@@ -15,6 +15,9 @@ export default function Footer() {
         <Link href="/privacy" className="py-2 transition-colors hover:text-ink">
           Privacy
         </Link>
+        <Link href="/manga" className="py-2 transition-colors hover:text-ink">
+          iPhone reader
+        </Link>
       </nav>
     </footer>
   );
