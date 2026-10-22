@@ -93,6 +93,11 @@ async fn add_a_repository_install_browse_read_update_and_return() {
     let info = engine.install_from_repo(view.info.base.clone(), "local".into()).await.unwrap();
     assert_eq!((info.id.as_str(), info.can_search), ("local", true));
     assert_eq!(engine.repo_sources(view.info.base.clone()).await.unwrap().sources[0].state, SourceState::Installed);
+
+    // What a repository installed keeps its `extends`, so it follows its theme rather than a frozen copy.
+    let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data_dir.join("sources/local.json")).unwrap()).unwrap();
+    assert_eq!(kept["extends"].as_str(), Some("madara"));
+    assert!(kept.get("detail").is_none(), "a repository's source is not flattened");
     assert!(engine.install_from_repo(view.info.base.clone(), "nope".into()).await.is_err());
 
     assert!(engine.remembered_listing("local".into(), false).is_none(), "nothing is remembered before the first load");
@@ -237,5 +242,65 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
     // Removing a series forgets all of it.
     fresh.forget_series("local".into(), "solo-leveling".into()).unwrap();
     assert!(fresh.library().unwrap().iter().all(|item| item.id != "solo-leveling"));
+    let _ = std::fs::remove_dir_all(&temp);
+}
+
+/// A source pasted on its own: it extends a theme, so the theme is merged into it when it is installed,
+/// and it keeps working after the theme is gone. Removing a repository leaves a source installed by hand alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pasted_source_carries_its_theme_and_outlives_it() {
+    let temp = std::env::temp_dir().join(format!("akimanga-pasted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    let (repo_dir, data_dir) = (temp.join("repo"), temp.join("data"));
+    let address = serve(repo_dir.clone()).await;
+    make_repo(&repo_dir, &address, 1, None);
+
+    // A source on its own, extending a theme that is not installed: refused, and said so plainly.
+    let engine = Engine::new(data_dir.to_string_lossy().to_string()).unwrap();
+    let alone = format!(r#"{{"extends":"madara","id":"pasted","name":"Pasted","version":1,"base_url":"{address}","rate_per_second":20}}"#);
+    let error = engine.install_source(alone.clone()).unwrap_err();
+    assert!(error.to_string().contains("madara"), "{error}");
+
+    // The theme arrives (from a repository, or by hand); then the same pasted definition installs, theme and all.
+    let theme = std::fs::read_to_string(Path::new(FIXTURES).join("themes/madara.json")).unwrap();
+    engine.install_theme("madara".into(), theme).unwrap();
+    engine.add_repo(format!("{address}/repo/")).await.unwrap();
+    let preview = engine.preview_source(alone.clone()).unwrap();
+    assert_eq!((preview.id.as_str(), preview.name.as_str(), preview.version), ("pasted", "Pasted", 1));
+    assert!(engine.install_source("not json".into()).is_err());
+    assert!(engine.preview_source("not json".into()).is_err());
+    assert!(engine.preview_source(alone.clone()).is_ok() && engine.sources().is_empty(), "previewing installs nothing");
+
+    // A preview refuses exactly what an install refuses, so the sheet never offers one that would then fail.
+    let bad_id = r#"{"extends":"madara","id":"Bad/Id","name":"Bad","version":1,"base_url":"http://127.0.0.1:1"}"#;
+    assert!(engine.preview_source(bad_id.into()).is_err());
+    assert!(engine.install_source(bad_id.into()).is_err());
+
+    let info = engine.install_source(alone.clone()).unwrap();
+    assert_eq!(info.id, "pasted");
+    assert_eq!(engine.sources().len(), 1);
+
+    // An older version than the one installed is refused, by a preview as well as an install.
+    let older = alone.replace(r#""version":1"#, r#""version":0"#);
+    assert!(engine.preview_source(older.clone()).is_err());
+    assert!(engine.install_source(older).is_err());
+    assert_eq!(engine.popular("pasted".into(), 1).await.unwrap().items.len(), 2);
+
+    // What is kept on disk is the definition with the theme in it: no `extends`, its own id and version.
+    let kept: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(data_dir.join("sources/pasted.json")).unwrap()).unwrap();
+    assert!(kept.get("extends").is_none() && kept.get("theme").is_none());
+    assert_eq!((kept["id"].as_str(), kept["version"].as_u64()), (Some("pasted"), Some(1)));
+
+    // The theme goes away entirely — every theme file deleted — and the pasted source still loads, in a new
+    // Engine too. That is the whole point: it is not quietly depending on a theme someone else installed.
+    let base = engine.repos().unwrap()[0].base.clone();
+    engine.remove_repo(base).unwrap();
+    drop(engine);
+    for entry in std::fs::read_dir(data_dir.join("themes")).unwrap() {
+        std::fs::remove_file(entry.unwrap().path()).unwrap();
+    }
+    let reopened = Engine::new(data_dir.to_string_lossy().to_string()).unwrap();
+    assert_eq!(reopened.sources().len(), 1);
+    assert_eq!(reopened.popular("pasted".into(), 1).await.unwrap().items.len(), 2);
     let _ = std::fs::remove_dir_all(&temp);
 }

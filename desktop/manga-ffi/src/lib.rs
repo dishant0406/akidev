@@ -522,16 +522,31 @@ impl Engine {
             self.reload();
         }
         let text = repo::fetch_file(base, &offered.path, &offered.sha256).await?;
-        let info = self.install_text(&text).map_err(|error| anyhow::anyhow!("{error}"))?;
+        let info = self.install_document(&text, false).map_err(|error| anyhow::anyhow!("{error}"))?;
         anyhow::ensure!(info.id == offered.id && info.version == offered.version, "the file for {} is not the source the index lists (it is {} {})", offered.id, info.id, info.version);
         self.store.set_origin(&info.id, Some(base), info.version)?;
         Ok(info)
     }
 
-    /// Installs a source from its document, checking it first.
-    fn install_text(&self, json: &str) -> Result<SourceInfo> {
-        let document: serde_json::Value = serde_json::from_str(json).map_err(|error| failed(format!("the definition is not JSON: {error}")))?;
-        let source = self.build(document)?;
+    /// The source a document makes, and the text it is kept as. One pasted on its own has the themes it
+    /// extends merged in and is kept that way, so it stands alone; one from a repository keeps what it was
+    /// given, so it follows its theme's updates.
+    fn prepared(&self, json: &str, pasted: bool) -> Result<(Source, String)> {
+        let given: serde_json::Value = serde_json::from_str(json).map_err(|error| failed(format!("the definition is not JSON: {error}")))?;
+        if !pasted {
+            let source = self.build(given).map_err(|error| failed(format!("{error:#}")))?;
+            return Ok((source, json.to_string()));
+        }
+        let merged = self.themes.read().unwrap().resolve_document(given).map_err(|error| failed(format!("{error:#}")))?;
+        let text = serde_json::to_string_pretty(&merged).map_err(|error| failed(error.to_string()))?;
+        let source = self.build(merged).map_err(|error| failed(format!("{error:#}")))?;
+        Ok((source, text))
+    }
+
+    /// The source a document makes, checked as if it were about to be kept: a preview and an install refuse
+    /// the same things, so the sheet never offers an install that would then fail.
+    fn checked(&self, json: &str, pasted: bool) -> Result<(Source, String)> {
+        let (source, text) = self.prepared(json, pasted)?;
         let info = source.info();
         if !plain_name(&info.id) {
             return Err(failed(format!("{} is not an id a source may have", info.id)));
@@ -541,7 +556,14 @@ impl Engine {
         {
             return Err(failed(format!("{} {have} is installed; this is the older {}", info.name, info.version)));
         }
-        self.save("sources", &info.id, json)?;
+        Ok((source, text))
+    }
+
+    /// Installs a source from its document, checking it first.
+    fn install_document(&self, json: &str, pasted: bool) -> Result<SourceInfo> {
+        let (source, text) = self.checked(json, pasted)?;
+        let info = source.info();
+        self.save("sources", &info.id, &text)?;
         self.sources.write().unwrap().insert(info.id.clone(), Arc::new(source));
         Ok(info.into())
     }
@@ -585,11 +607,24 @@ impl Engine {
     }
 
     /// Installs a source from its definition, checking it first. A source with the same id is replaced
-    /// if the new one's version is not lower.
+    /// if the new one's version is not lower. The themes it extends are merged into it and it is kept that
+    /// way, so one pasted on its own works without the repository that has the theme.
     pub fn install_source(&self, json: String) -> Result<SourceInfo> {
-        let info = self.install_text(&json)?;
+        let info = self.install_document(&json, true)?;
         self.store.set_origin(&info.id, None, info.version)?;
         Ok(info)
+    }
+
+    /// What a definition would install, without installing it: the "install this source?" sheet. Checks the
+    /// whole definition, so a broken one says what is wrong before anything is kept.
+    pub fn preview_source(&self, json: String) -> Result<SourceInfo> {
+        Ok(self.checked(&json, true)?.0.info().into())
+    }
+
+    /// The repository an installed source came from, if any. Pasting over one of these replaces it with a
+    /// standalone copy that no longer updates, which the sheet warns about first.
+    pub fn installed_origin(&self, id: String) -> Option<String> {
+        self.store.origin(&id).ok().flatten().and_then(|(origin, _)| origin)
     }
 
     pub fn remove_source(&self, id: String) -> Result<()> {
@@ -919,7 +954,7 @@ impl Engine {
             let installed = self.installed_version(&source.id).is_some();
             let outcome = match (&source.document, &source.repo) {
                 _ if installed => Ok(()),
-                (Some(document), _) => self.install_text(&document.to_string()).map(|info| self.store.set_origin(&info.id, None, info.version)).map(|_| ()),
+                (Some(document), _) => self.install_document(&document.to_string(), false).map(|info| self.store.set_origin(&info.id, None, info.version)).map(|_| ()),
                 (None, Some(base)) => match repo::fetch_index(base).await {
                     Ok(fetched) => self.install_one(base, &fetched.index, &source.id).await.map(|_| ()).map_err(MangaError::from),
                     Err(error) => Err(error.into()),

@@ -6,6 +6,7 @@ import SwiftUI
 struct SourcesView: View {
     @Environment(AppModel.self) private var model
     @State private var adding = false
+    @State private var pasting = false
     @State private var link = ""
 
     var body: some View {
@@ -28,6 +29,7 @@ struct SourcesView: View {
                             }
                             .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
+                        AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
                     }
                     AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
                         if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
@@ -49,6 +51,7 @@ struct SourcesView: View {
             .akiDestination(for: RepoInfo.self) { RepoScreen(repo: $0) }
             .akiDestination(for: String.self) { SourceSettingsView(source: $0) }
             .akiDestination(for: SettingsRoute.self) { _ in SettingsView() }
+            .akiSheet(isPresented: $pasting) { SourceAddSheet() }
             .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
     }
