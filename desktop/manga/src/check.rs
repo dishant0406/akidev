@@ -30,6 +30,9 @@ struct Call {
     id: Option<String>,
     #[serde(default)]
     series: Option<String>,
+    /// The filters the person chose, by filter id (a genre, an order).
+    #[serde(default)]
+    filters: BTreeMap<String, String>,
     /// What the call must return; empty on a new call, filled in by `bless`.
     #[serde(default)]
     expect: Option<Value>,
@@ -46,7 +49,7 @@ async fn call(source: &Source, call: &Call) -> anyhow::Result<Value> {
     Ok(match call.op.as_str() {
         "popular" => serde_json::to_value(source.popular(page).await?)?,
         "latest" => serde_json::to_value(source.latest(page).await?)?,
-        "search" => serde_json::to_value(source.search(call.term.as_deref().context("search needs a term")?, page, &BTreeMap::new()).await?)?,
+        "search" => serde_json::to_value(source.search(call.term.as_deref().unwrap_or_default(), page, &call.filters).await?)?,
         "details" => serde_json::to_value(source.details(&id()?).await?)?,
         "chapters" => serde_json::to_value(source.chapters(&id()?).await?)?,
         "pages" => serde_json::to_value(source.pages(call.series.as_deref().unwrap_or_default(), &id()?).await?)?,

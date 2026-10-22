@@ -16,9 +16,9 @@
     {
       "id": "dynastyscans",
       "name": "Dynasty Scans",
-      "version": 1,
+      "version": 2,
       "path": "sources/dynastyscans.json",
-      "sha256": "00df658de9b6ba746008cc933d0d6c90792e72552f45e2262d00de2eaa93c128",
+      "sha256": "dfe22d9efc2c6597ba2dcb94d63f69a720a91e5f8cc16884d93bbb2d48ac4a02",
       "lang": [
         "en"
       ],

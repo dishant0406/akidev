@@ -687,7 +687,7 @@
           "id": "houkago_time",
           "number": null,
           "scanlator": "Chocolate Scans",
-          "title": "Houkago \u25cb\u25cb Time"
+          "title": "Houkago ○○ Time"
         },
         {
           "date_ms": 1312329600000,
@@ -771,7 +771,7 @@
           "id": "yui_azusa",
           "number": null,
           "scanlator": "Team Vanilla",
-          "title": "YUI \u00d7 AZUSA"
+          "title": "YUI × AZUSA"
         },
         {
           "date_ms": 1336003200000,
@@ -1181,10 +1181,10 @@
         },
         {
           "date_ms": 1459555200000,
-          "id": "\u03bcs_vs_htt_the_allies",
+          "id": "μs_vs_htt_the_allies",
           "number": null,
           "scanlator": "Girls in Boxes",
-          "title": "\u03bc\u2019s vs HTT - The Allies"
+          "title": "μ’s vs HTT - The Allies"
         },
         {
           "date_ms": 1472083200000,
@@ -1205,7 +1205,7 @@
           "id": "girls_talk_3",
           "number": null,
           "scanlator": "/u/ Scanlations",
-          "title": "Girls\u2019 Talk"
+          "title": "Girls’ Talk"
         },
         {
           "date_ms": 1513641600000,
@@ -1310,7 +1310,7 @@
           "id": "ten_years_later_weve_started_living_together_yuiazu",
           "number": null,
           "scanlator": "Mumei Scanlation",
-          "title": "Ten Years Later, We\u2019ve Started Living Together - YuiAzu"
+          "title": "Ten Years Later, We’ve Started Living Together - YuiAzu"
         },
         {
           "date_ms": 1585353600000,
@@ -1324,7 +1324,7 @@
           "id": "ui_chans_blooming_maidenly_chat",
           "number": null,
           "scanlator": "EHCOVE",
-          "title": "Ui-chan's Blooming Maidenly Chat!\u2606"
+          "title": "Ui-chan's Blooming Maidenly Chat!☆"
         },
         {
           "date_ms": 1621123200000,
@@ -1357,6 +1357,230 @@
       ],
       "id": "doujins/k_on",
       "op": "chapters"
+    },
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": null,
+            "id": "series/sweet_little_devil_series",
+            "title": "Sweet Little Devil (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/zettai_x_roman_series",
+            "title": "Zettai x Roman (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/girlish_sweet",
+            "title": "Girlish Sweet"
+          },
+          {
+            "cover": null,
+            "id": "series/paradise_of_nightmare_series",
+            "title": "Paradise of Nightmare (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/aspherical_love",
+            "title": "Aspherical Love"
+          },
+          {
+            "cover": null,
+            "id": "series/sasameki_koto",
+            "title": "Sasameki Koto"
+          },
+          {
+            "cover": null,
+            "id": "series/shinigami_alice",
+            "title": "Shinigami Alice"
+          },
+          {
+            "cover": null,
+            "id": "series/apocalypse",
+            "title": "Apocalypse"
+          },
+          {
+            "cover": null,
+            "id": "series/chatting_at_the_amber_teahouse",
+            "title": "Chatting at the Amber Teahouse"
+          },
+          {
+            "cover": null,
+            "id": "series/sweet_blue_flowers",
+            "title": "Sweet Blue Flowers"
+          },
+          {
+            "cover": null,
+            "id": "series/flower_flower",
+            "title": "Flower Flower"
+          },
+          {
+            "cover": null,
+            "id": "series/gretel",
+            "title": "Gretel"
+          },
+          {
+            "cover": null,
+            "id": "series/aqua_blue_cinema",
+            "title": "Aqua Blue Cinema"
+          },
+          {
+            "cover": null,
+            "id": "series/love_dna_xx",
+            "title": "Love DNA XX"
+          },
+          {
+            "cover": null,
+            "id": "series/two_and_two",
+            "title": "Two and Two"
+          },
+          {
+            "cover": null,
+            "id": "series/sisterism",
+            "title": "Sisterism"
+          },
+          {
+            "cover": null,
+            "id": "series/hoshikawa_ginza_district_4",
+            "title": "Hoshikawa Ginza District 4"
+          },
+          {
+            "cover": null,
+            "id": "series/yuru_yuri",
+            "title": "Yuru Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/unchanging_days",
+            "title": "Unchanging Days"
+          },
+          {
+            "cover": null,
+            "id": "series/minus_literacy",
+            "title": "Minus Literacy"
+          }
+        ]
+      },
+      "filters": {
+        "genre": "5113"
+      },
+      "op": "search",
+      "term": ""
+    },
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": null,
+            "id": "series/sweet_little_devil_series",
+            "title": "Sweet Little Devil (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/zettai_x_roman_series",
+            "title": "Zettai x Roman (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/girlish_sweet",
+            "title": "Girlish Sweet"
+          },
+          {
+            "cover": null,
+            "id": "series/the_series_of_life",
+            "title": "The Series of Life"
+          },
+          {
+            "cover": null,
+            "id": "series/paradise_of_nightmare_series",
+            "title": "Paradise of Nightmare (Series)"
+          },
+          {
+            "cover": null,
+            "id": "series/aspherical_love",
+            "title": "Aspherical Love"
+          },
+          {
+            "cover": null,
+            "id": "series/28_ways_to_write_a_long_running_series_with_ease",
+            "title": "28 Ways to Write a Long-Running Series with Ease"
+          },
+          {
+            "cover": null,
+            "id": "series/uisaki_series",
+            "title": "UiSaki Series"
+          },
+          {
+            "cover": null,
+            "id": "doujins/k_on",
+            "title": "K-ON! Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/dennou_coil",
+            "title": "Dennou Coil Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/code_geass",
+            "title": "Code Geass Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/original",
+            "title": "Original Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/hoshikawa_ginza_district_4",
+            "title": "Hoshikawa Ginza District 4 Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/touhou_project",
+            "title": "Touhou Project Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/the_melancholy_of_haruhi_suzumiya",
+            "title": "The Melancholy of Haruhi Suzumiya Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/neon_genesis_evangelion",
+            "title": "Neon Genesis Evangelion Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/full_metal_alchemist",
+            "title": "Full Metal Alchemist Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/hyakko",
+            "title": "Hyakko Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/kashimashi",
+            "title": "Kashimashi Doujin"
+          },
+          {
+            "cover": null,
+            "id": "doujins/cowboy_bebop",
+            "title": "Cowboy Bebop Doujin"
+          }
+        ]
+      },
+      "filters": {
+        "type": "Doujin"
+      },
+      "op": "search",
+      "term": ""
     }
   ],
   "now_ms": 1792661480000,
@@ -1372,7 +1596,9 @@
     "GET https://dynasty-scans.com/doujins/k_on.json?page=5": "doujin-p5.json",
     "GET https://dynasty-scans.com/doujins/k_on.json?page=6": "doujin-p6.json",
     "GET https://dynasty-scans.com/doujins/k_on.json?page=7": "doujin-p7.json",
-    "GET https://dynasty-scans.com/search?classes%5B%5D=Doujin&classes%5B%5D=Series&q=yuri&page=1": "search.html",
+    "GET https://dynasty-scans.com/search?classes%5B%5D=Series&classes%5B%5D=Doujin&page=1": "search-type-doujin.html",
+    "GET https://dynasty-scans.com/search?classes%5B%5D=Series&with%5B%5D=5113&page=1": "search-genre-yuri.html",
+    "GET https://dynasty-scans.com/search?q=yuri&classes%5B%5D=Series&page=1": "search.html",
     "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json": "series-p1.json",
     "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json?page=1": "series-p1.json",
     "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json?page=2": "series-p1.json"
