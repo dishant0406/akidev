@@ -39,14 +39,18 @@ fn repo_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manga-sources")
 }
 
+/// The files in a folder, or nothing when the folder is not there: a repository may ship no sources at all.
+fn files(folder: PathBuf) -> Vec<PathBuf> {
+    std::fs::read_dir(folder).map(|entries| entries.map(|entry| entry.unwrap().path()).collect()).unwrap_or_default()
+}
+
 /// A copy of the repository's themes and sources in a temp folder, with an index built for it.
 fn copy_repo(name: &str, key: Option<String>) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("akidev-repo-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     for folder in ["themes", "sources"] {
         std::fs::create_dir_all(dir.join(folder)).unwrap();
-        for entry in std::fs::read_dir(repo_dir().join(folder)).unwrap() {
-            let path = entry.unwrap().path();
+        for path in files(repo_dir().join(folder)) {
             std::fs::copy(&path, dir.join(folder).join(path.file_name().unwrap())).unwrap();
         }
     }

@@ -14,7 +14,11 @@ async fn every_definition_reads_its_fixtures() {
         themes.insert(&name, serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap());
     }
     let mut checked = 0;
-    let definitions = ["sources", "examples"].into_iter().flat_map(|dir| std::fs::read_dir(root.join(dir)).unwrap().map(|entry| entry.unwrap().path()));
+    // A repository may ship no sources: the files are read when the folder is there.
+    let explore = |dir: &str| -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(root.join(dir)).map(|entries| entries.map(|entry| entry.unwrap().path()).collect()).unwrap_or_default()
+    };
+    let definitions = ["sources", "examples"].into_iter().flat_map(explore);
     for path in definitions {
         if path.extension().is_none_or(|ext| ext != "json") {
             continue;
