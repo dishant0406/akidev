@@ -1,7 +1,58 @@
 {
   "schema": 1,
   "name": "Akidev sources",
-  "sources": [],
+  "sources": [
+    {
+      "id": "3asq",
+      "name": "3asq",
+      "version": 1,
+      "path": "sources/3asq.json",
+      "sha256": "2ed6549041688fe07770a1e21474027efa7a02cb88fde21b985f4abb55a7c141",
+      "lang": [
+        "ar"
+      ],
+      "nsfw": false,
+      "requires": [
+        "madara"
+      ]
+    },
+    {
+      "id": "asurascans",
+      "name": "Asura Scans",
+      "version": 1,
+      "path": "sources/asurascans.json",
+      "sha256": "5310cd28531e31a4862b8324565cd603a66f41c925ff1133ae1cf6023749c837",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false
+    },
+    {
+      "id": "manhuaplus",
+      "name": "ManhuaPlus",
+      "version": 1,
+      "path": "sources/manhuaplus.json",
+      "sha256": "d0e73d4f34e19769b086d5440e10e5898be247491f114f5783969e680ae7f65a",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false,
+      "requires": [
+        "madara"
+      ]
+    },
+    {
+      "id": "tcbscans",
+      "name": "TCB Scans",
+      "version": 1,
+      "path": "sources/tcbscans.json",
+      "sha256": "4f7f4d7f89dccfb1ef8e0ff3433bc3256a5c32d465a42f8c4b65c9bf27acb2da",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false
+    }
+  ],
   "themes": [
     {
       "id": "madara",

@@ -17,14 +17,30 @@ fixtures/<id>/         recorded pages and fixtures.json for a source or an examp
 
 ## What is in it
 
-No sources. The repository ships the `madara` theme (a base for sites that run that CMS) and two examples that test the
-engine (`examples/`), and the index lists none. A source is added by writing `sources/<id>.json` (see Publishing) or pasted
-into the app on its own (Sources tab, Add a source). Only sources that are legal to read belong here: a public API that
-welcomes third-party readers, or work released under an open licence. Nothing that republishes copyrighted chapters
-without the publisher's leave.
+Four sources, each with fixtures recorded from the live site, and one theme:
+
+| Source | Site | How it reads the site |
+| --- | --- | --- |
+| `manhuaplus` | manhuaplus.com | the `madara` theme; its chapter images sit in `div.reading-content`, not `div.page-break` |
+| `3asq` | 3asq.online (Arabic) | the `madara` theme; the status comes back in Arabic, which the theme's `map` turns into a word |
+| `asurascans` | api.asurascans.com | its own JSON API: `data`, `meta.has_more`, `series`, `data.chapter.pages.*.url` |
+| `tcbscans` | tcbonepiecechapters.com | its own Tailwind markup; a card is `div.bg-card`, the id is `<number>/<slug>` |
+
+Two examples under `examples/` test the engine (`madara-example` for Madara's markup, `madara-protected` for an encrypted
+chapter payload). A source is added by writing `sources/<id>.json` (see Publishing) or pasted into the app on its own
+(Sources tab, Add a source). Only sources that are legal to read belong here: a public API that welcomes third-party
+readers, or work released under an open licence. Nothing that republishes copyrighted chapters without the publisher's
+leave.
+
+A source is worth adding only if the site is **reachable, gives its chapters in the answer, and gives its pages in the
+answer**. Most sites do not: as of 2026-10-22, of the 98 base addresses listed by the Paperback extensions, 42 are
+refused by this machine's proxy and most of the rest are parked or dead, so the extension metadata is largely stale.
+The probe behind that, and why each family fails, is in `pipeline/MANGA_SOURCES_PORT_PLAN.md` §3b.
 
 A site that answers a `POST` (the chapter list) through a redirect loses the body, which silently returns the wrong page:
-put the host that answers without redirecting in `base_url` and the other in `mirrors`.
+put the host that answers without redirecting in `base_url` and the other in `mirrors`. `3asq` is the worked example:
+`3asq.org` answers `301` to `3asq.online`, so `.online` is `base_url` and `.org` the mirror, even though the extension
+that led here named `.org`.
 
 ## Adding this repository to the app
 

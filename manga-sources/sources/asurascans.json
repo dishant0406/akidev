@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "id": "asurascans",
+  "name": "Asura Scans",
+  "version": 1,
+  "lang": [
+    "en"
+  ],
+  "nsfw": false,
+  "base_url": "https://api.asurascans.com",
+  "rate_per_second": 1,
+  "popular": {
+    "request": {
+      "url": "{base}/api/series?page={page}&per_page=20&sort=popular"
+    },
+    "format": "json",
+    "rows": "data",
+    "card": {
+      "id": "slug",
+      "title": "title",
+      "cover": "cover"
+    },
+    "next": "meta.has_more"
+  },
+  "latest": {
+    "request": {
+      "url": "{base}/api/series?page={page}&per_page=20"
+    },
+    "format": "json",
+    "rows": "data",
+    "card": {
+      "id": "slug",
+      "title": "title",
+      "cover": "cover"
+    },
+    "next": "meta.has_more"
+  },
+  "search": {
+    "request": {
+      "url": "{base}/api/series?page={page}&per_page=20&search={term}"
+    },
+    "format": "json",
+    "rows": "data",
+    "card": {
+      "id": "slug",
+      "title": "title",
+      "cover": "cover"
+    },
+    "next": "meta.has_more"
+  },
+  "detail": {
+    "request": {
+      "url": "{base}/api/series/{id}"
+    },
+    "format": "json",
+    "title": "series.title",
+    "cover": "series.cover",
+    "description": [
+      {
+        "path": "series.description"
+      },
+      "plain_text"
+    ],
+    "authors": "series.author",
+    "tags": "series.genres.*.name",
+    "status": [
+      {
+        "path": "series.status"
+      },
+      {
+        "map": [
+          [
+            "completed",
+            "completed"
+          ],
+          [
+            "ongoing",
+            "ongoing"
+          ],
+          [
+            "hiatus",
+            "hiatus"
+          ],
+          [
+            "cancelled",
+            "cancelled"
+          ],
+          [
+            "canceled",
+            "cancelled"
+          ]
+        ]
+      },
+      {
+        "default": "unknown"
+      }
+    ]
+  },
+  "chapters": {
+    "request": {
+      "url": "{base}/api/series/{id}/chapters?page={page}&per_page=100"
+    },
+    "format": "json",
+    "rows": "data",
+    "chapter": {
+      "id": "slug",
+      "number": "number",
+      "title": [
+        {
+          "path": "number"
+        },
+        {
+          "template": "Chapter {value}"
+        }
+      ],
+      "date": [
+        {
+          "path": "published_at"
+        },
+        {
+          "date": [
+            "iso"
+          ]
+        }
+      ]
+    },
+    "order": "newest-first",
+    "repeat": {
+      "size": 100
+    }
+  },
+  "pages": {
+    "request": {
+      "url": "{base}/api/series/{series}/chapters/{id}"
+    },
+    "format": "json",
+    "images": "data.chapter.pages.*.url",
+    "reading": "longstrip"
+  }
+}

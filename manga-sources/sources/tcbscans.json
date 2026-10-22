@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "id": "tcbscans",
+  "name": "TCB Scans",
+  "version": 1,
+  "lang": [
+    "en"
+  ],
+  "nsfw": false,
+  "base_url": "https://tcbonepiecechapters.com",
+  "rate_per_second": 1,
+  "popular": {
+    "request": {
+      "url": "{base}/projects"
+    },
+    "rows": "div.bg-card:has(a[href*=\"/mangas/\"])",
+    "card": {
+      "id": [
+        {
+          "css": "a[href*=\"/mangas/\"][class*=text-white]"
+        },
+        {
+          "attr": "href"
+        },
+        {
+          "regex": "/mangas/(\\d+/[^/]+)/?$"
+        }
+      ],
+      "title": "a[href*=\"/mangas/\"][class*=text-white]",
+      "cover": "img@data-src|data-lazy-src|src"
+    }
+  },
+  "detail": {
+    "request": {
+      "url": "{base}/mangas/{id:raw}"
+    },
+    "title": "h1",
+    "cover": [
+      {
+        "css": "img[alt]"
+      },
+      {
+        "attr": "data-src|data-lazy-src|src"
+      }
+    ],
+    "description": [
+      {
+        "css": "p[class*=leading-6]"
+      },
+      "text"
+    ]
+  },
+  "chapters": {
+    "request": {
+      "url": "{base}/mangas/{id:raw}"
+    },
+    "rows": "a[href*=\"/chapters/\"][class*=bg-card]",
+    "chapter": {
+      "id": [
+        {
+          "attr": "href"
+        },
+        {
+          "regex": "/chapters/(\\d+/[^/]+)/?$"
+        }
+      ],
+      "title": "div.text-lg"
+    },
+    "order": "newest-first"
+  },
+  "pages": {
+    "request": {
+      "url": "{base}/chapters/{id:raw}"
+    },
+    "images": [
+      {
+        "css": "img.fixed-ratio-content"
+      },
+      {
+        "attr": "data-src|data-lazy-src|src"
+      }
+    ],
+    "reading": "paged"
+  }
+}

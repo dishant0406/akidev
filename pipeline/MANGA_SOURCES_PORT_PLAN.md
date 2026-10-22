@@ -1,6 +1,7 @@
 # Porting Paperback sources to akidev-manga: catalog and plan
 
-Status: research done, nothing ported yet. Written 2026-10-22.
+Status: four sources shipped (`manhuaplus`, `3asq`, `asurascans`, `tcbscans`), each with live fixtures; see §3b for the
+re-probe that chose them and §Phase 1/Phase 5 for what shipped. Written 2026-10-22, re-probed the same day.
 Inputs: a full clone-and-read of the live Paperback extension ecosystem, the akidev-manga engine
 (`desktop/manga/`), and live probing of every candidate site from this machine.
 
@@ -82,6 +83,40 @@ The 25 needing engine work, by feature:
 
 Note the overlap: several sites need two or three at once. These are the same three capabilities
 `MANGA_PLAN.md` already listed under "Not here yet", so the work is already scoped in the right place.
+
+## 3b. Re-probed 2026-10-22: what the ecosystem actually offers
+
+Every one of the 98 base addresses in the 14 cloned repos was probed (locally, then through a text relay for the ones the
+proxy refuses). Two findings replace the guesses in §2 and §4:
+
+**The metadata is stale.** Of 96 addresses, 42 are refused by this machine's proxy and most of the rest are **parked or
+dead** — `1stkissmanga.me`, `lilymanga.com`, `reset-scans.com`, `skscans.com`, `mangacultivator.com`, `novelmic.com`,
+`pianmanga.me`, `manhuapro.com`, `isekaiscan.com`, `mangafast.net`, `mangahasu.me`, `www.manga-raw.club`, `pururin.to`,
+`mangasee123.com` and `macbold.com` all answer with a parklogic/HugeDomains page or 197 bytes. A catalogue of 215 ids is
+therefore not a catalogue of 215 usable sites.
+
+**A portable source needs three things at once: reachable, chapters in the answer, and pages in the answer.** Applying
+that test collapses the list to four:
+
+| Shipped | Why it passes |
+| --- | --- |
+| `manhuaplus` | Madara; chapters 3,364 rows on the ajax POST, pages 12 in `div.reading-content` |
+| `3asq` | Madara; 50 chapters, 17 pages |
+| `asurascans` | JSON API; `meta.has_more` pages, `data.chapter.pages.*.url` |
+| `tcbscans` | Tailwind markup; 19 cards, chapter ids as `<number>/<slug>`, 40 pages |
+
+And that is what fails for the rest:
+
+- **Guya family** (`guya.cubari.moe`, `hachirumi.com`, `mahoushoujobu.com`, `danke.moe`): the reader serves `<img />`
+  with no `src` and fills the pages from a script. No browser, no pages.
+- **Proxy-blocked Madara** (`madaradex.org`, `ksgroupscans.com`, `allporncomic.com`, `hentai20.io`): the detail page has
+  `0` chapter rows and the list needs a `POST` body. A text relay can fetch a page but forwards no body (checked: a
+  chapter-protector POST came back a 404 page through `r.jina.ai`, and the POST-capable proxies were all 429/404).
+- **`manga1st.online`**: the one blocked site that carries its chapters on the detail page (295 rows) — but its chapter
+  pages hold **zero** image addresses in the HTML, so its pages are script-loaded too.
+- **`toonily.com`**: no longer Madara. It serves `/serie/<slug>/` now, so its extension's selectors are stale.
+
+**Lesson for the next port:** classify from the live page, never from the extension's metadata or its `desc` field.
 
 ## 4. Live-site reality check (this is the part that changes the plan)
 
@@ -225,7 +260,31 @@ destination, re-encode.
 and 1 has nothing left to descramble. The engine work this port needed is finished; what remains is not engine work.
 
 
-### Phase 5 — bespoke sites
+### Phase 5 — bespoke sites (started, 2026-10-22)
+
+Two are shipped: `asurascans` (api.asurascans.com is plain JSON — `repeat: {size: 100}` reads all 345 chapters of a
+serial, `data.chapter.pages.*.url` gives the pages) and `tcbscans` (Tailwind markup; a card is `div.bg-card`, a chapter
+id is `<number>/<slug>` and must stay raw because it is a path). TCB has no `latest` or `search` section: its home feed
+is chapter links, whose id is a chapter, and a card id has to be a manga id or opening the card asks for the wrong
+thing; `?search=` and `?page=` are ignored by the site, so a section claiming them would quietly lie.
+
+Two engine-shaped lessons from doing it:
+
+- **A field the schema does not have is silently ignored.** `chapters.next` was written for Asura and dropped on the
+  floor, so only the first page was read and a 345-chapter serial looked like an 8-chapter one. Check a new field
+  against `def.rs`, not against intuition.
+- **`map` drops text no needle matches.** That is right for translating a status word, but it turns "wrong status" into
+  "no status", so every status pipe ends with `{"default":"unknown"}` and the fixture is what catches a renamed status.
+
+### Phase 4b — the escaped theme bug
+
+`themes/madara.json` read `.post-status .summary-content`, which on Madara is the **Release year**, so every Madara
+source reported `status: unknown` (ManhuaPlus's Martial Peak reads `ongoing` now). The selector is
+`.post-status .post-content_item:nth-of-type(2) .summary-content` (Release is the first row, Status the second), and
+`fixtures/madara-example/detail.html` was changed to carry a Release row *before* Status so the example fails if the
+bug comes back.
+
+### Phase 6 — bespoke sites still to do
 
 Everything left: custom themes like `rinkocomics.com` (`.comic-card`, `/comic/<slug>/`, live and
 unblocked, but no `wp-manga`), `asuracomic.net` (Astro, live, 765 KB), `flamecomics.com` (Next.js).

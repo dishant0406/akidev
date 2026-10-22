@@ -1,0 +1,534 @@
+{
+  "calls": [
+    {
+      "expect": {
+        "has_next": false,
+        "items": [
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/v1-1-175x238.jpg",
+            "id": "one-piece",
+            "title": "One Piece"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/00-175x238.jpg",
+            "id": "berserk",
+            "title": "Berserk"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/F909tJfWsAAFfQS-175x238.jpg",
+            "id": "kingdom",
+            "title": "Kingdom"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2024/03/0cover-175x238.jpg",
+            "id": "kingdom-2",
+            "title": "WANteam"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2021/11/cover1-175x238.png",
+            "id": "hajime-no-ippo",
+            "title": "idre2d | عبادي"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/03/cover_250x350-175x238.jpg",
+            "id": "hunter-x-hunter",
+            "title": "Hunter X Hunter"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2021/04/jjk-v26-175x238.jpg",
+            "id": "jujutsu-kaisen",
+            "title": "KingSukuna"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/05/31477-175x238.jpeg",
+            "id": "solo-leveling",
+            "title": "Solo Leveling"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2020/09/FK-wmW9XMAMdgCL-175x238.jpg",
+            "id": "kaijuno8",
+            "title": "Kaiju No. 8"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/09/Kimetsu_no_Yaiba_V20-175x238.png",
+            "id": "kimetsu-no-yaiba",
+            "title": "Kimetsu No Yaiba"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/08/TLH-175x238.jpg",
+            "id": "the-last-human",
+            "title": "18+NOAL - MANGA"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/volume-26-cover-final-v0-ezfn3js94b791-175x238.jpg",
+            "id": "dr-stone",
+            "title": "Dr. Stone"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/08/01-02-1-175x238.png",
+            "id": "hunter-x-hunter-colored",
+            "title": "Hunter X Hunter – colored"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/V32-C-175x238.jpg",
+            "id": "shingeki-no-kyojin",
+            "title": "Shingeki no Kyojin"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2022/01/IMG_3100-175x238.jpeg",
+            "id": "naruto-digital-colored",
+            "title": "Hokage Team"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2019/04/cover_250x350-5-175x238.jpg",
+            "id": "bleach",
+            "title": "Bleach"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2023/02/01-175x238.jpg",
+            "id": "jujutsu-kaisen-2",
+            "title": "Jujutsu Kaisen"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2024/02/00a-175x238.jpg",
+            "id": "vagabond",
+            "title": "Vagabond"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2022/06/upscaled_4x-UltraSharp-5-175x238.webp",
+            "id": "one-punch-man",
+            "title": "BlackHaTeam"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2022/07/8501749-71vkehyw5l-175x238.jpg",
+            "id": "vinland-saga",
+            "title": "BlackHaTeam"
+          },
+          {
+            "cover": "https://3asq.online/wp-content/uploads/2022/01/abyss-175x238.jpg",
+            "id": "boys-abyss",
+            "title": "18+valxscans"
+          }
+        ]
+      },
+      "op": "popular",
+      "page": 1
+    },
+    {
+      "expect": {
+        "authors": [
+          "Eiichiro Oda"
+        ],
+        "cover": "https://3asq.online/wp-content/uploads/2019/04/v1-1.jpg",
+        "description": "تتمحور القصة حول مغامرات طاقم قراصنة قبعة القش بقيادة مونكي دي لوفي، لكل فرد من أفراد هذا الطاقم هدفٌ يطمح لتحقيقه، أما الهدف الرئيس لقائدهم لوفي هو إيجاد الكنز الأسطوري “ون بيس” وأن يغدو ملك القراصنة.",
+        "status": "ongoing",
+        "tags": [
+          "100%",
+          "3asq",
+          "أكشن",
+          "خيال",
+          "دراما",
+          "قوى خارقة",
+          "كوميديا",
+          "مغامرة"
+        ],
+        "title": "One Piece"
+      },
+      "id": "one-piece",
+      "op": "details"
+    },
+    {
+      "expect": [
+        {
+          "date_ms": null,
+          "id": "1196",
+          "number": 1196.0,
+          "scanlator": null,
+          "title": "1196 - لا قيمة لحب من يسترخص حياته."
+        },
+        {
+          "date_ms": null,
+          "id": "1195",
+          "number": 1195.0,
+          "scanlator": null,
+          "title": "1195 - نقطة الضعف"
+        },
+        {
+          "date_ms": null,
+          "id": "1194",
+          "number": 1194.0,
+          "scanlator": null,
+          "title": "1194 - كل شيء يتغير."
+        },
+        {
+          "date_ms": null,
+          "id": "1193",
+          "number": 1193.0,
+          "scanlator": null,
+          "title": "1193 - ما زلت أتدرب"
+        },
+        {
+          "date_ms": null,
+          "id": "1192",
+          "number": 1192.0,
+          "scanlator": null,
+          "title": "1192 - لن نسمح!!"
+        },
+        {
+          "date_ms": null,
+          "id": "1191",
+          "number": 1191.0,
+          "scanlator": null,
+          "title": "1191 - لوكي موجود."
+        },
+        {
+          "date_ms": null,
+          "id": "1190",
+          "number": 1190.0,
+          "scanlator": null,
+          "title": "1190 - من يفرح الكثير بموته."
+        },
+        {
+          "date_ms": null,
+          "id": "1189",
+          "number": 1189.0,
+          "scanlator": null,
+          "title": "1189 - ملك العالم."
+        },
+        {
+          "date_ms": null,
+          "id": "1188",
+          "number": 1188.0,
+          "scanlator": null,
+          "title": "1188 - العدم."
+        },
+        {
+          "date_ms": null,
+          "id": "1187",
+          "number": 1187.0,
+          "scanlator": null,
+          "title": "1187 - أساس البلاء"
+        },
+        {
+          "date_ms": null,
+          "id": "1186",
+          "number": 1186.0,
+          "scanlator": null,
+          "title": "1186 - مرة أخرى."
+        },
+        {
+          "date_ms": null,
+          "id": "1185",
+          "number": 1185.0,
+          "scanlator": null,
+          "title": "1185 - اتركوني في حالي."
+        },
+        {
+          "date_ms": null,
+          "id": "1184",
+          "number": 1184.0,
+          "scanlator": null,
+          "title": "1184 - لن يبقى بعد الموت سوى العظام."
+        },
+        {
+          "date_ms": null,
+          "id": "1183",
+          "number": 1183.0,
+          "scanlator": null,
+          "title": "1183 - صباح الخير يا حورية."
+        },
+        {
+          "date_ms": null,
+          "id": "1182",
+          "number": 1182.0,
+          "scanlator": null,
+          "title": "1182 - زازا."
+        },
+        {
+          "date_ms": null,
+          "id": "1181-5",
+          "number": 1181.5,
+          "scanlator": null,
+          "title": "1181.5 - الحاكم والشيطان."
+        },
+        {
+          "date_ms": null,
+          "id": "1181",
+          "number": 1181.0,
+          "scanlator": null,
+          "title": "1181 - الحاكم والشيطان."
+        },
+        {
+          "date_ms": null,
+          "id": "1180",
+          "number": 1180.0,
+          "scanlator": null,
+          "title": "1180 - الهالة الشيطانية."
+        },
+        {
+          "date_ms": null,
+          "id": "1179",
+          "number": 1179.0,
+          "scanlator": null,
+          "title": "1179 - نزول نيرونا إيمو."
+        },
+        {
+          "date_ms": null,
+          "id": "1178",
+          "number": 1178.0,
+          "scanlator": null,
+          "title": "1178 - انقشاع الكابوس."
+        },
+        {
+          "date_ms": null,
+          "id": "1177",
+          "number": 1177.0,
+          "scanlator": null,
+          "title": "1177 - غضب."
+        },
+        {
+          "date_ms": null,
+          "id": "1176",
+          "number": 1176.0,
+          "scanlator": null,
+          "title": "1176 - بشموخ وعزّة."
+        },
+        {
+          "date_ms": null,
+          "id": "1175",
+          "number": 1175.0,
+          "scanlator": null,
+          "title": "1175 - نيدهوغ."
+        },
+        {
+          "date_ms": null,
+          "id": "1174",
+          "number": 1174.0,
+          "scanlator": null,
+          "title": "1174 - أقوى شيء في العالم."
+        },
+        {
+          "date_ms": null,
+          "id": "1173",
+          "number": 1173.0,
+          "scanlator": null,
+          "title": "1173 - جيل المحاربين."
+        },
+        {
+          "date_ms": null,
+          "id": "1172",
+          "number": 1172.0,
+          "scanlator": null,
+          "title": "1172 - إلباف التي أحترمها"
+        },
+        {
+          "date_ms": null,
+          "id": "1171",
+          "number": 1171.0,
+          "scanlator": null,
+          "title": "1171 - راغنير."
+        },
+        {
+          "date_ms": null,
+          "id": "1170",
+          "number": 1170.0,
+          "scanlator": null,
+          "title": "1170 - تناقض."
+        },
+        {
+          "date_ms": null,
+          "id": "1169",
+          "number": 1169.0,
+          "scanlator": null,
+          "title": "1169 - يجب أن أموت حالًا."
+        },
+        {
+          "date_ms": null,
+          "id": "1168",
+          "number": 1168.0,
+          "scanlator": null,
+          "title": "1168 - ثلوج إلباف."
+        },
+        {
+          "date_ms": null,
+          "id": "1167",
+          "number": 1167.0,
+          "scanlator": null,
+          "title": "1167 - ابن ايدا."
+        },
+        {
+          "date_ms": null,
+          "id": "1166",
+          "number": 1166.0,
+          "scanlator": null,
+          "title": "1166 - حكايا جديدة."
+        },
+        {
+          "date_ms": null,
+          "id": "1165-5",
+          "number": 1165.5,
+          "scanlator": null,
+          "title": "1165.5 - صدى متردد"
+        },
+        {
+          "date_ms": null,
+          "id": "1165",
+          "number": 1165.0,
+          "scanlator": null,
+          "title": "1165 - صدى متردد"
+        },
+        {
+          "date_ms": null,
+          "id": "1164-5",
+          "number": 1164.5,
+          "scanlator": null,
+          "title": "1164.5 - سلالة ديفي."
+        },
+        {
+          "date_ms": null,
+          "id": "1164",
+          "number": 1164.0,
+          "scanlator": null,
+          "title": "1164 - سلالة ديفي."
+        },
+        {
+          "date_ms": null,
+          "id": "1163-5",
+          "number": 1163.5,
+          "scanlator": null,
+          "title": "1163.5 - وعد"
+        },
+        {
+          "date_ms": null,
+          "id": "1163",
+          "number": 1163.0,
+          "scanlator": null,
+          "title": "1163 - وعـــد"
+        },
+        {
+          "date_ms": null,
+          "id": "1162",
+          "number": 1162.0,
+          "scanlator": null,
+          "title": "1162 - معركة شاملة في غاد فالي."
+        },
+        {
+          "date_ms": null,
+          "id": "1161",
+          "number": 1161.0,
+          "scanlator": null,
+          "title": "1161 - قصيدة حب تحت وابل السهام"
+        },
+        {
+          "date_ms": null,
+          "id": "1160-5",
+          "number": 1160.5,
+          "scanlator": null,
+          "title": "1160.5 - موقعة غاد فالي."
+        },
+        {
+          "date_ms": null,
+          "id": "1160",
+          "number": 1160.0,
+          "scanlator": null,
+          "title": "1160 - موقعة غاد فالي."
+        },
+        {
+          "date_ms": null,
+          "id": "1159",
+          "number": 1159.0,
+          "scanlator": null,
+          "title": "1159 - جزيرة الأقدار."
+        },
+        {
+          "date_ms": null,
+          "id": "1158",
+          "number": 1158.0,
+          "scanlator": null,
+          "title": "1158 - روكس ضد هارالد."
+        },
+        {
+          "date_ms": null,
+          "id": "1157",
+          "number": 1157.0,
+          "scanlator": null,
+          "title": "1157 - الحانة الأسطورية."
+        },
+        {
+          "date_ms": null,
+          "id": "1156-5",
+          "number": 1156.5,
+          "scanlator": null,
+          "title": "1156.5 - النجمات"
+        },
+        {
+          "date_ms": null,
+          "id": "1156",
+          "number": 1156.0,
+          "scanlator": null,
+          "title": "1156 - النجمات."
+        },
+        {
+          "date_ms": null,
+          "id": "1155-5",
+          "number": 1155.5,
+          "scanlator": null,
+          "title": "1155.5 - قراصنة الروكس"
+        },
+        {
+          "date_ms": null,
+          "id": "1155",
+          "number": 1155.0,
+          "scanlator": null,
+          "title": "1155 - قراصنة الروكس"
+        },
+        {
+          "date_ms": null,
+          "id": "1154",
+          "number": 1154.0,
+          "scanlator": null,
+          "title": "1154 - حتى الموت لا يريدني."
+        }
+      ],
+      "id": "one-piece",
+      "op": "chapters"
+    },
+    {
+      "expect": {
+        "headers": {
+          "referer": "https://3asq.online/"
+        },
+        "images": [
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_01.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_02.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_03.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_04.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_05.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_06.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_07.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_08.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_09.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_10.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_11.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_12.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_13.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_14-15.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_16.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_17.jpg",
+          "https://3asq.online/wp-content/uploads/WP-manga/data/manga_5ca2daf920c76/118d9991f7d8846a3c2b29df6edb4d9c/1196m_18.jpg"
+        ],
+        "reading": "long_strip"
+      },
+      "id": "1196",
+      "op": "pages",
+      "series": "one-piece"
+    }
+  ],
+  "now_ms": 1792655316573,
+  "responses": {
+    "GET https://3asq.online/manga/one-piece/": "r2.html",
+    "GET https://3asq.online/manga/one-piece/1196/": "r4.html",
+    "GET https://3asq.online/manga/page/1/?m_orderby=views": "r1.html",
+    "POST https://3asq.online/manga/one-piece/ajax/chapters/": "r3.html"
+  }
+}
