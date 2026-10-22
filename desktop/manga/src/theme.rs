@@ -20,7 +20,11 @@ impl Themes {
     /// version stay its own. Loading a document with no themes at all must still work.
     pub fn resolve_document(&self, mut definition: Value) -> anyhow::Result<Value> {
         let mut seen = Vec::new();
-        while let Some(name) = definition.get("extends").and_then(Value::as_str).map(str::to_string) {
+        while let Some(name) = definition
+            .get("extends")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        {
             if seen.contains(&name) {
                 bail!("themes extend each other in a circle: {name}");
             }
@@ -42,7 +46,6 @@ impl Themes {
     pub fn resolve(&self, definition: Value) -> anyhow::Result<SourceDef> {
         Ok(serde_json::from_value(self.resolve_document(definition)?)?)
     }
-
 }
 
 fn merge(base: &mut Value, over: Value) {
@@ -69,9 +72,17 @@ mod tests {
     #[test]
     fn a_site_overrides_fields_and_keeps_the_rest_of_the_theme() {
         let mut themes = Themes::default();
-        themes.insert("t", json!({"theme": true, "a": {"x": 1, "y": 2}, "list": [1, 2], "keep": "k"}));
-        let out = themes.resolve_document(json!({"extends": "t", "a": {"y": 3}, "list": [9]})).unwrap();
-        assert_eq!(out, json!({"a": {"x": 1, "y": 3}, "list": [9], "keep": "k"}));
+        themes.insert(
+            "t",
+            json!({"theme": true, "a": {"x": 1, "y": 2}, "list": [1, 2], "keep": "k"}),
+        );
+        let out = themes
+            .resolve_document(json!({"extends": "t", "a": {"y": 3}, "list": [9]}))
+            .unwrap();
+        assert_eq!(
+            out,
+            json!({"a": {"x": 1, "y": 3}, "list": [9], "keep": "k"})
+        );
     }
 
     #[test]
@@ -79,7 +90,10 @@ mod tests {
         let mut themes = Themes::default();
         themes.insert("a", json!({"extends": "b", "one": 1}));
         themes.insert("b", json!({"two": 2, "one": 0}));
-        assert_eq!(themes.resolve_document(json!({"extends": "a"})).unwrap(), json!({"one": 1, "two": 2}));
+        assert_eq!(
+            themes.resolve_document(json!({"extends": "a"})).unwrap(),
+            json!({"one": 1, "two": 2})
+        );
         themes.insert("c", json!({"extends": "c"}));
         assert!(themes.resolve_document(json!({"extends": "c"})).is_err());
     }
@@ -106,7 +120,10 @@ mod tests {
         // and neither `extends` nor `theme` is left behind.
         assert_eq!(document["id"], json!("site"));
         assert_eq!(document["version"], json!(1));
-        assert_eq!(document["chapters"]["request"]["url"], json!("{base}/chapters/{id}"));
+        assert_eq!(
+            document["chapters"]["request"]["url"],
+            json!("{base}/chapters/{id}")
+        );
         assert_eq!(document["chapters"]["rows"], json!("li"));
         assert_eq!(document["detail"]["title"], json!("h1"));
         assert!(document.get("extends").is_none() && document.get("theme").is_none());
@@ -116,7 +133,13 @@ mod tests {
 
     #[test]
     fn extending_a_theme_that_is_not_installed_says_what_to_do_about_it() {
-        let error = Themes::default().resolve_document(json!({"extends": "madara", "schema": 1})).unwrap_err().to_string();
-        assert!(error.contains("madara") && error.contains("not installed"), "{error}");
+        let error = Themes::default()
+            .resolve_document(json!({"extends": "madara", "schema": 1}))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("madara") && error.contains("not installed"),
+            "{error}"
+        );
     }
 }

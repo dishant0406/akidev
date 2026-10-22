@@ -44,7 +44,10 @@ pub enum Step {
     Path(String),
     /// The first capture group, or the whole match; a node that does not match is dropped.
     Regex(String),
-    Replace { from: String, to: String },
+    Replace {
+        from: String,
+        to: String,
+    },
     Trim,
     Lower,
     /// Text with `{value}` (the node) and the request's holes; `{? ... ?}` groups vanish when empty.

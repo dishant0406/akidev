@@ -35,7 +35,12 @@ pub struct Ctx<'a> {
 
 impl<'a> Ctx<'a> {
     pub fn new(base: &'a str, hole: &'a dyn Fn(&str) -> Option<String>, now_ms: i64) -> Ctx<'a> {
-        Ctx { base, hole, now_ms, row: None }
+        Ctx {
+            base,
+            hole,
+            now_ms,
+            row: None,
+        }
     }
 }
 
@@ -70,7 +75,8 @@ pub fn selector(text: &str) -> anyhow::Result<Selector> {
     if let Some(found) = SELECTORS.with(|cache| cache.borrow().get(text).cloned()) {
         return Ok(found);
     }
-    let parsed = Selector::parse(text).map_err(|error| anyhow::anyhow!("bad selector \"{text}\": {error}"))?;
+    let parsed = Selector::parse(text)
+        .map_err(|error| anyhow::anyhow!("bad selector \"{text}\": {error}"))?;
     SELECTORS.with(|cache| cache.borrow_mut().insert(text.to_string(), parsed.clone()));
     Ok(parsed)
 }
@@ -86,7 +92,24 @@ fn squash(text: &str) -> String {
 /// An element's text: each block (a paragraph, a line break, a list item) on its own line, and
 /// runs of spaces squashed, so "<p>One.</p><p>Two.</p>" reads as two lines and not "One.Two.".
 fn element_text(element: ElementRef) -> String {
-    const BLOCKS: [&str; 16] = ["p", "div", "br", "li", "ul", "ol", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "section", "article"];
+    const BLOCKS: [&str; 16] = [
+        "p",
+        "div",
+        "br",
+        "li",
+        "ul",
+        "ol",
+        "tr",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "blockquote",
+        "section",
+        "article",
+    ];
     let mut text = String::new();
     for node in element.descendants() {
         match node.value() {
@@ -95,7 +118,11 @@ fn element_text(element: ElementRef) -> String {
             _ => {}
         }
     }
-    text.lines().map(squash).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
+    text.lines()
+        .map(squash)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// A node as text.
@@ -105,7 +132,9 @@ pub fn text_of(node: &Node) -> String {
         Node::Json(Value::String(text)) => text.clone(),
         Node::Json(Value::Null) => String::new(),
         Node::Json(value) => scalar(value).unwrap_or_else(|| value.to_string()),
-        Node::Html(document, id) => element(document, *id).map(|e| element_text(e)).unwrap_or_default(),
+        Node::Html(document, id) => element(document, *id)
+            .map(|e| element_text(e))
+            .unwrap_or_default(),
     }
 }
 
@@ -118,29 +147,60 @@ pub fn steps(ex: &Ex, role: Role, format: Format) -> Vec<Step> {
             (Format::Html, Role::Rows) => vec![Step::Css(text.clone())],
             (Format::Html, Role::Field) => match text.rsplit_once('@') {
                 Some(("", attribute)) => vec![Step::Attr(attribute.to_string())],
-                Some((css, attribute)) => vec![Step::Css(css.to_string()), Step::Attr(attribute.to_string())],
+                Some((css, attribute)) => vec![
+                    Step::Css(css.to_string()),
+                    Step::Attr(attribute.to_string()),
+                ],
                 None => vec![Step::Css(text.clone()), Step::Text],
             },
         },
     }
 }
 
-pub fn eval(ex: &Ex, role: Role, format: Format, from: &Node, ctx: &Ctx) -> anyhow::Result<Vec<Node>> {
-    let inner = Ctx { base: ctx.base, hole: ctx.hole, now_ms: ctx.now_ms, row: Some(from) };
+pub fn eval(
+    ex: &Ex,
+    role: Role,
+    format: Format,
+    from: &Node,
+    ctx: &Ctx,
+) -> anyhow::Result<Vec<Node>> {
+    let inner = Ctx {
+        base: ctx.base,
+        hole: ctx.hole,
+        now_ms: ctx.now_ms,
+        row: Some(from),
+    };
     run(&steps(ex, role, format), format, vec![from.clone()], &inner)
 }
 
 /// The first non-empty text an expression gives.
-pub fn eval_text(ex: &Ex, format: Format, from: &Node, ctx: &Ctx) -> anyhow::Result<Option<String>> {
-    Ok(eval(ex, Role::Field, format, from, ctx)?.iter().map(|node| text_of(node).trim().to_string()).find(|text| !text.is_empty()))
+pub fn eval_text(
+    ex: &Ex,
+    format: Format,
+    from: &Node,
+    ctx: &Ctx,
+) -> anyhow::Result<Option<String>> {
+    Ok(eval(ex, Role::Field, format, from, ctx)?
+        .iter()
+        .map(|node| text_of(node).trim().to_string())
+        .find(|text| !text.is_empty()))
 }
 
 /// Every non-empty text an expression gives.
 pub fn eval_texts(ex: &Ex, format: Format, from: &Node, ctx: &Ctx) -> anyhow::Result<Vec<String>> {
-    Ok(eval(ex, Role::Field, format, from, ctx)?.iter().map(|node| text_of(node).trim().to_string()).filter(|text| !text.is_empty()).collect())
+    Ok(eval(ex, Role::Field, format, from, ctx)?
+        .iter()
+        .map(|node| text_of(node).trim().to_string())
+        .filter(|text| !text.is_empty())
+        .collect())
 }
 
-pub fn run(steps: &[Step], format: Format, mut nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Result<Vec<Node>> {
+pub fn run(
+    steps: &[Step],
+    format: Format,
+    mut nodes: Vec<Node>,
+    ctx: &Ctx,
+) -> anyhow::Result<Vec<Node>> {
     for step in steps {
         nodes = apply(step, format, nodes, ctx)?;
     }
@@ -166,7 +226,10 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
                     },
                 };
                 if let Some(root) = element(&document, id) {
-                    found.extend(root.select(&selector).map(|hit| Node::Html(document.clone(), hit.id())));
+                    found.extend(
+                        root.select(&selector)
+                            .map(|hit| Node::Html(document.clone(), hit.id())),
+                    );
                 }
             }
             found
@@ -176,7 +239,12 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
             .filter_map(|node| match node {
                 Node::Html(document, id) => {
                     let found = element(document, *id)?;
-                    names.split('|').find_map(|name| found.value().attr(name.trim()).filter(|value| !value.trim().is_empty()))
+                    names.split('|').find_map(|name| {
+                        found
+                            .value()
+                            .attr(name.trim())
+                            .filter(|value| !value.trim().is_empty())
+                    })
                 }
                 _ => None,
             })
@@ -186,14 +254,22 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
         Step::Html => nodes
             .iter()
             .filter_map(|node| match node {
-                Node::Html(document, id) => element(document, *id).map(|e| Node::Text(e.inner_html())),
+                Node::Html(document, id) => {
+                    element(document, *id).map(|e| Node::Text(e.inner_html()))
+                }
                 other => Some(Node::Text(text_of(other))),
             })
             .collect(),
         Step::Path(path) => nodes
             .iter()
             .filter_map(|node| match node {
-                Node::Json(value) => Some(select(value, path).into_iter().cloned().map(Node::Json).collect::<Vec<_>>()),
+                Node::Json(value) => Some(
+                    select(value, path)
+                        .into_iter()
+                        .cloned()
+                        .map(Node::Json)
+                        .collect::<Vec<_>>(),
+                ),
                 _ => None,
             })
             .flatten()
@@ -201,23 +277,39 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
         Step::Regex(text) => {
             let regex = pattern(text)?;
             texts(nodes)
-                .filter_map(|text| regex.captures(&text).map(|found| found.get(1).unwrap_or_else(|| found.get(0).unwrap()).as_str().to_string()))
+                .filter_map(|text| {
+                    regex.captures(&text).map(|found| {
+                        found
+                            .get(1)
+                            .unwrap_or_else(|| found.get(0).unwrap())
+                            .as_str()
+                            .to_string()
+                    })
+                })
                 .map(Node::Text)
                 .collect()
         }
         Step::Replace { from, to } => {
             let regex = pattern(from)?;
-            texts(nodes).map(|text| Node::Text(regex.replace_all(&text, to.as_str()).into_owned())).collect()
+            texts(nodes)
+                .map(|text| Node::Text(regex.replace_all(&text, to.as_str()).into_owned()))
+                .collect()
         }
-        Step::Trim => texts(nodes).map(|text| Node::Text(text.trim().to_string())).collect(),
-        Step::Lower => texts(nodes).map(|text| Node::Text(text.to_lowercase())).collect(),
+        Step::Trim => texts(nodes)
+            .map(|text| Node::Text(text.trim().to_string()))
+            .collect(),
+        Step::Lower => texts(nodes)
+            .map(|text| Node::Text(text.to_lowercase()))
+            .collect(),
         Step::Template(template) => texts(nodes)
             .filter_map(|value| {
                 let hole = |name: &str| match name {
                     "value" => Some(value.clone()),
                     other => match other.strip_prefix("^.") {
                         Some(path) => match ctx.row {
-                            Some(Node::Json(row)) => select(row, path).first().and_then(|found| scalar(found)),
+                            Some(Node::Json(row)) => {
+                                select(row, path).first().and_then(|found| scalar(found))
+                            }
                             _ => None,
                         },
                         None => (ctx.hole)(other),
@@ -229,39 +321,81 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
             .collect(),
         Step::Abs => {
             let base = url::Url::parse(ctx.base).context("the source's address is not a URL")?;
-            texts(nodes).filter_map(|text| base.join(text.trim()).ok()).map(|link| Node::Text(link.to_string())).collect()
+            texts(nodes)
+                .filter_map(|text| base.join(text.trim()).ok())
+                .map(|link| Node::Text(link.to_string()))
+                .collect()
         }
-        Step::Date(formats) => texts(nodes).filter_map(|text| crate::date::parse(&text, formats, ctx.now_ms)).map(|ms| Node::Text(ms.to_string())).collect(),
-        Step::Number => texts(nodes).filter_map(|text| crate::date::chapter_number(&text)).map(|number| Node::Text(number.to_string())).collect(),
-        Step::Json => texts(nodes).filter_map(|text| serde_json::from_str::<Value>(text.trim()).ok()).map(Node::Json).collect(),
+        Step::Date(formats) => texts(nodes)
+            .filter_map(|text| crate::date::parse(&text, formats, ctx.now_ms))
+            .map(|ms| Node::Text(ms.to_string()))
+            .collect(),
+        Step::Number => texts(nodes)
+            .filter_map(|text| crate::date::chapter_number(&text))
+            .map(|number| Node::Text(number.to_string()))
+            .collect(),
+        Step::Json => texts(nodes)
+            .filter_map(|text| serde_json::from_str::<Value>(text.trim()).ok())
+            .map(Node::Json)
+            .collect(),
         Step::First => nodes.into_iter().take(1).collect(),
         Step::Last => nodes.into_iter().last().into_iter().collect(),
         Step::Nth(index) => nodes.into_iter().nth(*index).into_iter().collect(),
         Step::Join(separator) => {
             let all: Vec<String> = texts(nodes).filter(|text| !text.is_empty()).collect();
-            if all.is_empty() { vec![] } else { vec![Node::Text(all.join(separator))] }
+            if all.is_empty() {
+                vec![]
+            } else {
+                vec![Node::Text(all.join(separator))]
+            }
         }
         Step::Split(separator) => texts(nodes)
-            .flat_map(|text| text.split(separator.as_str()).map(|piece| piece.trim().to_string()).collect::<Vec<_>>())
+            .flat_map(|text| {
+                text.split(separator.as_str())
+                    .map(|piece| piece.trim().to_string())
+                    .collect::<Vec<_>>()
+            })
             .filter(|piece| !piece.is_empty())
             .map(Node::Text)
             .collect(),
         Step::Const(text) => vec![Node::Text(text.clone())],
         Step::Default(text) => {
-            if nodes.iter().any(|node| !text_of(node).trim().is_empty()) { nodes } else { vec![Node::Text(text.clone())] }
+            if nodes.iter().any(|node| !text_of(node).trim().is_empty()) {
+                nodes
+            } else {
+                vec![Node::Text(text.clone())]
+            }
         }
-        Step::NonEmpty => nodes.into_iter().filter(|node| !text_of(node).trim().is_empty()).collect(),
+        Step::NonEmpty => nodes
+            .into_iter()
+            .filter(|node| !text_of(node).trim().is_empty())
+            .collect(),
         Step::Exists => {
-            if nodes.iter().any(|node| !matches!(node, Node::Text(text) if text.is_empty())) { vec![Node::Text("true".into())] } else { vec![] }
+            if nodes
+                .iter()
+                .any(|node| !matches!(node, Node::Text(text) if text.is_empty()))
+            {
+                vec![Node::Text("true".into())]
+            } else {
+                vec![]
+            }
         }
         Step::Map(table) => texts(nodes)
             .filter_map(|text| {
                 let lower = text.to_lowercase();
-                table.iter().find(|(needle, _)| lower.contains(&needle.to_lowercase())).map(|(_, value)| Node::Text(value.clone()))
+                table
+                    .iter()
+                    .find(|(needle, _)| lower.contains(&needle.to_lowercase()))
+                    .map(|(_, value)| Node::Text(value.clone()))
             })
             .collect(),
-        Step::Where(test) => nodes.into_iter().filter(|node| matches_where(node, test, ctx)).collect(),
-        Step::PlainText => texts(nodes).map(|text| Node::Text(text_of(&parse_fragment(&text)))).collect(),
+        Step::Where(test) => nodes
+            .into_iter()
+            .filter(|node| matches_where(node, test, ctx))
+            .collect(),
+        Step::PlainText => texts(nodes)
+            .map(|text| Node::Text(text_of(&parse_fragment(&text))))
+            .collect(),
         Step::Sort => {
             let mut all: Vec<String> = texts(nodes).collect();
             all.sort_by(|a, b| natural_cmp(a, b));
@@ -269,12 +403,20 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
         }
         Step::Unique => {
             let mut seen = std::collections::HashSet::new();
-            nodes.into_iter().filter(|node| seen.insert(text_of(node))).collect()
+            nodes
+                .into_iter()
+                .filter(|node| seen.insert(text_of(node)))
+                .collect()
         }
         Step::AesCbc(spec) => decrypt(nodes, spec, ctx)?,
         Step::Coalesce(options) => {
             for option in options {
-                let found = run(&steps(option, Role::Field, format), format, nodes.clone(), ctx)?;
+                let found = run(
+                    &steps(option, Role::Field, format),
+                    format,
+                    nodes.clone(),
+                    ctx,
+                )?;
                 if found.iter().any(|node| !text_of(node).trim().is_empty()) {
                     return Ok(found);
                 }
@@ -313,8 +455,15 @@ fn decrypt(nodes: Vec<Node>, spec: &AesCbc, ctx: &Ctx) -> anyhow::Result<Vec<Nod
             Some(payload) => payload.ct.clone(),
             None => text_of(&node),
         };
-        let data = crate::crypt::bytes(&ct, spec.hex).with_context(|| format!("the value to decrypt is not {}", if spec.hex { "hexadecimal" } else { "base64" }))?;
-        out.push(Node::Text(String::from_utf8_lossy(&crate::crypt::decrypt(key, &data)?).into_owned()));
+        let data = crate::crypt::bytes(&ct, spec.hex).with_context(|| {
+            format!(
+                "the value to decrypt is not {}",
+                if spec.hex { "hexadecimal" } else { "base64" }
+            )
+        })?;
+        out.push(Node::Text(
+            String::from_utf8_lossy(&crate::crypt::decrypt(key, &data)?).into_owned(),
+        ));
     }
     Ok(out)
 }
@@ -330,7 +479,8 @@ fn payload_of(node: &Node) -> anyhow::Result<Option<Payload>> {
             if !text.starts_with('{') {
                 return Ok(None);
             }
-            serde_json::from_str(text).with_context(|| "the payload is not JSON: has the site changed?")?
+            serde_json::from_str(text)
+                .with_context(|| "the payload is not JSON: has the site changed?")?
         }
     };
     Ok(match serde_json::from_value(value) {
@@ -340,19 +490,29 @@ fn payload_of(node: &Node) -> anyhow::Result<Option<Payload>> {
     })
 }
 
-fn key_for(spec: &AesCbc, payload: Option<&Payload>, ctx: &Ctx) -> anyhow::Result<crate::crypt::Key> {
-    let fill = |text: &str| crate::template::fill(text, ctx.hole, false).with_context(|| format!("{text} needs a value this call does not have"));
+fn key_for(
+    spec: &AesCbc,
+    payload: Option<&Payload>,
+    ctx: &Ctx,
+) -> anyhow::Result<crate::crypt::Key> {
+    let fill = |text: &str| {
+        crate::template::fill(text, ctx.hole, false)
+            .with_context(|| format!("{text} needs a value this call does not have"))
+    };
     if let Some(passphrase) = &spec.passphrase {
         // The salt is usually in the payload; a definition that states one uses it instead.
         let salt = match &spec.salt {
             Some(salt) => fill(salt)?,
-            None => payload.and_then(|payload| payload.s.clone()).context("aes_cbc needs a salt: none was stated and the payload has none")?,
+            None => payload
+                .and_then(|payload| payload.s.clone())
+                .context("aes_cbc needs a salt: none was stated and the payload has none")?,
         };
         let salt = crate::crypt::bytes(&salt, true).context("the salt is not hexadecimal")?;
         let mut derived = crate::crypt::derive(&fill(passphrase)?, &salt);
         // A payload may carry its own IV where a site varies it per chapter.
         if let Some(iv) = payload.and_then(|payload| payload.iv.clone()) {
-            derived.iv = crate::crypt::bytes(fill(&iv)?.as_str(), true).context("the IV is not hexadecimal")?;
+            derived.iv = crate::crypt::bytes(fill(&iv)?.as_str(), true)
+                .context("the IV is not hexadecimal")?;
         }
         return Ok(derived);
     }
@@ -396,18 +556,34 @@ pub(crate) fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 fn matches_where(node: &Node, test: &crate::def::Where, ctx: &Ctx) -> bool {
-    let Node::Json(value) = node else { return false };
-    let found = select(value, &test.path).into_iter().find(|found| !found.is_null());
+    let Node::Json(value) = node else {
+        return false;
+    };
+    let found = select(value, &test.path)
+        .into_iter()
+        .find(|found| !found.is_null());
     let text = found.and_then(scalar);
     if test.absent.is_some_and(|absent| absent != text.is_none()) {
         return false;
     }
     let have = text.as_deref().unwrap_or("");
     // A wanted value may name a hole of the request ("{id}").
-    let fill = |wanted: &str| if wanted.contains('{') { crate::template::fill(wanted, ctx.hole, false).unwrap_or_default() } else { wanted.to_string() };
+    let fill = |wanted: &str| {
+        if wanted.contains('{') {
+            crate::template::fill(wanted, ctx.hole, false).unwrap_or_default()
+        } else {
+            wanted.to_string()
+        }
+    };
     test.equals.as_deref().is_none_or(|want| have == fill(want))
-        && test.not_equals.as_deref().is_none_or(|not| have != fill(not))
-        && test.one_of.as_ref().is_none_or(|list| list.iter().any(|item| *item == have || fill(item) == have))
+        && test
+            .not_equals
+            .as_deref()
+            .is_none_or(|not| have != fill(not))
+        && test
+            .one_of
+            .as_ref()
+            .is_none_or(|list| list.iter().any(|item| *item == have || fill(item) == have))
 }
 
 /// Rejects what can be known to be wrong without a response: a bad selector, pattern or date format.
@@ -426,7 +602,9 @@ pub fn check_steps(list: &[Step], format: Format) -> anyhow::Result<()> {
             Step::Date(formats) => {
                 for format in formats {
                     if !crate::date::check(format) {
-                        bail!("the date format \"{format}\" can never read a date (it needs a year)");
+                        bail!(
+                            "the date format \"{format}\" can never read a date (it needs a year)"
+                        );
                     }
                 }
             }
@@ -490,12 +668,36 @@ mod tests {
     fn a_pipe_extracts_ids_and_falls_back_between_attributes() {
         let none = |_: &str| None;
         let ctx = ctx(&none);
-        let rows = eval(&ex(r#""div.card""#), Role::Rows, Format::Html, &parse_html(PAGE), &ctx).unwrap();
+        let rows = eval(
+            &ex(r#""div.card""#),
+            Role::Rows,
+            Format::Html,
+            &parse_html(PAGE),
+            &ctx,
+        )
+        .unwrap();
         let id = ex(r#"[{"css":"a"},{"attr":"href"},{"regex":"/series/([^/]+)/"}]"#);
-        assert_eq!(eval_text(&id, Format::Html, &rows[0], &ctx).unwrap().as_deref(), Some("solo"));
-        let cover = ex(r#"[{"coalesce":[[{"css":"img"},{"attr":"data-src"}],[{"css":"img"},{"attr":"src"}]]},"abs"]"#);
-        assert_eq!(eval_text(&cover, Format::Html, &rows[0], &ctx).unwrap().as_deref(), Some("https://example.org/c/solo.jpg"));
-        assert_eq!(eval_text(&cover, Format::Html, &rows[1], &ctx).unwrap().as_deref(), Some("https://example.org/c/tower.jpg"));
+        assert_eq!(
+            eval_text(&id, Format::Html, &rows[0], &ctx)
+                .unwrap()
+                .as_deref(),
+            Some("solo")
+        );
+        let cover = ex(
+            r#"[{"coalesce":[[{"css":"img"},{"attr":"data-src"}],[{"css":"img"},{"attr":"src"}]]},"abs"]"#,
+        );
+        assert_eq!(
+            eval_text(&cover, Format::Html, &rows[0], &ctx)
+                .unwrap()
+                .as_deref(),
+            Some("https://example.org/c/solo.jpg")
+        );
+        assert_eq!(
+            eval_text(&cover, Format::Html, &rows[1], &ctx)
+                .unwrap()
+                .as_deref(),
+            Some("https://example.org/c/tower.jpg")
+        );
     }
 
     #[test]
@@ -506,7 +708,17 @@ mod tests {
         let root = parse_root(body, Format::Json).unwrap();
         let rows = eval(&ex(r#""data""#), Role::Rows, Format::Json, &root, &ctx).unwrap();
         assert_eq!(rows.len(), 2);
-        assert_eq!(eval_text(&ex(r#""attributes.title.en""#), Format::Json, &rows[1], &ctx).unwrap().as_deref(), Some("Two"));
+        assert_eq!(
+            eval_text(
+                &ex(r#""attributes.title.en""#),
+                Format::Json,
+                &rows[1],
+                &ctx
+            )
+            .unwrap()
+            .as_deref(),
+            Some("Two")
+        );
 
         let html = parse_html(r#"<script id="d">{"pages":["/1.jpg","/2.jpg"]}</script>"#);
         let pages = ex(r##"[{"css":"script#d"},"text","json",{"path":"pages.*"},"text"]"##);
@@ -519,7 +731,13 @@ mod tests {
         let hole = |name: &str| (name == "id").then(|| "solo".to_string());
         let ctx = ctx(&hole);
         let from = Node::Text("12".into());
-        let out = run(&[Step::Template("{id}-ch-{value}".into())], Format::Html, vec![from], &ctx).unwrap();
+        let out = run(
+            &[Step::Template("{id}-ch-{value}".into())],
+            Format::Html,
+            vec![from],
+            &ctx,
+        )
+        .unwrap();
         assert_eq!(text_of(&out[0]), "solo-ch-12");
     }
 
@@ -536,11 +754,31 @@ mod tests {
     fn files_sort_the_way_people_read_them_and_where_can_name_a_hole() {
         let hole = |name: &str| (name == "id").then(|| "ep2".to_string());
         let ctx = ctx(&hole);
-        let from = Node::Json(serde_json::json!({"files": ["p10.jpg", "p2.jpg", "p1.jpg", "cover.jpg"]}));
-        let sorted = eval(&ex(r#"[{"path":"files"},"sort"]"#), Role::Field, Format::Json, &from, &ctx).unwrap();
-        assert_eq!(sorted.iter().map(text_of).collect::<Vec<_>>(), ["cover.jpg", "p1.jpg", "p2.jpg", "p10.jpg"]);
-        let rows = Node::Json(serde_json::json!([{"name": "ep1", "t": "one"}, {"name": "ep2", "t": "two"}]));
-        let found = eval(&ex(r#"[{"path":""},{"where":{"path":"name","equals":"{id}"}},{"path":"t"}]"#), Role::Field, Format::Json, &rows, &ctx).unwrap();
+        let from =
+            Node::Json(serde_json::json!({"files": ["p10.jpg", "p2.jpg", "p1.jpg", "cover.jpg"]}));
+        let sorted = eval(
+            &ex(r#"[{"path":"files"},"sort"]"#),
+            Role::Field,
+            Format::Json,
+            &from,
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            sorted.iter().map(text_of).collect::<Vec<_>>(),
+            ["cover.jpg", "p1.jpg", "p2.jpg", "p10.jpg"]
+        );
+        let rows = Node::Json(
+            serde_json::json!([{"name": "ep1", "t": "one"}, {"name": "ep2", "t": "two"}]),
+        );
+        let found = eval(
+            &ex(r#"[{"path":""},{"where":{"path":"name","equals":"{id}"}},{"path":"t"}]"#),
+            Role::Field,
+            Format::Json,
+            &rows,
+            &ctx,
+        )
+        .unwrap();
         assert_eq!(found.iter().map(text_of).collect::<Vec<_>>(), ["two"]);
     }
 
@@ -558,7 +796,18 @@ mod tests {
             ("complete".into(), "completed".into()),
             ("on hold".into(), "hiatus".into()),
         ]);
-        let mapped = |text: &str| run(std::slice::from_ref(&step), Format::Html, vec![Node::Text(text.into())], &ctx).unwrap().iter().map(text_of).collect::<Vec<_>>();
+        let mapped = |text: &str| {
+            run(
+                std::slice::from_ref(&step),
+                Format::Html,
+                vec![Node::Text(text.into())],
+                &ctx,
+            )
+            .unwrap()
+            .iter()
+            .map(text_of)
+            .collect::<Vec<_>>()
+        };
         assert_eq!(mapped("Ongoing"), ["ongoing"]);
         assert_eq!(mapped("OnGoing"), ["ongoing"]);
         assert_eq!(mapped("Completed"), ["completed"]);
@@ -582,7 +831,11 @@ mod tests {
         let mut buffer = plain.to_vec();
         buffer.resize(plain.len() + 16 - plain.len() % 16, 0);
         let length = buffer.len();
-        cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv).unwrap().encrypt_padded_mut::<Pkcs7>(&mut buffer[..length], plain.len()).unwrap().to_vec()
+        cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv)
+            .unwrap()
+            .encrypt_padded_mut::<Pkcs7>(&mut buffer[..length], plain.len())
+            .unwrap()
+            .to_vec()
     }
 
     fn hex(text: &str) -> Vec<u8> {
@@ -602,28 +855,62 @@ mod tests {
         let salt = "0001020304050607";
         let key = crate::crypt::derive("s3cret", &hex(salt));
         let plain = br#"["https://img.test/1.jpg","https://img.test/2.jpg"]"#;
-        let payload = serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)), "s": salt }).to_string();
+        let payload =
+            serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)), "s": salt })
+                .to_string();
         let none = |_: &str| None;
         let ctx = ctx(&none);
         let pipe = ex(r#"["json",{"aes_cbc":{"passphrase":"s3cret"}}]"#);
-        let out = run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![Node::Text(payload.clone())], &ctx).unwrap();
-        assert_eq!(out.iter().map(text_of).collect::<Vec<_>>(), [String::from_utf8_lossy(plain)]);
+        let out = run(
+            &steps(&pipe, Role::Field, Format::Html),
+            Format::Html,
+            vec![Node::Text(payload.clone())],
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            out.iter().map(text_of).collect::<Vec<_>>(),
+            [String::from_utf8_lossy(plain)]
+        );
         // The same payload arriving as JSON rather than as text reads the same way.
-        let out = run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![parse_root(&payload, Format::Json).unwrap()], &ctx).unwrap();
-        assert_eq!(out.iter().map(text_of).collect::<Vec<_>>(), [String::from_utf8_lossy(plain)]);
+        let out = run(
+            &steps(&pipe, Role::Field, Format::Html),
+            Format::Html,
+            vec![parse_root(&payload, Format::Json).unwrap()],
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(
+            out.iter().map(text_of).collect::<Vec<_>>(),
+            [String::from_utf8_lossy(plain)]
+        );
         // A payload whose `ct` is missing, and one that is not JSON at all, both say so rather than blaming
         // base64. Read without the `json` step first, because that step drops what it cannot parse.
         let direct = ex(r#"[{"aes_cbc":{"passphrase":"s3cret"}}]"#);
-        for (broken, wanted) in [("{not json", "not JSON"), (r#"{"s":"00"}"#, "no ciphertext")] {
-            let error = match run(&steps(&direct, Role::Field, Format::Html), Format::Html, vec![Node::Text(broken.into())], &ctx) {
+        for (broken, wanted) in [
+            ("{not json", "not JSON"),
+            (r#"{"s":"00"}"#, "no ciphertext"),
+        ] {
+            let error = match run(
+                &steps(&direct, Role::Field, Format::Html),
+                Format::Html,
+                vec![Node::Text(broken.into())],
+                &ctx,
+            ) {
                 Err(error) => format!("{error:#}"),
                 Ok(_) => panic!("{broken} must not decrypt"),
             };
             assert!(error.contains(wanted), "{broken}: {error}");
         }
         // No salt anywhere is said plainly, not decrypted into nonsense.
-        let bare = serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)) }).to_string();
-        let error = match run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![Node::Text(bare)], &ctx) {
+        let bare =
+            serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)) }).to_string();
+        let error = match run(
+            &steps(&pipe, Role::Field, Format::Html),
+            Format::Html,
+            vec![Node::Text(bare)],
+            &ctx,
+        ) {
             Err(error) => error.to_string(),
             Ok(_) => panic!("a payload with no salt must not decrypt"),
         };
@@ -632,17 +919,54 @@ mod tests {
 
     #[test]
     fn a_stated_key_decrypts_and_a_half_specified_one_is_caught_by_check() {
-        let (key, iv) = ("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f");
+        let (key, iv) = (
+            "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+            "000102030405060708090a0b0c0d0e0f",
+        );
         let plain = b"https://img.test/page.jpg";
         let from = Node::Text(base64(&encrypt(&hex(key), &hex(iv), plain)));
         let none = |_: &str| None;
-        let step = |key: Option<&str>, iv: Option<&str>| Step::AesCbc(AesCbc { passphrase: None, salt: None, key: key.map(Into::into), iv: iv.map(Into::into), hex: false });
-        let out = run(&[step(Some(key), Some(iv))], Format::Html, vec![from], &ctx(&none)).unwrap();
+        let step = |key: Option<&str>, iv: Option<&str>| {
+            Step::AesCbc(AesCbc {
+                passphrase: None,
+                salt: None,
+                key: key.map(Into::into),
+                iv: iv.map(Into::into),
+                hex: false,
+            })
+        };
+        let out = run(
+            &[step(Some(key), Some(iv))],
+            Format::Html,
+            vec![from],
+            &ctx(&none),
+        )
+        .unwrap();
         assert_eq!(text_of(&out[0]), String::from_utf8_lossy(plain));
 
-        assert!(check_steps(&[step(Some(key), None)], Format::Html).is_err(), "half a key pair");
-        assert!(check_steps(&[step(None, None)], Format::Html).is_err(), "no key at all");
-        let wrong = Step::AesCbc(AesCbc { passphrase: None, salt: None, key: Some("ff".repeat(32)), iv: Some(iv.into()), hex: false });
-        assert!(run(&[wrong], Format::Html, vec![Node::Text(base64(&encrypt(&hex(key), &hex(iv), plain)))], &ctx(&none)).is_err());
+        assert!(
+            check_steps(&[step(Some(key), None)], Format::Html).is_err(),
+            "half a key pair"
+        );
+        assert!(
+            check_steps(&[step(None, None)], Format::Html).is_err(),
+            "no key at all"
+        );
+        let wrong = Step::AesCbc(AesCbc {
+            passphrase: None,
+            salt: None,
+            key: Some("ff".repeat(32)),
+            iv: Some(iv.into()),
+            hex: false,
+        });
+        assert!(
+            run(
+                &[wrong],
+                Format::Html,
+                vec![Node::Text(base64(&encrypt(&hex(key), &hex(iv), plain)))],
+                &ctx(&none)
+            )
+            .is_err()
+        );
     }
 }

@@ -27,9 +27,13 @@ pub fn fill(template: &str, hole: &dyn Fn(&str) -> Option<String>, encode: bool)
                 Some(name) => (name, true),
                 None => (name, false),
             };
-            let value = hole(name)
-                .filter(|value| !value.is_empty())
-                .map(|value| if encode && !raw { percent_encode(&value) } else { value });
+            let value = hole(name).filter(|value| !value.is_empty()).map(|value| {
+                if encode && !raw {
+                    percent_encode(&value)
+                } else {
+                    value
+                }
+            });
             match (&mut group, value) {
                 (Some((inside, _)), Some(value)) => inside.push_str(&value),
                 (Some((_, complete)), None) => *complete = false,
@@ -53,7 +57,9 @@ pub fn percent_encode(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for byte in text.bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
             _ => out.push_str(&format!("%{byte:02X}")),
         }
     }
@@ -74,14 +80,20 @@ mod tests {
 
     #[test]
     fn encodes_holes_and_keeps_raw_ones() {
-        assert_eq!(fill("/s?q={term}", &holes, true).unwrap(), "/s?q=solo%20leveling");
+        assert_eq!(
+            fill("/s?q={term}", &holes, true).unwrap(),
+            "/s?q=solo%20leveling"
+        );
         assert_eq!(fill("{id:raw}ajax", &holes, true).unwrap(), "/manga/x/ajax");
     }
 
     #[test]
     fn groups_vanish_when_a_hole_is_empty() {
         assert_eq!(fill("a{?&g={genre}?}b", &holes, true).unwrap(), "ab");
-        assert_eq!(fill("a{?&q={term}?}b", &holes, true).unwrap(), "a&q=solo%20levelingb");
+        assert_eq!(
+            fill("a{?&q={term}?}b", &holes, true).unwrap(),
+            "a&q=solo%20levelingb"
+        );
     }
 
     #[test]

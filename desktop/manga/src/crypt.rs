@@ -28,8 +28,17 @@ pub fn bytes(text: &str, hex: bool) -> anyhow::Result<Vec<u8>> {
     ensure!(!text.is_empty(), "there is nothing to decode");
     ensure!(text.len() <= MAX_INPUT, "the value is too large to decrypt");
     if hex {
-        ensure!(text.len().is_multiple_of(2) && text.bytes().all(|b| b.is_ascii_hexdigit()), "the value is not hexadecimal");
-        return (0..text.len()).step_by(2).map(|at| u8::from_str_radix(&text[at..at + 2], 16).with_context(|| format!("not hexadecimal at byte {at}"))).collect();
+        ensure!(
+            text.len().is_multiple_of(2) && text.bytes().all(|b| b.is_ascii_hexdigit()),
+            "the value is not hexadecimal"
+        );
+        return (0..text.len())
+            .step_by(2)
+            .map(|at| {
+                u8::from_str_radix(&text[at..at + 2], 16)
+                    .with_context(|| format!("not hexadecimal at byte {at}"))
+            })
+            .collect();
     }
     // base64 as a `<script>` holds it: possibly wrapped across lines, possibly without its padding.
     let squashed: String = text.chars().filter(|c| !c.is_whitespace()).collect();
@@ -58,25 +67,46 @@ pub fn derive(passphrase: &str, salt: &[u8]) -> Key {
         previous = hasher.finalize().to_vec();
         material.extend_from_slice(&previous);
     }
-    Key { bytes: material[..32].to_vec(), iv: material[32..48].to_vec() }
+    Key {
+        bytes: material[..32].to_vec(),
+        iv: material[32..48].to_vec(),
+    }
 }
 
 /// The key a site states plainly: a hex key (32 or 16 bytes) and a hex IV.
 pub fn fixed(key_hex: &str, iv_hex: &str) -> anyhow::Result<Key> {
-    Ok(Key { bytes: bytes(key_hex, true).context("the key is not hexadecimal")?, iv: bytes(iv_hex, true).context("the IV is not hexadecimal")? })
+    Ok(Key {
+        bytes: bytes(key_hex, true).context("the key is not hexadecimal")?,
+        iv: bytes(iv_hex, true).context("the IV is not hexadecimal")?,
+    })
 }
 
 /// Removes the AES-CBC padding. What comes back is often text, but not always, so it is left as bytes.
 pub fn decrypt(key: &Key, data: &[u8]) -> anyhow::Result<Vec<u8>> {
-    ensure!(key.iv.len() == 16, "an AES IV is 16 bytes, not {}", key.iv.len());
-    ensure!(data.len().is_multiple_of(16) && !data.is_empty(), "an AES-CBC ciphertext is a whole number of 16-byte blocks");
+    ensure!(
+        key.iv.len() == 16,
+        "an AES IV is 16 bytes, not {}",
+        key.iv.len()
+    );
+    ensure!(
+        data.len().is_multiple_of(16) && !data.is_empty(),
+        "an AES-CBC ciphertext is a whole number of 16-byte blocks"
+    );
     let mut buffer = data.to_vec();
     let plain: &[u8] = match key.bytes.len() {
-        32 => Aes256Cbc::new_from_slices(&key.bytes, &key.iv).map_err(|_| anyhow::anyhow!("the AES key is not 32 bytes"))?.decrypt_padded_mut::<Pkcs7>(&mut buffer),
-        16 => cbc::Decryptor::<aes::Aes128>::new_from_slices(&key.bytes, &key.iv).map_err(|_| anyhow::anyhow!("the AES key is not 16 bytes"))?.decrypt_padded_mut::<Pkcs7>(&mut buffer),
+        32 => Aes256Cbc::new_from_slices(&key.bytes, &key.iv)
+            .map_err(|_| anyhow::anyhow!("the AES key is not 32 bytes"))?
+            .decrypt_padded_mut::<Pkcs7>(&mut buffer),
+        16 => cbc::Decryptor::<aes::Aes128>::new_from_slices(&key.bytes, &key.iv)
+            .map_err(|_| anyhow::anyhow!("the AES key is not 16 bytes"))?
+            .decrypt_padded_mut::<Pkcs7>(&mut buffer),
         other => bail!("an AES key is 32 bytes (256 bit) or 16 (128 bit), not {other}"),
     }
-    .map_err(|_| anyhow::anyhow!("the padding is wrong: the key, the IV or the ciphertext is not the one expected"))?;
+    .map_err(|_| {
+        anyhow::anyhow!(
+            "the padding is wrong: the key, the IV or the ciphertext is not the one expected"
+        )
+    })?;
     Ok(plain.to_vec())
 }
 
@@ -93,13 +123,20 @@ mod tests {
         let mut buffer = plain.to_vec();
         buffer.resize(plain.len() + 16 - plain.len() % 16, 0);
         let length = buffer.len();
-        cbc::Encryptor::<Aes256>::new_from_slices(key, iv).unwrap().encrypt_padded_mut::<Pkcs7>(&mut buffer[..length], plain.len()).unwrap().to_vec()
+        cbc::Encryptor::<Aes256>::new_from_slices(key, iv)
+            .unwrap()
+            .encrypt_padded_mut::<Pkcs7>(&mut buffer[..length], plain.len())
+            .unwrap()
+            .to_vec()
     }
 
     #[test]
     fn md5_is_the_standard_one() {
         use md5::Digest;
-        assert_eq!(format!("{:x}", Md5::digest(b"abc")), "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(
+            format!("{:x}", Md5::digest(b"abc")),
+            "900150983cd24fb0d6963f7d28e17f72"
+        );
     }
 
     /// NIST SP 800-38A, F.2.1/F.2.6: the first block of AES-256-CBC.
@@ -153,10 +190,22 @@ mod tests {
 
     #[test]
     fn only_a_32_or_16_byte_key_is_accepted() {
-        assert!(fixed("00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f").is_ok());
-        let odd = Key { bytes: vec![0; 24], iv: vec![0; 16] };
+        assert!(
+            fixed(
+                "00112233445566778899aabbccddeeff",
+                "000102030405060708090a0b0c0d0e0f"
+            )
+            .is_ok()
+        );
+        let odd = Key {
+            bytes: vec![0; 24],
+            iv: vec![0; 16],
+        };
         assert!(decrypt(&odd, &[0; 16]).is_err());
-        let short_iv = Key { bytes: vec![0; 32], iv: vec![0; 8] };
+        let short_iv = Key {
+            bytes: vec![0; 32],
+            iv: vec![0; 8],
+        };
         assert!(decrypt(&short_iv, &[0; 16]).is_err());
     }
 }

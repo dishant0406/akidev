@@ -1,7 +1,9 @@
 //! A source: a definition and the means to ask its site the six questions every reader asks.
 
 use crate::date;
-use crate::def::{Ex, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SourceDef, SCHEMA};
+use crate::def::{
+    Ex, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SCHEMA, SourceDef,
+};
 use crate::eval::{self, Ctx, check_ex, eval, eval_text, eval_texts};
 use crate::fetch::{Fetcher, Req, Unreachable};
 use crate::model::{Card, Chapter, Detail, Page, PageList, Reading, Status};
@@ -38,11 +40,20 @@ impl Holes {
         match name {
             "page" => Some(self.page.max(1).to_string()),
             "page0" => Some(self.page.max(1).saturating_sub(1).to_string()),
-            "offset" => Some(self.offset.unwrap_or_else(|| self.page.max(1).saturating_sub(1) * self.page_size.max(1)).to_string()),
+            "offset" => Some(
+                self.offset
+                    .unwrap_or_else(|| self.page.max(1).saturating_sub(1) * self.page_size.max(1))
+                    .to_string(),
+            ),
             "term" => self.term.clone(),
             "id" => self.id.clone(),
             "series" => self.series.clone(),
-            other => self.vars.get(other).or_else(|| self.filters.get(other)).or_else(|| self.settings.get(other)).cloned(),
+            other => self
+                .vars
+                .get(other)
+                .or_else(|| self.filters.get(other))
+                .or_else(|| self.settings.get(other))
+                .cloned(),
         }
     }
 }
@@ -79,7 +90,8 @@ pub struct Source {
 }
 
 fn is_http(address: &str) -> bool {
-    url::Url::parse(address).is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
+    url::Url::parse(address)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
 }
 
 impl Source {
@@ -88,7 +100,12 @@ impl Source {
         if let Some(agent) = &def.user_agent {
             fetcher.set_user_agent(agent);
         }
-        Ok(Source { def, fetcher, now_ms: None, chosen: RwLock::default() })
+        Ok(Source {
+            def,
+            fetcher,
+            now_ms: None,
+            chosen: RwLock::default(),
+        })
     }
 
     pub fn live(def: SourceDef) -> anyhow::Result<Source> {
@@ -135,7 +152,19 @@ impl Source {
 
     fn effective_settings(&self) -> BTreeMap<String, String> {
         let chosen = self.chosen.read().unwrap();
-        self.def.settings.iter().map(|setting| (setting.id.clone(), chosen.get(&setting.id).cloned().unwrap_or_else(|| setting.default.clone()))).collect()
+        self.def
+            .settings
+            .iter()
+            .map(|setting| {
+                (
+                    setting.id.clone(),
+                    chosen
+                        .get(&setting.id)
+                        .cloned()
+                        .unwrap_or_else(|| setting.default.clone()),
+                )
+            })
+            .collect()
     }
 
     pub fn settings(&self) -> Vec<SettingState> {
@@ -146,7 +175,11 @@ impl Source {
             .map(|setting| SettingState {
                 id: setting.id.clone(),
                 name: setting.name.clone(),
-                options: setting.options.iter().map(|option| (option.value.clone(), option.name.clone())).collect(),
+                options: setting
+                    .options
+                    .iter()
+                    .map(|option| (option.value.clone(), option.name.clone()))
+                    .collect(),
                 value: value[&setting.id].clone(),
             })
             .collect()
@@ -154,14 +187,30 @@ impl Source {
 
     /// Chooses one of a setting's options.
     pub fn choose(&self, id: &str, value: &str) -> anyhow::Result<()> {
-        let setting = self.def.settings.iter().find(|setting| setting.id == id).with_context(|| format!("{} has no setting {id}", self.def.name))?;
-        ensure!(setting.options.iter().any(|option| option.value == value), "{value} is not one of the choices for {}", setting.name);
-        self.chosen.write().unwrap().insert(id.to_string(), value.to_string());
+        let setting = self
+            .def
+            .settings
+            .iter()
+            .find(|setting| setting.id == id)
+            .with_context(|| format!("{} has no setting {id}", self.def.name))?;
+        ensure!(
+            setting.options.iter().any(|option| option.value == value),
+            "{value} is not one of the choices for {}",
+            setting.name
+        );
+        self.chosen
+            .write()
+            .unwrap()
+            .insert(id.to_string(), value.to_string());
         Ok(())
     }
 
     fn holes(&self) -> Holes {
-        Holes { page_size: self.def.page_size, settings: self.effective_settings(), ..Holes::default() }
+        Holes {
+            page_size: self.def.page_size,
+            settings: self.effective_settings(),
+            ..Holes::default()
+        }
     }
 
     fn now(&self) -> i64 {
@@ -171,13 +220,20 @@ impl Source {
     // --- asking --------------------------------------------------------------------------------
 
     fn hosts(&self) -> impl Iterator<Item = &str> {
-        std::iter::once(self.def.base_url.as_str()).chain(self.def.mirrors.iter().map(String::as_str))
+        std::iter::once(self.def.base_url.as_str())
+            .chain(self.def.mirrors.iter().map(String::as_str))
     }
 
     /// The request for one host, or `None` when a hole it needs has nothing.
     fn build(&self, request: &Request, host: &str, holes: &Holes) -> Option<Req> {
         let host = host.trim_end_matches('/');
-        let lookup = |name: &str| if name == "base" { Some(host.to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let rest = request.url.strip_prefix("{base}")?;
         let url = format!("{host}{}", fill(rest, &lookup, true)?);
         let text = |value: &str| fill(value, &lookup, false);
@@ -197,7 +253,13 @@ impl Source {
             Some(json) => Some(fill_json(json, &lookup)?),
             None => None,
         };
-        Some(Req { method: request.method.to_uppercase(), url, headers, form, json })
+        Some(Req {
+            method: request.method.to_uppercase(),
+            url,
+            headers,
+            form,
+            json,
+        })
     }
 
     /// Asks the site, trying each mirror when one cannot be reached. A site that answers with an
@@ -207,7 +269,10 @@ impl Source {
         for host in self.hosts() {
             let Some(req) = self.build(request, host, holes) else {
                 // The definition's own mistake, not the person's: say so, and which part of the address is missing.
-                bail!("this source cannot answer that: its definition asks for a value the app had none of (in {}). That is a mistake in the source's definition, not in your connection.", request.url);
+                bail!(
+                    "this source cannot answer that: its definition asks for a value the app had none of (in {}). That is a mistake in the source's definition, not in your connection.",
+                    request.url
+                );
             };
             match self.fetcher.send(&req).await {
                 Ok(body) => return Ok((body, host)),
@@ -219,11 +284,24 @@ impl Source {
     }
 
     /// Values an answer gives, as `vars` say.
-    fn read_vars(&self, vars: &BTreeMap<String, Ex>, format: Format, body: &str, host: &str, holes: &Holes) -> anyhow::Result<Vec<(String, String)>> {
+    fn read_vars(
+        &self,
+        vars: &BTreeMap<String, Ex>,
+        format: Format,
+        body: &str,
+        host: &str,
+        holes: &Holes,
+    ) -> anyhow::Result<Vec<(String, String)>> {
         if vars.is_empty() {
             return Ok(Vec::new());
         }
-        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.trim_end_matches('/').to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, format)?;
         let mut found = Vec::new();
@@ -247,17 +325,34 @@ impl Source {
 
     // --- lists ---------------------------------------------------------------------------------
 
-    async fn list(&self, list: Option<&ListDef>, what: &str, mut holes: Holes) -> anyhow::Result<Page<Card>> {
+    async fn list(
+        &self,
+        list: Option<&ListDef>,
+        what: &str,
+        mut holes: Holes,
+    ) -> anyhow::Result<Page<Card>> {
         let list = list.with_context(|| format!("{} has no {what}", self.def.name))?;
         self.prepare(&list.prepare, &mut holes).await?;
         let (body, host) = self.ask(&list.request, &holes).await?;
         self.read_list(list, &body, host, holes)
     }
 
-    fn read_list(&self, list: &ListDef, body: &str, host: &str, mut holes: Holes) -> anyhow::Result<Page<Card>> {
+    fn read_list(
+        &self,
+        list: &ListDef,
+        body: &str,
+        host: &str,
+        mut holes: Holes,
+    ) -> anyhow::Result<Page<Card>> {
         let found = self.read_vars(&list.vars, list.format, body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.trim_end_matches('/').to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, list.format)?;
         let rows = eval(&list.rows, Role::Rows, list.format, &root, &ctx)?;
@@ -265,9 +360,13 @@ impl Source {
         for row in &rows {
             let id = eval_text(&list.card.id, list.format, row, &ctx)?;
             let title = eval_text(&list.card.title, list.format, row, &ctx)?;
-            let (Some(id), Some(title)) = (id, title) else { continue };
+            let (Some(id), Some(title)) = (id, title) else {
+                continue;
+            };
             let cover = match &list.card.cover {
-                Some(cover) => eval_text(cover, list.format, row, &ctx)?.and_then(|link| absolute(host, &link)),
+                Some(cover) => {
+                    eval_text(cover, list.format, row, &ctx)?.and_then(|link| absolute(host, &link))
+                }
                 None => None,
             };
             if !items.iter().any(|have: &Card| have.id == id) {
@@ -275,7 +374,9 @@ impl Source {
             }
         }
         let has_next = if let Some(total) = &list.total {
-            let total = eval_text(total, list.format, &root, &ctx)?.and_then(|text| text.parse::<f64>().ok()).unwrap_or(0.0);
+            let total = eval_text(total, list.format, &root, &ctx)?
+                .and_then(|text| text.parse::<f64>().ok())
+                .unwrap_or(0.0);
             let size = holes.page_size.max(1);
             f64::from(holes.page.max(1) * size) < total
         } else if let Some(next) = &list.next {
@@ -287,11 +388,27 @@ impl Source {
     }
 
     pub async fn popular(&self, page: u32) -> anyhow::Result<Page<Card>> {
-        self.list(self.def.popular.as_ref(), "popular list", Holes { page, ..self.holes() }).await
+        self.list(
+            self.def.popular.as_ref(),
+            "popular list",
+            Holes {
+                page,
+                ..self.holes()
+            },
+        )
+        .await
     }
 
     pub async fn latest(&self, page: u32) -> anyhow::Result<Page<Card>> {
-        self.list(self.def.latest.as_ref(), "latest list", Holes { page, ..self.holes() }).await
+        self.list(
+            self.def.latest.as_ref(),
+            "latest list",
+            Holes {
+                page,
+                ..self.holes()
+            },
+        )
+        .await
     }
 
     /// The ways a search can be narrowed.
@@ -299,13 +416,23 @@ impl Source {
         &self.def.filters
     }
 
-    pub async fn search(&self, term: &str, page: u32, chosen: &BTreeMap<String, String>) -> anyhow::Result<Page<Card>> {
+    pub async fn search(
+        &self,
+        term: &str,
+        page: u32,
+        chosen: &BTreeMap<String, String>,
+    ) -> anyhow::Result<Page<Card>> {
         // Each filter has the person's choice, or its default.
         let filters = self.def.filters.iter().filter_map(|filter| {
             let value = chosen.get(&filter.id).or(filter.default.as_ref())?;
             Some((filter.id.clone(), value.clone()))
         });
-        let holes = Holes { page, term: Some(term.to_string()), filters: filters.collect(), ..self.holes() };
+        let holes = Holes {
+            page,
+            term: Some(term.to_string()),
+            filters: filters.collect(),
+            ..self.holes()
+        };
         self.list(self.def.search.as_ref(), "search", holes).await
     }
 
@@ -313,12 +440,21 @@ impl Source {
 
     pub async fn details(&self, id: &str) -> anyhow::Result<Detail> {
         let def = &self.def.detail;
-        let mut holes = Holes { id: Some(id.to_string()), ..self.holes() };
+        let mut holes = Holes {
+            id: Some(id.to_string()),
+            ..self.holes()
+        };
         self.prepare(&def.prepare, &mut holes).await?;
         let (body, host) = self.ask(&def.request, &holes).await?;
         let found = self.read_vars(&def.vars, def.format, &body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.trim_end_matches('/').to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(&body, def.format)?;
         let one = |ex: &Option<Ex>| -> anyhow::Result<Option<String>> {
@@ -333,7 +469,8 @@ impl Source {
                 None => Ok(Vec::new()),
             }
         };
-        let title = eval_text(&def.title, def.format, &root, &ctx)?.context("the page has no title: has the site changed?")?;
+        let title = eval_text(&def.title, def.format, &root, &ctx)?
+            .context("the page has no title: has the site changed?")?;
         let status = one(&def.status)?.map_or(Status::Unknown, |text| Status::parse(&text));
         Ok(Detail {
             title,
@@ -348,7 +485,11 @@ impl Source {
     /// Every chapter, newest first whatever order the site lists them in.
     pub async fn chapters(&self, id: &str) -> anyhow::Result<Vec<Chapter>> {
         let def = &self.def.chapters;
-        let mut holes = Holes { id: Some(id.to_string()), series: Some(id.to_string()), ..self.holes() };
+        let mut holes = Holes {
+            id: Some(id.to_string()),
+            series: Some(id.to_string()),
+            ..self.holes()
+        };
         self.prepare(&def.prepare, &mut holes).await?;
         let mut chapters: Vec<Chapter> = Vec::new();
         let mut offset = 0u32;
@@ -356,7 +497,11 @@ impl Source {
         // returned as a shorter list that looks complete.
         let mut asked = 0u32;
         loop {
-            ensure!(asked < MAX_CHAPTER_REQUESTS, "{} gave chapters for {MAX_CHAPTER_REQUESTS} requests without ending: raise chapters.repeat.size", self.def.name);
+            ensure!(
+                asked < MAX_CHAPTER_REQUESTS,
+                "{} gave chapters for {MAX_CHAPTER_REQUESTS} requests without ending: raise chapters.repeat.size",
+                self.def.name
+            );
             asked += 1;
             let repeat = def.repeat.as_ref();
             holes.offset = repeat.map(|_| offset);
@@ -369,7 +514,10 @@ impl Source {
             let (rows, total) = self.read_chapters(&body, host, holes.clone(), &mut chapters)?;
             let Some(repeat) = repeat else { break };
             offset += repeat.size;
-            if rows == 0 || chapters.len() == before || total.is_some_and(|total| u64::from(offset) >= total) {
+            if rows == 0
+                || chapters.len() == before
+                || total.is_some_and(|total| u64::from(offset) >= total)
+            {
                 break;
             }
         }
@@ -380,34 +528,55 @@ impl Source {
     }
 
     /// Adds the chapters in one answer; says how many rows it had and the total, if the source gives one.
-    fn read_chapters(&self, body: &str, host: &str, mut holes: Holes, chapters: &mut Vec<Chapter>) -> anyhow::Result<(usize, Option<u64>)> {
+    fn read_chapters(
+        &self,
+        body: &str,
+        host: &str,
+        mut holes: Holes,
+        chapters: &mut Vec<Chapter>,
+    ) -> anyhow::Result<(usize, Option<u64>)> {
         let def = &self.def.chapters;
         let found = self.read_vars(&def.vars, def.format, body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.trim_end_matches('/').to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(body, def.format)?;
         let rows = eval(&def.rows, Role::Rows, def.format, &root, &ctx)?;
         let total = match &def.repeat {
             Some(repeat) => match &repeat.total {
-                Some(ex) => eval_text(ex, def.format, &root, &ctx)?.and_then(|text| text.parse::<u64>().ok()),
+                Some(ex) => eval_text(ex, def.format, &root, &ctx)?
+                    .and_then(|text| text.parse::<u64>().ok()),
                 None => None,
             },
             None => None,
         };
         for row in &rows {
-            let Some(chapter_id) = eval_text(&def.chapter.id, def.format, row, &ctx)? else { continue };
+            let Some(chapter_id) = eval_text(&def.chapter.id, def.format, row, &ctx)? else {
+                continue;
+            };
             let title = match &def.chapter.title {
                 Some(ex) => eval_text(ex, def.format, row, &ctx)?,
                 None => None,
             };
             let number = match &def.chapter.number {
-                Some(ex) => eval_text(ex, def.format, row, &ctx)?.and_then(|text| text.parse::<f64>().ok().or_else(|| date::chapter_number(&text))),
+                Some(ex) => eval_text(ex, def.format, row, &ctx)?.and_then(|text| {
+                    text.parse::<f64>()
+                        .ok()
+                        .or_else(|| date::chapter_number(&text))
+                }),
                 None => None,
             }
             .or_else(|| title.as_deref().and_then(date::chapter_number));
             let date_ms = match &def.chapter.date {
-                Some(ex) => eval_text(ex, def.format, row, &ctx)?.and_then(|text| text.parse::<i64>().ok()),
+                Some(ex) => {
+                    eval_text(ex, def.format, row, &ctx)?.and_then(|text| text.parse::<i64>().ok())
+                }
                 None => None,
             };
             let scanlator = match &def.chapter.scanlator {
@@ -415,7 +584,13 @@ impl Source {
                 None => None,
             };
             if !chapters.iter().any(|have| have.id == chapter_id) {
-                chapters.push(Chapter { id: chapter_id, number, title, date_ms, scanlator });
+                chapters.push(Chapter {
+                    id: chapter_id,
+                    number,
+                    title,
+                    date_ms,
+                    scanlator,
+                });
             }
         }
         Ok((rows.len(), total))
@@ -423,16 +598,32 @@ impl Source {
 
     pub async fn pages(&self, series: &str, chapter: &str) -> anyhow::Result<PageList> {
         let def = &self.def.pages;
-        let mut holes = Holes { id: Some(chapter.to_string()), series: Some(series.to_string()), ..self.holes() };
+        let mut holes = Holes {
+            id: Some(chapter.to_string()),
+            series: Some(series.to_string()),
+            ..self.holes()
+        };
         self.prepare(&def.prepare, &mut holes).await?;
         let (body, host) = self.ask(&def.request, &holes).await?;
         let found = self.read_vars(&def.vars, def.format, &body, host, &holes)?;
         holes.vars.extend(found);
-        let lookup = |name: &str| if name == "base" { Some(host.trim_end_matches('/').to_string()) } else { holes.lookup(name) };
+        let lookup = |name: &str| {
+            if name == "base" {
+                Some(host.trim_end_matches('/').to_string())
+            } else {
+                holes.lookup(name)
+            }
+        };
         let ctx = Ctx::new(host, &lookup, self.now());
         let root = eval::parse_root(&body, def.format)?;
-        let images: Vec<String> = eval_texts(&def.images, def.format, &root, &ctx)?.iter().filter_map(|link| absolute(host, link)).collect();
-        ensure!(!images.is_empty(), "the chapter has no pages: has the site changed?");
+        let images: Vec<String> = eval_texts(&def.images, def.format, &root, &ctx)?
+            .iter()
+            .filter_map(|link| absolute(host, link))
+            .collect();
+        ensure!(
+            !images.is_empty(),
+            "the chapter has no pages: has the site changed?"
+        );
         let reading = match def.reading.as_deref() {
             Some("longstrip") => Reading::LongStrip,
             Some("paged") => Reading::Paged,
@@ -441,7 +632,13 @@ impl Source {
         };
         let mut headers = BTreeMap::new();
         let base = host.trim_end_matches('/').to_string();
-        let image_lookup = |name: &str| if name == "base" { Some(base.clone()) } else { holes.lookup(name) };
+        let image_lookup = |name: &str| {
+            if name == "base" {
+                Some(base.clone())
+            } else {
+                holes.lookup(name)
+            }
+        };
         headers.insert("referer".to_string(), format!("{base}/"));
         for (name, value) in &def.image_headers {
             match fill(value, &image_lookup, false) {
@@ -454,7 +651,11 @@ impl Source {
                 }
             }
         }
-        Ok(PageList { images, reading, headers })
+        Ok(PageList {
+            images,
+            reading,
+            headers,
+        })
     }
 }
 
@@ -463,25 +664,45 @@ fn absolute(base: &str, link: &str) -> Option<String> {
     if link.is_empty() || link.starts_with("data:") {
         return None;
     }
-    url::Url::parse(base).ok()?.join(link).ok().map(|joined| joined.to_string())
+    url::Url::parse(base)
+        .ok()?
+        .join(link)
+        .ok()
+        .map(|joined| joined.to_string())
 }
 
 fn fill_json(value: &Value, lookup: &dyn Fn(&str) -> Option<String>) -> Option<Value> {
     Some(match value {
         Value::String(text) => Value::String(fill(text, lookup, false)?),
-        Value::Array(items) => Value::Array(items.iter().map(|item| fill_json(item, lookup)).collect::<Option<_>>()?),
-        Value::Object(map) => Value::Object(map.iter().filter_map(|(key, value)| Some((key.clone(), fill_json(value, lookup)?))).collect()),
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| fill_json(item, lookup))
+                .collect::<Option<_>>()?,
+        ),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .filter_map(|(key, value)| Some((key.clone(), fill_json(value, lookup)?)))
+                .collect(),
+        ),
         other => other.clone(),
     })
 }
 
 fn plain(name: &str) -> bool {
-    !name.is_empty() && name.len() <= 64 && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
 fn check_vars(vars: &BTreeMap<String, Ex>, format: Format, what: &str) -> anyhow::Result<()> {
     for (name, ex) in vars {
-        ensure!(plain(name), "{what}: a var's name is lowercase letters, digits, dashes and underscores");
+        ensure!(
+            plain(name),
+            "{what}: a var's name is lowercase letters, digits, dashes and underscores"
+        );
         check_ex(ex, Role::Field, format).with_context(|| format!("{what}.vars.{name}"))?;
     }
     Ok(())
@@ -489,8 +710,14 @@ fn check_vars(vars: &BTreeMap<String, Ex>, format: Format, what: &str) -> anyhow
 
 fn check_prepare(steps: &[Prepare], what: &str) -> anyhow::Result<()> {
     for (index, step) in steps.iter().enumerate() {
-        ensure!(step.request.url.starts_with("{base}"), "{what}.prepare[{index}]: a request's url must start with {{base}}");
-        ensure!(matches!(step.request.method.to_uppercase().as_str(), "GET" | "POST"), "{what}.prepare[{index}]: the method must be GET or POST");
+        ensure!(
+            step.request.url.starts_with("{base}"),
+            "{what}.prepare[{index}]: a request's url must start with {{base}}"
+        );
+        ensure!(
+            matches!(step.request.method.to_uppercase().as_str(), "GET" | "POST"),
+            "{what}.prepare[{index}]: the method must be GET or POST"
+        );
         check_vars(&step.vars, step.format, &format!("{what}.prepare[{index}]"))?;
     }
     Ok(())
@@ -498,35 +725,91 @@ fn check_prepare(steps: &[Prepare], what: &str) -> anyhow::Result<()> {
 
 /// Rejects a definition that can be known to be wrong without asking its site.
 pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
-    ensure!(def.schema == SCHEMA, "schema {} is not one this app reads (it reads {SCHEMA})", def.schema);
-    ensure!(!def.id.is_empty() && def.id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'), "the id must be lowercase letters, digits and dashes");
-    ensure!(is_http(&def.base_url), "base_url must be an http(s) address");
+    ensure!(
+        def.schema == SCHEMA,
+        "schema {} is not one this app reads (it reads {SCHEMA})",
+        def.schema
+    );
+    ensure!(
+        !def.id.is_empty()
+            && def
+                .id
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'),
+        "the id must be lowercase letters, digits and dashes"
+    );
+    ensure!(
+        is_http(&def.base_url),
+        "base_url must be an http(s) address"
+    );
     for mirror in &def.mirrors {
-        ensure!(is_http(mirror), "mirror {mirror} must be an http(s) address");
+        ensure!(
+            is_http(mirror),
+            "mirror {mirror} must be an http(s) address"
+        );
     }
     if let Some(rate) = def.rate_per_second {
-        ensure!(rate > 0.0 && rate <= 20.0, "rate_per_second must be above 0 and at most 20");
+        ensure!(
+            rate > 0.0 && rate <= 20.0,
+            "rate_per_second must be above 0 and at most 20"
+        );
     }
-    ensure!((1..=500).contains(&def.page_size), "page_size must be from 1 to 500");
+    ensure!(
+        (1..=500).contains(&def.page_size),
+        "page_size must be from 1 to 500"
+    );
     for setting in &def.settings {
-        ensure!(plain(&setting.id), "a setting's id is lowercase letters, digits, dashes and underscores");
-        ensure!(setting.options.iter().any(|option| option.value == setting.default), "setting {}: the default is not one of its options", setting.id);
+        ensure!(
+            plain(&setting.id),
+            "a setting's id is lowercase letters, digits, dashes and underscores"
+        );
+        ensure!(
+            setting
+                .options
+                .iter()
+                .any(|option| option.value == setting.default),
+            "setting {}: the default is not one of its options",
+            setting.id
+        );
     }
     for filter in &def.filters {
-        ensure!(plain(&filter.id), "a filter's id is lowercase letters, digits, dashes and underscores");
+        ensure!(
+            plain(&filter.id),
+            "a filter's id is lowercase letters, digits, dashes and underscores"
+        );
         match filter.kind {
             FilterKind::Select => {
-                ensure!(!filter.options.is_empty(), "filter {}: a select needs options", filter.id);
+                ensure!(
+                    !filter.options.is_empty(),
+                    "filter {}: a select needs options",
+                    filter.id
+                );
                 if let Some(default) = &filter.default {
-                    ensure!(filter.options.iter().any(|option| &option.value == default), "filter {}: the default is not one of its options", filter.id);
+                    ensure!(
+                        filter.options.iter().any(|option| &option.value == default),
+                        "filter {}: the default is not one of its options",
+                        filter.id
+                    );
                 }
             }
-            FilterKind::Text => ensure!(filter.options.is_empty(), "filter {}: a text filter has no options", filter.id),
+            FilterKind::Text => ensure!(
+                filter.options.is_empty(),
+                "filter {}: a text filter has no options",
+                filter.id
+            ),
         }
     }
-    let mut requests: Vec<(&str, &Request)> = vec![("detail", &def.detail.request), ("chapters", &def.chapters.request), ("pages", &def.pages.request)];
+    let mut requests: Vec<(&str, &Request)> = vec![
+        ("detail", &def.detail.request),
+        ("chapters", &def.chapters.request),
+        ("pages", &def.pages.request),
+    ];
     let mut lists: Vec<(&str, &ListDef)> = Vec::new();
-    for (name, list) in [("popular", &def.popular), ("latest", &def.latest), ("search", &def.search)] {
+    for (name, list) in [
+        ("popular", &def.popular),
+        ("latest", &def.latest),
+        ("search", &def.search),
+    ] {
         if let Some(list) = list {
             lists.push((name, list));
         }
@@ -534,16 +817,26 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
     for (name, list) in &lists {
         requests.push((name, &list.request));
     }
-    ensure!(!lists.is_empty(), "a source needs at least one of popular, latest and search");
+    ensure!(
+        !lists.is_empty(),
+        "a source needs at least one of popular, latest and search"
+    );
     for (name, request) in requests {
-        ensure!(request.url.starts_with("{base}"), "{name}: a request's url must start with {{base}} (a source can only ask its own address)");
-        ensure!(matches!(request.method.to_uppercase().as_str(), "GET" | "POST"), "{name}: the method must be GET or POST");
+        ensure!(
+            request.url.starts_with("{base}"),
+            "{name}: a request's url must start with {{base}} (a source can only ask its own address)"
+        );
+        ensure!(
+            matches!(request.method.to_uppercase().as_str(), "GET" | "POST"),
+            "{name}: the method must be GET or POST"
+        );
     }
     for (name, list) in lists {
         let format = list.format;
         check_ex(&list.rows, Role::Rows, format).with_context(|| format!("{name}.rows"))?;
         check_ex(&list.card.id, Role::Field, format).with_context(|| format!("{name}.card.id"))?;
-        check_ex(&list.card.title, Role::Field, format).with_context(|| format!("{name}.card.title"))?;
+        check_ex(&list.card.title, Role::Field, format)
+            .with_context(|| format!("{name}.card.title"))?;
         if let Some(cover) = &list.card.cover {
             check_ex(cover, Role::Field, format).with_context(|| format!("{name}.card.cover"))?;
         }
@@ -557,7 +850,14 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
         check_vars(&list.vars, format, name)?;
     }
     let detail = &def.detail;
-    for (name, ex) in [("title", Some(&detail.title)), ("cover", detail.cover.as_ref()), ("description", detail.description.as_ref()), ("authors", detail.authors.as_ref()), ("tags", detail.tags.as_ref()), ("status", detail.status.as_ref())] {
+    for (name, ex) in [
+        ("title", Some(&detail.title)),
+        ("cover", detail.cover.as_ref()),
+        ("description", detail.description.as_ref()),
+        ("authors", detail.authors.as_ref()),
+        ("tags", detail.tags.as_ref()),
+        ("status", detail.status.as_ref()),
+    ] {
         if let Some(ex) = ex {
             check_ex(ex, Role::Field, detail.format).with_context(|| format!("detail.{name}"))?;
         }
@@ -567,13 +867,22 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
     let chapters = &def.chapters;
     check_ex(&chapters.rows, Role::Rows, chapters.format).context("chapters.rows")?;
     check_ex(&chapters.chapter.id, Role::Field, chapters.format).context("chapters.chapter.id")?;
-    for (name, ex) in [("number", &chapters.chapter.number), ("title", &chapters.chapter.title), ("date", &chapters.chapter.date), ("scanlator", &chapters.chapter.scanlator)] {
+    for (name, ex) in [
+        ("number", &chapters.chapter.number),
+        ("title", &chapters.chapter.title),
+        ("date", &chapters.chapter.date),
+        ("scanlator", &chapters.chapter.scanlator),
+    ] {
         if let Some(ex) = ex {
-            check_ex(ex, Role::Field, chapters.format).with_context(|| format!("chapters.chapter.{name}"))?;
+            check_ex(ex, Role::Field, chapters.format)
+                .with_context(|| format!("chapters.chapter.{name}"))?;
         }
     }
     if let Some(repeat) = &chapters.repeat {
-        ensure!((1..=1000).contains(&repeat.size), "chapters.repeat.size must be from 1 to 1000");
+        ensure!(
+            (1..=1000).contains(&repeat.size),
+            "chapters.repeat.size must be from 1 to 1000"
+        );
         if let Some(total) = &repeat.total {
             check_ex(total, Role::Field, chapters.format).context("chapters.repeat.total")?;
         }
@@ -584,7 +893,10 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
     check_prepare(&def.pages.prepare, "pages")?;
     check_vars(&def.pages.vars, def.pages.format, "pages")?;
     if let Some(reading) = &def.pages.reading {
-        ensure!(matches!(reading.as_str(), "longstrip" | "paged" | "paged_rtl"), "pages.reading must be longstrip, paged or paged_rtl");
+        ensure!(
+            matches!(reading.as_str(), "longstrip" | "paged" | "paged_rtl"),
+            "pages.reading must be longstrip, paged or paged_rtl"
+        );
     }
     Ok(())
 }
@@ -607,8 +919,15 @@ mod tests {
         for (key, value) in extra.as_object().unwrap() {
             def[key] = value.clone();
         }
-        let answers: HashMap<String, String> = answers.iter().map(|(url, body)| (format!("GET https://t.test{url}"), body.to_string())).collect();
-        Source::new(serde_json::from_value(def).unwrap(), Fetcher::recorded(answers)).unwrap()
+        let answers: HashMap<String, String> = answers
+            .iter()
+            .map(|(url, body)| (format!("GET https://t.test{url}"), body.to_string()))
+            .collect();
+        Source::new(
+            serde_json::from_value(def).unwrap(),
+            Fetcher::recorded(answers),
+        )
+        .unwrap()
     }
 
     #[tokio::test]
@@ -617,13 +936,25 @@ mod tests {
             "request": {"url": "{base}/c/{id}?o={offset}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
             "repeat": {"size": 2, "total": "total"}
         });
-        let source = source(json!({"chapters": chapters}), &[
-            ("/c/s?o=0", r#"{"total":3,"rows":[{"id":"a","n":3},{"id":"b","n":2}]}"#),
-            ("/c/s?o=2", r#"{"total":3,"rows":[{"id":"c","n":1}]}"#),
-        ]);
+        let source = source(
+            json!({"chapters": chapters}),
+            &[
+                (
+                    "/c/s?o=0",
+                    r#"{"total":3,"rows":[{"id":"a","n":3},{"id":"b","n":2}]}"#,
+                ),
+                ("/c/s?o=2", r#"{"total":3,"rows":[{"id":"c","n":1}]}"#),
+            ],
+        );
         let list = source.chapters("s").await.unwrap();
-        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
-        assert_eq!(source.fetcher().seen(), ["GET https://t.test/c/s?o=0", "GET https://t.test/c/s?o=2"]);
+        assert_eq!(
+            list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            source.fetcher().seen(),
+            ["GET https://t.test/c/s?o=0", "GET https://t.test/c/s?o=2"]
+        );
     }
 
     #[tokio::test]
@@ -632,14 +963,30 @@ mod tests {
             "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
             "repeat": {"size": 2}
         });
-        let source = source(json!({"chapters": chapters}), &[
-            ("/c/s?t=1", r#"{"rows":[{"id":"a","n":3},{"id":"b","n":2}]}"#),
-            ("/c/s?t=2", r#"{"rows":[{"id":"c","n":1}]}"#),
-            ("/c/s?t=3", r#"{"rows":[]}"#),
-        ]);
+        let source = source(
+            json!({"chapters": chapters}),
+            &[
+                (
+                    "/c/s?t=1",
+                    r#"{"rows":[{"id":"a","n":3},{"id":"b","n":2}]}"#,
+                ),
+                ("/c/s?t=2", r#"{"rows":[{"id":"c","n":1}]}"#),
+                ("/c/s?t=3", r#"{"rows":[]}"#),
+            ],
+        );
         let list = source.chapters("s").await.unwrap();
-        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
-        assert_eq!(source.fetcher().seen(), ["GET https://t.test/c/s?t=1", "GET https://t.test/c/s?t=2", "GET https://t.test/c/s?t=3"]);
+        assert_eq!(
+            list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            source.fetcher().seen(),
+            [
+                "GET https://t.test/c/s?t=1",
+                "GET https://t.test/c/s?t=2",
+                "GET https://t.test/c/s?t=3"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -648,29 +995,50 @@ mod tests {
             "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
             "repeat": {"size": 1}
         });
-        let source = source(json!({"chapters": chapters}), &[
-            ("/c/s?t=1", r#"{"rows":[{"id":"a","n":3}]}"#),
-            ("/c/s?t=2", r#"{"rows":[{"id":"a","n":3}]}"#),
-        ]);
+        let source = source(
+            json!({"chapters": chapters}),
+            &[
+                ("/c/s?t=1", r#"{"rows":[{"id":"a","n":3}]}"#),
+                ("/c/s?t=2", r#"{"rows":[{"id":"a","n":3}]}"#),
+            ],
+        );
         let list = source.chapters("s").await.unwrap();
-        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a"]);
-        assert_eq!(source.fetcher().seen().len(), 2, "it must not keep asking once a page brings nothing new");
+        assert_eq!(
+            list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["a"]
+        );
+        assert_eq!(
+            source.fetcher().seen().len(),
+            2,
+            "it must not keep asking once a page brings nothing new"
+        );
     }
 
     #[tokio::test]
     async fn a_chapter_list_never_ending_is_reported_and_not_silently_cut_short() {
         // A `repeat` that keeps bringing chapters without ever ending would ask for ever; the bound is
         // reported, never returned as a short list that looks complete.
-        let urls: Vec<String> = (1..=MAX_CHAPTER_REQUESTS).map(|page| format!("/c/s?t={page}")).collect();
-        let bodies: Vec<String> = (1..=MAX_CHAPTER_REQUESTS).map(|page| format!(r#"{{"rows":[{{"id":"c{page}","n":{page}}}]}}"#)).collect();
-        let pairs: Vec<(&str, &str)> = urls.iter().map(|u| u.as_str()).zip(bodies.iter().map(|b| b.as_str())).collect();
+        let urls: Vec<String> = (1..=MAX_CHAPTER_REQUESTS)
+            .map(|page| format!("/c/s?t={page}"))
+            .collect();
+        let bodies: Vec<String> = (1..=MAX_CHAPTER_REQUESTS)
+            .map(|page| format!(r#"{{"rows":[{{"id":"c{page}","n":{page}}}]}}"#))
+            .collect();
+        let pairs: Vec<(&str, &str)> = urls
+            .iter()
+            .map(|u| u.as_str())
+            .zip(bodies.iter().map(|b| b.as_str()))
+            .collect();
         let chapters = json!({
             "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
             "repeat": {"size": 1}
         });
         let source = source(json!({"chapters": chapters}), &pairs);
         let error = source.chapters("s").await.unwrap_err();
-        assert!(format!("{error:#}").contains("without ending"), "got: {error:#}");
+        assert!(
+            format!("{error:#}").contains("without ending"),
+            "got: {error:#}"
+        );
     }
 
     #[tokio::test]
@@ -681,20 +1049,32 @@ mod tests {
             "vars": {"cdn": "cdn"},
             "images": [{"path": "images"}, {"template": "{cdn}/{value}"}]
         });
-        let source = source(json!({"pages": pages}), &[
-            ("/token", r#"{"t":"abc"}"#),
-            ("/p/c1?k=abc", r#"{"cdn":"https://img.test","images":["1.png","2.png"]}"#),
-        ]);
+        let source = source(
+            json!({"pages": pages}),
+            &[
+                ("/token", r#"{"t":"abc"}"#),
+                (
+                    "/p/c1?k=abc",
+                    r#"{"cdn":"https://img.test","images":["1.png","2.png"]}"#,
+                ),
+            ],
+        );
         let list = source.pages("s", "c1").await.unwrap();
-        assert_eq!(list.images, ["https://img.test/1.png", "https://img.test/2.png"]);
+        assert_eq!(
+            list.images,
+            ["https://img.test/1.png", "https://img.test/2.png"]
+        );
     }
 
     #[tokio::test]
     async fn settings_fill_holes_and_only_take_their_own_options() {
-        let source = source(json!({}), &[
-            ("/list?l=en", r#"{"items":[{"id":"1","name":"English"}]}"#),
-            ("/list?l=fr", r#"{"items":[{"id":"2","name":"Francais"}]}"#),
-        ]);
+        let source = source(
+            json!({}),
+            &[
+                ("/list?l=en", r#"{"items":[{"id":"1","name":"English"}]}"#),
+                ("/list?l=fr", r#"{"items":[{"id":"2","name":"Francais"}]}"#),
+            ],
+        );
         assert_eq!(source.popular(1).await.unwrap().items[0].title, "English");
         source.choose("lang", "fr").unwrap();
         assert_eq!(source.popular(1).await.unwrap().items[0].title, "Francais");
@@ -706,10 +1086,19 @@ mod tests {
     #[tokio::test]
     async fn the_total_decides_whether_another_page_follows() {
         let list = json!({"request": {"url": "{base}/list?o={offset}"}, "format": "json", "rows": "items", "total": "total", "card": {"id": "id", "title": "name"}});
-        let source = source(json!({"popular": list, "page_size": 2}), &[
-            ("/list?o=0", r#"{"total":3,"items":[{"id":"1","name":"a"},{"id":"2","name":"b"}]}"#),
-            ("/list?o=2", r#"{"total":3,"items":[{"id":"3","name":"c"}]}"#),
-        ]);
+        let source = source(
+            json!({"popular": list, "page_size": 2}),
+            &[
+                (
+                    "/list?o=0",
+                    r#"{"total":3,"items":[{"id":"1","name":"a"},{"id":"2","name":"b"}]}"#,
+                ),
+                (
+                    "/list?o=2",
+                    r#"{"total":3,"items":[{"id":"3","name":"c"}]}"#,
+                ),
+            ],
+        );
         assert!(source.popular(1).await.unwrap().has_next);
         assert!(!source.popular(2).await.unwrap().has_next);
     }
@@ -718,17 +1107,23 @@ mod tests {
     async fn a_next_built_from_the_page_number_would_say_every_page_follows() {
         // A list with no `next` and no `total` ends when an answer brings no rows.
         let list = json!({"request": {"url": "{base}/list?p={page}"}, "format": "json", "rows": "items", "card": {"id": "id", "title": "name"}});
-        let paging = source(json!({"popular": list}), &[
-            ("/list?p=1", r#"{"items":[{"id":"1","name":"a"}]}"#),
-            ("/list?p=2", r#"{"items":[]}"#),
-        ]);
+        let paging = source(
+            json!({"popular": list}),
+            &[
+                ("/list?p=1", r#"{"items":[{"id":"1","name":"a"}]}"#),
+                ("/list?p=2", r#"{"items":[]}"#),
+            ],
+        );
         assert!(paging.popular(1).await.unwrap().has_next);
         assert!(!paging.popular(2).await.unwrap().has_next);
 
         // {page} is a hole in expressions too, so a `next` that only names it is always filled and says
         // every page follows for ever. That is why a list that cannot tell ends by having no `next`.
         let always = json!({"request": {"url": "{base}/list?p={page}"}, "format": "json", "rows": "items", "next": [{"template": "{page}"}], "card": {"id": "id", "title": "name"}});
-        let looping = source(json!({"popular": always}), &[("/list?p=1", r#"{"items":[]}"#)]);
+        let looping = source(
+            json!({"popular": always}),
+            &[("/list?p=1", r#"{"items":[]}"#)],
+        );
         assert!(looping.popular(1).await.unwrap().has_next);
     }
 
@@ -736,14 +1131,23 @@ mod tests {
     async fn filters_fall_back_to_their_defaults_and_take_the_persons_choice() {
         let search = json!({"request": {"url": "{base}/s?q={term}&o={order}"}, "format": "json", "rows": "items", "card": {"id": "id", "title": "name"}});
         let filters = json!([{"id": "order", "name": "Order", "kind": "select", "default": "new", "options": [{"value": "new", "name": "Newest"}, {"value": "top", "name": "Top"}]}]);
-        let source = source(json!({"search": search, "filters": filters}), &[
-            ("/s?q=a&o=new", r#"{"items":[{"id":"1","name":"newest"}]}"#),
-            ("/s?q=a&o=top", r#"{"items":[{"id":"2","name":"top"}]}"#),
-        ]);
+        let source = source(
+            json!({"search": search, "filters": filters}),
+            &[
+                ("/s?q=a&o=new", r#"{"items":[{"id":"1","name":"newest"}]}"#),
+                ("/s?q=a&o=top", r#"{"items":[{"id":"2","name":"top"}]}"#),
+            ],
+        );
         assert_eq!(source.filters().len(), 1);
-        assert_eq!(source.search("a", 1, &BTreeMap::new()).await.unwrap().items[0].title, "newest");
+        assert_eq!(
+            source.search("a", 1, &BTreeMap::new()).await.unwrap().items[0].title,
+            "newest"
+        );
         let chosen = BTreeMap::from([("order".to_string(), "top".to_string())]);
-        assert_eq!(source.search("a", 1, &chosen).await.unwrap().items[0].title, "top");
+        assert_eq!(
+            source.search("a", 1, &chosen).await.unwrap().items[0].title,
+            "top"
+        );
     }
 
     #[test]
@@ -805,7 +1209,9 @@ mod tests {
         });
         let source = Source::live(serde_json::from_value(def).unwrap()).unwrap();
         let error = source.details("x").await.unwrap_err();
-        let challenge = error.downcast_ref::<crate::fetch::Challenge>().unwrap_or_else(|| panic!("{error:#}"));
+        let challenge = error
+            .downcast_ref::<crate::fetch::Challenge>()
+            .unwrap_or_else(|| panic!("{error:#}"));
         assert_eq!(challenge.status, 200);
         assert!(challenge.url.ends_with("/d"), "{}", challenge.url);
     }
@@ -820,7 +1226,8 @@ mod tests {
         });
         assert!(validate(&serde_json::from_value(def.clone()).unwrap()).is_err());
         def["popular"]["request"]["url"] = json!("{base}/x");
-        def["pages"]["prepare"] = json!([{"request": {"url": "https://evil.test/t"}, "vars": {"a": "b"}}]);
+        def["pages"]["prepare"] =
+            json!([{"request": {"url": "https://evil.test/t"}, "vars": {"a": "b"}}]);
         assert!(validate(&serde_json::from_value(def).unwrap()).is_err());
     }
 }

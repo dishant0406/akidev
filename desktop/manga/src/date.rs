@@ -18,7 +18,18 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
 }
 
 const MONTHS: [&str; 12] = [
-    "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
 ];
 
 fn month_number(name: &str) -> Option<i64> {
@@ -26,7 +37,10 @@ fn month_number(name: &str) -> Option<i64> {
     if name.len() < 3 {
         return None;
     }
-    MONTHS.iter().position(|month| month.starts_with(&name)).map(|index| index as i64 + 1)
+    MONTHS
+        .iter()
+        .position(|month| month.starts_with(&name))
+        .map(|index| index as i64 + 1)
 }
 
 /// What a pattern holds, in the order its parts appear.
@@ -73,7 +87,10 @@ fn compile(format: &str) -> Option<(Regex, Vec<Part>)> {
         }
         rest = &rest[width..];
     }
-    parts.iter().any(|part| matches!(part, Part::Year | Part::ShortYear)).then_some(())?;
+    parts
+        .iter()
+        .any(|part| matches!(part, Part::Year | Part::ShortYear))
+        .then_some(())?;
     Some((Regex::new(&format!("(?i){regex}")).ok()?, parts))
 }
 
@@ -98,10 +115,13 @@ fn by_pattern(text: &str, format: &str) -> Option<i64> {
 }
 
 fn iso(text: &str) -> Option<i64> {
-    let found = Regex::new(r"(\d{4})-(\d{2})-(\d{2})").ok()?.captures(text)?;
+    let found = Regex::new(r"(\d{4})-(\d{2})-(\d{2})")
+        .ok()?
+        .captures(text)?;
     let number = |index: usize| found[index].parse::<i64>().ok();
     let (year, month, day) = (number(1)?, number(2)?, number(3)?);
-    ((1..=12).contains(&month) && (1..=31).contains(&day)).then(|| days_from_civil(year, month, day) * DAY_MS)
+    ((1..=12).contains(&month) && (1..=31).contains(&day))
+        .then(|| days_from_civil(year, month, day) * DAY_MS)
 }
 
 /// "3 days ago", "an hour ago", "yesterday", "just now", relative to `now_ms`.
@@ -113,9 +133,10 @@ fn relative(text: &str, now_ms: i64) -> Option<i64> {
     if lower.contains("today") || lower.contains("just now") || lower.contains("moments ago") {
         return Some(now_ms);
     }
-    let found = Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b")
-        .ok()?
-        .captures(&lower)?;
+    let found =
+        Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b")
+            .ok()?
+            .captures(&lower)?;
     let amount: i64 = match &found[1] {
         "a" | "an" | "one" => 1,
         digits => digits.parse().ok()?,
@@ -151,7 +172,9 @@ pub fn check(format: &str) -> bool {
 pub fn chapter_number(text: &str) -> Option<f64> {
     let marked = Regex::new(r"(?i)(?:chapter|ch\.?|episode|ep\.?|#)\s*(\d+(?:\.\d+)?)").ok()?;
     let any = Regex::new(r"(\d+(?:\.\d+)?)").ok()?;
-    marked.captures(text).or_else(|| any.captures(text))?[1].parse().ok()
+    marked.captures(text).or_else(|| any.captures(text))?[1]
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -168,15 +191,30 @@ mod tests {
     fn reads_patterns_with_month_names_and_ordinals() {
         let day = parse("March 5th, 2024", &formats(&["MMMM d, yyyy"]), NOW).unwrap();
         assert_eq!(day, days_from_civil(2024, 3, 5) * DAY_MS);
-        assert_eq!(parse("Jan 07, 2023", &formats(&["MMM dd, yyyy"]), NOW), Some(days_from_civil(2023, 1, 7) * DAY_MS));
-        assert_eq!(parse("07/01/23", &formats(&["dd/MM/yy"]), NOW), Some(days_from_civil(2023, 1, 7) * DAY_MS));
+        assert_eq!(
+            parse("Jan 07, 2023", &formats(&["MMM dd, yyyy"]), NOW),
+            Some(days_from_civil(2023, 1, 7) * DAY_MS)
+        );
+        assert_eq!(
+            parse("07/01/23", &formats(&["dd/MM/yy"]), NOW),
+            Some(days_from_civil(2023, 1, 7) * DAY_MS)
+        );
     }
 
     #[test]
     fn reads_relative_and_iso_dates_and_tries_formats_in_order() {
-        assert_eq!(parse("3 days ago", &formats(&["relative"]), NOW), Some(NOW - 3 * DAY_MS));
-        assert_eq!(parse("an hour ago", &formats(&["relative"]), NOW), Some(NOW - 3_600_000));
-        assert_eq!(parse("2024-02-29T10:00:00+00:00", &formats(&["iso"]), NOW), Some(days_from_civil(2024, 2, 29) * DAY_MS));
+        assert_eq!(
+            parse("3 days ago", &formats(&["relative"]), NOW),
+            Some(NOW - 3 * DAY_MS)
+        );
+        assert_eq!(
+            parse("an hour ago", &formats(&["relative"]), NOW),
+            Some(NOW - 3_600_000)
+        );
+        assert_eq!(
+            parse("2024-02-29T10:00:00+00:00", &formats(&["iso"]), NOW),
+            Some(days_from_civil(2024, 2, 29) * DAY_MS)
+        );
         assert!(parse("2 weeks ago", &formats(&["MMM d, yyyy", "relative"]), NOW).is_some());
         assert!(parse("nonsense", &formats(&["relative", "iso"]), NOW).is_none());
     }

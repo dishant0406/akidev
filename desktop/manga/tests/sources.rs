@@ -11,12 +11,17 @@ async fn every_definition_reads_its_fixtures() {
     for entry in std::fs::read_dir(root.join("themes")).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        themes.insert(&name, serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap());
+        themes.insert(
+            &name,
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap(),
+        );
     }
     let mut checked = 0;
     // A repository may ship no sources: the files are read when the folder is there.
     let explore = |dir: &str| -> Vec<std::path::PathBuf> {
-        std::fs::read_dir(root.join(dir)).map(|entries| entries.map(|entry| entry.unwrap().path()).collect()).unwrap_or_default()
+        std::fs::read_dir(root.join(dir))
+            .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
+            .unwrap_or_default()
     };
     let definitions = ["sources", "examples"].into_iter().flat_map(explore);
     for path in definitions {
@@ -24,11 +29,20 @@ async fn every_definition_reads_its_fixtures() {
             continue;
         }
         let id = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let def = themes.resolve(serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()).unwrap_or_else(|error| panic!("{id}: {error:#}"));
-        let outcomes = check::run(def, &root.join("fixtures").join(&id), false).await.unwrap_or_else(|error| panic!("{id}: {error:#}"));
+        let def = themes
+            .resolve(serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap())
+            .unwrap_or_else(|error| panic!("{id}: {error:#}"));
+        let outcomes = check::run(def, &root.join("fixtures").join(&id), false)
+            .await
+            .unwrap_or_else(|error| panic!("{id}: {error:#}"));
         assert!(!outcomes.is_empty(), "{id} has no fixture calls");
         for outcome in outcomes {
-            assert!(outcome.error.is_none(), "{id}: {}: {}", outcome.name, outcome.error.unwrap());
+            assert!(
+                outcome.error.is_none(),
+                "{id}: {}: {}",
+                outcome.name,
+                outcome.error.unwrap()
+            );
         }
         checked += 1;
     }
@@ -40,7 +54,11 @@ async fn every_definition_reads_its_fixtures() {
 #[test]
 fn the_index_is_up_to_date() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manga-sources");
-    let committed: akidev_manga::repo::Index = serde_json::from_str(&std::fs::read_to_string(root.join("index.json")).unwrap()).unwrap();
+    let committed: akidev_manga::repo::Index =
+        serde_json::from_str(&std::fs::read_to_string(root.join("index.json")).unwrap()).unwrap();
     let fresh = akidev_manga::repo::build_index(&root, committed.key.clone()).unwrap();
-    assert_eq!(committed, fresh, "run: cargo run -p akidev-manga --bin akidev-manga-cli -- index ../manga-sources");
+    assert_eq!(
+        committed, fresh,
+        "run: cargo run -p akidev-manga --bin akidev-manga-cli -- index ../manga-sources"
+    );
 }

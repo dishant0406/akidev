@@ -40,7 +40,11 @@ pub struct Challenge {
 
 impl std::fmt::Display for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} wants a check before it answers (status {})", self.url, self.status)
+        write!(
+            f,
+            "{} wants a check before it answers (status {})",
+            self.url, self.status
+        )
     }
 }
 
@@ -76,9 +80,14 @@ fn cause(error: &dyn std::error::Error) -> String {
 enum Transport {
     Live,
     /// Recorded answers by `Req::key`, and the requests that were made.
-    Recorded { answers: HashMap<String, String>, seen: Mutex<Vec<String>> },
+    Recorded {
+        answers: HashMap<String, String>,
+        seen: Mutex<Vec<String>>,
+    },
     /// Asks the site for real and keeps every answer, to make fixtures from.
-    Recording { taken: Mutex<Vec<(String, String)>> },
+    Recording {
+        taken: Mutex<Vec<(String, String)>>,
+    },
 }
 
 pub struct Fetcher {
@@ -106,7 +115,11 @@ fn looks_like_challenge(status: u16, body: &str) -> bool {
     if STRONG_MARKS.iter().any(|mark| body.contains(mark)) {
         return true;
     }
-    let title = body.split("<title>").nth(1).and_then(|rest| rest.split("</title>").next()).unwrap_or_default();
+    let title = body
+        .split("<title>")
+        .nth(1)
+        .and_then(|rest| rest.split("</title>").next())
+        .unwrap_or_default();
     if CHECK_TITLES.iter().any(|check| title.contains(check)) {
         return true;
     }
@@ -120,7 +133,12 @@ impl Fetcher {
 
     /// A live fetcher that remembers each answer (see `taken`).
     pub fn recording(rate_per_second: Option<f64>) -> Fetcher {
-        Fetcher::new(Transport::Recording { taken: Mutex::new(Vec::new()) }, rate_per_second)
+        Fetcher::new(
+            Transport::Recording {
+                taken: Mutex::new(Vec::new()),
+            },
+            rate_per_second,
+        )
     }
 
     /// What a recording fetcher was answered, as (request key, body) in the order asked, once each.
@@ -132,12 +150,26 @@ impl Fetcher {
     }
 
     pub fn recorded(answers: HashMap<String, String>) -> Fetcher {
-        Fetcher::new(Transport::Recorded { answers, seen: Mutex::new(Vec::new()) }, None)
+        Fetcher::new(
+            Transport::Recorded {
+                answers,
+                seen: Mutex::new(Vec::new()),
+            },
+            None,
+        )
     }
 
     fn new(transport: Transport, rate_per_second: Option<f64>) -> Fetcher {
-        let gap = rate_per_second.filter(|rate| *rate > 0.0).map_or(Duration::ZERO, |rate| Duration::from_secs_f64(1.0 / rate));
-        Fetcher { transport, gap, next_slot: Mutex::new(Instant::now()), cookies: Mutex::default(), user_agent: Mutex::new(DEFAULT_USER_AGENT.to_string()) }
+        let gap = rate_per_second
+            .filter(|rate| *rate > 0.0)
+            .map_or(Duration::ZERO, |rate| Duration::from_secs_f64(1.0 / rate));
+        Fetcher {
+            transport,
+            gap,
+            next_slot: Mutex::new(Instant::now()),
+            cookies: Mutex::default(),
+            user_agent: Mutex::new(DEFAULT_USER_AGENT.to_string()),
+        }
     }
 
     pub fn set_cookies(&self, cookies: impl IntoIterator<Item = (String, String)>) {
@@ -179,14 +211,28 @@ impl Fetcher {
                 seen.lock().unwrap().push(req.key());
                 match answers.get(&req.key()) {
                     Some(body) => Ok(body.clone()),
-                    None => bail!("no recorded answer for {} (have: {})", req.key(), answers.keys().cloned().collect::<Vec<_>>().join(", ")),
+                    None => bail!(
+                        "no recorded answer for {} (have: {})",
+                        req.key(),
+                        answers.keys().cloned().collect::<Vec<_>>().join(", ")
+                    ),
                 }
             }
             Transport::Live | Transport::Recording { .. } => {
                 self.wait_turn().await;
-                let method = reqwest::Method::from_bytes(req.method.as_bytes()).context("bad method")?;
-                let mut builder = client().request(method, &req.url).header("user-agent", self.user_agent.lock().unwrap().clone());
-                let cookie = self.cookies.lock().unwrap().iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("; ");
+                let method =
+                    reqwest::Method::from_bytes(req.method.as_bytes()).context("bad method")?;
+                let mut builder = client()
+                    .request(method, &req.url)
+                    .header("user-agent", self.user_agent.lock().unwrap().clone());
+                let cookie = self
+                    .cookies
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|(name, value)| format!("{name}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("; ");
                 if !cookie.is_empty() {
                     builder = builder.header("cookie", cookie);
                 }
@@ -200,11 +246,19 @@ impl Fetcher {
                     builder = builder.json(json);
                 }
                 // The address is already in the message, so the error's own copy of it is dropped.
-                let response = builder.send().await.map_err(|error| Unreachable { url: req.url.clone(), reason: cause(&error.without_url()) })?;
+                let response = builder.send().await.map_err(|error| Unreachable {
+                    url: req.url.clone(),
+                    reason: cause(&error.without_url()),
+                })?;
                 let status = response.status();
-                let body = String::from_utf8_lossy(&read_capped(response, MAX_BODY).await?).into_owned();
+                let body =
+                    String::from_utf8_lossy(&read_capped(response, MAX_BODY).await?).into_owned();
                 if looks_like_challenge(status.as_u16(), &body) {
-                    return Err(Challenge { url: req.url.clone(), status: status.as_u16() }.into());
+                    return Err(Challenge {
+                        url: req.url.clone(),
+                        status: status.as_u16(),
+                    }
+                    .into());
                 }
                 if !status.is_success() {
                     bail!("{} answered {}", req.url, status);
@@ -230,13 +284,25 @@ mod tests {
         assert!(looks_like_challenge(403, "<title>Just a moment...</title>"));
         assert!(looks_like_challenge(503, "<div id=\"cf-chl-widget\">"));
         // An interstitial served as a plain 200 is still a check, not a broken definition.
-        assert!(looks_like_challenge(200, "<!-- cf-chl-widget --><title>Just a moment...</title>"));
+        assert!(looks_like_challenge(
+            200,
+            "<!-- cf-chl-widget --><title>Just a moment...</title>"
+        ));
         // The script Cloudflare adds to ordinary pages, and a Turnstile widget on a form, are not checks: a real
         // Madara page carries the first, and treating it as one made that whole source unreadable.
-        assert!(!looks_like_challenge(200, "<title>Home - Site</title><script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script>"));
-        assert!(!looks_like_challenge(200, "<title>Sign in</title><div class=\"cf-turnstile\" data-sitekey=\"x\">turnstile</div>"));
+        assert!(!looks_like_challenge(
+            200,
+            "<title>Home - Site</title><script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script>"
+        ));
+        assert!(!looks_like_challenge(
+            200,
+            "<title>Sign in</title><div class=\"cf-turnstile\" data-sitekey=\"x\">turnstile</div>"
+        ));
         // The same marks on a refusal are a check.
-        assert!(looks_like_challenge(403, "<div id=\"challenge-platform\"></div>"));
+        assert!(looks_like_challenge(
+            403,
+            "<div id=\"challenge-platform\"></div>"
+        ));
         // The word itself is not enough: ordinary pages say it.
         assert!(!looks_like_challenge(200, "<p>Comment captcha below.</p>"));
         assert!(!looks_like_challenge(503, "Service unavailable"));
@@ -245,11 +311,30 @@ mod tests {
 
     #[tokio::test]
     async fn a_recorded_fetcher_answers_by_method_and_address_and_says_what_it_lacks() {
-        let fetcher = Fetcher::recorded(HashMap::from([("GET https://a.test/x".to_string(), "body".to_string())]));
-        let req = |url: &str| Req { method: "GET".into(), url: url.into(), headers: vec![], form: vec![], json: None };
-        assert_eq!(fetcher.send(&req("https://a.test/x")).await.unwrap(), "body");
-        let error = fetcher.send(&req("https://a.test/y")).await.unwrap_err().to_string();
-        assert!(error.contains("no recorded answer for GET https://a.test/y"), "{error}");
+        let fetcher = Fetcher::recorded(HashMap::from([(
+            "GET https://a.test/x".to_string(),
+            "body".to_string(),
+        )]));
+        let req = |url: &str| Req {
+            method: "GET".into(),
+            url: url.into(),
+            headers: vec![],
+            form: vec![],
+            json: None,
+        };
+        assert_eq!(
+            fetcher.send(&req("https://a.test/x")).await.unwrap(),
+            "body"
+        );
+        let error = fetcher
+            .send(&req("https://a.test/y"))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("no recorded answer for GET https://a.test/y"),
+            "{error}"
+        );
         assert_eq!(fetcher.seen().len(), 2);
     }
 

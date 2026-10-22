@@ -7,8 +7,8 @@ use akidev_manga::model as m;
 use akidev_manga::repo;
 use akidev_manga::source::{Info, Source};
 use akidev_manga::store::{Export, Progress, Store};
-use akidev_manga::{downloads, local};
 use akidev_manga::theme::Themes;
+use akidev_manga::{downloads, local};
 use anyhow::Context;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -24,10 +24,18 @@ uniffi::setup_scaffolding!();
 pub enum MangaError {
     /// The site wants a check first (Cloudflare, a captcha). There is no browser in the app to pass it in, so
     /// the screen says the site is not supported from here.
-    Challenge { url: String, status: u16 },
+    Challenge {
+        url: String,
+        status: u16,
+    },
     /// The site could not be reached at all (no network, a blocked address).
-    Offline { url: String, reason: String },
-    Failed { message: String },
+    Offline {
+        url: String,
+        reason: String,
+    },
+    Failed {
+        message: String,
+    },
 }
 
 impl std::fmt::Display for MangaError {
@@ -45,19 +53,29 @@ impl std::error::Error for MangaError {}
 impl From<anyhow::Error> for MangaError {
     fn from(error: anyhow::Error) -> MangaError {
         if let Some(challenge) = error.downcast_ref::<Challenge>() {
-            return MangaError::Challenge { url: challenge.url.clone(), status: challenge.status };
+            return MangaError::Challenge {
+                url: challenge.url.clone(),
+                status: challenge.status,
+            };
         }
         if let Some(down) = error.downcast_ref::<Unreachable>() {
-            return MangaError::Offline { url: down.url.clone(), reason: down.reason.clone() };
+            return MangaError::Offline {
+                url: down.url.clone(),
+                reason: down.reason.clone(),
+            };
         }
-        MangaError::Failed { message: format!("{error:#}") }
+        MangaError::Failed {
+            message: format!("{error:#}"),
+        }
     }
 }
 
 type Result<T> = std::result::Result<T, MangaError>;
 
 fn failed(message: impl Into<String>) -> MangaError {
-    MangaError::Failed { message: message.into() }
+    MangaError::Failed {
+        message: message.into(),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -311,13 +329,20 @@ pub struct HistoryEntry {
 
 impl From<m::Card> for Card {
     fn from(card: m::Card) -> Card {
-        Card { id: card.id, title: card.title, cover: card.cover }
+        Card {
+            id: card.id,
+            title: card.title,
+            cover: card.cover,
+        }
     }
 }
 
 impl From<m::Page<m::Card>> for CardPage {
     fn from(page: m::Page<m::Card>) -> CardPage {
-        CardPage { items: page.items.into_iter().map(Card::from).collect(), has_next: page.has_next }
+        CardPage {
+            items: page.items.into_iter().map(Card::from).collect(),
+            has_next: page.has_next,
+        }
     }
 }
 
@@ -335,7 +360,14 @@ impl From<m::Status> for Status {
 
 impl From<m::Detail> for Detail {
     fn from(detail: m::Detail) -> Detail {
-        Detail { title: detail.title, cover: detail.cover, description: detail.description, authors: detail.authors, tags: detail.tags, status: detail.status.into() }
+        Detail {
+            title: detail.title,
+            cover: detail.cover,
+            description: detail.description,
+            authors: detail.authors,
+            tags: detail.tags,
+            status: detail.status.into(),
+        }
     }
 }
 
@@ -352,13 +384,31 @@ impl From<m::Reading> for Reading {
 
 impl From<m::PageList> for PageList {
     fn from(list: m::PageList) -> PageList {
-        PageList { images: list.images, reading: list.reading.into(), headers: list.headers.into_iter().map(|(name, value)| Header { name, value }).collect() }
+        PageList {
+            images: list.images,
+            reading: list.reading.into(),
+            headers: list
+                .headers
+                .into_iter()
+                .map(|(name, value)| Header { name, value })
+                .collect(),
+        }
     }
 }
 
 impl From<Info> for SourceInfo {
     fn from(info: Info) -> SourceInfo {
-        SourceInfo { id: info.id, name: info.name, languages: info.languages, nsfw: info.nsfw, version: info.version, can_popular: info.can_popular, can_latest: info.can_latest, can_search: info.can_search, has_settings: info.has_settings }
+        SourceInfo {
+            id: info.id,
+            name: info.name,
+            languages: info.languages,
+            nsfw: info.nsfw,
+            version: info.version,
+            can_popular: info.can_popular,
+            can_latest: info.can_latest,
+            can_search: info.can_search,
+            has_settings: info.has_settings,
+        }
     }
 }
 
@@ -368,7 +418,11 @@ impl From<Info> for SourceInfo {
 
 /// A name that is safe as a file name: lowercase letters, digits and dashes.
 fn plain_name(name: &str) -> bool {
-    !name.is_empty() && name.len() <= 64 && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 fn now_ms() -> i64 {
@@ -424,17 +478,27 @@ impl Engine {
     }
 
     fn source(&self, id: &str) -> Result<Arc<Source>> {
-        self.sources.read().unwrap().get(id).cloned().ok_or_else(|| failed(format!("there is no source called {id}")))
+        self.sources
+            .read()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| failed(format!("there is no source called {id}")))
     }
 
     fn read_dir_json(&self, name: &str) -> Vec<(String, serde_json::Value)> {
-        let Ok(entries) = std::fs::read_dir(self.dir.join(name)) else { return Vec::new() };
+        let Ok(entries) = std::fs::read_dir(self.dir.join(name)) else {
+            return Vec::new();
+        };
         let mut found: Vec<(String, serde_json::Value)> = entries
             .filter_map(|entry| {
                 let path = entry.ok()?.path();
                 (path.extension()? == "json").then_some(())?;
                 let stem = path.file_stem()?.to_str()?.to_string();
-                Some((stem, serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?))
+                Some((
+                    stem,
+                    serde_json::from_str(&std::fs::read_to_string(&path).ok()?).ok()?,
+                ))
             })
             .collect();
         found.sort_by(|a, b| a.0.cmp(&b.0));
@@ -473,11 +537,17 @@ impl Engine {
     }
 
     fn save(&self, folder: &str, name: &str, text: &str) -> Result<()> {
-        std::fs::create_dir_all(self.dir.join(folder)).and_then(|()| std::fs::write(self.dir.join(folder).join(format!("{name}.json")), text)).map_err(|error| failed(error.to_string()))
+        std::fs::create_dir_all(self.dir.join(folder))
+            .and_then(|()| std::fs::write(self.dir.join(folder).join(format!("{name}.json")), text))
+            .map_err(|error| failed(error.to_string()))
     }
 
     fn installed_version(&self, id: &str) -> Option<u64> {
-        self.sources.read().unwrap().get(id).map(|source| source.info().version)
+        self.sources
+            .read()
+            .unwrap()
+            .get(id)
+            .map(|source| source.info().version)
     }
 
     fn view(&self, base: &str, name: &str, signed: bool, index: &repo::Index) -> RepoView {
@@ -485,7 +555,11 @@ impl Engine {
             .sources
             .iter()
             .map(|offered| {
-                let state = if offered.min_app.as_deref().is_some_and(|wanted| !repo::app_at_least(APP_VERSION, wanted)) {
+                let state = if offered
+                    .min_app
+                    .as_deref()
+                    .is_some_and(|wanted| !repo::app_at_least(APP_VERSION, wanted))
+                {
                     SourceState::NeedsNewerApp
                 } else {
                     match self.installed_version(&offered.id) {
@@ -494,27 +568,63 @@ impl Engine {
                         Some(_) => SourceState::Installed,
                     }
                 };
-                RepoSource { id: offered.id.clone(), name: offered.name.clone(), version: offered.version, languages: offered.lang.clone(), nsfw: offered.nsfw, state }
+                RepoSource {
+                    id: offered.id.clone(),
+                    name: offered.name.clone(),
+                    version: offered.version,
+                    languages: offered.lang.clone(),
+                    nsfw: offered.nsfw,
+                    state,
+                }
             })
             .collect();
-        RepoView { info: RepoInfo { base: base.to_string(), name: name.to_string(), signed }, sources }
+        RepoView {
+            info: RepoInfo {
+                base: base.to_string(),
+                name: name.to_string(),
+                signed,
+            },
+            sources,
+        }
     }
 
     /// Fetches what a repository offers and installs one source (with the themes it extends).
-    async fn install_one(&self, base: &str, index: &repo::Index, source_id: &str) -> anyhow::Result<SourceInfo> {
-        let offered = index.sources.iter().find(|offered| offered.id == source_id).with_context(|| format!("the repository has no source called {source_id}"))?;
+    async fn install_one(
+        &self,
+        base: &str,
+        index: &repo::Index,
+        source_id: &str,
+    ) -> anyhow::Result<SourceInfo> {
+        let offered = index
+            .sources
+            .iter()
+            .find(|offered| offered.id == source_id)
+            .with_context(|| format!("the repository has no source called {source_id}"))?;
         if let Some(wanted) = &offered.min_app {
-            anyhow::ensure!(repo::app_at_least(APP_VERSION, wanted), "{} needs Akidev {wanted} or newer (this is {APP_VERSION})", offered.name);
+            anyhow::ensure!(
+                repo::app_at_least(APP_VERSION, wanted),
+                "{} needs Akidev {wanted} or newer (this is {APP_VERSION})",
+                offered.name
+            );
         }
         let mut themes_changed = false;
         for theme_id in &offered.requires {
-            anyhow::ensure!(plain_name(theme_id), "{theme_id} is not a name a theme may have");
-            let theme = index.themes.iter().find(|theme| &theme.id == theme_id).with_context(|| format!("the repository has no theme {theme_id}"))?;
+            anyhow::ensure!(
+                plain_name(theme_id),
+                "{theme_id} is not a name a theme may have"
+            );
+            let theme = index
+                .themes
+                .iter()
+                .find(|theme| &theme.id == theme_id)
+                .with_context(|| format!("the repository has no theme {theme_id}"))?;
             let text = repo::fetch_file(base, &theme.path, &theme.sha256).await?;
-            serde_json::from_str::<serde_json::Value>(&text).with_context(|| format!("theme {theme_id} is not JSON"))?;
+            serde_json::from_str::<serde_json::Value>(&text)
+                .with_context(|| format!("theme {theme_id} is not JSON"))?;
             let path = self.dir.join("themes").join(format!("{theme_id}.json"));
             if std::fs::read_to_string(&path).ok().as_deref() != Some(text.as_str()) {
-                self.save("themes", theme_id, &text).map_err(|error| anyhow::anyhow!("{error}"))?;
+                self.save("themes", theme_id, &text)
+                    .map_err(|error| anyhow::anyhow!("{error}"))?;
                 themes_changed = true;
             }
         }
@@ -522,8 +632,16 @@ impl Engine {
             self.reload();
         }
         let text = repo::fetch_file(base, &offered.path, &offered.sha256).await?;
-        let info = self.install_document(&text, false).map_err(|error| anyhow::anyhow!("{error}"))?;
-        anyhow::ensure!(info.id == offered.id && info.version == offered.version, "the file for {} is not the source the index lists (it is {} {})", offered.id, info.id, info.version);
+        let info = self
+            .install_document(&text, false)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        anyhow::ensure!(
+            info.id == offered.id && info.version == offered.version,
+            "the file for {} is not the source the index lists (it is {} {})",
+            offered.id,
+            info.id,
+            info.version
+        );
         self.store.set_origin(&info.id, Some(base), info.version)?;
         Ok(info)
     }
@@ -532,14 +650,25 @@ impl Engine {
     /// extends merged in and is kept that way, so it stands alone; one from a repository keeps what it was
     /// given, so it follows its theme's updates.
     fn prepared(&self, json: &str, pasted: bool) -> Result<(Source, String)> {
-        let given: serde_json::Value = serde_json::from_str(json).map_err(|error| failed(format!("the definition is not JSON: {error}")))?;
+        let given: serde_json::Value = serde_json::from_str(json)
+            .map_err(|error| failed(format!("the definition is not JSON: {error}")))?;
         if !pasted {
-            let source = self.build(given).map_err(|error| failed(format!("{error:#}")))?;
+            let source = self
+                .build(given)
+                .map_err(|error| failed(format!("{error:#}")))?;
             return Ok((source, json.to_string()));
         }
-        let merged = self.themes.read().unwrap().resolve_document(given).map_err(|error| failed(format!("{error:#}")))?;
-        let text = serde_json::to_string_pretty(&merged).map_err(|error| failed(error.to_string()))?;
-        let source = self.build(merged).map_err(|error| failed(format!("{error:#}")))?;
+        let merged = self
+            .themes
+            .read()
+            .unwrap()
+            .resolve_document(given)
+            .map_err(|error| failed(format!("{error:#}")))?;
+        let text =
+            serde_json::to_string_pretty(&merged).map_err(|error| failed(error.to_string()))?;
+        let source = self
+            .build(merged)
+            .map_err(|error| failed(format!("{error:#}")))?;
         Ok((source, text))
     }
 
@@ -549,12 +678,18 @@ impl Engine {
         let (source, text) = self.prepared(json, pasted)?;
         let info = source.info();
         if !plain_name(&info.id) {
-            return Err(failed(format!("{} is not an id a source may have", info.id)));
+            return Err(failed(format!(
+                "{} is not an id a source may have",
+                info.id
+            )));
         }
         if let Some(have) = self.installed_version(&info.id)
             && have > info.version
         {
-            return Err(failed(format!("{} {have} is installed; this is the older {}", info.name, info.version)));
+            return Err(failed(format!(
+                "{} {have} is installed; this is the older {}",
+                info.name, info.version
+            )));
         }
         Ok((source, text))
     }
@@ -564,7 +699,10 @@ impl Engine {
         let (source, text) = self.checked(json, pasted)?;
         let info = source.info();
         self.save("sources", &info.id, &text)?;
-        self.sources.write().unwrap().insert(info.id.clone(), Arc::new(source));
+        self.sources
+            .write()
+            .unwrap()
+            .insert(info.id.clone(), Arc::new(source));
         Ok(info.into())
     }
 }
@@ -575,11 +713,18 @@ impl Engine {
     #[uniffi::constructor]
     pub fn new(data_dir: String) -> Result<Arc<Engine>> {
         let dir = PathBuf::from(data_dir);
-        std::fs::create_dir_all(&dir).map_err(|error| failed(format!("cannot use {}: {error}", dir.display())))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|error| failed(format!("cannot use {}: {error}", dir.display())))?;
         let store = Store::open(&dir.join("manga.db"))?;
         store.fail_interrupted_downloads()?;
         downloads::clear_unfinished(&dir.join("downloads"));
-        let engine = Engine { dir, store, themes: RwLock::default(), sources: RwLock::default(), downloading: Default::default() };
+        let engine = Engine {
+            dir,
+            store,
+            themes: RwLock::default(),
+            sources: RwLock::default(),
+            downloading: Default::default(),
+        };
         engine.reload();
         Ok(Arc::new(engine))
     }
@@ -591,16 +736,24 @@ impl Engine {
     // --- sources -------------------------------------------------------------------------------
 
     pub fn sources(&self) -> Vec<SourceInfo> {
-        self.sources.read().unwrap().values().map(|source| source.info().into()).collect()
+        self.sources
+            .read()
+            .unwrap()
+            .values()
+            .map(|source| source.info().into())
+            .collect()
     }
 
     /// Installs a theme (a base definition for sites on the same CMS), kept across launches. Repositories
     /// install their themes themselves; this is for a definition written by hand.
     pub fn install_theme(&self, name: String, json: String) -> Result<()> {
         if !plain_name(&name) {
-            return Err(failed("a theme's name is lowercase letters, digits and dashes"));
+            return Err(failed(
+                "a theme's name is lowercase letters, digits and dashes",
+            ));
         }
-        serde_json::from_str::<serde_json::Value>(&json).map_err(|error| failed(format!("the theme is not JSON: {error}")))?;
+        serde_json::from_str::<serde_json::Value>(&json)
+            .map_err(|error| failed(format!("the theme is not JSON: {error}")))?;
         self.save("themes", &name, &json)?;
         self.reload();
         Ok(())
@@ -624,7 +777,11 @@ impl Engine {
     /// The repository an installed source came from, if any. Pasting over one of these replaces it with a
     /// standalone copy that no longer updates, which the sheet warns about first.
     pub fn installed_origin(&self, id: String) -> Option<String> {
-        self.store.origin(&id).ok().flatten().and_then(|(origin, _)| origin)
+        self.store
+            .origin(&id)
+            .ok()
+            .flatten()
+            .and_then(|(origin, _)| origin)
     }
 
     pub fn remove_source(&self, id: String) -> Result<()> {
@@ -646,7 +803,11 @@ impl Engine {
             .map(|setting| SettingInfo {
                 id: setting.id,
                 name: setting.name,
-                options: setting.options.into_iter().map(|(value, name)| SettingOption { value, name }).collect(),
+                options: setting
+                    .options
+                    .into_iter()
+                    .map(|(value, name)| SettingOption { value, name })
+                    .collect(),
                 value: setting.value,
             })
             .collect())
@@ -665,7 +826,13 @@ impl Engine {
     pub async fn add_repo(&self, link: String) -> Result<RepoView> {
         let base = repo::base_of(&link)?;
         let fetched = repo::fetch_index(&base).await?;
-        self.store.add_repo(&base, &fetched.index.name, fetched.index.key.as_deref(), fetched.signed, now_ms())?;
+        self.store.add_repo(
+            &base,
+            &fetched.index.name,
+            fetched.index.key.as_deref(),
+            fetched.signed,
+            now_ms(),
+        )?;
         Ok(self.view(&base, &fetched.index.name, fetched.signed, &fetched.index))
     }
 
@@ -677,7 +844,12 @@ impl Engine {
     }
 
     pub fn repos(&self) -> Result<Vec<RepoInfo>> {
-        Ok(self.store.repos()?.into_iter().map(|(base, name, signed)| RepoInfo { base, name, signed }).collect())
+        Ok(self
+            .store
+            .repos()?
+            .into_iter()
+            .map(|(base, name, signed)| RepoInfo { base, name, signed })
+            .collect())
     }
 
     /// Removes a repository. Sources installed from it stay, but no longer update.
@@ -688,7 +860,13 @@ impl Engine {
     /// What a repository offers now, and which of it is installed.
     pub async fn repo_sources(&self, base: String) -> Result<RepoView> {
         let fetched = repo::fetch_index(&base).await?;
-        self.store.add_repo(&base, &fetched.index.name, fetched.index.key.as_deref(), fetched.signed, now_ms())?;
+        self.store.add_repo(
+            &base,
+            &fetched.index.name,
+            fetched.index.key.as_deref(),
+            fetched.signed,
+            now_ms(),
+        )?;
         Ok(self.view(&base, &fetched.index.name, fetched.signed, &fetched.index))
     }
 
@@ -696,7 +874,13 @@ impl Engine {
     /// checked against the hash the index gives.
     pub async fn install_from_repo(&self, base: String, source: String) -> Result<SourceInfo> {
         let fetched = repo::fetch_index(&base).await?;
-        self.store.add_repo(&base, &fetched.index.name, fetched.index.key.as_deref(), fetched.signed, now_ms())?;
+        self.store.add_repo(
+            &base,
+            &fetched.index.name,
+            fetched.index.key.as_deref(),
+            fetched.signed,
+            now_ms(),
+        )?;
         Ok(self.install_one(&base, &fetched.index, &source).await?)
     }
 
@@ -705,10 +889,20 @@ impl Engine {
     pub async fn update_sources(&self) -> Result<Vec<String>> {
         let mut updated = Vec::new();
         for (base, _, _) in self.store.repos()? {
-            let Ok(fetched) = repo::fetch_index(&base).await else { continue };
+            let Ok(fetched) = repo::fetch_index(&base).await else {
+                continue;
+            };
             for offered in &fetched.index.sources {
-                let Some((Some(origin), version)) = self.store.origin(&offered.id)? else { continue };
-                if origin == base && version < offered.version && self.install_one(&base, &fetched.index, &offered.id).await.is_ok() {
+                let Some((Some(origin), version)) = self.store.origin(&offered.id)? else {
+                    continue;
+                };
+                if origin == base
+                    && version < offered.version
+                    && self
+                        .install_one(&base, &fetched.index, &offered.id)
+                        .await
+                        .is_ok()
+                {
                     updated.push(offered.id.clone());
                 }
             }
@@ -719,7 +913,11 @@ impl Engine {
     /// After the person has a clearance cookie for a site (pasted in, say), or a login: cookies a
     /// source sends. Nothing in the app gets them from a browser.
     pub fn set_cookies(&self, source: String, cookies: Vec<Cookie>) -> Result<()> {
-        self.source(&source)?.fetcher().set_cookies(cookies.into_iter().map(|cookie| (cookie.name, cookie.value)));
+        self.source(&source)?.fetcher().set_cookies(
+            cookies
+                .into_iter()
+                .map(|cookie| (cookie.name, cookie.value)),
+        );
         Ok(())
     }
 
@@ -739,8 +937,13 @@ impl Engine {
 
     /// What `popular` or `latest` gave last time for page one, with no network: shown at once while the fresh page loads.
     pub fn remembered_listing(&self, source: String, latest: bool) -> Option<CardPage> {
-        let body = self.store.listing(&source, if latest { "latest" } else { "popular" }).ok()??;
-        serde_json::from_str::<m::Page<m::Card>>(&body).ok().map(CardPage::from)
+        let body = self
+            .store
+            .listing(&source, if latest { "latest" } else { "popular" })
+            .ok()??;
+        serde_json::from_str::<m::Page<m::Card>>(&body)
+            .ok()
+            .map(CardPage::from)
     }
 
     /// The ways a source lets a search be narrowed.
@@ -756,16 +959,36 @@ impl Engine {
                     akidev_manga::def::FilterKind::Select => FilterKind::Select,
                     akidev_manga::def::FilterKind::Text => FilterKind::Text,
                 },
-                options: filter.options.iter().map(|option| SettingOption { value: option.value.clone(), name: option.name.clone() }).collect(),
+                options: filter
+                    .options
+                    .iter()
+                    .map(|option| SettingOption {
+                        value: option.value.clone(),
+                        name: option.name.clone(),
+                    })
+                    .collect(),
                 default: filter.default.clone().unwrap_or_default(),
             })
             .collect())
     }
 
     /// A search; `choices` are the filters the person set (the rest take their defaults).
-    pub async fn search(&self, source: String, term: String, page: u32, choices: Vec<Choice>) -> Result<CardPage> {
-        let chosen = choices.into_iter().map(|choice| (choice.id, choice.value)).collect();
-        Ok(self.source(&source)?.search(&term, page, &chosen).await?.into())
+    pub async fn search(
+        &self,
+        source: String,
+        term: String,
+        page: u32,
+        choices: Vec<Choice>,
+    ) -> Result<CardPage> {
+        let chosen = choices
+            .into_iter()
+            .map(|choice| (choice.id, choice.value))
+            .collect();
+        Ok(self
+            .source(&source)?
+            .search(&term, page, &chosen)
+            .await?
+            .into())
     }
 
     /// The series' page. Also remembers it, so it can be saved to the library.
@@ -774,19 +997,32 @@ impl Engine {
             return Err(failed("a comic on the device has no page to fetch"));
         }
         let detail = self.source(&source)?.details(&id).await?;
-        self.store.upsert_series(&source, &id, &detail.title, detail.cover.as_deref(), detail.description.as_deref(), detail.status)?;
+        self.store.upsert_series(
+            &source,
+            &id,
+            &detail.title,
+            detail.cover.as_deref(),
+            detail.description.as_deref(),
+            detail.status,
+        )?;
         Ok(detail.into())
     }
 
     /// Asks the site for the chapters, keeps them, and returns them with how far each was read.
     pub async fn chapters(&self, source: String, id: String) -> Result<ChapterList> {
         if source == DEVICE {
-            return Ok(ChapterList { entries: self.entries(&source, &id)?, new_ids: Vec::new() });
+            return Ok(ChapterList {
+                entries: self.entries(&source, &id)?,
+                new_ids: Vec::new(),
+            });
         }
         let fetched = self.source(&source)?.chapters(&id).await?;
         let synced = self.store.sync_chapters(&source, &id, &fetched)?;
         self.store.set_checked(&source, &id, now_ms())?;
-        Ok(ChapterList { entries: self.entries(&source, &id)?, new_ids: synced.new })
+        Ok(ChapterList {
+            entries: self.entries(&source, &id)?,
+            new_ids: synced.new,
+        })
     }
 
     pub async fn pages(&self, source: String, series: String, chapter: String) -> Result<PageList> {
@@ -794,19 +1030,30 @@ impl Engine {
         if source == DEVICE && plain_name(&series) {
             let kept = downloads::pages(&self.dir.join("local").join(&series));
             if !kept.is_empty() {
-                return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading: Reading::Unknown, headers: Vec::new() });
+                return Ok(PageList {
+                    images: kept.iter().map(|page| file_url(page)).collect(),
+                    reading: Reading::Unknown,
+                    headers: Vec::new(),
+                });
             }
         } else if source != DEVICE && self.store.is_downloaded(&source, &series, &chapter)? {
             let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
             let kept = downloads::pages(&folder);
             if !kept.is_empty() {
-                let reading = match std::fs::read_to_string(folder.join("reading.txt")).unwrap_or_default().trim() {
+                let reading = match std::fs::read_to_string(folder.join("reading.txt"))
+                    .unwrap_or_default()
+                    .trim()
+                {
                     "long_strip" => Reading::LongStrip,
                     "paged" => Reading::Paged,
                     "paged_rtl" => Reading::PagedRtl,
                     _ => Reading::Unknown,
                 };
-                return Ok(PageList { images: kept.iter().map(|page| file_url(page)).collect(), reading, headers: Vec::new() });
+                return Ok(PageList {
+                    images: kept.iter().map(|page| file_url(page)).collect(),
+                    reading,
+                    headers: Vec::new(),
+                });
             }
         }
         Ok(self.source(&source)?.pages(&series, &chapter).await?.into())
@@ -839,7 +1086,19 @@ impl Engine {
             .store
             .library()?
             .into_iter()
-            .map(|item| LibraryEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, total: item.total, last_read_ms: item.last_read_ms, saved_ms: item.saved_ms, categories: item.categories, checked_ms: item.checked_ms, completed: item.completed })
+            .map(|item| LibraryEntry {
+                source: item.source,
+                id: item.id,
+                title: item.title,
+                cover: item.cover,
+                unread: item.unread,
+                total: item.total,
+                last_read_ms: item.last_read_ms,
+                saved_ms: item.saved_ms,
+                categories: item.categories,
+                checked_ms: item.checked_ms,
+                completed: item.completed,
+            })
             .collect())
     }
 
@@ -849,7 +1108,16 @@ impl Engine {
             .store
             .updates()?
             .into_iter()
-            .map(|item| UpdateEntry { source: item.source, id: item.id, title: item.title, cover: item.cover, unread: item.unread, latest_number: item.latest_number, latest_title: item.latest_title, latest_date_ms: item.latest_date_ms })
+            .map(|item| UpdateEntry {
+                source: item.source,
+                id: item.id,
+                title: item.title,
+                cover: item.cover,
+                unread: item.unread,
+                latest_number: item.latest_number,
+                latest_title: item.latest_title,
+                latest_date_ms: item.latest_date_ms,
+            })
             .collect())
     }
 
@@ -863,23 +1131,60 @@ impl Engine {
         Ok(self.store.set_checked(&source, &series, now_ms())?)
     }
 
-    pub fn set_progress(&self, source: String, series: String, chapter: String, page: u32, offset: f64, finished: bool) -> Result<()> {
-        Ok(self.store.set_progress(&source, &series, &chapter, Progress { page, offset, finished }, now_ms())?)
+    pub fn set_progress(
+        &self,
+        source: String,
+        series: String,
+        chapter: String,
+        page: u32,
+        offset: f64,
+        finished: bool,
+    ) -> Result<()> {
+        Ok(self.store.set_progress(
+            &source,
+            &series,
+            &chapter,
+            Progress {
+                page,
+                offset,
+                finished,
+            },
+            now_ms(),
+        )?)
     }
 
-    pub fn mark(&self, source: String, series: String, chapters: Vec<String>, read: bool) -> Result<()> {
+    pub fn mark(
+        &self,
+        source: String,
+        series: String,
+        chapters: Vec<String>,
+        read: bool,
+    ) -> Result<()> {
         let ids: Vec<&str> = chapters.iter().map(String::as_str).collect();
         Ok(self.store.mark(&source, &series, &ids, read, now_ms())?)
     }
 
     pub fn resume(&self, source: String, series: String) -> Result<Option<Resume>> {
-        Ok(self.store.resume(&source, &series)?.map(|resume| Resume { chapter: resume.chapter, page: resume.page, offset: resume.offset }))
+        Ok(self.store.resume(&source, &series)?.map(|resume| Resume {
+            chapter: resume.chapter,
+            page: resume.page,
+            offset: resume.offset,
+        }))
     }
 
     // --- categories ----------------------------------------------------------------------------
 
     pub fn categories(&self) -> Result<Vec<CategoryInfo>> {
-        Ok(self.store.categories()?.into_iter().map(|category| CategoryInfo { id: category.id, name: category.name, count: category.count }).collect())
+        Ok(self
+            .store
+            .categories()?
+            .into_iter()
+            .map(|category| CategoryInfo {
+                id: category.id,
+                name: category.name,
+                count: category.count,
+            })
+            .collect())
     }
 
     pub fn add_category(&self, name: String) -> Result<i64> {
@@ -898,22 +1203,48 @@ impl Engine {
         Ok(self.store.delete_category(id)?)
     }
 
-    pub fn set_category(&self, source: String, series: String, category: i64, member: bool) -> Result<()> {
-        Ok(self.store.put_in_category(&source, &series, category, member)?)
+    pub fn set_category(
+        &self,
+        source: String,
+        series: String,
+        category: i64,
+        member: bool,
+    ) -> Result<()> {
+        Ok(self
+            .store
+            .put_in_category(&source, &series, category, member)?)
     }
 
     // --- moving and removing -------------------------------------------------------------------
 
     /// Moves a series' library entry, categories and read chapters to the same series on another source.
     /// The other series must have been opened once (so its chapters are known). Returns the chapters carried over.
-    pub fn migrate(&self, source: String, series: String, to_source: String, to_series: String) -> Result<u32> {
-        Ok(self.store.migrate(&source, &series, &to_source, &to_series, now_ms())?)
+    pub fn migrate(
+        &self,
+        source: String,
+        series: String,
+        to_source: String,
+        to_series: String,
+    ) -> Result<u32> {
+        Ok(self
+            .store
+            .migrate(&source, &series, &to_source, &to_series, now_ms())?)
     }
 
     /// Forgets a series entirely: library entry, read state and the downloads it had.
     pub fn forget_series(&self, source: String, series: String) -> Result<()> {
-        for row in self.store.downloads()?.into_iter().filter(|row| row.source == source && row.series == series) {
-            let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &row.source, &row.series, &row.chapter));
+        for row in self
+            .store
+            .downloads()?
+            .into_iter()
+            .filter(|row| row.source == source && row.series == series)
+        {
+            let _ = std::fs::remove_dir_all(downloads::folder(
+                &self.dir.join("downloads"),
+                &row.source,
+                &row.series,
+                &row.chapter,
+            ));
         }
         if source == DEVICE && plain_name(&series) {
             let _ = std::fs::remove_dir_all(self.dir.join("local").join(&series));
@@ -929,34 +1260,68 @@ impl Engine {
         let mut sources = Vec::new();
         for (id, repo) in self.store.origins()? {
             let document = match &repo {
-                None => std::fs::read_to_string(self.dir.join("sources").join(format!("{id}.json"))).ok().and_then(|text| serde_json::from_str(&text).ok()),
+                None => {
+                    std::fs::read_to_string(self.dir.join("sources").join(format!("{id}.json")))
+                        .ok()
+                        .and_then(|text| serde_json::from_str(&text).ok())
+                }
                 Some(_) => None,
             };
-            sources.push(BackupSource { settings: self.store.settings(&id)?, id, repo, document });
+            sources.push(BackupSource {
+                settings: self.store.settings(&id)?,
+                id,
+                repo,
+                document,
+            });
         }
-        let backup = Backup { version: 1, library: self.store.export()?, repos: self.store.repos()?.into_iter().map(|(base, _, _)| base).collect(), sources };
+        let backup = Backup {
+            version: 1,
+            library: self.store.export()?,
+            repos: self
+                .store
+                .repos()?
+                .into_iter()
+                .map(|(base, _, _)| base)
+                .collect(),
+            sources,
+        };
         serde_json::to_string(&backup).map_err(|error| failed(error.to_string()))
     }
 
     /// Puts a backup back: the library at once, then the repositories and sources as far as they can be
     /// reached. What could not come back is reported, not hidden.
     pub async fn restore(&self, text: String) -> Result<RestoreReport> {
-        let backup: Backup = serde_json::from_str(&text).map_err(|error| failed(format!("that is not a backup: {error}")))?;
+        let backup: Backup = serde_json::from_str(&text)
+            .map_err(|error| failed(format!("that is not a backup: {error}")))?;
         if backup.version != 1 {
-            return Err(failed(format!("this backup is version {}; this app reads version 1", backup.version)));
+            return Err(failed(format!(
+                "this backup is version {}; this app reads version 1",
+                backup.version
+            )));
         }
         self.store.import(&backup.library)?;
         for base in &backup.repos {
             let _ = self.add_repo(base.clone()).await;
         }
-        let mut report = RestoreReport { series: backup.library.series.len() as u32, sources_installed: Vec::new(), sources_missing: Vec::new() };
+        let mut report = RestoreReport {
+            series: backup.library.series.len() as u32,
+            sources_installed: Vec::new(),
+            sources_missing: Vec::new(),
+        };
         for source in &backup.sources {
             let installed = self.installed_version(&source.id).is_some();
             let outcome = match (&source.document, &source.repo) {
                 _ if installed => Ok(()),
-                (Some(document), _) => self.install_document(&document.to_string(), false).map(|info| self.store.set_origin(&info.id, None, info.version)).map(|_| ()),
+                (Some(document), _) => self
+                    .install_document(&document.to_string(), false)
+                    .map(|info| self.store.set_origin(&info.id, None, info.version))
+                    .map(|_| ()),
                 (None, Some(base)) => match repo::fetch_index(base).await {
-                    Ok(fetched) => self.install_one(base, &fetched.index, &source.id).await.map(|_| ()).map_err(MangaError::from),
+                    Ok(fetched) => self
+                        .install_one(base, &fetched.index, &source.id)
+                        .await
+                        .map(|_| ())
+                        .map_err(MangaError::from),
                     Err(error) => Err(error.into()),
                 },
                 (None, None) => Err(failed("no way to get it back")),
@@ -980,8 +1345,21 @@ impl Engine {
     /// Returns the series id.
     pub fn import_file(&self, path: String) -> Result<String> {
         let imported = local::import(std::path::Path::new(&path), &self.dir.join("local"))?;
-        self.store.upsert_series(DEVICE, &imported.id, &imported.title, imported.pages.first().map(|page| file_url(page)).as_deref(), None, m::Status::Unknown)?;
-        let chapter = m::Chapter { id: "1".into(), number: Some(1.0), title: Some(imported.title.clone()), date_ms: None, scanlator: None };
+        self.store.upsert_series(
+            DEVICE,
+            &imported.id,
+            &imported.title,
+            imported.pages.first().map(|page| file_url(page)).as_deref(),
+            None,
+            m::Status::Unknown,
+        )?;
+        let chapter = m::Chapter {
+            id: "1".into(),
+            number: Some(1.0),
+            title: Some(imported.title.clone()),
+            date_ms: None,
+            scanlator: None,
+        };
         self.store.sync_chapters(DEVICE, &imported.id, &[chapter])?;
         self.store.add_to_library(DEVICE, &imported.id, now_ms())?;
         Ok(imported.id)
@@ -990,7 +1368,12 @@ impl Engine {
     // --- downloads -----------------------------------------------------------------------------
 
     /// Keeps a chapter on the device. Returns when it is done; a failed one is recorded as such.
-    pub async fn download_chapter(&self, source: String, series: String, chapter: String) -> Result<()> {
+    pub async fn download_chapter(
+        &self,
+        source: String,
+        series: String,
+        chapter: String,
+    ) -> Result<()> {
         let key = format!("{source}/{series}/{chapter}");
         if !self.downloading.lock().unwrap().insert(key.clone()) {
             return Ok(());
@@ -1001,24 +1384,53 @@ impl Engine {
     }
 
     pub fn downloads(&self) -> Result<Vec<DownloadInfo>> {
-        Ok(self.store.downloads()?.into_iter().map(|row| DownloadInfo { source: row.source, series: row.series, chapter: row.chapter, state: row.state, pages: row.pages, bytes: row.bytes }).collect())
+        Ok(self
+            .store
+            .downloads()?
+            .into_iter()
+            .map(|row| DownloadInfo {
+                source: row.source,
+                series: row.series,
+                chapter: row.chapter,
+                state: row.state,
+                pages: row.pages,
+                bytes: row.bytes,
+            })
+            .collect())
     }
 
     pub fn delete_download(&self, source: String, series: String, chapter: String) -> Result<()> {
-        let _ = std::fs::remove_dir_all(downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter));
+        let _ = std::fs::remove_dir_all(downloads::folder(
+            &self.dir.join("downloads"),
+            &source,
+            &series,
+            &chapter,
+        ));
         Ok(self.store.delete_download(&source, &series, &chapter)?)
     }
 }
 
 impl Engine {
     async fn download_one(&self, source: &str, series: &str, chapter: &str) -> Result<()> {
-        let (source, series, chapter) = (source.to_string(), series.to_string(), chapter.to_string());
-        let mut row = akidev_manga::store::DownloadRow { source: source.clone(), series: series.clone(), chapter: chapter.clone(), state: "active".into(), pages: 0, bytes: 0 };
+        let (source, series, chapter) =
+            (source.to_string(), series.to_string(), chapter.to_string());
+        let mut row = akidev_manga::store::DownloadRow {
+            source: source.clone(),
+            series: series.clone(),
+            chapter: chapter.clone(),
+            state: "active".into(),
+            pages: 0,
+            bytes: 0,
+        };
         self.store.set_download(&row)?;
         let outcome = async {
             let list = self.source(&source)?.pages(&series, &chapter).await?;
             let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
-            let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(60)).connect_timeout(std::time::Duration::from_secs(15)).build().map_err(|error| anyhow::anyhow!("{error}"))?;
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .build()
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
             let headers: Vec<(String, String)> = list.headers.into_iter().collect();
             let bytes = downloads::fetch(&client, &list.images, &headers, &folder, |done| {
                 row.pages = done;
@@ -1049,7 +1461,6 @@ impl Engine {
             }
         }
     }
-
 }
 
 #[uniffi::export]
