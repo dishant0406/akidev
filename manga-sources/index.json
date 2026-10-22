@@ -1,58 +1,7 @@
 {
   "schema": 1,
   "name": "Akidev sources",
-  "sources": [
-    {
-      "id": "internet-archive-comics",
-      "name": "Internet Archive: public-domain comics",
-      "version": 1,
-      "path": "sources/internet-archive-comics.json",
-      "sha256": "9f92d264147a488766c9f2e45b3ede98ae256700caef9d6cb4291517047cf4d0",
-      "lang": [
-        "en"
-      ],
-      "nsfw": false
-    },
-    {
-      "id": "mangadex",
-      "name": "MangaDex",
-      "version": 1,
-      "path": "sources/mangadex.json",
-      "sha256": "8ed2e322d4d93d11d039bf34a9eb219f6da0e405706785f288b644b358ee4320",
-      "lang": [
-        "en"
-      ],
-      "nsfw": false
-    },
-    {
-      "id": "pepper-and-carrot",
-      "name": "Pepper&Carrot",
-      "version": 1,
-      "path": "sources/pepper-and-carrot.json",
-      "sha256": "7aec475bfc9ccd9ee1b7fa5ff20476d64140774c0055c744bd0eaac89bb10f8c",
-      "lang": [
-        "en",
-        "fr",
-        "de",
-        "es",
-        "it",
-        "pt",
-        "ja"
-      ],
-      "nsfw": false
-    },
-    {
-      "id": "xkcd",
-      "name": "xkcd",
-      "version": 1,
-      "path": "sources/xkcd.json",
-      "sha256": "0c110673ce9cdea123e0e7b669d881ef5d6f992b6680dc6d1e51ff86bf50d54e",
-      "lang": [
-        "en"
-      ],
-      "nsfw": false
-    }
-  ],
+  "sources": [],
   "themes": [
     {
       "id": "madara",

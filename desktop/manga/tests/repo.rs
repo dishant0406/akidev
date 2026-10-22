@@ -61,23 +61,24 @@ async fn the_committed_repository_reads_and_its_files_match_their_hashes() {
     let base = serve(repo_dir(), HashMap::new()).await;
     let fetched = fetch_index(&base).await.unwrap();
     assert!(!fetched.signed);
-    let source = fetched.index.sources.iter().find(|source| source.id == "mangadex").unwrap();
-    let text = fetch_file(&base, &source.path, &source.sha256).await.unwrap();
-    assert!(text.contains("\"id\": \"mangadex\""));
+    // Whatever the repository lists (sources come and go), every file it lists reads and matches its hash.
     let theme = &fetched.index.themes[0];
-    assert!(fetch_file(&base, &theme.path, &theme.sha256).await.is_ok());
+    assert!(fetch_file(&base, &theme.path, &theme.sha256).await.unwrap().contains("\"theme\": true"));
+    for source in &fetched.index.sources {
+        assert!(fetch_file(&base, &source.path, &source.sha256).await.is_ok(), "{}", source.id);
+    }
 }
 
 #[tokio::test]
 async fn a_file_that_is_not_what_the_index_says_is_refused() {
     let dir = copy_repo("tamper", None);
-    let tampered = HashMap::from([("sources/mangadex.json".to_string(), b"{\"schema\":1}".to_vec())]);
+    let tampered = HashMap::from([("themes/madara.json".to_string(), b"{\"theme\":true}".to_vec())]);
     let base = serve(dir.clone(), tampered).await;
     let fetched = fetch_index(&base).await.unwrap();
-    let source = fetched.index.sources.iter().find(|source| source.id == "mangadex").unwrap();
-    let error = fetch_file(&base, &source.path, &source.sha256).await.unwrap_err().to_string();
+    let theme = &fetched.index.themes[0];
+    let error = fetch_file(&base, &theme.path, &theme.sha256).await.unwrap_err().to_string();
     assert!(error.contains("hash differs"), "{error}");
-    assert!(fetch_file(&base, "../etc/passwd", &source.sha256).await.is_err());
+    assert!(fetch_file(&base, "../etc/passwd", &theme.sha256).await.is_err());
     let _ = std::fs::remove_dir_all(dir);
 }
 
