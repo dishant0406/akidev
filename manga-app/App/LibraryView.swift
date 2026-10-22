@@ -44,6 +44,11 @@ struct LibraryView: View {
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
             }
+            .akiRefreshable {
+                await model.refreshLibrary(force: true)
+                history = (try? model.engine.history(limit: 60)) ?? []
+                loadCategories()
+            }
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()

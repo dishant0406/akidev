@@ -45,6 +45,10 @@ struct SourcesView: View {
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
             }
+            .akiRefreshable {
+                await model.updateSources()
+                model.refresh()
+            }
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()
@@ -85,6 +89,7 @@ struct RepoScreen: View {
             }
             .padding(.horizontal, 20).padding(.top, 8)
         }
+        .akiRefreshable { await load() }
         .background(AkiBackdrop())
         .akiNoNavigationBar()
         .hidesTabBar()

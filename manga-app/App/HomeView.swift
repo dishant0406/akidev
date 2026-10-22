@@ -95,6 +95,7 @@ struct HomeView: View {
                 .padding(.horizontal, 20).padding(.top, 8)
             }
             .scrollDismissesKeyboard(.immediately)
+            .akiRefreshable { await reload() }
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()
