@@ -1,3 +1,4 @@
+import AkiManga
 import Foundation
 
 /// "Oct 20, 2026" for a time in milliseconds.
@@ -11,4 +12,8 @@ func chapterName(number: Double?, title: String?) -> String {
     if let title, !title.isEmpty { return title }
     if let number { return "Chapter \(number.formatted(.number.precision(.fractionLength(0...2))))" }
     return "Chapter"
+}
+
+extension HistoryEntry {
+    var key: String { "\(source)/\(series)" }
 }

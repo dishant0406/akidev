@@ -2,6 +2,8 @@ import SwiftUI
 
 enum AkiTextStyle {
     case display, title, heading, body, bodyStrong, caption, captionStrong, eyebrow
+    /// A big number: the rank on a "Top 10" card.
+    case numeral
 }
 
 enum AkiTone {
@@ -53,6 +55,7 @@ struct AkiText: View {
         case .body, .bodyStrong: 0
         case .caption, .captionStrong: 0.1
         case .eyebrow: 1.4
+        case .numeral: -2
         }
     }
 
@@ -66,6 +69,7 @@ struct AkiText: View {
         case .caption: .system(.footnote, design: .rounded, weight: .medium)
         case .captionStrong: .system(.caption, design: .rounded, weight: .semibold)
         case .eyebrow: .system(.caption2, design: .rounded, weight: .bold)
+        case .numeral: .system(size: 72, weight: .black, design: .rounded)
         }
     }
 }

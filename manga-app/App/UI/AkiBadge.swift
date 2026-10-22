@@ -5,6 +5,8 @@ enum AkiBadgeStyle {
     case flat
     /// Glass, for a picture.
     case glass
+    /// The accent, for the one thing to do.
+    case primary
 }
 
 /// A small label: a date, a scanlator, a status.
@@ -20,7 +22,7 @@ struct AkiBadge: View {
     }
 
     var body: some View {
-        let tone: AkiTone = style == .glass ? .onMedia : .muted
+        let tone: AkiTone = style == .glass ? .onMedia : style == .primary ? .onPrimary : .muted
         let label = HStack(spacing: 4) {
             if let icon { AkiIcon(icon, size: 10, tone: tone) }
             AkiText(text, .captionStrong, tone: tone, lines: 1)
@@ -30,6 +32,7 @@ struct AkiBadge: View {
         switch style {
         case .flat: label.background(Aki.secondary, in: Capsule())
         case .glass: label.akiGlass(.capsule, tint: Aki.scrim, interactive: false)
+        case .primary: label.padding(.horizontal, 6).padding(.vertical, 2).background(Aki.primary, in: Capsule())
         }
     }
 }
