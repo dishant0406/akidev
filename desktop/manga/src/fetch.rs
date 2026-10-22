@@ -232,7 +232,7 @@ mod tests {
         // An interstitial served as a plain 200 is still a check, not a broken definition.
         assert!(looks_like_challenge(200, "<!-- cf-chl-widget --><title>Just a moment...</title>"));
         // The script Cloudflare adds to ordinary pages, and a Turnstile widget on a form, are not checks: a real
-        // ManhuaPlus page carries the first, and treating it as one made the whole source unreadable.
+        // Madara page carries the first, and treating it as one made that whole source unreadable.
         assert!(!looks_like_challenge(200, "<title>Home - Site</title><script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script>"));
         assert!(!looks_like_challenge(200, "<title>Sign in</title><div class=\"cf-turnstile\" data-sitekey=\"x\">turnstile</div>"));
         // The same marks on a refusal are a check.
