@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "id": "dynastyscans",
+  "name": "Dynasty Scans",
+  "version": 1,
+  "lang": ["en"],
+  "nsfw": true,
+  "base_url": "https://dynasty-scans.com",
+  "rate_per_second": 2,
+  "latest": {
+    "request": {
+      "url": "{base}/chapters/added.json?page={page}"
+    },
+    "format": "json",
+    "rows": "chapters",
+    "card": {
+      "id": [
+        { "path": "tags" },
+        { "where": { "path": "type", "equals": "Series" } },
+        { "path": "permalink" },
+        { "template": "series/{value}" }
+      ],
+      "title": "series"
+    }
+  },
+  "search": {
+    "request": {
+      "url": "{base}/search?classes%5B%5D=Doujin&classes%5B%5D=Series&q={term}&page={page}"
+    },
+    "rows": "dl.chapter-list dd",
+    "card": {
+      "id": [
+        { "css": "a.name" },
+        { "attr": "href" },
+        { "replace": { "from": "^/", "to": "" } }
+      ],
+      "title": "a.name"
+    },
+    "next": "a[rel=\"next\"]"
+  },
+  "detail": {
+    "request": {
+      "url": "{base}/{id:raw}.json"
+    },
+    "format": "json",
+    "title": "name",
+    "cover": "cover",
+    "description": [
+      { "path": "description" },
+      "plain_text"
+    ],
+    "authors": [
+      { "path": "tags" },
+      { "where": { "path": "type", "equals": "Author" } },
+      { "path": "name" }
+    ],
+    "tags": [
+      { "path": "tags" },
+      { "where": { "path": "type", "equals": "General" } },
+      { "path": "name" }
+    ],
+    "status": [
+      { "path": "tags" },
+      { "where": { "path": "type", "equals": "Status" } },
+      { "path": "name" }
+    ]
+  },
+  "chapters": {
+    "request": {
+      "url": "{base}/{id:raw}.json?page={page}"
+    },
+    "format": "json",
+    "rows": [
+      { "path": "taggings" },
+      { "where": { "path": "title", "absent": false } }
+    ],
+    "repeat": { "size": 25 },
+    "chapter": {
+      "id": "permalink",
+      "title": "title",
+      "date": [
+        { "path": "released_on" },
+        { "date": ["yyyy-MM-dd", "iso"] }
+      ],
+      "scanlator": [
+        { "path": "tags" },
+        { "where": { "path": "type", "equals": "Scanlator" } },
+        { "path": "name" },
+        "first"
+      ]
+    },
+    "order": "oldest-first"
+  },
+  "pages": {
+    "request": {
+      "url": "{base}/chapters/{id:raw}.json"
+    },
+    "format": "json",
+    "images": "pages.*.url",
+    "reading": "paged"
+  }
+}

@@ -1,0 +1,1380 @@
+{
+  "calls": [
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": null,
+            "id": "series/maou_sama_re_re_revenge",
+            "title": "Maou-sama, Re Re Revenge!"
+          },
+          {
+            "cover": null,
+            "id": "series/li_zi_and_nian_nian",
+            "title": "Li Zi and Nian Nian"
+          },
+          {
+            "cover": null,
+            "id": "series/revenge_of_the_fallen_angel_soprano_chan",
+            "title": "Revenge of the Fallen Angel Soprano-chan"
+          },
+          {
+            "cover": null,
+            "id": "series/love_shines_brightly_on_moonlit_nights",
+            "title": "Love Shines Brightly On Moonlit Nights"
+          },
+          {
+            "cover": null,
+            "id": "series/my_wish_is_to_fall_in_love_until_you_die",
+            "title": "My Wish Is To Fall In Love Until You Die"
+          },
+          {
+            "cover": null,
+            "id": "series/fancy_some_afternoon_tea_under_one_roof_my_impure_yet_wholehearted_life_with_my_senpai",
+            "title": "Fancy Some Afternoon Tea? Under One Roof, My Impure Yet Wholehearted Life With My Senpai"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_yuri_panic_an_extremely_precious_affair_has_begun",
+            "title": "Yuri Yuri Panic: An Extremely Precious Affair has Begun"
+          },
+          {
+            "cover": null,
+            "id": "series/just_the_two_of_us",
+            "title": "Just the Two of Us."
+          },
+          {
+            "cover": null,
+            "id": "series/the_blue_star_on_that_day",
+            "title": "The Blue Star on That Day"
+          },
+          {
+            "cover": null,
+            "id": "series/momiji_and_kouyou",
+            "title": "Momiji and Kouyou"
+          },
+          {
+            "cover": null,
+            "id": "series/sakuras_world",
+            "title": "Sakura's World"
+          },
+          {
+            "cover": null,
+            "id": "series/howling_song_for_husky_girl",
+            "title": "Howling Song for Husky Girl"
+          },
+          {
+            "cover": null,
+            "id": "series/the_guy_she_was_interested_in_wasnt_a_guy_at_all",
+            "title": "The Guy She Was Interested in Wasn't a Guy At All"
+          },
+          {
+            "cover": null,
+            "id": "series/looking_up_to_magical_girls",
+            "title": "Looking Up to Magical Girls"
+          },
+          {
+            "cover": null,
+            "id": "series/my_girlfriends_not_here_today",
+            "title": "My Girlfriend's Not Here Today"
+          },
+          {
+            "cover": null,
+            "id": "series/ill_take_this_love_home_with_me_for_now",
+            "title": "I'll Take This Love Home With Me For Now!"
+          },
+          {
+            "cover": null,
+            "id": "series/touhou_drunken_butterfly_flower_lotus_eaters_sobering",
+            "title": "Touhou Drunken Butterfly Flower ~ Lotus Eaters' Sobering"
+          }
+        ]
+      },
+      "op": "latest",
+      "page": 1
+    },
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": null,
+            "id": "series/my_cute_little_kitten",
+            "title": "My Cute Little Kitten"
+          },
+          {
+            "cover": null,
+            "id": "series/my_wish_is_to_fall_in_love_until_you_die",
+            "title": "My Wish Is To Fall In Love Until You Die"
+          },
+          {
+            "cover": null,
+            "id": "series/guilty_library",
+            "title": "Guilty Library"
+          },
+          {
+            "cover": null,
+            "id": "series/night_tide",
+            "title": "Night Tide"
+          },
+          {
+            "cover": null,
+            "id": "series/sakuras_world",
+            "title": "Sakura's World"
+          },
+          {
+            "cover": null,
+            "id": "series/akutsu_san_looks_like_my_oshi",
+            "title": "Akutsu-san Looks Like My Oshi"
+          },
+          {
+            "cover": null,
+            "id": "series/gal_and_gal_yuri",
+            "title": "#Gal and Gal Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/magical_girl_lyrical_nanoha_exceeds",
+            "title": "Magical Girl Lyrical Nanoha EXCEEDS"
+          },
+          {
+            "cover": null,
+            "id": "series/ill_take_this_love_home_with_me_for_now",
+            "title": "I'll Take This Love Home With Me For Now!"
+          },
+          {
+            "cover": null,
+            "id": "series/alcohol_and_ogre_girls",
+            "title": "Alcohol and Ogre-girls"
+          },
+          {
+            "cover": null,
+            "id": "series/former_evil_general_is_crushing_on_the_magical_girl",
+            "title": "Former Evil General Is Crushing on the Magical Girl"
+          },
+          {
+            "cover": null,
+            "id": "series/please_bully_me_miss_villainess",
+            "title": "Please Bully Me, Miss Villainess!"
+          },
+          {
+            "cover": null,
+            "id": "series/girly_debut",
+            "title": "Girly Debut"
+          }
+        ]
+      },
+      "op": "latest",
+      "page": 2
+    },
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": null,
+            "id": "series/unrequited_yuri_love",
+            "title": "Unrequited Yuri Love"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_is_taboo_to_a_yuri_otaku",
+            "title": "Yuri is Taboo to a Yuri Otaku"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_yuri_panic_an_extremely_precious_affair_has_begun",
+            "title": "Yuri Yuri Panic: An Extremely Precious Affair has Begun"
+          },
+          {
+            "cover": null,
+            "id": "series/gal_and_gal_yuri",
+            "title": "#Gal and Gal Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/sorry_but_im_not_into_yuri",
+            "title": "Sorry but I'm Not Into Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/our_yuri_started_with_me_getting_rejected_in_a_dream",
+            "title": "Our Yuri Started With Me Getting Rejected in a Dream"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_is_my_job",
+            "title": "Yuri Is My Job!"
+          },
+          {
+            "cover": null,
+            "id": "series/social_anxiety_vs_yuri",
+            "title": "Social Anxiety vs Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/the_results_of_my_authorclassmate_discovering_my_yuri_obsession",
+            "title": "The Results of My Author/Classmate Discovering My Yuri Obsession"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_sm_de_futari_no_kimochi_wa_tsunagarimasu_ka",
+            "title": "Yuri SM de Futari no Kimochi wa Tsunagarimasu ka?"
+          },
+          {
+            "cover": null,
+            "id": "series/making_progress_on_yuri_before_the_deadline",
+            "title": "Making Progress on Yuri Before the Deadline"
+          },
+          {
+            "cover": null,
+            "id": "series/after_kissing_many_girls_i_became_a_yuri_kisser",
+            "title": "After Kissing Many Girls, I Became A Yuri Kisser..."
+          },
+          {
+            "cover": null,
+            "id": "series/the_big_stepsis_who_wants_to_be_a_big_sister_vs_the_little_stepsis_who_wants_to_be_yuri",
+            "title": "The Big Stepsis Who Wants to Be a Big Sister vs. The Little Stepsis Who Wants to Be Yuri"
+          },
+          {
+            "cover": null,
+            "id": "series/a_yuri_story_about_how_my_classmate_whose_only_good_trait_is_her_excessively_pretty_face_comes_at_me_relentlessly",
+            "title": "A Yuri Story About How My Classmate Whose Only Good Trait Is Her Excessively Pretty Face Comes At Me Relentlessly"
+          },
+          {
+            "cover": null,
+            "id": "series/a_yuri_story_about_breaking_a_pretty_girl_who_keeps_insisting_i_wont_lose_into_submission",
+            "title": "A Yuri Story About Breaking a Pretty Girl Who Keeps Insisting \"I Won't Lose\" into Submission"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_yuri_2",
+            "title": "Yuri Yuri 2"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_yuri_elegy_syndrome",
+            "title": "Yuri Yuri (ELEGY SYNDROME)"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_lover_kun_and_yuri_lover_lover_kun",
+            "title": "Yuri Lover-kun and Yuri Lover Lover-kun"
+          },
+          {
+            "cover": null,
+            "id": "series/yuri_chan_yuri_chan_everywhere",
+            "title": "Yuri-chan, Yuri-chan Everywhere"
+          },
+          {
+            "cover": null,
+            "id": "series/yuru_yuri",
+            "title": "Yuru Yuri"
+          }
+        ]
+      },
+      "op": "search",
+      "page": 1,
+      "term": "yuri"
+    },
+    {
+      "expect": {
+        "authors": [
+          "Naba Kanna"
+        ],
+        "cover": "https://dynasty-scans.com/system/tag_contents_covers/000/026/665/medium/9784098548408.jpg?1789764006",
+        "description": "https://www.sunday-webry.com/episode/12207421983741802837",
+        "status": "ongoing",
+        "tags": [
+          "Yuri",
+          "Gender bender",
+          "Reverse isekai",
+          "Age gap",
+          "School girl",
+          "Comedy",
+          "Romance",
+          "Height gap"
+        ],
+        "title": "Maou-sama, Re Re Revenge!"
+      },
+      "id": "series/maou_sama_re_re_revenge",
+      "op": "details"
+    },
+    {
+      "expect": [
+        {
+          "date_ms": 1792454400000,
+          "id": "maou_sama_re_re_revenge_ch12",
+          "number": 12.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 12: Study Session, Getting Toyed With!"
+        },
+        {
+          "date_ms": 1790985600000,
+          "id": "maou_sama_re_re_revenge_ch11",
+          "number": 11.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 11: Prerequisites, All Over the Place!"
+        },
+        {
+          "date_ms": 1789689600000,
+          "id": "maou_sama_re_re_revenge_ch10",
+          "number": 10.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 10: Grades in Jeopardy, the Nature of Love!"
+        },
+        {
+          "date_ms": 1788566400000,
+          "id": "maou_sama_re_re_revenge_ch09",
+          "number": 9.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 9: I Love You."
+        },
+        {
+          "date_ms": 1787356800000,
+          "id": "maou_sama_re_re_revenge_ch08",
+          "number": 8.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 8: The Flower Field, Operation Friendship!!"
+        },
+        {
+          "date_ms": 1786147200000,
+          "id": "maou_sama_re_re_revenge_ch07",
+          "number": 7.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 7: Free-For-All, Date Overtime!"
+        },
+        {
+          "date_ms": 1784937600000,
+          "id": "maou_sama_re_re_revenge_ch06",
+          "number": 6.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 6: Demon Lord VS Suspicious Person!?"
+        },
+        {
+          "date_ms": 1783728000000,
+          "id": "maou_sama_re_re_revenge_bonus",
+          "number": null,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Bonus"
+        },
+        {
+          "date_ms": 1782518400000,
+          "id": "maou_sama_re_re_revenge_ch05",
+          "number": 5.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 5: Overthrowing, Excitement, the Real-Deal Date!"
+        },
+        {
+          "date_ms": 1781481600000,
+          "id": "maou_sama_re_re_revenge_ch04",
+          "number": 4.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 4: Carelessness, Negligence, the Basics of Dates!"
+        },
+        {
+          "date_ms": 1780963200000,
+          "id": "maou_sama_re_re_revenge_ch03",
+          "number": 3.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 3: Shall - We - First Date!"
+        },
+        {
+          "date_ms": 1780531200000,
+          "id": "maou_sama_re_re_revenge_ch02",
+          "number": 2.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 2: The Liar, Negotiations, the First Step!"
+        },
+        {
+          "date_ms": 1780185600000,
+          "id": "maou_sama_re_re_revenge_ch01",
+          "number": 1.0,
+          "scanlator": "Whimsical Meatloaf",
+          "title": "Chapter 1: The Former Demon Lord, Now a Middle School Girl!"
+        }
+      ],
+      "id": "series/maou_sama_re_re_revenge",
+      "op": "chapters"
+    },
+    {
+      "expect": {
+        "headers": {
+          "referer": "https://dynasty-scans.com/"
+        },
+        "images": [
+          "https://dynasty-scans.com/system/releases/000/048/615/01.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/02.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/03.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/04.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/05.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/06.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/07.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/08.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/09.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/10.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/11.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/12.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/13.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/14.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/15.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/16.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/17.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/18.webp",
+          "https://dynasty-scans.com/system/releases/000/048/615/Credits%20Maou%20ch12.webp"
+        ],
+        "reading": "paged"
+      },
+      "id": "maou_sama_re_re_revenge_ch12",
+      "op": "pages",
+      "series": "series/maou_sama_re_re_revenge"
+    },
+    {
+      "expect": {
+        "authors": [],
+        "cover": "https://dynasty-scans.com/system/tag_contents_covers/000/001/783/medium/cover.jpg?1530320990",
+        "description": null,
+        "status": "unknown",
+        "tags": [],
+        "title": "K-ON!"
+      },
+      "id": "doujins/k_on",
+      "op": "details"
+    },
+    {
+      "expect": [
+        {
+          "date_ms": 1241740800000,
+          "id": "mio_bares_all",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "Mio Bares All"
+        },
+        {
+          "date_ms": 1246579200000,
+          "id": "houkago_tea_time_ch01",
+          "number": 1.0,
+          "scanlator": "Wings of Yuri",
+          "title": "Houkago Tea Time ch01"
+        },
+        {
+          "date_ms": 1246924800000,
+          "id": "houkago_tea_time_ch02",
+          "number": 2.0,
+          "scanlator": "Wings of Yuri",
+          "title": "Houkago Tea Time ch02"
+        },
+        {
+          "date_ms": 1248998400000,
+          "id": "miottemasu",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Miottemasu"
+        },
+        {
+          "date_ms": 1250640000000,
+          "id": "flavored_milk",
+          "number": null,
+          "scanlator": "YQII",
+          "title": "Flavored Milk"
+        },
+        {
+          "date_ms": 1255305600000,
+          "id": "k_on_hon_ch02",
+          "number": 2.0,
+          "scanlator": "Burning Bang!",
+          "title": "K-ON-Hon!? ch02: Mio to Azusa"
+        },
+        {
+          "date_ms": 1255305600000,
+          "id": "k_on_hon_ch01",
+          "number": 1.0,
+          "scanlator": "Burning Bang!",
+          "title": "K-ON-Hon!? ch01"
+        },
+        {
+          "date_ms": 1257033600000,
+          "id": "mashmallow_nyan_nyan_whip",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Mashmallow NYAN NYAN Whip"
+        },
+        {
+          "date_ms": 1261094400000,
+          "id": "houkago_tea_time_ch03",
+          "number": 3.0,
+          "scanlator": "Wings of Yuri",
+          "title": "Houkago Tea Time ch03"
+        },
+        {
+          "date_ms": 1264204800000,
+          "id": "yuri_to_iu_yori_wa_les",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Yuri to Iu Yori wa Les"
+        },
+        {
+          "date_ms": 1264896000000,
+          "id": "secret_tea_time",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "secret tea time"
+        },
+        {
+          "date_ms": 1270598400000,
+          "id": "butterflies",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "BUTTERFLIES"
+        },
+        {
+          "date_ms": 1271980800000,
+          "id": "my_first_k_on",
+          "number": null,
+          "scanlator": "4dawgz",
+          "title": "My First K-ON"
+        },
+        {
+          "date_ms": 1274745600000,
+          "id": "lets_call_it_love",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Let's Call it Love"
+        },
+        {
+          "date_ms": 1278720000000,
+          "id": "excuse",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Excuse"
+        },
+        {
+          "date_ms": 1280188800000,
+          "id": "cat_ears_and_a_restroom_and_the_club_room_after_school",
+          "number": null,
+          "scanlator": "4dawgz",
+          "title": "Cat Ears And A Restroom And The Club Room After School"
+        },
+        {
+          "date_ms": 1280275200000,
+          "id": "first_kiss",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "First Kiss"
+        },
+        {
+          "date_ms": 1280361600000,
+          "id": "feelings",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Feelings"
+        },
+        {
+          "date_ms": 1283126400000,
+          "id": "study_time",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Study Time"
+        },
+        {
+          "date_ms": 1283126400000,
+          "id": "azusa_x_yui_4_koma_tsume_awase",
+          "number": 4.0,
+          "scanlator": "Wings of Yuri",
+          "title": "Azusa x Yui 4-koma Tsume Awase"
+        },
+        {
+          "date_ms": 1283644800000,
+          "id": "its_a_love_triangle_ricchan",
+          "number": null,
+          "scanlator": "StolenTranslations",
+          "title": "It's a Love Triangle Ricchan!"
+        },
+        {
+          "date_ms": 1284336000000,
+          "id": "blue_berry_rasp_berry",
+          "number": null,
+          "scanlator": "Wings of Yuri",
+          "title": "Blue-Berry Rasp-Berry"
+        },
+        {
+          "date_ms": 1284336000000,
+          "id": "its_romeo_and_juliet_ahahahaha",
+          "number": null,
+          "scanlator": "StolenTranslations",
+          "title": "It's Romeo and Juliet, Ahahahaha"
+        },
+        {
+          "date_ms": 1285718400000,
+          "id": "shio_fuki",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Shio-fuki!!"
+        },
+        {
+          "date_ms": 1286236800000,
+          "id": "azu_nyan_to_nyan_nyan",
+          "number": null,
+          "scanlator": "Soba-Scans",
+          "title": "Azu-nyan to Nyan-Nyan"
+        },
+        {
+          "date_ms": 1292198400000,
+          "id": "afterschool_kotatsu_time",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Afterschool Kotatsu Time"
+        },
+        {
+          "date_ms": 1294185600000,
+          "id": "nounai_de_shori_shiro",
+          "number": null,
+          "scanlator": "Yoroshii",
+          "title": "Nounai De Shori Shiro!"
+        },
+        {
+          "date_ms": 1297382400000,
+          "id": "on_her_birthday_eight_years_ago",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "On Her Birthday Eight Years Ago"
+        },
+        {
+          "date_ms": 1297382400000,
+          "id": "mole",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "Mole"
+        },
+        {
+          "date_ms": 1297468800000,
+          "id": "mios_birthday_present",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "Mio's Birthday Present"
+        },
+        {
+          "date_ms": 1297641600000,
+          "id": "a_valentines_day_manga",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "A Valentines Day Manga"
+        },
+        {
+          "date_ms": 1299715200000,
+          "id": "a_standard_of_graduation_ceremonies",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "A Standard of Graduation Ceremonies"
+        },
+        {
+          "date_ms": 1300665600000,
+          "id": "gouryella",
+          "number": null,
+          "scanlator": "Soba-Scans",
+          "title": "Gouryella"
+        },
+        {
+          "date_ms": 1301702400000,
+          "id": "kisu_suru",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Kisu suru!!"
+        },
+        {
+          "date_ms": 1309132800000,
+          "id": "houkago_time",
+          "number": null,
+          "scanlator": "Chocolate Scans",
+          "title": "Houkago \u25cb\u25cb Time"
+        },
+        {
+          "date_ms": 1312329600000,
+          "id": "babysitters",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Babysitters"
+        },
+        {
+          "date_ms": 1312848000000,
+          "id": "colors_10",
+          "number": 10.0,
+          "scanlator": "Kamikakushi",
+          "title": "Colors! 10"
+        },
+        {
+          "date_ms": 1313107200000,
+          "id": "nakano_and_hirasawa",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "Nakano and Hirasawa"
+        },
+        {
+          "date_ms": 1314489600000,
+          "id": "ui_mo_azusa_mo_crazy",
+          "number": null,
+          "scanlator": "Kamikakushi",
+          "title": "Ui mo Azusa mo CRAZY"
+        },
+        {
+          "date_ms": 1314662400000,
+          "id": "sweet_girls_1",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Sweet Girls"
+        },
+        {
+          "date_ms": 1315872000000,
+          "id": "yui_and_azusas_love_song",
+          "number": null,
+          "scanlator": "Soba-Scans",
+          "title": "Yui and Azusa's Love Song"
+        },
+        {
+          "date_ms": 1320537600000,
+          "id": "mugi_to_azu_ch01",
+          "number": 1.0,
+          "scanlator": "Biribiri",
+          "title": "Mugi to Azu ch01"
+        },
+        {
+          "date_ms": 1321228800000,
+          "id": "wa",
+          "number": null,
+          "scanlator": "Super Shanko & Friends",
+          "title": "Wa!"
+        },
+        {
+          "date_ms": 1323820800000,
+          "id": "yuis_birthday_present",
+          "number": null,
+          "scanlator": "Yuri Project",
+          "title": "Yui's Birthday Present"
+        },
+        {
+          "date_ms": 1326499200000,
+          "id": "babysitters_2",
+          "number": 2.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Babysitters 2"
+        },
+        {
+          "date_ms": 1328659200000,
+          "id": "give_me_more",
+          "number": null,
+          "scanlator": null,
+          "title": "Give Me More"
+        },
+        {
+          "date_ms": 1328832000000,
+          "id": "yui_azusa",
+          "number": null,
+          "scanlator": "Team Vanilla",
+          "title": "YUI \u00d7 AZUSA"
+        },
+        {
+          "date_ms": 1336003200000,
+          "id": "sweet_buns_2",
+          "number": 2.0,
+          "scanlator": "Yuri-ism",
+          "title": "Sweet Buns! 2"
+        },
+        {
+          "date_ms": 1338854400000,
+          "id": "sweet_sweet",
+          "number": null,
+          "scanlator": "Kamikakushi",
+          "title": "Sweet Sweet"
+        },
+        {
+          "date_ms": 1341792000000,
+          "id": "k_dan",
+          "number": null,
+          "scanlator": "Ragged Translations",
+          "title": "K-dan!"
+        },
+        {
+          "date_ms": 1348012800000,
+          "id": "monthly_ritsumio_for_adults_first_edition",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Monthly RitsuMio For Adults - First Edition"
+        },
+        {
+          "date_ms": 1349913600000,
+          "id": "comecomeerotick",
+          "number": null,
+          "scanlator": "Kamikakushi",
+          "title": "Come!Come!Erotick"
+        },
+        {
+          "date_ms": 1350000000000,
+          "id": "mugi_to_azu_ch02",
+          "number": 2.0,
+          "scanlator": "FUKE",
+          "title": "Mugi to Azu ch02: Mugi to Azu Kouhen"
+        },
+        {
+          "date_ms": 1350172800000,
+          "id": "azusa_yui",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "Azusa ==> Yui"
+        },
+        {
+          "date_ms": 1350172800000,
+          "id": "valentine",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "Valentine"
+        },
+        {
+          "date_ms": 1351987200000,
+          "id": "ai_iro",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "AI-IRO"
+        },
+        {
+          "date_ms": 1358640000000,
+          "id": "magic_for_nighttime_only",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Magic for Nighttime Only"
+        },
+        {
+          "date_ms": 1360454400000,
+          "id": "free_life_5",
+          "number": 5.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Free Life +5"
+        },
+        {
+          "date_ms": 1360886400000,
+          "id": "ritsumio_damashi_forever_the_k_n_anthology",
+          "number": null,
+          "scanlator": "SMDC Translations",
+          "title": "RitsuMio Damashi Forever - The K- N! Anthology"
+        },
+        {
+          "date_ms": 1366156800000,
+          "id": "chocolate_please",
+          "number": null,
+          "scanlator": "Dynasty Scans",
+          "title": "Chocolate Please"
+        },
+        {
+          "date_ms": 1366243200000,
+          "id": "little_sister",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Little Sister~"
+        },
+        {
+          "date_ms": 1366502400000,
+          "id": "houkago_tea_time_ch04",
+          "number": 4.0,
+          "scanlator": "Dynasty Scans",
+          "title": "Houkago Tea Time ch04"
+        },
+        {
+          "date_ms": 1367452800000,
+          "id": "monthly_ritsumio_for_adults_special_edition",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Monthly RitsuMio for Adults - Special Edition"
+        },
+        {
+          "date_ms": 1369267200000,
+          "id": "answer",
+          "number": null,
+          "scanlator": "Little Black Butterflies",
+          "title": "ANSWER"
+        },
+        {
+          "date_ms": 1372291200000,
+          "id": "onnanoko_doushi_toka_suki_dakara_1",
+          "number": 1.0,
+          "scanlator": "SMDC Translations",
+          "title": "Onnanoko Doushi toka Suki dakara! 1"
+        },
+        {
+          "date_ms": 1372809600000,
+          "id": "if_the_light_music_club_played_magic_the_gathering_ch01",
+          "number": 1.0,
+          "scanlator": "Little Black Butterflies",
+          "title": "If the Light Music Club played Magic: The Gathering ch01"
+        },
+        {
+          "date_ms": 1373328000000,
+          "id": "sloth_life",
+          "number": null,
+          "scanlator": "Kameden",
+          "title": "Sloth Life"
+        },
+        {
+          "date_ms": 1375056000000,
+          "id": "third_years_after_school",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "Third Years After School"
+        },
+        {
+          "date_ms": 1375401600000,
+          "id": "yuiazu",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "YuiAzu~~"
+        },
+        {
+          "date_ms": 1379548800000,
+          "id": "if_the_light_music_club_played_magic_the_gathering_ch02",
+          "number": 2.0,
+          "scanlator": "Little Black Butterflies",
+          "title": "If the Light Music Club played Magic: The Gathering ch02"
+        },
+        {
+          "date_ms": 1380326400000,
+          "id": "the_ritsu_ritsu_ritsu_ritsu_ritsu_x_mio_book",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "The Ritsu Ritsu Ritsu Ritsu Ritsu x Mio book"
+        },
+        {
+          "date_ms": 1380412800000,
+          "id": "if_the_light_music_club_played_magic_the_gathering_ch03",
+          "number": 3.0,
+          "scanlator": "Little Black Butterflies",
+          "title": "If the Light Music Club played Magic: The Gathering ch03"
+        },
+        {
+          "date_ms": 1380672000000,
+          "id": "the_mio_mio_mio_mio_mio_x_ritsu_book",
+          "number": null,
+          "scanlator": "Lazyedits",
+          "title": "The Mio Mio Mio Mio Mio x Ritsu Book"
+        },
+        {
+          "date_ms": 1382659200000,
+          "id": "lesson",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "lesson!!"
+        },
+        {
+          "date_ms": 1382659200000,
+          "id": "k_on_box",
+          "number": null,
+          "scanlator": "StolenTranslations",
+          "title": "K-ON! Box"
+        },
+        {
+          "date_ms": 1382745600000,
+          "id": "k_on_box_2",
+          "number": 2.0,
+          "scanlator": "StolenTranslations",
+          "title": "K-ON! Box 2"
+        },
+        {
+          "date_ms": 1382832000000,
+          "id": "k_on_box_3",
+          "number": 3.0,
+          "scanlator": "StolenTranslations",
+          "title": "K-ON! Box 3"
+        },
+        {
+          "date_ms": 1384905600000,
+          "id": "mio_kan",
+          "number": null,
+          "scanlator": "SMDC Translations",
+          "title": "Mio Kan!"
+        },
+        {
+          "date_ms": 1386633600000,
+          "id": "august_21st",
+          "number": 21.0,
+          "scanlator": "Yuri in Wonderland",
+          "title": "August 21st"
+        },
+        {
+          "date_ms": 1386633600000,
+          "id": "classroom_sunset",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "Classroom Sunset"
+        },
+        {
+          "date_ms": 1386720000000,
+          "id": "0214",
+          "number": 214.0,
+          "scanlator": "Yuri in Wonderland",
+          "title": "0214"
+        },
+        {
+          "date_ms": 1386806400000,
+          "id": "ante_meridiem_1032",
+          "number": 10.0,
+          "scanlator": "Yuri in Wonderland",
+          "title": "Ante Meridiem 10:32"
+        },
+        {
+          "date_ms": 1386892800000,
+          "id": "january_15",
+          "number": 15.0,
+          "scanlator": "Yuri in Wonderland",
+          "title": "January 15"
+        },
+        {
+          "date_ms": 1387843200000,
+          "id": "azunyan_as_a_side_dish",
+          "number": null,
+          "scanlator": "Fiendish-Imp",
+          "title": "Azunyan as a Side Dish"
+        },
+        {
+          "date_ms": 1388361600000,
+          "id": "happy_birthday_yui_chan",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "Happy Birthday, Yui-chan!"
+        },
+        {
+          "date_ms": 1388534400000,
+          "id": "omoi_ha_sorezore",
+          "number": null,
+          "scanlator": "One of a Kind Productions",
+          "title": "Omoi Ha Sorezore"
+        },
+        {
+          "date_ms": 1388534400000,
+          "id": "yui_and_peace",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "Yui and Peace"
+        },
+        {
+          "date_ms": 1389916800000,
+          "id": "i_want_to_bully_ricchan",
+          "number": null,
+          "scanlator": "Yuri in Wonderland",
+          "title": "I Want To Bully Ricchan!"
+        },
+        {
+          "date_ms": 1397347200000,
+          "id": "next_to_you_1",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Next To You"
+        },
+        {
+          "date_ms": 1409011200000,
+          "id": "hey_i_love_you_forevermore",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "HEY!!!!! I LOVE YOU!!!!! FOREVERMORE!!!!!"
+        },
+        {
+          "date_ms": 1411603200000,
+          "id": "unforgettable_flowers_and_rainbows",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Unforgettable Flowers and Rainbows"
+        },
+        {
+          "date_ms": 1415059200000,
+          "id": "yuri_on_2_kosokoso_mio_chan",
+          "number": 2.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Yuri-On! #2: Kosokoso Mio-chan!"
+        },
+        {
+          "date_ms": 1415059200000,
+          "id": "yuri_on_1_mesomeso_azunyan",
+          "number": 1.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Yuri-On! #1: Mesomeso Azunyan!"
+        },
+        {
+          "date_ms": 1415059200000,
+          "id": "yuri_on_4_muramura_mugi_chan",
+          "number": 4.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Yuri-On! #4: Muramura Mugi-chan!"
+        },
+        {
+          "date_ms": 1415232000000,
+          "id": "rere",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Re;Re;"
+        },
+        {
+          "date_ms": 1415318400000,
+          "id": "yuri_on_3_uzuuzu_ui_chan",
+          "number": 3.0,
+          "scanlator": "/u/ Scanlations",
+          "title": "Yuri-On! #3: Uzuuzu Ui-chan!"
+        },
+        {
+          "date_ms": 1416960000000,
+          "id": "a_book_with_just_mio_and_ritsu_kissing_and_flirting",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "A Book with Just Mio and Ritsu Kissing and Flirting"
+        },
+        {
+          "date_ms": 1419552000000,
+          "id": "yume_gatari_koi_gatari",
+          "number": null,
+          "scanlator": "onichan",
+          "title": "Yume Gatari Koi Gatari"
+        },
+        {
+          "date_ms": 1421107200000,
+          "id": "aruku_youna_hayasa_de",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Aruku Youna Hayasa de"
+        },
+        {
+          "date_ms": 1424736000000,
+          "id": "day_dream_believer",
+          "number": null,
+          "scanlator": "SMDC Translations",
+          "title": "Day Dream Believer"
+        },
+        {
+          "date_ms": 1424822400000,
+          "id": "mioritsu_for_adults_rebellion_story",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "MioRitsu for Adults - Rebellion Story"
+        },
+        {
+          "date_ms": 1424908800000,
+          "id": "hop_step_leap",
+          "number": null,
+          "scanlator": "Girls in Boxes",
+          "title": "Hop Step Leap!"
+        },
+        {
+          "date_ms": 1428019200000,
+          "id": "ato_3_centi",
+          "number": 3.0,
+          "scanlator": "SMDC Translations",
+          "title": "Ato 3-centi"
+        },
+        {
+          "date_ms": 1445731200000,
+          "id": "lesson_zero",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "Lesson Zero"
+        },
+        {
+          "date_ms": 1458345600000,
+          "id": "azunyan_sadness",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Azunyan sadness"
+        },
+        {
+          "date_ms": 1459555200000,
+          "id": "\u03bcs_vs_htt_the_allies",
+          "number": null,
+          "scanlator": "Girls in Boxes",
+          "title": "\u03bc\u2019s vs HTT - The Allies"
+        },
+        {
+          "date_ms": 1472083200000,
+          "id": "coming_of_age_booze_party",
+          "number": null,
+          "scanlator": null,
+          "title": "Coming-of-Age Booze Party"
+        },
+        {
+          "date_ms": 1483142400000,
+          "id": "how_to_make_a_love_letter",
+          "number": null,
+          "scanlator": "Yuri-ism",
+          "title": "How to Make a Love Letter"
+        },
+        {
+          "date_ms": 1497484800000,
+          "id": "girls_talk_3",
+          "number": null,
+          "scanlator": "/u/ Scanlations",
+          "title": "Girls\u2019 Talk"
+        },
+        {
+          "date_ms": 1513641600000,
+          "id": "spring_1",
+          "number": null,
+          "scanlator": "Kawaii Scans",
+          "title": "Spring"
+        },
+        {
+          "date_ms": 1542931200000,
+          "id": "summer",
+          "number": null,
+          "scanlator": "Kawaii Scans",
+          "title": "Summer"
+        },
+        {
+          "date_ms": 1562112000000,
+          "id": "natural_gigolo_yui",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Natural Gigolo Yui"
+        },
+        {
+          "date_ms": 1562371200000,
+          "id": "its_got_to_be_the_real_thing_or_you_wont_understand",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "It's Got to be the Real Thing Or You Won't Understand"
+        },
+        {
+          "date_ms": 1563321600000,
+          "id": "a_better_way_than_counting_sheep",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "A Better Way Than Counting Sheep (?)"
+        },
+        {
+          "date_ms": 1563321600000,
+          "id": "yui_nodoka_kiss_sequence",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Yui & Nodoka: Kiss Sequence"
+        },
+        {
+          "date_ms": 1563408000000,
+          "id": "ritsu_and_mio",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Ritsu and Mio"
+        },
+        {
+          "date_ms": 1563580800000,
+          "id": "january_15th",
+          "number": 15.0,
+          "scanlator": "Fighting For Flandre!",
+          "title": "January 15th"
+        },
+        {
+          "date_ms": 1563667200000,
+          "id": "yuiazu_manga",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "YuiAzu Manga"
+        },
+        {
+          "date_ms": 1564358400000,
+          "id": "kenhou_4_koma_ch01",
+          "number": 1.0,
+          "scanlator": "Fighting For Flandre!",
+          "title": "kenhou 4-koma ch01"
+        },
+        {
+          "date_ms": 1564444800000,
+          "id": "valentines_ritsumio",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Valentine's RitsuMio"
+        },
+        {
+          "date_ms": 1574553600000,
+          "id": "kuruwasete_nodoka_chan",
+          "number": null,
+          "scanlator": "Korn Dog Krew",
+          "title": "Kuruwasete Nodoka-chan"
+        },
+        {
+          "date_ms": 1575849600000,
+          "id": "kimi_ni_hidamari_no_jinsei_ga_aran_koto_o",
+          "number": null,
+          "scanlator": "Korn Dog Krew",
+          "title": "Kimi ni Hidamari no Jinsei ga Aran Koto o"
+        },
+        {
+          "date_ms": 1579910400000,
+          "id": "childhood_friend",
+          "number": null,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Childhood Friend"
+        },
+        {
+          "date_ms": 1582675200000,
+          "id": "ten_years_later_weve_started_living_together_yuiazu",
+          "number": null,
+          "scanlator": "Mumei Scanlation",
+          "title": "Ten Years Later, We\u2019ve Started Living Together - YuiAzu"
+        },
+        {
+          "date_ms": 1585353600000,
+          "id": "august_20th",
+          "number": 20.0,
+          "scanlator": "Mumei Scanlation",
+          "title": "August 20th"
+        },
+        {
+          "date_ms": 1587772800000,
+          "id": "ui_chans_blooming_maidenly_chat",
+          "number": null,
+          "scanlator": "EHCOVE",
+          "title": "Ui-chan's Blooming Maidenly Chat!\u2606"
+        },
+        {
+          "date_ms": 1621123200000,
+          "id": "autumn",
+          "number": null,
+          "scanlator": "Kawaii Scans",
+          "title": "Autumn"
+        },
+        {
+          "date_ms": 1621468800000,
+          "id": "azusa_x_yui_4_koma_tsume_awase_2",
+          "number": 4.0,
+          "scanlator": "Fighting For Flandre!",
+          "title": "Azusa x Yui 4-koma Tsume Awase 2"
+        },
+        {
+          "date_ms": 1776470400000,
+          "id": "day_without_you",
+          "number": null,
+          "scanlator": "Windyfall",
+          "title": "Day Without You"
+        },
+        {
+          "date_ms": 1780790400000,
+          "id": "dearest_heart",
+          "number": null,
+          "scanlator": "Windyfall",
+          "title": "Dearest Heart"
+        }
+      ],
+      "id": "doujins/k_on",
+      "op": "chapters"
+    }
+  ],
+  "now_ms": 1792661480000,
+  "responses": {
+    "GET https://dynasty-scans.com/chapters/added.json?page=1": "latest-1.json",
+    "GET https://dynasty-scans.com/chapters/added.json?page=2": "latest-2.json",
+    "GET https://dynasty-scans.com/chapters/maou_sama_re_re_revenge_ch12.json": "chapter.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json": "doujin-p1.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=1": "doujin-p1.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=2": "doujin-p2.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=3": "doujin-p3.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=4": "doujin-p4.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=5": "doujin-p5.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=6": "doujin-p6.json",
+    "GET https://dynasty-scans.com/doujins/k_on.json?page=7": "doujin-p7.json",
+    "GET https://dynasty-scans.com/search?classes%5B%5D=Doujin&classes%5B%5D=Series&q=yuri&page=1": "search.html",
+    "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json": "series-p1.json",
+    "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json?page=1": "series-p1.json",
+    "GET https://dynasty-scans.com/series/maou_sama_re_re_revenge.json?page=2": "series-p1.json"
+  }
+}

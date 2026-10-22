@@ -17,30 +17,34 @@ fixtures/<id>/         recorded pages and fixtures.json for a source or an examp
 
 ## What is in it
 
-Four sources, each with fixtures recorded from the live site, and one theme:
+Two sources, each with fixtures recorded from the live site, and one theme:
 
 | Source | Site | How it reads the site |
 | --- | --- | --- |
-| `manhuaplus` | manhuaplus.com | the `madara` theme; its chapter images sit in `div.reading-content`, not `div.page-break` |
-| `3asq` | 3asq.online (Arabic) | the `madara` theme; the status comes back in Arabic, which the theme's `map` turns into a word |
 | `asurascans` | api.asurascans.com | its own JSON API: `data`, `meta.has_more`, `series`, `data.chapter.pages.*.url` |
-| `tcbscans` | tcbonepiecechapters.com | its own Tailwind markup; a card is `div.bg-card`, the id is `<number>/<slug>` |
+| `dynastyscans` | dynasty-scans.com | its own JSON API, for series and for one-shots; an id is `series/<p>` or `doujins/<p>` |
+
+No shipped source extends `madara` any more. The theme stays: `examples/madara-example.json` and
+`examples/madara-protected.json` are what keep it honest, and the family is still the cheapest place to add sources from.
+Earlier ports of `manhuaplus`, `3asq` and `tcbscans` live in `git show 75a1a53`, and the findings they produced — the
+mirror trap, the per-site `pages` override, the chapter list that must ride in the detail page — are why those sites are
+cheap whenever they are wanted again.
+
+`asurascans` and `dynastyscans` are the only sources here for the only reason that matters: a source is worth shipping
+when the site is **reachable, gives its chapters in the answer, and gives its pages in the answer**. Most sites in the
+ecosystem fail one of the three. The probe behind that, and why each family fails, is in
+`pipeline/MANGA_SOURCES_PORT_PLAN.md` §3b.
+
+A site that answers a `POST` (the chapter list) through a redirect loses the body, which silently returns the wrong page:
+put the host that answers without redirecting in `base_url` and the other in `mirrors`. The recorded case was
+`3asq.org`, which answers `301` to `3asq.online`: `.online` had to be `base_url` and `.org` the mirror, even though the
+extension that led there named `.org`. Probe a mirror pair before writing either address, because the failure is silent.
 
 Two examples under `examples/` test the engine (`madara-example` for Madara's markup, `madara-protected` for an encrypted
 chapter payload). A source is added by writing `sources/<id>.json` (see Publishing) or pasted into the app on its own
 (Sources tab, Add a source). Only sources that are legal to read belong here: a public API that welcomes third-party
 readers, or work released under an open licence. Nothing that republishes copyrighted chapters without the publisher's
 leave.
-
-A source is worth adding only if the site is **reachable, gives its chapters in the answer, and gives its pages in the
-answer**. Most sites do not: as of 2026-10-22, of the 98 base addresses listed by the Paperback extensions, 42 are
-refused by this machine's proxy and most of the rest are parked or dead, so the extension metadata is largely stale.
-The probe behind that, and why each family fails, is in `pipeline/MANGA_SOURCES_PORT_PLAN.md` §3b.
-
-A site that answers a `POST` (the chapter list) through a redirect loses the body, which silently returns the wrong page:
-put the host that answers without redirecting in `base_url` and the other in `mirrors`. `3asq` is the worked example:
-`3asq.org` answers `301` to `3asq.online`, so `.online` is `base_url` and `.org` the mirror, even though the extension
-that led here named `.org`.
 
 ## Adding this repository to the app
 
@@ -149,10 +153,19 @@ A value is read by an expression. Short forms: HTML `"h3"` (the text of the matc
   that holds a nonce, a lookup that says which server to ask).
 - `chapters.repeat`: `{"size": 500, "total": "total"}` asks again with `{offset}` raised by `size` until `total` is
   reached (a source that pages its chapter list). `{page}` is also set, raised by one each time, for a site that
-  numbers its pages (`?t={page}`) instead of counting rows. `total` may be left out: asking then stops when a page
-  brings no chapter not already seen.
+  numbers its pages (`?t={page}`) instead of counting rows — so put `{page}` in the request's url, or every request
+  is the same one. `total` counts **chapters**; a site that only says how many **pages** it has (`"total_pages": 6`)
+  must leave `total` out. Asking then stops when a page brings no chapter not already seen. Screenshots of the same
+  list can repeat across pages, so that is the safer stop either way. One list may take at most **60** requests, so a
+  source with more chapters than `60 * size` in all asks for a bigger `size`; running out is reported, never returned
+  as a short list that looks complete.
 - Lists: `page_size` (top level) and `{offset}` (`(page - 1) * page_size`); `total` says how many titles there are, so
-  the app knows whether another page follows.
+  the app knows whether another page follows. `next` is an expression over the answer, and a page follows when it gives
+  something (`"next": "a.nextpostslink"` reads the site's own next link). Leave both out and a page follows whenever
+  the answer had **rows** — cards dropped for having no id do not end the list. Do not build `next` out of the
+  request's own holes (`{"template": "{page}"}`): those are always set, so it would say every page follows for ever.
+  `total` is compared with `page * page_size`, so it has to count what a page holds; a site handing back 25 rows a page
+  cannot be described by `total` unless `page_size` is 25 too.
 - `settings`: `{"id": "lang", "name": ..., "default": "en", "options": [{"value", "name"}]}`; the person's choice (the
   default until then) fills the hole `{lang}`. `{rating:raw}` is not percent-encoded, for an option that is a piece of
   query. The app shows each setting as a picker on the source's page.

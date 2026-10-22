@@ -11,6 +11,10 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
+/// The most requests one chapter list may take. A source with more chapters than this in all asks for more
+/// per request (`chapters.repeat.size`) rather than reading part of the list and calling it complete.
+const MAX_CHAPTER_REQUESTS: u32 = 60;
+
 /// What a request template's holes are filled with.
 #[derive(Default, Clone)]
 pub struct Holes {
@@ -347,8 +351,12 @@ impl Source {
         self.prepare(&def.prepare, &mut holes).await?;
         let mut chapters: Vec<Chapter> = Vec::new();
         let mut offset = 0u32;
-        // A source that pages its list is asked again until it has given them all (and never without end).
-        for _ in 0..60 {
+        // A buggy `repeat` could ask for ever, so the asking is bounded; running out is reported rather than
+        // returned as a shorter list that looks complete.
+        let mut asked = 0u32;
+        loop {
+            ensure!(asked < MAX_CHAPTER_REQUESTS, "{} gave chapters for {MAX_CHAPTER_REQUESTS} requests without ending: raise chapters.repeat.size", self.def.name);
+            asked += 1;
             let repeat = def.repeat.as_ref();
             holes.offset = repeat.map(|_| offset);
             // The page the list is on, for a site that numbers its pages (`?t={page}`) instead of counting
@@ -649,6 +657,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_chapter_list_never_ending_is_reported_and_not_silently_cut_short() {
+        // A `repeat` that keeps bringing chapters without ever ending would ask for ever; the bound is
+        // reported, never returned as a short list that looks complete.
+        let urls: Vec<String> = (1..=MAX_CHAPTER_REQUESTS).map(|page| format!("/c/s?t={page}")).collect();
+        let bodies: Vec<String> = (1..=MAX_CHAPTER_REQUESTS).map(|page| format!(r#"{{"rows":[{{"id":"c{page}","n":{page}}}]}}"#)).collect();
+        let pairs: Vec<(&str, &str)> = urls.iter().map(|u| u.as_str()).zip(bodies.iter().map(|b| b.as_str())).collect();
+        let chapters = json!({
+            "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
+            "repeat": {"size": 1}
+        });
+        let source = source(json!({"chapters": chapters}), &pairs);
+        let error = source.chapters("s").await.unwrap_err();
+        assert!(format!("{error:#}").contains("without ending"), "got: {error:#}");
+    }
+
+    #[tokio::test]
     async fn a_prepare_request_gives_values_the_next_request_uses() {
         let pages = json!({
             "prepare": [{"request": {"url": "{base}/token"}, "format": "json", "vars": {"token": "t"}}],
@@ -687,6 +711,24 @@ mod tests {
         ]);
         assert!(source.popular(1).await.unwrap().has_next);
         assert!(!source.popular(2).await.unwrap().has_next);
+    }
+
+    #[tokio::test]
+    async fn a_next_built_from_the_page_number_would_say_every_page_follows() {
+        // A list with no `next` and no `total` ends when an answer brings no rows.
+        let list = json!({"request": {"url": "{base}/list?p={page}"}, "format": "json", "rows": "items", "card": {"id": "id", "title": "name"}});
+        let paging = source(json!({"popular": list}), &[
+            ("/list?p=1", r#"{"items":[{"id":"1","name":"a"}]}"#),
+            ("/list?p=2", r#"{"items":[]}"#),
+        ]);
+        assert!(paging.popular(1).await.unwrap().has_next);
+        assert!(!paging.popular(2).await.unwrap().has_next);
+
+        // {page} is a hole in expressions too, so a `next` that only names it is always filled and says
+        // every page follows for ever. That is why a list that cannot tell ends by having no `next`.
+        let always = json!({"request": {"url": "{base}/list?p={page}"}, "format": "json", "rows": "items", "next": [{"template": "{page}"}], "card": {"id": "id", "title": "name"}});
+        let looping = source(json!({"popular": always}), &[("/list?p=1", r#"{"items":[]}"#)]);
+        assert!(looping.popular(1).await.unwrap().has_next);
     }
 
     #[tokio::test]

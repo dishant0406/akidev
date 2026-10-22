@@ -1,7 +1,9 @@
 # Porting Paperback sources to akidev-manga: catalog and plan
 
-Status: four sources shipped (`manhuaplus`, `3asq`, `asurascans`, `tcbscans`), each with live fixtures; see §3b for the
-re-probe that chose them and §Phase 1/Phase 5 for what shipped. Written 2026-10-22, re-probed the same day.
+Status: two sources shipped (`asurascans`, `dynastyscans`), each with live fixtures. `manhuaplus`, `3asq` and
+`tcbscans` were shipped and then removed on request; their definitions and findings remain in `git show 75a1a53`, and
+the lessons they produced are kept below. See §3b for the re-probe that chose the candidates and §Phase 1/Phase 5 for
+what shipped. Written 2026-10-22, re-probed the same day.
 Inputs: a full clone-and-read of the live Paperback extension ecosystem, the akidev-manga engine
 (`desktop/manga/`), and live probing of every candidate site from this machine.
 
@@ -96,14 +98,16 @@ dead** — `1stkissmanga.me`, `lilymanga.com`, `reset-scans.com`, `skscans.com`,
 therefore not a catalogue of 215 usable sites.
 
 **A portable source needs three things at once: reachable, chapters in the answer, and pages in the answer.** Applying
-that test collapses the list to four:
+that test collapses the list to two shipped sources:
 
 | Shipped | Why it passes |
 | --- | --- |
-| `manhuaplus` | Madara; chapters 3,364 rows on the ajax POST, pages 12 in `div.reading-content` |
-| `3asq` | Madara; 50 chapters, 17 pages |
 | `asurascans` | JSON API; `meta.has_more` pages, `data.chapter.pages.*.url` |
-| `tcbscans` | Tailwind markup; 19 cards, chapter ids as `<number>/<slug>`, 40 pages |
+| `dynastyscans` | JSON API for series and one-shots; `taggings` pages at 25, `pages[].url` |
+
+Four also passed that test and were removed afterwards: `manhuaplus` (Madara; 3,364 chapter rows, pages in
+`div.reading-content`), `3asq` (Madara, Arabic status), and `tcbscans` (Tailwind markup; ids are `<number>/<slug>`).
+`git show 75a1a53` has all three, so re-adding one is a checkout, not a port.
 
 And that is what fails for the rest:
 
@@ -173,11 +177,13 @@ not Madara).
    guesswork from a laptop behind a proxy.
 3. Decide the mirror convention (`mirrors` in the definition) and use it from the first site.
 
-### Phase 1 — the confirmed Madara sites (done, 2026-10-22)
+### Phase 1 — the confirmed Madara sites (done 2026-10-22, since removed)
 
 `manhuaplus` and `3asq` shipped as `sources/<id>.json` extending `madara`, with fixtures recorded by
-`akidev-manga-cli record` and checked by `cargo test -p akidev-manga` (55 tests green). `manhuaplus` is
-the template: it proves the whole chain (list → detail → chapters → pages) against real markup.
+`akidev-manga-cli record` and checked by `cargo test -p akidev-manga` (55 tests green at the time). `manhuaplus` was
+the template: it proved the whole chain (list → detail → chapters → pages) against real markup. Both are in
+`git show 75a1a53` and were removed on request, so nothing extends `madara` in the shipped repository today; the theme
+is kept by `examples/madara-example.json`.
 
 Two things had to be learned the hard way, and both are now recorded in `manga-sources/README.md`:
 
@@ -263,10 +269,64 @@ and 1 has nothing left to descramble. The engine work this port needed is finish
 ### Phase 5 — bespoke sites (started, 2026-10-22)
 
 Two are shipped: `asurascans` (api.asurascans.com is plain JSON — `repeat: {size: 100}` reads all 345 chapters of a
-serial, `data.chapter.pages.*.url` gives the pages) and `tcbscans` (Tailwind markup; a card is `div.bg-card`, a chapter
-id is `<number>/<slug>` and must stay raw because it is a path). TCB has no `latest` or `search` section: its home feed
-is chapter links, whose id is a chapter, and a card id has to be a manga id or opening the card asks for the wrong
-thing; `?search=` and `?page=` are ignored by the site, so a section claiming them would quietly lie.
+serial, `data.chapter.pages.*.url` gives the pages) and `dynastyscans` (below).
+
+`tcbscans` also shipped here and was removed afterwards; it is in `git show 75a1a53` and its shape is worth keeping in
+mind, because it is the counter-example to assuming every site has sections to fill. TCB had no `latest` or `search`
+section: its home feed is chapter links, whose id is a chapter, and a card id has to be a manga id or opening the card
+asks for the wrong thing; `?search=` and `?page=` are ignored by the site, so a section claiming them would quietly
+lie. Leaving a surface out is the correct answer there, and that reasoning applies to any bespoke port.
+
+`dynastyscans` (2026-10-22) is the cleanest bespoke port so far, because the site publishes a JSON API of its own:
+
+| Ask | Answer |
+| --- | --- |
+| `latest` | `/chapters/added.json?page=N` — 25 recent chapters, `total_pages: 1847` |
+| `search` | `/search?classes[]=Doujin&classes[]=Series&q=&page=N` — HTML, 20 rows, `a[rel=next]` |
+| `detail`, `chapters` | `/{id:raw}.json`, where the id is `series/<p>` or `doujins/<p>` |
+| `pages` | `/chapters/<chapter>.json` → `pages[].url` |
+
+Five things it settled, each recorded because they generalise:
+
+- **One id shape for two routes.** `/series/<p>.json` gives a serial and its chapters; `/doujins/<p>.json` gives a
+  one-shot tag and the one-shots under it. Both answer `{name, cover, description, tags[], taggings[]}`, so one
+  `detail` and one `chapters` read either shape while the id carries its own route (`"{base}/{id:raw}.json"`). The card
+  id is built by `{"css":"a.name"},{"attr":"href"},{"replace":{"from":"^/","to":""}}`, which keeps all **409**
+  one-shots reachable — a `regex` capturing only the slug threw that route away, and the fixture caught it.
+- **The newest list is chapter rows, not manga rows.** A card id must be a manga id, so it is read from the row's
+  `tags[]` entry whose `type` is `Series` (`where` → `path` → `template`). One-shot rows carry no `Series` tag at all:
+  they clear the id, and `source.rs` drops an id-less card, so they filter themselves out with no extra step.
+- **`next` built from `{page}` never stops.** The obvious `{"path":"total_pages"},{"template":"{page}"}` always
+  resolves, because `{page}` is always set, so paging would have walked all 1 847 pages. This site also answers past
+  its last page with `chapters: []` while `current_page` keeps climbing (1 848 of 1 847), so `current_page` cannot be
+  the stop either. The section leaves `next` out, and the engine's default — the answer had rows, so another page may
+  follow — does the right thing, because page 1 848 comes back empty.
+- **`plain_text` and `first` are bare strings, not objects.** `{"plain_text"}` fails as `data did not match any variant
+  of untagged enum Ex`; `coalesce` sub-expressions must likewise be lists of step objects (`[[{"path":"series"}]]`),
+  not bare strings.
+- **No covers in any listing, by the site's design.** `latest` and the search page carry none (the search page renders
+  no images, and `/series.json` is a 17-page A–Z tree of names without covers), so covers arrive only with `detail` and
+  list cards are text. There is no popularity sort anywhere either, so the source ships `latest` and `search` only.
+
+`nsfw` is true: the catalogue is largely adult, which is what the `ADULT` rating in the extension that led here said.
+
+Two things here are **not** proven, and are recorded so nobody reads the fixtures as covering them:
+
+- **A chapter with no pages.** `chapters` keeps every tagging that has a `title`, which is every chapter row on every
+  series and one-shot page sampled (four pages: keys are exactly `title`, `permalink`, `released_on`, `tags`, with no
+  external-link marker anywhere). Should the site ever list an off-site chapter, it would have a title and no `pages`,
+  and `pages` would report "the chapter has no pages: has the site changed?" rather than something truer.
+- **A chapter list long enough to paginate — this was real, and is now fixed.** The note here used to say `chapters`
+  had no `repeat` and that no paging was visible. That was measured on **series** pages only, and it was wrong for
+  **one-shots**: `/doujins/<p>.json` does paginate its `taggings` 25 at a time and says so (`"current_page": 1,
+  "total_pages": 6`), where a series page carries neither field and returns all of its chapters at once. `doujins/k_on`
+  holds **130** unique chapters across 6 pages, and the definition read page 1: **25 of 130, with no error**. The
+  definition now carries `repeat: {"size": 25}` and `?page={page}` in the request (a series ignores the parameter and
+  repeats its full answer, which the "nothing new" stop ends at once). Verified against an independent count taken from
+  the raw pages: 130 = 130, and `/series/…` still gives its 13.
+  The general lesson: `total` in `chapters.repeat` counts **chapters**, so a site that only reports `total_pages`
+  cannot be described by it — `{"total": "total_pages"}` compares 6 against the 25 rows already read and stops
+  immediately, which looks like a working definition returning 25 chapters.
 
 Two engine-shaped lessons from doing it:
 

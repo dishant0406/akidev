@@ -267,7 +267,8 @@ decide when we get there.
 ## 7. Adapters (no source files, just clients)
 
 - **MangaDex**: a plugin like any other since 2026-10-21 (`manga-sources/sources/mangadex.json`, section 16); the
-  rules below are how that definition behaves, not code in the app. Follow its rules: honest `akidev-manga/<version>` User-Agent, no
+  rules below are how that definition behaves, not code in the app. That definition was removed with every other source
+  in `74f6723` and comes back with `git show 74f6723^:manga-sources/sources/mangadex.json`. Follow its rules: honest `akidev-manga/<version>` User-Agent, no
   `Via`, a 5/s per-IP limiter (a shared token bucket, with `429` backoff), at-home server URLs fetched per
   chapter and report image success and failure to their `https://api.mangadex.network/report` endpoint as
   the docs ask (**check the current docs**: 503 when fetched on 2026-10-21 so this is unverified), content
@@ -554,8 +555,9 @@ with what to do instead. The facade and engine comments were corrected to match.
 
 Akidev has **no built-in source and no default repository**. Everything it reads comes from a definition the
 person installed, from a repository they added by address (a GitHub link, or any https folder with an
-`index.json`). The hardcoded MangaDex client (`mangadex.rs`) and the `Catalogue` enum are gone; MangaDex is
-`manga-sources/sources/mangadex.json`, published like any other plugin. Sections 7 and 8 above describe the plan
+`index.json`). The hardcoded MangaDex client (`mangadex.rs`) and the `Catalogue` enum are gone; MangaDex was
+`manga-sources/sources/mangadex.json`, published like any other plugin (removed with every other source in `74f6723`;
+recover it with `git show 74f6723^:manga-sources/sources/mangadex.json`). Sections 7 and 8 above describe the plan
 before this decision where they say the app ships with MangaDex.
 
 **What was built** (all committed, with tests):
