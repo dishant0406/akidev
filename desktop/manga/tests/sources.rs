@@ -1,12 +1,16 @@
-//! Every definition under `sources/` must read its recorded pages as its fixtures say. This is what
-//! stops a change to a theme from quietly breaking the sites that extend it.
+//! The engine's own theme and example definitions must read their recorded pages as their fixtures say.
+//! This is what stops a change to a theme from quietly breaking the definitions that extend it.
+//!
+//! These are synthetic fixtures (the `madara` theme and the `madara-example` / `madara-protected`
+//! definitions that exercise it), kept under `desktop/manga/testdata`. The catalogue of real source
+//! definitions lives in its own repository, `github.com/dishant0406/manga-sources`, and is checked there.
 
 use akidev_manga::{check, theme::Themes};
 use std::path::Path;
 
 #[tokio::test]
 async fn every_definition_reads_its_fixtures() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manga-sources");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata");
     let mut themes = Themes::default();
     for entry in std::fs::read_dir(root.join("themes")).unwrap() {
         let path = entry.unwrap().path();
@@ -17,14 +21,8 @@ async fn every_definition_reads_its_fixtures() {
         );
     }
     let mut checked = 0;
-    // A repository may ship no sources: the files are read when the folder is there.
-    let explore = |dir: &str| -> Vec<std::path::PathBuf> {
-        std::fs::read_dir(root.join(dir))
-            .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
-            .unwrap_or_default()
-    };
-    let definitions = ["sources", "examples"].into_iter().flat_map(explore);
-    for path in definitions {
+    for entry in std::fs::read_dir(root.join("examples")).unwrap() {
+        let path = entry.unwrap().path();
         if path.extension().is_none_or(|ext| ext != "json") {
             continue;
         }
@@ -47,18 +45,4 @@ async fn every_definition_reads_its_fixtures() {
         checked += 1;
     }
     assert!(checked > 0, "no definitions found");
-}
-
-/// The committed `index.json` must be what `index` would write now: a changed definition with a stale index
-/// would be refused by every app (its hash would not match).
-#[test]
-fn the_index_is_up_to_date() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manga-sources");
-    let committed: akidev_manga::repo::Index =
-        serde_json::from_str(&std::fs::read_to_string(root.join("index.json")).unwrap()).unwrap();
-    let fresh = akidev_manga::repo::build_index(&root, committed.key.clone()).unwrap();
-    assert_eq!(
-        committed, fresh,
-        "run: cargo run -p akidev-manga --bin akidev-manga-cli -- index ../manga-sources"
-    );
 }

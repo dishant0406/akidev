@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A fake Madara site for driving the app without any real site: `python3 scripts/demo-server.py [port]`.
 
-Serves the hand-written fixtures from manga-sources/fixtures/madara-example, with the page and cover
+Serves the hand-written fixtures from desktop/manga/testdata/fixtures/madara-example, with the page and cover
 images replaced by generated pictures on this server, plus a repository under /_demo/repo/ (an index.json
 that lists the madara theme and a source called `local`). Start the app with
 `-demoRepo http://127.0.0.1:8770/_demo/repo/ -source local`.
@@ -10,7 +10,7 @@ import hashlib, json, os, struct, sys, time, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2] / "manga-sources"
+ROOT = Path(__file__).resolve().parents[2] / "desktop/manga/testdata"
 FIX = ROOT / "fixtures/madara-example"
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8770
 BASE = f"http://127.0.0.1:{PORT}"
@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
         if (method, path) in ROUTES:
             return self.reply(fixture(ROUTES[(method, path)]))
         if path.startswith("/_demo/sources/"):
-            # The real repository folder (manga-sources), as GitHub would serve it.
+            # The demo repository folder (desktop/manga/testdata), as GitHub would serve it.
             target = (ROOT / path[len("/_demo/sources/"):]).resolve()
             if ROOT.resolve() in target.parents and target.is_file():
                 return self.reply(target.read_bytes(), "application/json")

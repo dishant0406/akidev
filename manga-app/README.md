@@ -33,9 +33,9 @@ xcrun simctl launch booted live.akidev.manga -demoRepo http://127.0.0.1:8770/_de
 
 The server is a fake Madara site and a repository (`/_demo/repo/`: an index naming the madara theme and a source
 called `local`, with hashes). `-demoRepo` (debug builds only) adds that repository at start and installs `local`
-(or the id in `-demoInstall`); `-source local` opens Browse on it. `/_demo/sources/` serves the real repository
-folder, `manga-sources/`. The pages are generated pictures; the
-HTML is the hand-written fixtures in `manga-sources/fixtures/madara-example`.
+(or the id in `-demoInstall`); `-source local` opens Browse on it. `/_demo/sources/` serves the demo repository
+folder, `desktop/manga/testdata/`. The pages are generated pictures; the
+HTML is the hand-written fixtures in `desktop/manga/testdata/fixtures/madara-example`.
 
 Other debug-only launch arguments for scripted runs: `-autoSeries "local|solo-leveling|Title"` opens straight on
 a series, `-autoContinue YES` then opens the reader where it left off, and `-mode.<source>.<series> strip|paged|rtl`
@@ -45,7 +45,7 @@ picks the reading mode. `DEMO_LOG=1 python3 scripts/demo-server.py` prints every
 
 Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address
 (Sources tab). It has no built-in source, no default repository, and offers and endorses none. The repository that
-holds the plugins we write is [manga-sources](../manga-sources/README.md).
+holds the plugins we write is the separate repository [dishant0406/manga-sources](https://github.com/dishant0406/manga-sources).
 
 One source can also be pasted in on its own (Sources tab, Add a source): it is checked, its name and languages are
 shown, and themes it extends are merged in so it works without the repository that has them.

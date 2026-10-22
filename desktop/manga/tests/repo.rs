@@ -46,8 +46,11 @@ async fn serve(dir: PathBuf, overrides: HashMap<String, Vec<u8>>) -> String {
     base
 }
 
+/// A small synthetic repository under `testdata/repo`: one theme and one source. The catalogue of real
+/// source definitions lives in its own repository (`github.com/dishant0406/manga-sources`) and is checked
+/// there; these tests only need a well-formed repository to read over HTTP.
 fn repo_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../manga-sources")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/repo")
 }
 
 /// The files in a folder, or nothing when the folder is not there: a repository may ship no sources at all.
@@ -142,7 +145,7 @@ async fn a_signed_repository_must_carry_a_matching_signature() {
 
     // The index changed after it was signed.
     let mut changed = String::from_utf8(text.clone()).unwrap();
-    changed = changed.replace("Akidev sources", "Somebody else");
+    changed = changed.replace("Test repo", "Somebody else");
     let base = serve(
         dir.clone(),
         HashMap::from([("index.json".to_string(), changed.into_bytes())]),

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../manga-sources");
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../manga/testdata");
 
 /// A server that answers by path (the query is ignored) from the madara fixtures, and serves the repository
 /// folder `repo_dir` (if any) under /repo/.

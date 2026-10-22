@@ -1,16 +1,19 @@
 # Porting Paperback sources to akidev-manga: catalog and plan
 
-Status: two sources shipped (`asurascans`, `dynastyscans`), each with live fixtures. `manhuaplus`, `3asq` and
+Status: four sources shipped (`arenascans`, `asurascans`, `dynastyscans`, `flamecomics`), each with live fixtures.
+`manhuaplus`, `3asq` and
 `tcbscans` were shipped and then removed on request; their definitions and findings remain in `git show 75a1a53`, and
 the lessons they produced are kept below. See §3b for the re-probe that chose the candidates and §Phase 1/Phase 5 for
-what shipped. Written 2026-10-22, re-probed the same day.
+what shipped. Written 2026-10-22, re-probed the same day; `arenascans` added the same day (§Phase 7).
 Inputs: a full clone-and-read of the live Paperback extension ecosystem, the akidev-manga engine
 (`desktop/manga/`), and live probing of every candidate site from this machine.
 
 ## 1. The answer
 
 **The port is cheap where a site runs a known CMS, and there is one CMS family that is worth more than
-everything else: Madara.** `manga-sources/themes/madara.json` already exists and is already proven. A
+everything else: Madara.** The `madara` theme already exists and is already proven. The catalogue of sources now
+lives in its own repository, [`dishant0406/manga-sources`](https://github.com/dishant0406/manga-sources); the theme
+and the fixtures that exercise the engine live with the crate under `desktop/manga/testdata/`. A
 Madara site is not a port, it is an 8-line file:
 
 ```json
@@ -169,7 +172,8 @@ not Madara).
 
 ### Phase 0 — make the port mechanical (small, do first)
 
-1. Add a `manga-sources/scripts/port-madara.sh` (or a `themes` helper) that takes `id`, `name`,
+1. Add a `scripts/port-madara.sh` (or a `themes` helper) in the `dishant0406/manga-sources` repository that takes
+   `id`, `name`,
    `base_url`, `lang`, `nsfw` and writes `sources/<id>.json`, then runs `record` + `check`. The point is
    that site #30 costs the same as site #1.
 2. Add a **liveness probe** to CI that curls each `base_url` and reports `reachable / blocked / dead`,
@@ -185,7 +189,7 @@ the template: it proved the whole chain (list → detail → chapters → pages)
 `git show 75a1a53` and were removed on request, so nothing extends `madara` in the shipped repository today; the theme
 is kept by `examples/madara-example.json`.
 
-Two things had to be learned the hard way, and both are now recorded in `manga-sources/README.md`:
+Two things had to be learned the hard way, and both are now recorded in the `dishant0406/manga-sources` README:
 
 1. **A redirect eats a `POST` body.** `3asq.org` answers `301 → 3asq.online`, and the chapter list is a
    `POST /ajax/chapters/`. The redirect is followed but the body is dropped, so the site returns the
@@ -381,6 +385,39 @@ step, so per-row JSON fields need an explicit `[{ "path": … }]`; (2) a JSON ob
 lexicographic key order, so page images need `"sort"`. Counts verified independently of `--bless`:
 154 search rows, 21 chapters, 23 pages.
 
+### Phase 7 — arenascans: the first MangaStream-theme source (SHIPPED 2026-10-22, v1)
+
+`arenascan.com` is proxy-blocked from this machine (a 503 corporate block page, not a dead site), so it was probed
+and recorded entirely through the `r.jina.ai` relay (GET, faithful HTML via `-H "x-respond-with: html"`). It is a
+WordPress site on the **`mangareader` theme** (the ThemeSans / MangaStream family — the same cluster keiyoushi's
+`Keyoapp`/`MangaStream` multisrc targets), and it passes the three-part test cleanly:
+
+| Ask | Answer |
+| --- | --- |
+| popular | `/manga/page/{page}/?order=popular` — `.bsx` cards, covered, genuinely ranked (TBATE first) |
+| latest | `/manga/page/{page}/?order=update` — the only other server-side sort |
+| search | `/page/{page}/?s={term}`; **filters by `?s=&genre=<slug>`** (proven to return a different, filtered list) |
+| detail | `/manga/{id}/` — `h1.entry-title`, `.entry-content-single`, genres as `/genres/<slug>/` links |
+| chapters | same page — `#chapterlist li[data-num] .eph-num a`; 175 rows for one series (incl. a `Chapter 0` prologue) |
+| pages | `/{id:raw}/` — `ts_reader.run({...})` script blob → `sources.0.images.*`; 173 pages |
+
+Two traps this port proved, both documented in the README ("A MangaStream / WP `mangareader` site"):
+
+- **The reader images are inside `<noscript>`.** `<div id="readerarea">` wraps every `<img>` in a `<noscript>`
+  no-JS fallback, and `scraper` skips `noscript` contents, so `#readerarea img` finds nothing. Pages are read from
+  the `ts_reader.run({...})` blob instead: `css: "script"` → `text` → regex the `{...}` argument → `json` →
+  `path`. The blob is the canonical list (no tiles, no crypto, plain `cdn.arenascan.com` URLs).
+- **The site never fills Status / Author / Artist** — `<i></i>` or `n/a` even on its most popular title — so
+  `status` reads `unknown` and `authors` reads `[]`. Truthful; the `default` / `non_empty` guards stay.
+
+The `genre` filter is wired as a `select` (20 options) so the dashboard's category chips work; `{term}` sits in a
+`{?...?}` group so a genre-only chip searches without a term (the Asura `{term}`-bare trap). Counts verified
+independently of `--bless`: 175 chapters, 173 pages, genre list provably distinct from a `s=solo` search.
+`page_size` is 10 (the theme serves 10 cards a page, not 20). Fixtures: 7 calls, 0 failed.
+
+This is the cheapest family to extend next: any other `mangareader`-theme site is the same definition with a
+different `base_url` and a re-checked genre slug list.
+
 ## 5c. Mapping a source to the dashboard's top / latest / categories (2026-10-22)
 
 The home feed is built from three things a source can offer: **top stuff** (the billboard and Top 10, from
@@ -444,8 +481,8 @@ the blocked aggregators stay parked until fixtures can be recorded from CI or th
 
 ## 6. Legal and product line
 
-`manga-sources/README.md` sets the rule: only sources that are legal to read — a public API that welcomes
-third-party readers, or work under an open licence. Most of the catalog is scanlation aggregators, which
+The `dishant0406/manga-sources` README sets the rule: only sources that are legal to read — a public API that
+welcomes third-party readers, or work under an open licence. Most of the catalog is scanlation aggregators, which
 is a different category, and the repo already carries `nsfw` and the `ADULT`/`MATURE` ratings for a
 reason. The port should keep that honesty:
 

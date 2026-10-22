@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "name": "Test repo",
+  "sources": [
+    {
+      "id": "local",
+      "name": "Local",
+      "version": 1,
+      "path": "sources/local.json",
+      "sha256": "c6d641d10b906d8a9e1112addcbda2713c673f74914d32ca3a42d534da1b543c",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false,
+      "requires": [
+        "madara"
+      ]
+    }
+  ],
+  "themes": [
+    {
+      "id": "madara",
+      "version": 1,
+      "path": "themes/madara.json",
+      "sha256": "45042546e3f82184d52b4c4c445a3881d9cb11366d93e958400bef0b90a61f64"
+    }
+  ]
+}

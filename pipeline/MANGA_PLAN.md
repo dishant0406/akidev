@@ -436,7 +436,7 @@ Built in `desktop/manga/` (`akidev-manga`, a workspace member that depends on `a
 Tests: 28 unit tests and one integration test pass; clippy is clean.
 
 **Not verified:** any real site. The `madara` theme and its fixtures are written from memory of Madara's
-markup and are synthetic (see `manga-sources/README.md`); the engine is proven against that shape,
+markup and are synthetic (see the `dishant0406/manga-sources` README); the engine is proven against that shape,
 not against a live Madara site. Phase 1 exit criterion "a CLI that can search, list chapters and dump page URLs
 for a definition" is met for recorded pages; against a live site it is untried.
 
@@ -561,7 +561,7 @@ recover it with `git show 74f6723^:manga-sources/sources/mangadex.json`). Sectio
 before this decision where they say the app ships with MangaDex.
 
 **What was built** (all committed, with tests):
-- **Format additions, driven by MangaDex** (documented in `manga-sources/README.md`): `vars` and `prepare`
+- **Format additions, driven by MangaDex** (documented in the `dishant0406/manga-sources` README): `vars` and `prepare`
   (chained requests whose answers become holes), `chapters.repeat` (a paged chapter list), `total` and `page_size` with
   `{offset}` for lists, `where` and `unique` steps (a related item of one type, a row that is not external),
   `{^.path}` in templates (a value in the row), `settings` with holes (language, content rating),

@@ -1,0 +1,9 @@
+{
+  "extends": "madara",
+  "id": "local",
+  "name": "Local",
+  "version": 1,
+  "lang": ["en"],
+  "base_url": "http://127.0.0.1:1",
+  "rate_per_second": 20
+}
