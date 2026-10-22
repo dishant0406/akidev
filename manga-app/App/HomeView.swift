@@ -136,7 +136,12 @@ struct HomeView: View {
         ))
     }
 
-    private var continueReading: [HistoryEntry] { reading.filter { !$0.finished } }
+    /// One card per series: the history has a row for every chapter read, newest first, so the same series appears many
+    /// times and only its latest row counts. Two cards with one id also break the carousel's layout.
+    private var continueReading: [HistoryEntry] {
+        var seen = Set<String>()
+        return reading.filter { seen.insert($0.key).inserted }.filter { !$0.finished }
+    }
 
     @ViewBuilder private var continueShelf: some View {
         if !continueReading.isEmpty {
