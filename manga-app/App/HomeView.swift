@@ -10,14 +10,14 @@ final class BrowseModel {
     private var page: UInt32 = 0
     private var key = ""
 
-    func load(_ engine: Engine, report: (String, Error?) -> Void, source: String, term: String, choices: [Choice] = [], reset: Bool) async {
-        let newKey = "\(source)|\(term)|\(choices.map { "\($0.id)=\($0.value)" })"
+    func load(_ engine: Engine, report: (String, Error?) -> Void, source: SourceInfo, term: String, choices: [Choice] = [], reset: Bool) async {
+        let newKey = "\(source.id)|\(term)|\(choices.map { "\($0.id)=\($0.value)" })"
         if reset || newKey != key { items = []; page = 0; hasNext = false; key = newKey; error = nil }
         guard !loading else { return }
         loading = true
         defer { loading = false }
         // The first page of Popular and Latest shows at once from the last time, while the fresh one is fetched.
-        if page == 0, items.isEmpty, term.isEmpty, choices.isEmpty, let kept = engine.rememberedListing(source: source, latest: false) {
+        if page == 0, items.isEmpty, term.isEmpty, choices.isEmpty, source.canPopular, let kept = engine.rememberedListing(source: source.id, latest: false) {
             items = kept.items
             hasNext = kept.hasNext
         }
@@ -25,12 +25,17 @@ final class BrowseModel {
             let next = page + 1
             let result: CardPage
             if !term.isEmpty || !choices.isEmpty {
-                result = try await engine.search(source: source, term: term, page: next, choices: choices)
+                result = try await engine.search(source: source.id, term: term, page: next, choices: choices)
+            } else if source.canPopular {
+                result = try await engine.popular(source: source.id, page: next)
+            } else if source.canLatest {
+                // No popular list: fall back to the newest titles so the feed is not empty.
+                result = try await engine.latest(source: source.id, page: next)
             } else {
-                result = try await engine.popular(source: source, page: next)
+                items = []; hasNext = false; return
             }
             guard key == newKey else { return }
-            report(source, nil)
+            report(source.id, nil)
             page = next
             if next == 1 {
                 items = result.items
@@ -41,7 +46,7 @@ final class BrowseModel {
             hasNext = result.hasNext
         } catch {
             guard key == newKey else { return }
-            report(source, error)
+            report(source.id, error)
             self.error = describe(error)
         }
     }
@@ -248,7 +253,8 @@ struct HomeView: View {
     }
 
     private func load(reset: Bool) async {
-        await browse.load(model.engine, report: model.report, source: source, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
+        guard let info else { return }
+        await browse.load(model.engine, report: model.report, source: info, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
     }
 }
 

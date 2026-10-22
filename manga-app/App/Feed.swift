@@ -49,7 +49,9 @@ final class FeedModel {
         }
         await withTaskGroup(of: (SourceInfo, Bool, Result<[Card], Error>).self) { group in
             for source in sources {
-                group.addTask { (source, false, await Result { try await engine.popular(source: source.id, page: 1).items }) }
+                // A source without a popular or latest list is not asked for it: asking would only surface the
+                // engine's "has no popular list" as a failure the person cannot fix.
+                if source.canPopular { group.addTask { (source, false, await Result { try await engine.popular(source: source.id, page: 1).items }) } }
                 if source.canLatest { group.addTask { (source, true, await Result { try await engine.latest(source: source.id, page: 1).items }) } }
             }
             for await (source, isLatest, result) in group where key == mine {

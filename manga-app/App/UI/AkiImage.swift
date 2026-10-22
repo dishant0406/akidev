@@ -41,7 +41,9 @@ struct AkiImage: View {
     }
 
     private func load(widthPoints: CGFloat) async {
-        guard let url, let parsed = URL(string: url) else { failed = true; return }
+        // No address at all is a cover the source does not have (its lists carry none): show the plain placeholder,
+        // not the broken-image mark. A failed fetch of an address it did give is the broken case.
+        guard let url, let parsed = URL(string: url) else { image = nil; failed = false; return }
         failed = false
         let loaded = await ImageLoader.shared.image(parsed, headers: headers, widthPx: max(widthPoints, 1) * scale)
         if let loaded {
