@@ -83,6 +83,28 @@ pub enum Step {
     PlainText,
     /// Orders texts the way people read file names: runs of digits by their value (`p2` before `p10`).
     Sort,
+    /// Decrypts a text a site hands over encrypted. `hex: false` (the default) reads base64, `true` hex.
+    AesCbc(AesCbc),
+}
+
+/// AES-CBC, the one cipher these sites use, with the key either stated (`key`, hex) or derived from a
+/// `passphrase` and a `salt` the way a site's own script derives it. Every value may hold a hole, so the key can
+/// come from a variable read off the page.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AesCbc {
+    /// A passphrase, stretched with the salt the payload carries (or `salt`, when a site uses one fixed salt).
+    #[serde(default)]
+    pub passphrase: Option<String>,
+    #[serde(default)]
+    pub salt: Option<String>,
+    /// A key already known (hex): 32 bytes for AES-256 or 16 for AES-128. With `iv` (hex, 16 bytes).
+    #[serde(default)]
+    pub key: Option<String>,
+    #[serde(default)]
+    pub iv: Option<String>,
+    /// The text is hex rather than base64.
+    #[serde(default)]
+    pub hex: bool,
 }
 
 /// A test on a JSON node, by a value inside it. All the tests given must hold. A value may hold request
@@ -209,7 +231,8 @@ pub struct ChaptersDef {
     pub chapter: ChapterDef,
     #[serde(default)]
     pub order: Order,
-    /// For a source that pages its chapter list: ask again with `{offset}` raised until `total` is reached.
+    /// For a source that pages its chapter list: ask again with `{offset}` (and `{page}`) raised until
+    /// `total` is reached, or until a page brings no chapter not already seen.
     #[serde(default)]
     pub repeat: Option<Repeat>,
     #[serde(default)]
@@ -220,10 +243,13 @@ pub struct ChaptersDef {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Repeat {
-    /// Chapters asked for each time; the next request's `{offset}` is this much higher.
+    /// Chapters asked for each time; the next request's `{offset}` is this much higher, and `{page}` is
+    /// this many rows further along.
     pub size: u32,
-    /// How many chapters there are in all, read from each answer.
-    pub total: Ex,
+    /// How many chapters there are in all, read from each answer. Without it, asking stops when a page
+    /// brings no chapter not already seen.
+    #[serde(default)]
+    pub total: Option<Ex>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

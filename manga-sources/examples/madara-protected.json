@@ -1,0 +1,52 @@
+{
+  "extends": "madara",
+  "id": "madara-protected",
+  "name": "Madara Protected Example",
+  "version": 1,
+  "lang": ["en"],
+  "base_url": "https://madara-protected.example",
+  "pages": {
+    "images": [
+      {
+        "css": "script#chapter-protector-data"
+      },
+      "html",
+      {
+        "replace": {
+          "from": "\\\\/",
+          "to": "/"
+        }
+      },
+      {
+        "regex": "(?s)var\\s+chapter_data\\s*=\\s*'(\\{.*?\\})';"
+      },
+      {
+        "aes_cbc": {
+          "passphrase": "{nonce}"
+        }
+      },
+      "json",
+      {
+        "path": "*"
+      }
+    ],
+    "vars": {
+      "nonce": [
+        {
+          "css": "script#chapter-protector-data"
+        },
+        "html",
+        {
+          "replace": {
+            "from": "\\\\",
+            "to": ""
+          }
+        },
+        {
+          "regex": "var\\s+wpmangaprotectornonce\\s*=\\s*'([^']*)';"
+        }
+      ]
+    },
+    "reading": "longstrip"
+  }
+}

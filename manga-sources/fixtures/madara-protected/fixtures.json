@@ -1,0 +1,24 @@
+{
+  "calls": [
+    {
+      "expect": {
+        "headers": {
+          "referer": "https://madara-protected.example/"
+        },
+        "images": [
+          "https://cdn.madaradex.example/p/1.jpg",
+          "https://cdn.madaradex.example/p/2.jpg",
+          "https://cdn.madaradex.example/p/3.jpg"
+        ],
+        "reading": "long_strip"
+      },
+      "id": "ch-12",
+      "op": "pages",
+      "series": "protected-series"
+    }
+  ],
+  "now_ms": 1792180000000,
+  "responses": {
+    "GET https://madara-protected.example/manga/protected-series/ch-12/": "pages.html"
+  }
+}

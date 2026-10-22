@@ -4,7 +4,7 @@
 //! into a list. Evaluation is synchronous and holds the parsed page only for its own duration (an
 //! HTML tree is not `Send`, so it never lives across an await).
 
-use crate::def::{Ex, Format, Role, Step};
+use crate::def::{AesCbc, Ex, Format, Role, Step};
 use akidev_core::expression::{scalar, select};
 use anyhow::{Context, bail};
 use ego_tree::NodeId;
@@ -271,6 +271,7 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
             let mut seen = std::collections::HashSet::new();
             nodes.into_iter().filter(|node| seen.insert(text_of(node))).collect()
         }
+        Step::AesCbc(spec) => decrypt(nodes, spec, ctx)?,
         Step::Coalesce(options) => {
             for option in options {
                 let found = run(&steps(option, Role::Field, format), format, nodes.clone(), ctx)?;
@@ -281,6 +282,84 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
             vec![]
         }
     })
+}
+
+/// One payload as a site sends it: the ciphertext, and usually the salt and IV it went with.
+#[derive(serde::Deserialize)]
+struct Payload {
+    ct: String,
+    #[serde(default)]
+    s: Option<String>,
+    #[serde(default)]
+    iv: Option<String>,
+}
+
+/// Decrypts each node as AES-CBC. A node is either the payload a site sends (an object, or the JSON text of one)
+/// or bare ciphertext; the salt arrives in the payload, so it is read from there when the definition does not
+/// state one, and the key is worked out once and shared by every node of that call.
+fn decrypt(nodes: Vec<Node>, spec: &AesCbc, ctx: &Ctx) -> anyhow::Result<Vec<Node>> {
+    let mut key: Option<crate::crypt::Key> = None;
+    let mut out = Vec::new();
+    for node in nodes {
+        let payload = payload_of(&node)?;
+        let key = match &key {
+            Some(key) => key,
+            None => {
+                key = Some(key_for(spec, payload.as_ref(), ctx)?);
+                key.as_ref().unwrap()
+            }
+        };
+        let ct = match &payload {
+            Some(payload) => payload.ct.clone(),
+            None => text_of(&node),
+        };
+        let data = crate::crypt::bytes(&ct, spec.hex).with_context(|| format!("the value to decrypt is not {}", if spec.hex { "hexadecimal" } else { "base64" }))?;
+        out.push(Node::Text(String::from_utf8_lossy(&crate::crypt::decrypt(key, &data)?).into_owned()));
+    }
+    Ok(out)
+}
+
+/// The payload object a node holds, when it holds one. A node that looks like a payload but is not one is an
+/// error rather than an empty result: a site that changed its payload is worth saying out loud.
+fn payload_of(node: &Node) -> anyhow::Result<Option<Payload>> {
+    let value = match node {
+        Node::Json(value) => value.clone(),
+        _ => {
+            let text = text_of(node);
+            let text = text.trim();
+            if !text.starts_with('{') {
+                return Ok(None);
+            }
+            serde_json::from_str(text).with_context(|| "the payload is not JSON: has the site changed?")?
+        }
+    };
+    Ok(match serde_json::from_value(value) {
+        Ok(payload) => Some(payload),
+        // An object with no `ct` is not a payload at all; one with `ct` but a wrong field type is a site change.
+        Err(_) => bail!("the payload has no ciphertext (`ct`): has the site changed?"),
+    })
+}
+
+fn key_for(spec: &AesCbc, payload: Option<&Payload>, ctx: &Ctx) -> anyhow::Result<crate::crypt::Key> {
+    let fill = |text: &str| crate::template::fill(text, ctx.hole, false).with_context(|| format!("{text} needs a value this call does not have"));
+    if let Some(passphrase) = &spec.passphrase {
+        // The salt is usually in the payload; a definition that states one uses it instead.
+        let salt = match &spec.salt {
+            Some(salt) => fill(salt)?,
+            None => payload.and_then(|payload| payload.s.clone()).context("aes_cbc needs a salt: none was stated and the payload has none")?,
+        };
+        let salt = crate::crypt::bytes(&salt, true).context("the salt is not hexadecimal")?;
+        let mut derived = crate::crypt::derive(&fill(passphrase)?, &salt);
+        // A payload may carry its own IV where a site varies it per chapter.
+        if let Some(iv) = payload.and_then(|payload| payload.iv.clone()) {
+            derived.iv = crate::crypt::bytes(fill(&iv)?.as_str(), true).context("the IV is not hexadecimal")?;
+        }
+        return Ok(derived);
+    }
+    let (Some(key), Some(iv)) = (&spec.key, &spec.iv) else {
+        bail!("aes_cbc needs a passphrase, or a key and an iv");
+    };
+    crate::crypt::fixed(&fill(key)?, &fill(iv)?)
 }
 
 /// Compares as people read file names: runs of digits by value, the rest by text.
@@ -354,6 +433,19 @@ pub fn check_steps(list: &[Step], format: Format) -> anyhow::Result<()> {
             Step::Coalesce(options) => {
                 for option in options {
                     check_ex(option, Role::Field, format)?;
+                }
+            }
+            Step::AesCbc(spec) => {
+                // Rejected now rather than at the site: a definition that can never decrypt is a mistake.
+                let stated = spec.key.is_some() && spec.iv.is_some();
+                if spec.passphrase.is_none() && !stated {
+                    bail!("aes_cbc needs a passphrase, or a key and an iv");
+                }
+                if spec.key.is_some() != spec.iv.is_some() {
+                    bail!("aes_cbc needs both a key and an iv");
+                }
+                if spec.passphrase.is_some() && spec.key.is_some() {
+                    bail!("aes_cbc takes a passphrase or a key, not both");
                 }
             }
             _ => {}
@@ -457,5 +549,75 @@ mod tests {
         assert!(check_steps(&[Step::Css("div[".into())], Format::Html).is_err());
         assert!(check_steps(&[Step::Regex("(".into())], Format::Html).is_err());
         assert!(check_steps(&[Step::Date(vec!["MMM d".into()])], Format::Html).is_err());
+    }
+
+    /// AES-256-CBC with PKCS#7, the way a site's script encrypts a payload: what a definition must undo.
+    fn encrypt(key: &[u8], iv: &[u8], plain: &[u8]) -> Vec<u8> {
+        use aes::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
+        let mut buffer = plain.to_vec();
+        buffer.resize(plain.len() + 16 - plain.len() % 16, 0);
+        let length = buffer.len();
+        cbc::Encryptor::<aes::Aes256>::new_from_slices(key, iv).unwrap().encrypt_padded_mut::<Pkcs7>(&mut buffer[..length], plain.len()).unwrap().to_vec()
+    }
+
+    fn hex(text: &str) -> Vec<u8> {
+        crate::crypt::bytes(text, true).unwrap()
+    }
+
+    fn base64(data: &[u8]) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(data)
+    }
+
+    /// A chapter protector's payload, made the way the site's own script makes it (an MD5-stretched passphrase and
+    /// the salt the payload carries, AES-256-CBC, base64 in `ct`, hex in `s`), then read back through a pipe
+    /// exactly as a definition would: no hole for the salt, because the payload holds it.
+    #[test]
+    fn an_encrypted_chapter_list_is_decrypted_with_a_passphrase_and_the_salt_in_the_payload() {
+        let salt = "0001020304050607";
+        let key = crate::crypt::derive("s3cret", &hex(salt));
+        let plain = br#"["https://img.test/1.jpg","https://img.test/2.jpg"]"#;
+        let payload = serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)), "s": salt }).to_string();
+        let none = |_: &str| None;
+        let ctx = ctx(&none);
+        let pipe = ex(r#"["json",{"aes_cbc":{"passphrase":"s3cret"}}]"#);
+        let out = run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![Node::Text(payload.clone())], &ctx).unwrap();
+        assert_eq!(out.iter().map(text_of).collect::<Vec<_>>(), [String::from_utf8_lossy(plain)]);
+        // The same payload arriving as JSON rather than as text reads the same way.
+        let out = run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![parse_root(&payload, Format::Json).unwrap()], &ctx).unwrap();
+        assert_eq!(out.iter().map(text_of).collect::<Vec<_>>(), [String::from_utf8_lossy(plain)]);
+        // A payload whose `ct` is missing, and one that is not JSON at all, both say so rather than blaming
+        // base64. Read without the `json` step first, because that step drops what it cannot parse.
+        let direct = ex(r#"[{"aes_cbc":{"passphrase":"s3cret"}}]"#);
+        for (broken, wanted) in [("{not json", "not JSON"), (r#"{"s":"00"}"#, "no ciphertext")] {
+            let error = match run(&steps(&direct, Role::Field, Format::Html), Format::Html, vec![Node::Text(broken.into())], &ctx) {
+                Err(error) => format!("{error:#}"),
+                Ok(_) => panic!("{broken} must not decrypt"),
+            };
+            assert!(error.contains(wanted), "{broken}: {error}");
+        }
+        // No salt anywhere is said plainly, not decrypted into nonsense.
+        let bare = serde_json::json!({ "ct": base64(&encrypt(&key.bytes, &key.iv, plain)) }).to_string();
+        let error = match run(&steps(&pipe, Role::Field, Format::Html), Format::Html, vec![Node::Text(bare)], &ctx) {
+            Err(error) => error.to_string(),
+            Ok(_) => panic!("a payload with no salt must not decrypt"),
+        };
+        assert!(error.contains("needs a salt"), "{error}");
+    }
+
+    #[test]
+    fn a_stated_key_decrypts_and_a_half_specified_one_is_caught_by_check() {
+        let (key, iv) = ("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "000102030405060708090a0b0c0d0e0f");
+        let plain = b"https://img.test/page.jpg";
+        let from = Node::Text(base64(&encrypt(&hex(key), &hex(iv), plain)));
+        let none = |_: &str| None;
+        let step = |key: Option<&str>, iv: Option<&str>| Step::AesCbc(AesCbc { passphrase: None, salt: None, key: key.map(Into::into), iv: iv.map(Into::into), hex: false });
+        let out = run(&[step(Some(key), Some(iv))], Format::Html, vec![from], &ctx(&none)).unwrap();
+        assert_eq!(text_of(&out[0]), String::from_utf8_lossy(plain));
+
+        assert!(check_steps(&[step(Some(key), None)], Format::Html).is_err(), "half a key pair");
+        assert!(check_steps(&[step(None, None)], Format::Html).is_err(), "no key at all");
+        let wrong = Step::AesCbc(AesCbc { passphrase: None, salt: None, key: Some("ff".repeat(32)), iv: Some(iv.into()), hex: false });
+        assert!(run(&[wrong], Format::Html, vec![Node::Text(base64(&encrypt(&hex(key), &hex(iv), plain)))], &ctx(&none)).is_err());
     }
 }

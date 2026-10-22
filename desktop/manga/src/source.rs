@@ -349,12 +349,18 @@ impl Source {
         let mut offset = 0u32;
         // A source that pages its list is asked again until it has given them all (and never without end).
         for _ in 0..60 {
-            holes.offset = def.repeat.as_ref().map(|_| offset);
+            let repeat = def.repeat.as_ref();
+            holes.offset = repeat.map(|_| offset);
+            // The page the list is on, for a site that numbers its pages (`?t={page}`) instead of counting
+            // rows. A site that gives a `total` still stops on it; one that does not stops when a page
+            // brings nothing new.
+            holes.page = repeat.map_or(1, |repeat| offset / repeat.size.max(1) + 1);
             let (body, host) = self.ask(&def.request, &holes).await?;
+            let before = chapters.len();
             let (rows, total) = self.read_chapters(&body, host, holes.clone(), &mut chapters)?;
-            let Some(repeat) = &def.repeat else { break };
+            let Some(repeat) = repeat else { break };
             offset += repeat.size;
-            if rows == 0 || total.is_none_or(|total| u64::from(offset) >= total) {
+            if rows == 0 || chapters.len() == before || total.is_some_and(|total| u64::from(offset) >= total) {
                 break;
             }
         }
@@ -374,7 +380,10 @@ impl Source {
         let root = eval::parse_root(body, def.format)?;
         let rows = eval(&def.rows, Role::Rows, def.format, &root, &ctx)?;
         let total = match &def.repeat {
-            Some(repeat) => eval_text(&repeat.total, def.format, &root, &ctx)?.and_then(|text| text.parse::<u64>().ok()),
+            Some(repeat) => match &repeat.total {
+                Some(ex) => eval_text(ex, def.format, &root, &ctx)?.and_then(|text| text.parse::<u64>().ok()),
+                None => None,
+            },
             None => None,
         };
         for row in &rows {
@@ -556,7 +565,9 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
     }
     if let Some(repeat) = &chapters.repeat {
         ensure!((1..=1000).contains(&repeat.size), "chapters.repeat.size must be from 1 to 1000");
-        check_ex(&repeat.total, Role::Field, chapters.format).context("chapters.repeat.total")?;
+        if let Some(total) = &repeat.total {
+            check_ex(total, Role::Field, chapters.format).context("chapters.repeat.total")?;
+        }
     }
     check_prepare(&chapters.prepare, "chapters")?;
     check_vars(&chapters.vars, chapters.format, "chapters")?;
@@ -604,6 +615,37 @@ mod tests {
         let list = source.chapters("s").await.unwrap();
         assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
         assert_eq!(source.fetcher().seen(), ["GET https://t.test/c/s?o=0", "GET https://t.test/c/s?o=2"]);
+    }
+
+    #[tokio::test]
+    async fn a_chapter_list_numbered_by_page_is_asked_again_until_a_page_is_empty() {
+        let chapters = json!({
+            "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
+            "repeat": {"size": 2}
+        });
+        let source = source(json!({"chapters": chapters}), &[
+            ("/c/s?t=1", r#"{"rows":[{"id":"a","n":3},{"id":"b","n":2}]}"#),
+            ("/c/s?t=2", r#"{"rows":[{"id":"c","n":1}]}"#),
+            ("/c/s?t=3", r#"{"rows":[]}"#),
+        ]);
+        let list = source.chapters("s").await.unwrap();
+        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
+        assert_eq!(source.fetcher().seen(), ["GET https://t.test/c/s?t=1", "GET https://t.test/c/s?t=2", "GET https://t.test/c/s?t=3"]);
+    }
+
+    #[tokio::test]
+    async fn a_chapter_list_that_never_says_it_has_ended_stops_when_a_page_repeats() {
+        let chapters = json!({
+            "request": {"url": "{base}/c/{id}?t={page}"}, "format": "json", "rows": "rows", "chapter": {"id": "id", "number": "n"},
+            "repeat": {"size": 1}
+        });
+        let source = source(json!({"chapters": chapters}), &[
+            ("/c/s?t=1", r#"{"rows":[{"id":"a","n":3}]}"#),
+            ("/c/s?t=2", r#"{"rows":[{"id":"a","n":3}]}"#),
+        ]);
+        let list = source.chapters("s").await.unwrap();
+        assert_eq!(list.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a"]);
+        assert_eq!(source.fetcher().seen().len(), 2, "it must not keep asking once a page brings nothing new");
     }
 
     #[tokio::test]
@@ -686,6 +728,43 @@ mod tests {
         let source = Source::live(serde_json::from_value(def).unwrap()).unwrap();
         let error = source.popular(1).await.unwrap_err();
         assert!(error.is::<Unreachable>(), "{error:#}");
+    }
+
+    /// Answers every request with a Cloudflare interstitial, served as a plain 200, the way Cloudflare often does.
+    async fn interstitial() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buffer = [0; 1024];
+                    let _ = socket.read(&mut buffer).await;
+                    let body = "<html><head><title>Just a moment...</title></head><body><div id=\"cf-chl-widget\"></div></body></html>";
+                    let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len()).as_bytes()).await;
+                });
+            }
+        });
+        format!("http://{address}")
+    }
+
+    /// A site that answers with a check is a typed `Challenge` the app can explain, never "the page has no title:
+    /// has the site changed?" — which would blame the definition for the site refusing to answer.
+    #[tokio::test]
+    async fn a_check_page_becomes_a_challenge_and_not_a_broken_definition() {
+        let base = interstitial().await;
+        let def = json!({
+            "schema": 1, "id": "t", "name": "T", "version": 1, "base_url": base,
+            "popular": {"request": {"url": "{base}/x"}, "rows": "r", "card": {"id": "i", "title": "t"}},
+            "detail": {"request": {"url": "{base}/d"}, "title": "h1"}, "chapters": {"request": {"url": "{base}/c"}, "rows": "r", "chapter": {"id": "i"}},
+            "pages": {"request": {"url": "{base}/p"}, "images": "i"}
+        });
+        let source = Source::live(serde_json::from_value(def).unwrap()).unwrap();
+        let error = source.details("x").await.unwrap_err();
+        let challenge = error.downcast_ref::<crate::fetch::Challenge>().unwrap_or_else(|| panic!("{error:#}"));
+        assert_eq!(challenge.status, 200);
+        assert!(challenge.url.ends_with("/d"), "{}", challenge.url);
     }
 
     #[test]

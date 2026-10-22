@@ -211,11 +211,15 @@ dependencies = [
 name = "akidev-manga"
 version = "0.1.25"
 dependencies = [
+ "aes",
  "akidev-core",
  "anyhow",
+ "base64 0.22.1",
+ "cbc",
  "ed25519-dalek",
  "ego-tree",
  "getrandom 0.3.4",
+ "md-5",
  "regex",
  "reqwest 0.13.5",
  "rusqlite",

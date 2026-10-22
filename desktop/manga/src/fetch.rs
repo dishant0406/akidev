@@ -89,12 +89,28 @@ pub struct Fetcher {
     user_agent: Mutex<String>,
 }
 
+/// Marks only a check page carries. A Cloudflare interstitial is served as 403 and 503 and also as a plain 200, so these are
+/// believed at any status: without that an interstitial reads as "the site changed", which blames the definition.
+const STRONG_MARKS: [&str; 2] = ["cf-chl", "cf_chl_opt"];
+
+/// Marks that also sit on ordinary pages: `challenge-platform` is the address of the script Cloudflare adds to normal pages
+/// to detect bots, and `turnstile` is a widget a login or comment form embeds. They only count when the status already
+/// says the request was refused.
+const WEAK_MARKS: [&str; 4] = ["challenge-platform", "turnstile", "ddos-guard", "captcha"];
+
+/// The titles check pages have.
+const CHECK_TITLES: [&str; 3] = ["just a moment", "attention required", "ddos-guard"];
+
 fn looks_like_challenge(status: u16, body: &str) -> bool {
-    if !matches!(status, 403 | 429 | 503) {
-        return false;
-    }
     let body = body.to_lowercase();
-    ["just a moment", "cf-chl", "challenge-platform", "captcha", "attention required", "ddos-guard"].iter().any(|mark| body.contains(mark))
+    if STRONG_MARKS.iter().any(|mark| body.contains(mark)) {
+        return true;
+    }
+    let title = body.split("<title>").nth(1).and_then(|rest| rest.split("</title>").next()).unwrap_or_default();
+    if CHECK_TITLES.iter().any(|check| title.contains(check)) {
+        return true;
+    }
+    matches!(status, 403 | 429 | 503) && WEAK_MARKS.iter().any(|mark| body.contains(mark))
 }
 
 impl Fetcher {
@@ -213,8 +229,18 @@ mod tests {
     fn a_challenge_page_is_told_from_a_plain_error() {
         assert!(looks_like_challenge(403, "<title>Just a moment...</title>"));
         assert!(looks_like_challenge(503, "<div id=\"cf-chl-widget\">"));
-        assert!(!looks_like_challenge(404, "Just a moment"));
+        // An interstitial served as a plain 200 is still a check, not a broken definition.
+        assert!(looks_like_challenge(200, "<!-- cf-chl-widget --><title>Just a moment...</title>"));
+        // The script Cloudflare adds to ordinary pages, and a Turnstile widget on a form, are not checks: a real
+        // ManhuaPlus page carries the first, and treating it as one made the whole source unreadable.
+        assert!(!looks_like_challenge(200, "<title>Home - Site</title><script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script>"));
+        assert!(!looks_like_challenge(200, "<title>Sign in</title><div class=\"cf-turnstile\" data-sitekey=\"x\">turnstile</div>"));
+        // The same marks on a refusal are a check.
+        assert!(looks_like_challenge(403, "<div id=\"challenge-platform\"></div>"));
+        // The word itself is not enough: ordinary pages say it.
+        assert!(!looks_like_challenge(200, "<p>Comment captcha below.</p>"));
         assert!(!looks_like_challenge(503, "Service unavailable"));
+        assert!(!looks_like_challenge(404, "<title>Not found</title>"));
     }
 
     #[tokio::test]

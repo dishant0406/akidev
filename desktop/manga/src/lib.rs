@@ -2,6 +2,7 @@
 //! means to test a definition against recorded pages.
 
 pub mod check;
+pub mod crypt;
 pub mod date;
 pub mod def;
 pub mod eval;
