@@ -120,6 +120,11 @@ tried in turn when one cannot be reached). Holes: `{page}`, `{page0}`, `{term}`,
 filter's id, each percent-encoded; `{id:raw}` is not (for an id that is a path). `{? ... ?}` vanishes when a
 hole inside is empty. A request can be `POST` with `form` or `json`, and has `headers`.
 
+Put `{term}` inside a `{? ... ?}` group, never bare. A search can run with no term — the home screen's genre
+chips search with only a filter set — and a bare `{term}` then has nothing to fill it, so the whole request
+fails with "needs a value this call does not have". `...?q={term}` breaks genre browsing; `...{?&q={term}?}`
+does not. The same goes for any hole a call might not set.
+
 A value is read by an expression. Short forms: HTML `"h3"` (the text of the match), `"img@data-src|src"`
 (an attribute, the first that is not empty), `"@href"` (an attribute of the row); JSON `"a.b.c"` (a path,
 `*` for every value). For anything else, a list of steps:

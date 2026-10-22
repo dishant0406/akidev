@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "asurascans",
   "name": "Asura Scans",
-  "version": 3,
+  "version": 4,
   "lang": [
     "en"
   ],
@@ -37,7 +37,7 @@
   },
   "search": {
     "request": {
-      "url": "{base}/api/series?offset={offset}&per_page=20&search={term}{?&genre={genre}&sort=popular?}"
+      "url": "{base}/api/series?offset={offset}&per_page=20{?&search={term}?}{?&genre={genre}&sort=popular?}"
     },
     "format": "json",
     "rows": "data",

@@ -2641,6 +2641,118 @@
       "id": "chapter-8",
       "op": "pages",
       "series": "monster-s-streamer-star"
+    },
+    {
+      "expect": {
+        "has_next": true,
+        "items": [
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/overgeared.905990.webp",
+            "id": "overgeared",
+            "title": "Overgeared"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/the-greatest-estate-developer.ad682d.webp",
+            "id": "the-greatest-estate-developer",
+            "title": "The Greatest Estate Developer"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/myst-might-mayhem.78970c.webp",
+            "id": "myst-might-mayhem",
+            "title": "Myst, Might, Mayhem"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/surviving-the-game-as-a-barbarian.86af24.webp",
+            "id": "surviving-the-game-as-a-barbarian",
+            "title": "Surviving The Game as a Barbarian"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/pick-me-up-infinite-gacha.3ebe61.webp",
+            "id": "pick-me-up-infinite-gacha",
+            "title": "Pick Me Up, Infinite Gacha"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/star-embracing-swordmaster.6b1222.webp",
+            "id": "star-embracing-swordmaster",
+            "title": "Star-Embracing Swordmaster"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/return-of-the-mount-hua-sect.c0cbf9.webp",
+            "id": "return-of-the-mount-hua-sect",
+            "title": "Return of the Mount Hua Sect"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/nano-machine.e31bdb.webp",
+            "id": "nano-machine",
+            "title": "Nano Machine"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/the-regressed-mercenarys-machinations.3ba589.webp",
+            "id": "the-regressed-mercenarys-machinations",
+            "title": "The Regressed Mercenary's Machinations"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/revenge-of-the-iron-blooded-sword-hound.41b6fb.webp",
+            "id": "revenge-of-the-iron-blooded-sword-hound",
+            "title": "Revenge of the Iron-Blooded Sword Hound"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/infinite-mage.e79aed.webp",
+            "id": "infinite-mage",
+            "title": "Infinite Mage"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/the-academy-s-weapon-replicator.4e99d4.webp",
+            "id": "the-academy-s-weapon-replicator",
+            "title": "The Academy’s Weapon Replicator"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/absolute-regression.5742b2.webp",
+            "id": "absolute-regression",
+            "title": "Absolute Regression"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/absolute-sword-sense.09c12f.webp",
+            "id": "absolute-sword-sense",
+            "title": "Absolute Sword Sense"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/reformation-of-the-deadbeat-noble.214565.webp",
+            "id": "reformation-of-the-deadbeat-noble",
+            "title": "Reformation of the Deadbeat Noble"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/solo-swordmaster.467196.webp",
+            "id": "solo-swordmaster",
+            "title": "Solo Swordmaster"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/a-regressors-tale-of-cultivation.19e91c.webp",
+            "id": "a-regressors-tale-of-cultivation",
+            "title": "A Regressor’s Tale of Cultivation"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/solo-max-level-newbie.bac83f.webp",
+            "id": "solo-max-level-newbie",
+            "title": "Solo Max-Level Newbie"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/the-extras-academy-survival-guide.18d91e.webp",
+            "id": "the-extras-academy-survival-guide",
+            "title": "The Extra’s Academy Survival Guide"
+          },
+          {
+            "cover": "https://cdn.asurascans.com/asura-images/covers/the-regressor-and-the-blind-saint.7bee05.webp",
+            "id": "the-regressor-and-the-blind-saint",
+            "title": "The Regressor and the Blind Saint"
+          }
+        ]
+      },
+      "op": "search",
+      "term": "",
+      "filters": {
+        "genre": "adventure"
+      }
     }
   ],
   "now_ms": 1792659798896,
@@ -2650,6 +2762,7 @@
     "GET https://api.asurascans.com/api/series/overgeared/chapters?page=1&per_page=100": "r4.json",
     "GET https://api.asurascans.com/api/series/overgeared/chapters?page=2&per_page=100": "r5.json",
     "GET https://api.asurascans.com/api/series?offset=0&per_page=20&search=solo": "r2.json",
-    "GET https://api.asurascans.com/api/series?offset=0&per_page=20&sort=popular": "r1.json"
+    "GET https://api.asurascans.com/api/series?offset=0&per_page=20&sort=popular": "r1.json",
+    "GET https://api.asurascans.com/api/series?offset=0&per_page=20&genre=adventure&sort=popular": "r7.json"
   }
 }
