@@ -395,8 +395,9 @@ What changes in the plan:
    (54% of English themed extensions), then keyoapp, mangacatalog, mangahub, iken.
 2. **The four extras are v1, not later:** a script-blob extractor (`json_in_html`), ajax POST requests, date
    formats including relative ones, and tile descrambling as a closed op set.
-3. **Add to v1 if cheap:** `aes` decrypt and `xor`, since they unlock the madara protector and some image
-   scrambles without WASM.
+3. ~~**Add to v1 if cheap:** `aes` decrypt and `xor`, since they unlock the madara protector and some image
+   scrambles without WASM.~~ **`aes` decrypt shipped 2026-10-22** as the `aes_cbc` step (`desktop/manga/src/crypt.rs`);
+   `xor` stays out until a source needs it.
 4. **Expect to leave out in v1** (needs code or a captcha): MangaPlus, Mangago, MangaHere, AllAnime, MangaFire,
    Asura-class tile permutations with signatures, and every paid or login-gated API. Say so in the source list
    instead of faking support.
@@ -438,9 +439,10 @@ markup and are synthetic (see `manga-sources/README.md`); the engine is proven a
 not against a live Madara site. Phase 1 exit criterion "a CLI that can search, list chapters and dump page URLs
 for a definition" is met for recorded pages; against a live site it is untried.
 
-**Still to do in phase 1:** a second theme (`mangathemesia`, the next biggest), filters end to end, `aes` and
-`xor` steps and tile descrambling, a nonce step for ajax chapter lists, and a live run of everything once a
-network that reaches the sites is available. Next phase (2): uniffi facade over this crate and the store, and
+**Still to do in phase 1:** a second theme (`mangathemesia`, the next biggest), filters end to end, an `xor` step
+and tile descrambling (both waiting on a source that needs them: the one tile source, AsuraScans, stopped sending
+permutations — see `MANGA_SOURCES_PORT_PLAN.md` §Phase 4), a nonce step for ajax chapter lists, and a live run of
+everything once a network that reaches the sites is available. **Done since:** `aes_cbc` decryption. Next phase (2): uniffi facade over this crate and the store, and
 the Swift shell.
 
 ## 13. Phase 2 status (facade and Swift shell), 2026-10-21
