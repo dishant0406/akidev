@@ -94,7 +94,7 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()
@@ -154,6 +154,7 @@ struct HomeView: View {
             }
             .frame(height: 320)
             .clipShape(RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
         }
     }
 

@@ -31,6 +31,10 @@ struct AkiImage: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            // A picture filled into a box spills past it; clipping hides the spill but would still let it catch taps
+            // meant for what is next to it (the search field above a featured cover).
+            .clipped()
+            .contentShape(Rectangle())
             .task(id: url) { await load(widthPoints: geometry.size.width) }
         }
         .modifier(KeepsShape(ratio: free ? nil : (fill ? 1 / placeholder : (image.map { $0.size.width / $0.size.height } ?? (1 / placeholder)))))
