@@ -347,9 +347,100 @@ bug comes back.
 ### Phase 6 — bespoke sites still to do
 
 Everything left: custom themes like `rinkocomics.com` (`.comic-card`, `/comic/<slug>/`, live and
-unblocked, but no `wp-manga`), `asuracomic.net` (Astro, live, 765 KB), `flamecomics.com` (Next.js).
-These get a hand-written definition each. `rinkocomics` is the best first one because it is live,
-unblocked, and its markup is simple.
+unblocked, but no `wp-manga`) and `flamecomics.xyz` (below). These get a hand-written definition each.
+
+**`flamecomics.xyz` — SHIPPED (2026-10-22, v1).** A clean Next.js site, live and reachable from this
+machine, with no real challenge. `flamecomics.com` 301s to `flamecomics.xyz`. Every page embeds its data in
+`<script id="__NEXT_DATA__">`; search is a thin `/api/series` JSON endpoint. It is a **manhwa-heavy**
+catalogue (`types`: Manga/Manhua/Manhwa/Novel) — the goal.
+
+The probe above was wrong on two points, corrected by the live port:
+
+- **There is no server-ranked `popular` or `latest`.** `/browse` is a static, client-rendered snapshot: every
+  `sort`/`order`/`page` param returns the *same* SSR `__NEXT_DATA__` (all 167 series, title-alphabetical), and
+  `/latest` 404s. Declaring either would have served "top" sorted A→Z — a lie. So the definition declares
+  **only `search`** (+ detail/chapters/pages), per the standing rule: never declare a listing the site doesn't
+  have. The app falls back to search for the feed.
+- **Search is not coverless.** `/api/series?search=<q>` rows are `{id,label,status,image,chapter_count}`, and
+  `image` is the cover filename — the card cover is built with
+  `template: "https://cdn.flamecomics.xyz/uploads/images/series/{^.id}/{value}"` (`{^.id}` reads the row's own
+  id). So FlameComics search returns covered cards, unlike Dynasty.
+
+What the shipped definition reads:
+
+| Ask | Answer |
+| --- | --- |
+| search | `/api/series?search=<q>` — JSON array; 154 rows for "solo", each with a buildable cover |
+| detail | `/series/<id>` — `script#__NEXT_DATA__` → `props.pageProps.series` (title/cover/desc/tags/status/authors) |
+| chapters | same page — `props.pageProps.chapters` (all inline, no paging; 21 for series 165) |
+| pages | `/series/<id>/<token>` — `props.pageProps.chapter.images`, an **object keyed by index**; needs a `"sort"` step before the URL `template` (see README "A Next.js site…") |
+
+Two engine subtleties this port proved, now documented in the README and worth knowing for the next
+script-blob source: (1) inside an `html`-format section a short-form field reads as CSS even after a `"json"`
+step, so per-row JSON fields need an explicit `[{ "path": … }]`; (2) a JSON object read with `*` iterates in
+lexicographic key order, so page images need `"sort"`. Counts verified independently of `--bless`:
+154 search rows, 21 chapters, 23 pages.
+
+## 5c. Mapping a source to the dashboard's top / latest / categories (2026-10-22)
+
+The home feed is built from three things a source can offer: **top stuff** (the billboard and Top 10, from
+`popular`), **latest** ("New releases", from `latest`), and **categories** — a row of chips the app derives
+from the **first `select` filter with more than one option** (`HomeView.swift`, `category`), capped at 24.
+A chip re-runs **search** with the filter's id as a hole; tapping "All" clears it. So a category is a
+`select` filter with **no default** whose hole sits in the search request inside a `{? ... ?}` group, which
+vanishes when nothing is chosen (`{?&genre={genre}&sort=popular?}`). No engine change is needed — the
+template group syntax already drops an unset hole, and `fill` returning `None` for an empty hole outside a
+group is what makes "All" render the plain search URL (verified: the `search solo` fixture is byte-identical
+with and without the group).
+
+What each live source can honestly fill, probed against the real APIs:
+
+| Surface | AsuraScans | Dynasty Scans |
+| --- | --- | --- |
+| Top stuff | `sort=popular` (ranked, covers) | none — the site sorts only by `name`/`created_at`/`released_on`, so the app falls back to latest |
+| Latest | `sort` omitted (newest) | `/chapters/added.json` |
+| Categories | `search=` (empty) + `{?&genre=<slug>&sort=popular?}` → ranked, covered cards; full list at `/api/genres` (36) | none honest — tag pages list **chapters** not a series grid, list rows carry **no covers**, and there is no genre sort |
+
+**AsuraScans** gained a `genre` select filter (20 broadly-useful genres of the 36) at v3; the genre browse
+returns ranked, covered cards. **Dynasty Scans** stays without categories: adding coverless genre chips or a
+chapter-shaped tag list would degrade it, and it has no popularity sort to rank them by. The lesson for any
+new source: a category only earns a chip when the filtered list returns **covers** in a **browsable order**;
+otherwise the dashboard is better with no chips than with a row of placeholders.
+
+## 5d. Beyond Paperback: the other source ecosystems are not portable (2026-10-22)
+
+Because the Paperback manhwa set is mostly proxy-blocked or dead, the wider open-source reader ecosystems
+were surveyed for more manhwa sources. The verdict: **none is portable** — Paperback is the only ecosystem
+whose sources are declarative data rather than executable code.
+
+| Ecosystem | Source format | Portable? | Manhwa coverage |
+| --- | --- | --- | --- |
+| Mihon / Tachiyomi (`keiyoushi/extensions-source`) | Kotlin classes → compiled APKs | No — executable | ~40 English `manhwa*` + 9 Korean; `src/en` has 405 dirs |
+| Kotatsu (`KotatsuApp/kotatsu-parsers`) | Kotlin/JVM parser classes | No — executable | 1000+ sources |
+| Aniyomi / Dantotsu / Suwayomi | Same Tachiyomi APKs (Suwayomi is an APK loader) | No | shared with Mihon |
+| HakuNeko | JS connector classes (`.mjs`) | No — executable | 730 connectors; Naver, Lezhin, Toomics, Tapas, Toonily |
+| Kavita / Komga | None — self-hosted library servers | N/A | no scraper sources |
+| Seanime / Mangayomi | TS/JS payloads run in a JS engine | No — executable | community providers |
+| Kazumi | **Declarative `*.json`** | format yes — but **anime-video only, no manga** | none |
+
+**The usable takeaway is the inventory, not the code.** keiyoushi/HakuNeko cover hundreds of manhwa sites
+that differ only in base URL plus a handful of selectors, because they share multisrc themes (Madara,
+MangaStream, Keyoapp). Their per-site classes are effectively documentation of *which* sites exist and what
+URLs/selectors they use — to be re-expressed as akidev JSON under our own `themes/`, exactly the multisrc
+pattern. Site-status facts worth keeping:
+
+- **Dead:** `reaperscans.com` (shut down May 2025, Kakao DMCA; keiyoushi #4356 closed), `luminous-scans.com`
+  (defunct/absorbed).
+- **Live and reachable from here:** `asuracomic.net` → 301 → `asurascans.com` (already shipped);
+  `flamecomics.com` → 301 → `flamecomics.xyz` (**shipped**, §Phase 6).
+- **Proxy-blocked (503), so untestable from this machine:** `manhwatop`, `toongod`, `webtoon.xyz`,
+  `coffeemanga`, `manhuaus`, `setsuscans`, `mangafire`, `mangapark`, `bato.to`, `comix.to`. These are the
+  highest-value manhwa aggregators and each is one `curl` from CI.
+
+**Consequence for the plan:** the marginal new manhwa source comes from **hand-porting the keiyoushi site
+list against live sites**, not from finding another Paperback. The realistic reachable
+ceiling from this machine is the JSON-API sites (Asura, Dynasty, flamecomics — shipped) plus rinkocomics;
+the blocked aggregators stay parked until fixtures can be recorded from CI or the server.
 
 ## 6. Legal and product line
 

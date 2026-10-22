@@ -5,9 +5,9 @@
     {
       "id": "asurascans",
       "name": "Asura Scans",
-      "version": 2,
+      "version": 3,
       "path": "sources/asurascans.json",
-      "sha256": "bf7695e067195f1e382eb4ce6326113ca1a6448c9b61f348bf087e0b27d997e1",
+      "sha256": "4f57ec499a8c6bb9c80a4ff2d9c05f1f2293a187b4d6174797a01b835482c5a0",
       "lang": [
         "en"
       ],
@@ -23,6 +23,17 @@
         "en"
       ],
       "nsfw": true
+    },
+    {
+      "id": "flamecomics",
+      "name": "Flame Comics",
+      "version": 1,
+      "path": "sources/flamecomics.json",
+      "sha256": "b61121ce1fdd3b1e7a28ac28b0e4dabaedc166dfea90bba7665dee16912afdb4",
+      "lang": [
+        "en"
+      ],
+      "nsfw": false
     }
   ],
   "themes": [

@@ -17,12 +17,13 @@ fixtures/<id>/         recorded pages and fixtures.json for a source or an examp
 
 ## What is in it
 
-Two sources, each with fixtures recorded from the live site, and one theme:
+Three sources, each with fixtures recorded from the live site, and one theme:
 
 | Source | Site | How it reads the site |
 | --- | --- | --- |
 | `asurascans` | api.asurascans.com | its own JSON API: `data`, `meta.has_more`, `series`, `data.chapter.pages.*.url` |
 | `dynastyscans` | dynasty-scans.com | its own JSON API, for series and for one-shots; an id is `series/<p>` or `doujins/<p>` |
+| `flamecomics` | flamecomics.xyz | a Next.js site: reads `script#__NEXT_DATA__` as JSON for detail, chapters and pages; search is its `/api/series` |
 
 No shipped source extends `madara` any more. The theme stays: `examples/madara-example.json` and
 `examples/madara-protected.json` are what keep it honest, and the family is still the cheapest place to add sources from.
@@ -30,7 +31,7 @@ Earlier ports of `manhuaplus`, `3asq` and `tcbscans` live in `git show 75a1a53`,
 mirror trap, the per-site `pages` override, the chapter list that must ride in the detail page — are why those sites are
 cheap whenever they are wanted again.
 
-`asurascans` and `dynastyscans` are the only sources here for the only reason that matters: a source is worth shipping
+These are the only sources here for the only reason that matters: a source is worth shipping
 when the site is **reachable, gives its chapters in the answer, and gives its pages in the answer**. Most sites in the
 ecosystem fail one of the three. The probe behind that, and why each family fails, is in
 `pipeline/MANGA_SOURCES_PORT_PLAN.md` §3b.
@@ -175,6 +176,23 @@ A value is read by an expression. Short forms: HTML `"h3"` (the text of the matc
 Chapters come back newest first whatever order the site lists them in (`"order": "oldest-first"` if it
 lists them oldest first). A chapter's number is read from its title when no `number` is given.
 `pages.reading` is `longstrip`, `paged` or `paged_rtl`.
+
+### A Next.js (or similar) site that ships its data as JSON in the page
+
+Some sites render no list markup at all: the catalogue lives in a `<script>` blob the page's own JavaScript
+reads. `flamecomics` (Next.js, `script#__NEXT_DATA__`) is the working pattern. The blob is HTML, so the section
+keeps `format: html` and the expression is `[{ "css": "script#__NEXT_DATA__" }, "html", "json", { "path": … }]`.
+Three things that bite, each proven against the live site:
+
+- Once the expression has gone through `"json"`, the nodes are JSON, but the **section's format is still
+  `html`**, so a short-form field (`"token"`) reads as CSS, not a path, and silently gives nothing. Write the
+  path explicitly: `[{ "path": "token" }]` (a bare `{ "path": "token" }` is not a valid expression — a single
+  step still needs its list).
+- A JSON **object** iterated with `*` (a chapter's `images`, keyed `"0".."22"`) comes back in the object's key
+  order, which is lexicographic: `…-09, -10, … -19, -02`. Add a `"sort"` step before the `template` that builds
+  the address, or the pages come out of order.
+- A `select` filter, the `next`/`total` rule and the rest behave exactly as on a plain HTML site — the JSON
+  detour changes only how a value is reached, not how lists page or filters fill holes.
 
 ### Encrypted payloads
 

@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "asurascans",
   "name": "Asura Scans",
-  "version": 2,
+  "version": 3,
   "lang": [
     "en"
   ],
@@ -37,7 +37,7 @@
   },
   "search": {
     "request": {
-      "url": "{base}/api/series?offset={offset}&per_page=20&search={term}"
+      "url": "{base}/api/series?offset={offset}&per_page=20&search={term}{?&genre={genre}&sort=popular?}"
     },
     "format": "json",
     "rows": "data",
@@ -48,6 +48,35 @@
     },
     "next": "meta.has_more"
   },
+  "filters": [
+    {
+      "id": "genre",
+      "name": "Genre",
+      "kind": "select",
+      "options": [
+        { "value": "action", "name": "Action" },
+        { "value": "adventure", "name": "Adventure" },
+        { "value": "comedy", "name": "Comedy" },
+        { "value": "drama", "name": "Drama" },
+        { "value": "fantasy", "name": "Fantasy" },
+        { "value": "isekai", "name": "Isekai" },
+        { "value": "magic", "name": "Magic" },
+        { "value": "martial-arts", "name": "Martial Arts" },
+        { "value": "murim", "name": "Murim" },
+        { "value": "mystery", "name": "Mystery" },
+        { "value": "overpowered", "name": "Overpowered" },
+        { "value": "regression", "name": "Regression" },
+        { "value": "reincarnation", "name": "Reincarnation" },
+        { "value": "revenge", "name": "Revenge" },
+        { "value": "romance", "name": "Romance" },
+        { "value": "school-life", "name": "School Life" },
+        { "value": "sci-fi", "name": "Sci-fi" },
+        { "value": "shounen", "name": "Shounen" },
+        { "value": "slice-of-life", "name": "Slice of Life" },
+        { "value": "system", "name": "System" }
+      ]
+    }
+  ],
   "detail": {
     "request": {
       "url": "{base}/api/series/{id}"
