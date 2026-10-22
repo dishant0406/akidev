@@ -23,17 +23,17 @@ extension View {
         } message: { Text(message) }
     }
 
-    /// A sheet that rises over the screen, on glass.
+    /// A sheet that rises over the screen, on the page colour so the cards inside it show.
     func akiSheet<Sheet: View>(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> Sheet) -> some View {
         sheet(isPresented: isPresented) {
-            content().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(.regularMaterial)
+            content().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Aki.background)
         }
     }
 
     /// The same sheet for something chosen by value (an address waiting to be confirmed).
     func akiSheet<Item: Identifiable, Sheet: View>(item: Binding<Item?>, @ViewBuilder content: @escaping (Item) -> Sheet) -> some View {
         sheet(item: item) { value in
-            content(value).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(.regularMaterial)
+            content(value).presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Aki.background)
         }
     }
 

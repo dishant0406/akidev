@@ -5,6 +5,14 @@ import SwiftUI
 enum ReadingMode: String, CaseIterable, Identifiable {
     case strip, paged, rtl
     var id: String { rawValue }
+    /// The same, short enough for a row of three pills.
+    var shortTitle: String {
+        switch self {
+        case .strip: "Strip"
+        case .paged: "Paged"
+        case .rtl: "Right to left"
+        }
+    }
     var title: String {
         switch self {
         case .strip: "Long strip"
