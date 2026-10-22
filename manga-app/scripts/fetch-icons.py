@@ -11,7 +11,7 @@ import subprocess
 
 ICONS = {
     "home": "home-2", "library": "library", "inbox": "inbox", "sources": "widget-2", "settings": "settings",
-    "add": "add-circle", "back": "alt-arrow-left", "forward": "alt-arrow-right", "sort": "sort-vertical",
+    "add": "add-circle", "back": "alt-arrow-left", "down": "alt-arrow-down", "forward": "alt-arrow-right",
     "refresh": "refresh", "restore": "restart", "download": "download-minimalistic", "share": "share",
     "trash": "trash-bin-minimalistic", "folder": "folder", "folder-add": "add-folder", "filter": "filter",
     "order": "sort-from-top-to-bottom", "sliders": "tuning-2", "search": "magnifier", "bookmark": "bookmark",

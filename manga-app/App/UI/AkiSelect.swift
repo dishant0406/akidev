@@ -16,9 +16,12 @@ struct AkiSelect<Value: Hashable>: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .muted, lines: 1)
-                    AkiIcon("sort", size: 11, tone: .muted)
+                    AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .text, lines: 1)
+                    AkiIcon("down", size: 12, tone: .muted)
                 }
+                // A chip, so it reads as something to tap and the arrow belongs to it.
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(Aki.secondary, in: Capsule())
             }
         }
     }
