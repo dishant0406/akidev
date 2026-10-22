@@ -117,7 +117,95 @@
     "description": ".summary__content",
     "authors": ".author-content a",
     "tags": ".genres-content a",
-    "status": ".post-status .summary-content"
+    "status": [
+      {
+        "css": ".post-status .post-content_item:nth-of-type(2) .summary-content"
+      },
+      "text",
+      {
+        "map": [
+          [
+            "not yet released",
+            "upcoming"
+          ],
+          [
+            "upcoming",
+            "upcoming"
+          ],
+          [
+            "on hold",
+            "hiatus"
+          ],
+          [
+            "ongoing",
+            "ongoing"
+          ],
+          [
+            "on going",
+            "ongoing"
+          ],
+          [
+            "publishing",
+            "ongoing"
+          ],
+          [
+            "completed",
+            "completed"
+          ],
+          [
+            "complete",
+            "completed"
+          ],
+          [
+            "finished",
+            "completed"
+          ],
+          [
+            "ended",
+            "completed"
+          ],
+          [
+            "hiatus",
+            "hiatus"
+          ],
+          [
+            "cancelled",
+            "cancelled"
+          ],
+          [
+            "canceled",
+            "cancelled"
+          ],
+          [
+            "dropped",
+            "cancelled"
+          ],
+          [
+            "discontinued",
+            "cancelled"
+          ],
+          [
+            "مستمرة",
+            "ongoing"
+          ],
+          [
+            "مكتملة",
+            "completed"
+          ],
+          [
+            "متوقفة",
+            "hiatus"
+          ],
+          [
+            "ملغاة",
+            "cancelled"
+          ]
+        ]
+      },
+      {
+        "default": "unknown"
+      }
+    ]
   },
   "chapters": {
     "request": {

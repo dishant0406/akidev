@@ -544,6 +544,31 @@ mod tests {
         assert_eq!(found.iter().map(text_of).collect::<Vec<_>>(), ["two"]);
     }
 
+    /// The status word a site gives has to survive `map`, because the Madara theme passes every status through it.
+    /// `map` keeps a node only when a needle is found, so an unlisted word disappears silently — which is how a
+    /// status of "unknown" used to appear with no explanation.
+    #[test]
+    fn a_status_word_maps_and_an_unlisted_one_disappears() {
+        let none = |_: &str| None;
+        let ctx = ctx(&none);
+        let step = Step::Map(vec![
+            ("not yet released".into(), "upcoming".into()),
+            ("ongoing".into(), "ongoing".into()),
+            ("completed".into(), "completed".into()),
+            ("complete".into(), "completed".into()),
+            ("on hold".into(), "hiatus".into()),
+        ]);
+        let mapped = |text: &str| run(std::slice::from_ref(&step), Format::Html, vec![Node::Text(text.into())], &ctx).unwrap().iter().map(text_of).collect::<Vec<_>>();
+        assert_eq!(mapped("Ongoing"), ["ongoing"]);
+        assert_eq!(mapped("OnGoing"), ["ongoing"]);
+        assert_eq!(mapped("Completed"), ["completed"]);
+        assert_eq!(mapped("On Hold"), ["hiatus"]);
+        assert_eq!(mapped("Not Yet Released"), ["upcoming"]);
+        // A word nobody listed gives nothing, so a site that renames its statuses is caught by its fixture
+        // rather than reported to the person as an empty status.
+        assert_eq!(mapped("Serialised"), Vec::<String>::new());
+    }
+
     #[test]
     fn a_bad_selector_is_caught_by_check() {
         assert!(check_steps(&[Step::Css("div[".into())], Format::Html).is_err());
