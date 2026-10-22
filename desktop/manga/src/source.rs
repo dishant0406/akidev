@@ -206,7 +206,8 @@ impl Source {
         let mut last = None;
         for host in self.hosts() {
             let Some(req) = self.build(request, host, holes) else {
-                bail!("the request needs a value this call does not have: {}", request.url);
+                // The definition's own mistake, not the person's: say so, and which part of the address is missing.
+                bail!("this source cannot answer that: its definition asks for a value the app had none of (in {}). That is a mistake in the source's definition, not in your connection.", request.url);
             };
             match self.fetcher.send(&req).await {
                 Ok(body) => return Ok((body, host)),
