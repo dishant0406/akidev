@@ -6,7 +6,7 @@ images replaced by generated pictures on this server, plus a repository under /_
 that lists the madara theme and a source called `local`). Start the app with
 `-demoRepo http://127.0.0.1:8770/_demo/repo/ -source local`.
 """
-import hashlib, json, os, struct, sys, zlib
+import hashlib, json, os, struct, sys, time, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -140,6 +140,12 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/_demo/repo/"):
             return self.repo(path[len("/_demo/repo/"):])
         if path.startswith("/solo/"):
+            # DEMO_SLOW=3 holds each page picture for 3 seconds (to see the loading look); DEMO_FAIL=1 refuses them.
+            time.sleep(float(os.environ.get("DEMO_SLOW", 0)))
+            if os.environ.get("DEMO_FAIL"):
+                self.send_response(500)
+                self.end_headers()
+                return
             _, _, number, name = path.split("/")
             page = int(name.split(".")[0])
             tall = "-" in number

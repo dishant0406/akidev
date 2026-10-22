@@ -4,10 +4,35 @@ import UIKit
 /// One page of the paged reader: the image fitted to the screen, pinch to zoom up to 4×, double tap to
 /// zoom in on a point and out again, drag to move around when zoomed. A single tap reports where on the
 /// screen it landed (0 to 1 across), so the reader can turn the page or show its controls.
-struct AkiZoomPage: UIViewRepresentable {
+enum AkiPageState { case loading, loaded, failed }
+
+/// One reader page for paged reading: the zoomable picture over the dark placeholder, which stays until the picture is
+/// in and comes back (tappable) when it failed.
+struct AkiPage: View {
+    let number: Int
     let url: String
     let headers: [String: String]
     let onTap: (CGFloat) -> Void
+    @State private var state = AkiPageState.loading
+    @State private var attempt = 0
+
+    var body: some View {
+        ZStack {
+            if state != .loaded { AkiPagePlaceholder(number: number + 1, failed: state == .failed) { attempt += 1 } }
+            AkiZoomPage(url: url, headers: headers, attempt: attempt, onTap: onTap) { state = $0 }
+                .opacity(state == .loaded ? 1 : 0)
+                .animation(.easeOut(duration: 0.25), value: state == .loaded)
+                .allowsHitTesting(state == .loaded)
+        }
+    }
+}
+
+struct AkiZoomPage: UIViewRepresentable {
+    let url: String
+    let headers: [String: String]
+    var attempt = 0
+    let onTap: (CGFloat) -> Void
+    var onState: (AkiPageState) -> Void = { _ in }
     @Environment(\.displayScale) private var scale
 
     func makeUIView(context: Context) -> ZoomScrollView {
@@ -19,9 +44,11 @@ struct AkiZoomPage: UIViewRepresentable {
 
     func updateUIView(_ view: ZoomScrollView, context: Context) {
         context.coordinator.parent = self
-        guard context.coordinator.loaded != url else { return }
-        context.coordinator.loaded = url
+        let key = "\(url)|\(attempt)"
+        guard context.coordinator.loaded != key else { return }
+        context.coordinator.loaded = key
         view.show(nil)
+        onState(.loading)
         guard let link = URL(string: url) else { return }
         let widthPx = Aki.screenSize.width * scale * 2
         let headers = headers
@@ -30,6 +57,7 @@ struct AkiZoomPage: UIViewRepresentable {
             let image = await ImageLoader.shared.image(link, headers: headers, widthPx: widthPx)
             guard !Task.isCancelled else { return }
             view.show(image)
+            onState(image == nil ? .failed : .loaded)
         }
     }
 

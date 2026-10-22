@@ -114,7 +114,7 @@ private struct StripReader: View {
                 ForEach(items) { item in
                     switch item.kind {
                     case .page(let index, let url, let headers):
-                        AkiImage(url: url, headers: headers, placeholder: 1.4, onAspect: { model.aspects[url] = $0 })
+                        AkiImage(url: url, headers: headers, placeholder: model.typicalHeightRatio, onAspect: { model.aspects[url] = $0 }, pageNumber: index)
                             .frame(width: width * model.zoom)
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { frame in
                                 if frame.minY <= 1, frame.maxY > 1 {
@@ -198,7 +198,7 @@ private struct PagedReader: View {
         let rtl = model.mode == .rtl
         TabView(selection: $model.pagedIndex) {
             ForEach(Array(segment.pages.images.enumerated()), id: \.offset) { index, url in
-                AkiZoomPage(url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
+                AkiPage(number: index, url: url, headers: headers, onTap: { tap($0, count: count, rtl: rtl) })
                     .tag(index)
             }
             endPage(segment).tag(count)

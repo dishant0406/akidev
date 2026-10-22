@@ -12,21 +12,32 @@ struct AkiImage: View {
     var free = false
     /// Told the width-to-height ratio once known (the reader needs it to restore a position).
     var onAspect: ((CGFloat) -> Void)?
+    /// A reader page: the dark placeholder with its number and a way to retry, instead of the plain cover block.
+    var pageNumber: Int?
     @State private var image: UIImage?
     @State private var failed = false
+    /// Bumped to ask for the picture again.
+    @State private var attempt = 0
     @Environment(\.displayScale) private var scale
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Aki.secondary
+                if let pageNumber, image == nil {
+                    AkiPagePlaceholder(number: pageNumber + 1, failed: failed) { attempt += 1 }
+                } else {
+                    Aki.secondary
+                }
                 if let image {
-                    if fill || free {
-                        Image(uiImage: image).resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()
-                    } else {
-                        Image(uiImage: image).resizable().scaledToFit().frame(width: geometry.size.width)
+                    Group {
+                        if fill || free {
+                            Image(uiImage: image).resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                        } else {
+                            Image(uiImage: image).resizable().scaledToFit().frame(width: geometry.size.width)
+                        }
                     }
-                } else if failed {
+                    .transition(.opacity)
+                } else if failed, pageNumber == nil {
                     AkiIcon("image", tone: .muted)
                 }
             }
@@ -35,8 +46,10 @@ struct AkiImage: View {
             // meant for what is next to it (the search field above a featured cover).
             .clipped()
             .contentShape(Rectangle())
-            .task(id: url) { await load(widthPoints: geometry.size.width) }
+            .task(id: "\(url ?? "")|\(attempt)") { await load(widthPoints: geometry.size.width) }
         }
+        // It comes in rather than popping in.
+        .animation(.easeOut(duration: 0.25), value: image != nil)
         .modifier(KeepsShape(ratio: free ? nil : (fill ? 1 / placeholder : (image.map { $0.size.width / $0.size.height } ?? (1 / placeholder)))))
     }
 

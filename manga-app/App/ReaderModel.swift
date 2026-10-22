@@ -60,6 +60,13 @@ final class ReaderModel {
     /// Set while the strip is being put back where it was, so the scrolling that does it is not saved.
     @ObservationIgnored var restoring = false
     @ObservationIgnored var aspects: [String: CGFloat] = [:]
+    /// The height, as a multiple of the width, a page is likely to have: the average of those already seen, so a page
+    /// that has not arrived holds about the room it will take and the strip does not jump when it does.
+    var typicalHeightRatio: CGFloat {
+        guard !aspects.isEmpty else { return 1.4 }
+        let average = aspects.values.reduce(0) { $0 + 1 / $1 } / CGFloat(aspects.count)
+        return min(max(average, 0.8), 8)
+    }
     @ObservationIgnored private var cache: [String: PageList] = [:]
     @ObservationIgnored private var latest: (chapter: String, page: Int, offset: Double)?
     @ObservationIgnored private var finished: Set<String> = []
