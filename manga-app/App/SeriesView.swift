@@ -47,7 +47,7 @@ struct SeriesView: View {
             }
             .ignoresSafeArea(edges: .top)
             .scrollIndicators(.hidden)
-            .akiRefreshable { await load(force: true) }
+            .akiRefreshable(inset: Aki.safeTop) { await load(force: true) }
             .background(Aki.background)
 
             // Pinned over the scrolling page, so back is always there and always takes the tap.
