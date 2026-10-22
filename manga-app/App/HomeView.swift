@@ -75,7 +75,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Discover", subtitle: isGlobal ? "All sources" : info?.name)
+                    AkiHeader(title: "Discover")
                     if model.sources.isEmpty && model.repos.isEmpty {
                         WelcomeView()
                     } else if model.visibleSources.isEmpty {
@@ -84,12 +84,16 @@ struct HomeView: View {
                     } else {
                         HStack(spacing: 10) {
                             AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
-                            if !filters.isEmpty && !isGlobal {
+                            if !otherFilters.isEmpty && !isGlobal {
                                 AkiIconButton(symbol: "sliders", label: "Filters", tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
                             }
                         }
-                        if model.visibleSources.count > 1 { AkiChips(items: [(Self.everySource, "All")] + model.visibleSources.map { ($0.id, $0.name) }, selection: $source) }
-                        if let category = category, !isGlobal { categories(category) }
+                        HStack(spacing: 10) {
+                            if model.visibleSources.count > 1 {
+                                AkiMenuPill(icon: "sources", selection: $source, options: [(Self.everySource, "All sources")] + model.visibleSources.map { ($0.id, $0.name) })
+                            }
+                            if let category = category, !isGlobal { categories(category) }
+                        }
                         if isGlobal { globalResults } else { results }
                     }
                 }
@@ -102,7 +106,7 @@ struct HomeView: View {
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
             .onChange(of: source) { UserDefaults.standard.set(source, forKey: "source"); submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
-            .akiSheet(isPresented: $filtering) { FiltersSheet(filters: filters, choices: $choices) { Task { await reload() } } }
+            .akiSheet(isPresented: $filtering) { FiltersSheet(filters: otherFilters, choices: $choices) { Task { await reload() } } }
             .task(id: model.sourcesKey) {
                 if !isGlobal && !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
@@ -124,16 +128,17 @@ struct HomeView: View {
 
     /// The first select filter a source defines (usually its genres), shown as a row of chips.
     private var category: FilterInfo? { filters.first { $0.kind == .select && $0.options.count > 1 } }
+    /// Everything else a source lets a search be narrowed by, behind the one filter button; the category has its own pill.
+    private var otherFilters: [FilterInfo] { filters.filter { $0.id != category?.id } }
 
     private func categories(_ filter: FilterInfo) -> some View {
-        let chosen = choices[filter.id] ?? ""
-        return AkiChips(items: [("", "All")] + filter.options.prefix(24).map { ($0.value, $0.name) }, selection: Binding(
-            get: { chosen },
+        AkiMenuPill(icon: "filter", placeholder: filter.name, selection: Binding(
+            get: { choices[filter.id] ?? "" },
             set: { value in
                 choices[filter.id] = value.isEmpty ? nil : value
                 Task { await reload() }
             }
-        ))
+        ), options: filter.options.contains { $0.value.isEmpty } ? filter.options.map { ($0.value, $0.name) } : [("", "All")] + filter.options.map { ($0.value, $0.name) })
     }
 
     /// One card per series: the history has a row for every chapter read, newest first, so the same series appears many

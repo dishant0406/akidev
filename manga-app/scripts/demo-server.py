@@ -111,14 +111,19 @@ class Handler(BaseHTTPRequestHandler):
         """A repository (index.json plus the madara theme and a source called `local`), the way a GitHub repo
         would serve it: the index names each file with its sha256."""
         theme = (ROOT / "themes/madara.json").read_bytes()
-        source = json.dumps({"extends": "madara", "id": "local", "name": "Demo site", "version": 1, "lang": ["en"], "base_url": BASE, "rate_per_second": 20}, indent=2).encode()
+        genres = [{"value": g.lower(), "name": g} for g in ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Romance", "Sci-fi", "Slice of life", "Thriller"]]
+        make = lambda id, name, extra: json.dumps({"extends": "madara", "id": id, "name": name, "version": 1, "lang": ["en"], "base_url": BASE, "rate_per_second": 20, **extra}, indent=2).encode()
+        # `local` defines a genre filter (to see the filter UI); `second` only exists so there is more than one source.
+        local = make("local", "Demo site", {"search": {"request": {"url": "{base}/page/{page}/?post_type=wp-manga{?&s={term}?}{?&genre={genre}?}"}}, "filters": [{"id": "genre", "name": "Genre", "kind": "select", "default": "", "options": [{"value": "", "name": "All"}] + genres}]})
+        second = make("second", "Second site", {})
         sha = lambda data: hashlib.sha256(data).hexdigest()
+        entry = lambda id, name, data: {"id": id, "name": name, "version": 1, "path": f"sources/{id}.json", "sha256": sha(data), "lang": ["en"], "requires": ["madara"]}
         index = {
             "schema": 1, "name": "Demo repository",
-            "sources": [{"id": "local", "name": "Demo site", "version": 1, "path": "sources/local.json", "sha256": sha(source), "lang": ["en"], "requires": ["madara"]}],
+            "sources": [entry("local", "Demo site", local), entry("second", "Second site", second)],
             "themes": [{"id": "madara", "version": json.loads(theme)["version"], "path": "themes/madara.json", "sha256": sha(theme)}],
         }
-        files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": source}
+        files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": local, "sources/second.json": second}
         if inside in files:
             return self.reply(files[inside], "application/json")
         self.send_response(404)
