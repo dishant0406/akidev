@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "asurascans",
   "name": "Asura Scans",
-  "version": 1,
+  "version": 2,
   "lang": [
     "en"
   ],
@@ -11,7 +11,7 @@
   "rate_per_second": 1,
   "popular": {
     "request": {
-      "url": "{base}/api/series?page={page}&per_page=20&sort=popular"
+      "url": "{base}/api/series?offset={offset}&per_page=20&sort=popular"
     },
     "format": "json",
     "rows": "data",
@@ -24,7 +24,7 @@
   },
   "latest": {
     "request": {
-      "url": "{base}/api/series?page={page}&per_page=20"
+      "url": "{base}/api/series?offset={offset}&per_page=20"
     },
     "format": "json",
     "rows": "data",
@@ -37,7 +37,7 @@
   },
   "search": {
     "request": {
-      "url": "{base}/api/series?page={page}&per_page=20&search={term}"
+      "url": "{base}/api/series?offset={offset}&per_page=20&search={term}"
     },
     "format": "json",
     "rows": "data",
@@ -136,5 +136,6 @@
     "format": "json",
     "images": "data.chapter.pages.*.url",
     "reading": "longstrip"
-  }
+  },
+  "page_size": 20
 }

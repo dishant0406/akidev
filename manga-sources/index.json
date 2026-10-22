@@ -19,9 +19,9 @@
     {
       "id": "asurascans",
       "name": "Asura Scans",
-      "version": 1,
+      "version": 2,
       "path": "sources/asurascans.json",
-      "sha256": "5310cd28531e31a4862b8324565cd603a66f41c925ff1133ae1cf6023749c837",
+      "sha256": "bf7695e067195f1e382eb4ce6326113ca1a6448c9b61f348bf087e0b27d997e1",
       "lang": [
         "en"
       ],

@@ -2643,13 +2643,13 @@
       "series": "monster-s-streamer-star"
     }
   ],
-  "now_ms": 1792655259779,
+  "now_ms": 1792659798896,
   "responses": {
     "GET https://api.asurascans.com/api/series/monster-s-streamer-star": "r3.json",
     "GET https://api.asurascans.com/api/series/monster-s-streamer-star/chapters/chapter-8": "r6.json",
     "GET https://api.asurascans.com/api/series/overgeared/chapters?page=1&per_page=100": "r4.json",
     "GET https://api.asurascans.com/api/series/overgeared/chapters?page=2&per_page=100": "r5.json",
-    "GET https://api.asurascans.com/api/series?page=1&per_page=20&search=solo": "r2.json",
-    "GET https://api.asurascans.com/api/series?page=1&per_page=20&sort=popular": "r1.json"
+    "GET https://api.asurascans.com/api/series?offset=0&per_page=20&search=solo": "r2.json",
+    "GET https://api.asurascans.com/api/series?offset=0&per_page=20&sort=popular": "r1.json"
   }
 }
