@@ -1483,7 +1483,7 @@ impl Engine {
         let outcome = async {
             let list = self.source(&source)?.pages(&series, &chapter).await?;
             let folder = downloads::folder(&self.dir.join("downloads"), &source, &series, &chapter);
-            let client = reqwest::Client::builder()
+            let client = akidev_manga::http::client_builder()
                 .timeout(std::time::Duration::from_secs(60))
                 .connect_timeout(std::time::Duration::from_secs(15))
                 .build()

@@ -8,8 +8,9 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 package="$root/manga-app/Packages/AkiManga"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-profile="${PROFILE:-release}"
-flag=""; [ "$profile" = release ] && flag="--release"
+# `ios` is the size-optimised profile in desktop/Cargo.toml; PROFILE=debug builds without optimisation.
+profile="${PROFILE:-ios}"
+flag="--profile $profile"; [ "$profile" = debug ] && flag=""
 
 # The app is iOS 26 only; rustls's crypto library needs a deployment target newer than Rust's default (iOS 10).
 export IPHONEOS_DEPLOYMENT_TARGET=26.0

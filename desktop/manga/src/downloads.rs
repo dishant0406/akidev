@@ -154,7 +154,7 @@ mod tests {
     async fn a_chapter_is_kept_page_by_page_and_a_failure_leaves_nothing() {
         let base = serve().await;
         let root = std::env::temp_dir().join(format!("aki-dl-{}", std::process::id()));
-        let client = reqwest::Client::new();
+        let client = crate::http::client_builder().build().unwrap();
         let folder = folder(&root, "mangadex", "a/b", "c1");
         assert_ne!(
             self::folder(&root, "m", "a/b", "c"),

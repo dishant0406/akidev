@@ -13,7 +13,9 @@ let package = Package(
             name: "AkiManga",
             dependencies: ["akimangaFFI"],
             // The generated bindings are Swift 5 code.
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            // The engine's database is the iPhone's own SQLite, not a copy inside the engine.
+            linkerSettings: [.linkedLibrary("sqlite3")]
         ),
     ]
 )
