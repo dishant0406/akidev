@@ -20,6 +20,11 @@ enum OrientationLock: String, CaseIterable {
     var mask: UIInterfaceOrientationMask { self == .portrait ? .portrait : self == .landscape ? .landscape : .allButUpsideDown }
 }
 
+enum LibrarySort: String, CaseIterable {
+    case recent = "Last read", added = "Date added", title = "Title", unread = "Unread"
+    case chapters = "Total chapters", latest = "Latest chapter", random = "Random"
+}
+
 /// What the person chose in Settings, kept in UserDefaults so it survives launches.
 @MainActor @Observable
 final class Preferences {
@@ -37,6 +42,9 @@ final class Preferences {
     var orientation: OrientationLock { didSet { defaults.set(orientation.rawValue, forKey: "orientation") } }
     /// How fast the reader's strip scrolls when set going.
     var autoScrollSpeed: AutoScrollSpeed { didSet { defaults.set(autoScrollSpeed.rawValue, forKey: "autoScrollSpeed") } }
+    /// How the library is ordered, and whether that order is turned round.
+    var librarySort: LibrarySort { didSet { defaults.set(librarySort.rawValue, forKey: "librarySort") } }
+    var libraryReversed: Bool { didSet { defaults.set(libraryReversed, forKey: "libraryReversed") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
     /// A notification when a saved series gets new chapters (the person is asked for permission when turning it on).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
@@ -55,6 +63,8 @@ final class Preferences {
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
+        librarySort = LibrarySort(rawValue: defaults.string(forKey: "librarySort") ?? "") ?? .recent
+        libraryReversed = defaults.bool(forKey: "libraryReversed")
         autoScrollSpeed = AutoScrollSpeed(rawValue: defaults.string(forKey: "autoScrollSpeed") ?? "") ?? .normal
         notifyUpdates = defaults.bool(forKey: "notifyUpdates")
         autoDownload = defaults.bool(forKey: "autoDownload")

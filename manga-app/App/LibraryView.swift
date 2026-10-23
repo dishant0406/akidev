@@ -3,10 +3,6 @@ import SwiftUI
 
 enum LibraryTab: Hashable { case saved, history }
 
-enum LibrarySort: String, CaseIterable {
-    case recent = "Last read", added = "Date added", title = "Title", unread = "Unread"
-}
-
 extension LibraryEntry {
     var key: String { "\(source)/\(id)" }
 }
@@ -19,7 +15,8 @@ struct LibraryView: View {
     @State private var categories: [CategoryInfo] = []
     /// -1 is every category.
     @State private var category: Int64 = -1
-    @State private var sort = LibrarySort.recent
+    /// Changes each time Random is chosen, so choosing it again shuffles again.
+    @State private var shuffle = UInt64.random(in: 0...UInt64.max)
     @State private var onlyUnread = false
     @State private var naming = false
     @State private var newName = ""
@@ -31,8 +28,9 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Library", subtitle: "\(model.library.count) saved") {
                         AkiMenu(symbol: "filter", label: "Sort and filter", items:
-                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == sort) { sort = option } }
-                            + [AkiMenuItem(title: "Only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
+                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.librarySort) { choose(option) } }
+                            + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
+                               AkiMenuItem(title: "Only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
                                AkiMenuItem(title: "New category", icon: "folder-add") { naming = true }]
                             + categories.map { cat in AkiMenuItem(title: "Delete “\(cat.name)”", icon: "trash", destructive: true) { deleteCategory(cat) } })
                     }
@@ -62,14 +60,34 @@ struct LibraryView: View {
 
     private var shown: [LibraryEntry] {
         let filtered = model.library.filter { (category < 0 || $0.categories.contains(category)) && (!onlyUnread || $0.unread > 0) }
+        let ordered = sorted(filtered)
+        return model.prefs.libraryReversed ? ordered.reversed() : ordered
+    }
+
+    /// Each order puts the biggest first (the most recent, the most unread), except the title, which is A to Z. Ties fall back
+    /// to the title so the order never reshuffles on its own.
+    private func sorted(_ items: [LibraryEntry]) -> [LibraryEntry] {
         func byTitle(_ a: LibraryEntry, _ b: LibraryEntry) -> Bool { a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending }
-        // Ties fall back to the title so the order never reshuffles on its own.
-        switch sort {
-        case .recent: return filtered.sorted { ($0.lastReadMs ?? 0) != ($1.lastReadMs ?? 0) ? ($0.lastReadMs ?? 0) > ($1.lastReadMs ?? 0) : byTitle($0, $1) }
-        case .added: return filtered.sorted { $0.savedMs != $1.savedMs ? $0.savedMs > $1.savedMs : byTitle($0, $1) }
-        case .title: return filtered.sorted(by: byTitle)
-        case .unread: return filtered.sorted { $0.unread != $1.unread ? $0.unread > $1.unread : byTitle($0, $1) }
+        func biggestFirst(_ value: (LibraryEntry) -> Int64) -> [LibraryEntry] {
+            items.sorted { value($0) != value($1) ? value($0) > value($1) : byTitle($0, $1) }
         }
+        switch model.prefs.librarySort {
+        case .recent: return biggestFirst { $0.lastReadMs ?? 0 }
+        case .added: return biggestFirst { $0.savedMs }
+        case .title: return items.sorted(by: byTitle)
+        case .unread: return biggestFirst { Int64($0.unread) }
+        case .chapters: return biggestFirst { Int64($0.total) }
+        case .latest:
+            let dates = Dictionary(model.updates.map { ($0.key, $0.latestDateMs ?? 0) }, uniquingKeysWith: { first, _ in first })
+            return biggestFirst { dates[$0.key] ?? 0 }
+        case .random: return items.sorted { "\($0.key)\(shuffle)".hashValue < "\($1.key)\(shuffle)".hashValue }
+        }
+    }
+
+    /// Random shuffles anew each time it is chosen.
+    private func choose(_ option: LibrarySort) {
+        if option == .random { shuffle = UInt64.random(in: 0...UInt64.max) }
+        model.prefs.librarySort = option
     }
 
     @ViewBuilder private var saved: some View {
