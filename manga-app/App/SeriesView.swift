@@ -9,7 +9,7 @@ struct ReaderTarget: Identifiable, Hashable {
     var id: String { chapterID }
 }
 
-enum SeriesTab: Hashable { case chapters, details }
+enum SeriesTab: Hashable { case chapters, bookmarks, details }
 
 /// A series: a full-width picture with its title, and a sheet that rises over it with the chapters.
 struct SeriesView: View {
@@ -28,6 +28,7 @@ struct SeriesView: View {
     @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var kept: Set<String> = []
+    @State private var bookmarks: [Bookmark] = []
     @State private var forgetting = false
     /// Counters that only change on something the person did, so a haptic never fires just from opening the page.
     @State private var savedTaps = 0
@@ -138,7 +139,7 @@ struct SeriesView: View {
 
     private var sheet: some View {
         VStack(spacing: 18) {
-            AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.details, "Details")], selection: $tab)
+            AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.bookmarks, "Bookmarks"), (SeriesTab.details, "Details")], selection: $tab)
             if let error, chapters.isEmpty {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load(force: true) } })).frame(minHeight: 260)
             } else if tab == .chapters && chapters.isEmpty && !loading {
@@ -146,6 +147,8 @@ struct SeriesView: View {
                     .frame(minHeight: 280)
             } else if tab == .chapters {
                 chapterList
+            } else if tab == .bookmarks {
+                bookmarkList
             } else {
                 details
             }
@@ -176,6 +179,26 @@ struct SeriesView: View {
                         ? AkiMenuItem(title: "Delete download", icon: "trash", destructive: true) { removeDownload(chapter) }
                         : AkiMenuItem(title: "Download", icon: "download") { download([chapter]) },
                 ])
+            }
+        }
+    }
+
+    private var bookmarkList: some View {
+        LazyVStack(spacing: 12) {
+            if bookmarks.isEmpty {
+                AkiEmptyState(title: "No bookmarks yet", message: "Tap the bookmark button while you read to mark a page, and it will be here.").frame(minHeight: 260)
+            }
+            ForEach(bookmarks, id: \.self) { mark in
+                AkiTap(action: { target = ReaderTarget(chapterID: mark.chapter, page: Int(mark.page), offset: mark.offset) }) {
+                    AkiListCard(thumbnail: detail?.cover ?? ref.cover, label: "Page \(mark.page + 1)",
+                                title: chapterName(number: mark.chapterNumber, title: mark.chapterTitle),
+                                badges: [shortDate(mark.createdMs)].compactMap { $0 }) {
+                        AkiTap(action: { removeBookmark(mark) }) {
+                            AkiIcon("trash", size: 22, tone: .muted).frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Remove bookmark")
+                    }
+                }
             }
         }
     }
@@ -259,6 +282,7 @@ struct SeriesView: View {
         let fresh = !force && !chapters.isEmpty && checked.map { Date().timeIntervalSince1970 * 1000 - Double($0) < 600_000 } == true
         loading = !fresh
         loadKept()
+        loadBookmarks()
         async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
         if fresh {
             do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
@@ -291,7 +315,17 @@ struct SeriesView: View {
         loadKept()
     }
 
+    private func loadBookmarks() {
+        bookmarks = (try? model.engine.bookmarks(source: ref.source, series: ref.id)) ?? []
+    }
+
+    private func removeBookmark(_ mark: Bookmark) {
+        try? model.engine.removeBookmark(source: ref.source, series: ref.id, chapter: mark.chapter, page: mark.page)
+        loadBookmarks()
+    }
+
     private func refreshProgress() async {
+        loadBookmarks()
         setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? chapters)
         model.refresh()
     }

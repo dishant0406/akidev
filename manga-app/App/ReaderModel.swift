@@ -55,6 +55,8 @@ final class ReaderModel {
     var chrome = true
     /// The strip is scrolling by itself.
     var autoScrolling = false
+    /// The pages marked in this series.
+    var bookmarks: [Bookmark] = []
     var loading = false
     var error: (title: String, message: String)?
     var restore: Restore?
@@ -91,6 +93,7 @@ final class ReaderModel {
         self.page = start.page
         self.mode = UserDefaults.standard.string(forKey: "mode.\(ref.source).\(ref.id)").flatMap(ReadingMode.init) ?? .strip
         self.restore = Restore(chapter: start.chapterID, page: start.page, offset: start.offset)
+        loadBookmarks()
     }
 
     // MARK: chapters
@@ -168,6 +171,26 @@ final class ReaderModel {
         pagedIndex = page
         restore = Restore(chapter: current, page: page, offset: new == .strip ? offset : 0)
         restoreToken += 1
+    }
+
+    // MARK: bookmarks
+
+    /// Whether the page the person is on (the one at the top of the strip) is marked.
+    var isBookmarked: Bool { bookmarks.contains { $0.chapter == current && Int($0.page) == page } }
+
+    func loadBookmarks() {
+        bookmarks = (try? engine.bookmarks(source: ref.source, series: ref.id)) ?? []
+    }
+
+    /// Marks the page on screen, and how far down it in the strip; marking a marked page takes the mark off.
+    func toggleBookmark() {
+        if isBookmarked {
+            try? engine.removeBookmark(source: ref.source, series: ref.id, chapter: current, page: UInt32(page))
+        } else {
+            let offset = mode == .strip && latest?.chapter == current && latest?.page == page ? latest?.offset ?? 0 : 0
+            try? engine.addBookmark(source: ref.source, series: ref.id, chapter: current, page: UInt32(page), offset: offset)
+        }
+        loadBookmarks()
     }
 
     // MARK: ahead

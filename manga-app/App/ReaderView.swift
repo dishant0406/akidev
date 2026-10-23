@@ -69,6 +69,8 @@ struct ReaderView: View {
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia)
                     .monospacedDigit()
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
+                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? "Remove bookmark" : "Bookmark this page", tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) { model.toggleBookmark() }
+                    .akiHaptic(trigger: model.isBookmarked)
                 if let newer = model.newer(than: model.current) {
                     AkiIconButton(symbol: "next", label: "Next chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(newer.id, page: 0, offset: 0) } }
                 }
