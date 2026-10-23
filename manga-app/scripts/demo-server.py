@@ -133,6 +133,9 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if method == "POST":
             self.rfile.read(int(self.headers.get("content-length") or 0))
+        # DEMO_LATENCY=0.3 makes every page of the site (not its pictures or the repository) take 300 ms, like a real network.
+        if not path.startswith(("/solo/", "/wp-content/", "/_demo/")):
+            time.sleep(float(os.environ.get("DEMO_LATENCY", 0)))
         if method == "GET" and path.startswith("/manga/solo-leveling/chapter-"):
             return self.reply(chapter_pages(path.strip("/").split("/")[-1]))
         if (method, path) in ROUTES:

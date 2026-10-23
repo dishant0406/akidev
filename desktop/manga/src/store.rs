@@ -2,13 +2,13 @@
 //! One SQLite file on the phone. Everything the sources return is a cache of what a site said;
 //! progress and the library are the only things here that cannot be fetched again.
 
-use crate::model::{Chapter, Status};
+use crate::model::{Chapter, Detail, Status};
 use anyhow::Context;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -257,6 +257,16 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
             "BEGIN;
              ALTER TABLE series ADD COLUMN custom_cover TEXT;
              PRAGMA user_version = 5;
+             COMMIT;",
+        )?;
+    }
+    if version < 6 {
+        db.execute_batch(
+            "BEGIN;
+             CREATE TABLE detail (
+                source TEXT NOT NULL, series TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL,
+                PRIMARY KEY (source, series));
+             PRAGMA user_version = 6;
              COMMIT;",
         )?;
     }
@@ -993,6 +1003,37 @@ impl Store {
         Ok(())
     }
 
+    // --- what a site said about a series -------------------------------------------------------
+
+    /// Keeps the last answer for a series' page (description, authors, tags), so it can be shown before the site is asked.
+    pub fn keep_detail(
+        &self,
+        source: &str,
+        series: &str,
+        detail: &Detail,
+        now_ms: i64,
+    ) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO detail (source, series, body, at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (source, series) DO UPDATE SET body = ?3, at = ?4",
+            params![source, series, serde_json::to_string(detail)?, now_ms],
+        )?;
+        Ok(())
+    }
+
+    pub fn detail(&self, source: &str, series: &str) -> anyhow::Result<Option<Detail>> {
+        let body: Option<String> = self
+            .db()
+            .query_row(
+                "SELECT body FROM detail WHERE source = ?1 AND series = ?2",
+                params![source, series],
+                |row| row.get(0),
+            )
+            .optional()?;
+        // An answer this version cannot read (the shape changed) is as good as none: the site is asked again.
+        Ok(body.and_then(|body| serde_json::from_str(&body).ok()))
+    }
+
     // --- covers --------------------------------------------------------------------------------
 
     /// Sets (or, with none, takes away) the cover the person chose, and gives back the name it replaces, so the caller can
@@ -1235,6 +1276,7 @@ impl Store {
             "bookmark",
             "download",
             "chapter",
+            "detail",
         ] {
             tx.execute(
                 &format!("DELETE FROM {table} WHERE source = ?1 AND series = ?2"),
@@ -1307,6 +1349,31 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["c3", "c2", "c1"]
         );
+    }
+
+    #[test]
+    fn what_a_site_said_about_a_series_is_kept_and_goes_with_the_series() {
+        let store = store_with_series();
+        assert_eq!(store.detail("s", "a").unwrap(), None);
+        let detail = Detail {
+            title: "Alpha".into(),
+            cover: Some("c.jpg".into()),
+            description: Some("About it".into()),
+            authors: vec!["Someone".into()],
+            tags: vec!["Action".into()],
+            status: Status::Ongoing,
+        };
+        store.keep_detail("s", "a", &detail, 100).unwrap();
+        assert_eq!(store.detail("s", "a").unwrap(), Some(detail.clone()));
+        // Asking the site again replaces it.
+        let newer = Detail {
+            description: Some("Changed".into()),
+            ..detail
+        };
+        store.keep_detail("s", "a", &newer, 200).unwrap();
+        assert_eq!(store.detail("s", "a").unwrap(), Some(newer));
+        store.delete_series("s", "a").unwrap();
+        assert_eq!(store.detail("s", "a").unwrap(), None);
     }
 
     #[test]
@@ -1566,9 +1633,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 and 5 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 6 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE bookmark; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();

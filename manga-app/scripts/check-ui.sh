@@ -14,3 +14,10 @@ if [ -n "$found" ]; then
   exit 1
 fi
 echo "ok: screens use only Aki components"
+
+# PhotosUI pulls the audio, video and MIDI libraries into every launch (about 800 ms in the simulator): pictures come from
+# UIKit's own picker (see akiPhotoPicker in UI/AkiFiles.swift). Measured, not guessed: do not bring it back without measuring again.
+if grep -rn --include='*.swift' -E '^import (PhotosUI|AVFoundation|AVKit|MapKit)' . ; then
+  echo "A heavy framework is imported: it slows every launch. Use a lighter route."
+  exit 1
+fi

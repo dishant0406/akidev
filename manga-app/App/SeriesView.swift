@@ -20,6 +20,8 @@ struct SeriesView: View {
     @State private var chapters: [ChapterEntry] = []
     /// Where Continue goes, worked out when the chapters or progress change, not on every redraw.
     @State private var resumable: Resumable?
+    /// The chapter whose pages were fetched ahead, so it is done once.
+    @State private var fetchedAhead: String?
     @State private var saved = false
     @State private var loading = true
     @State private var error: (title: String, message: String)?
@@ -286,6 +288,8 @@ struct SeriesView: View {
         let started = list.contains { $0.finished || $0.page != nil }
         let name = chapterName(number: chapter.number, title: chapter.title)
         resumable = Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? "Continue · \(name)" : "Start · \(name)")
+        // Only for a series the person keeps or has begun: browsing past one should not cost the site a request.
+        if started || saved { fetchPagesAhead(of: resume.chapter) }
     }
 
     /// Shows what is stored at once, then asks the site. The chapter list is not asked again within ten minutes of the
@@ -294,6 +298,7 @@ struct SeriesView: View {
         error = nil
         saved = (try? model.engine.inLibrary(source: ref.source, id: ref.id)) ?? false
         setChapters((try? model.engine.cachedChapters(source: ref.source, series: ref.id)) ?? [])
+        if detail == nil { detail = (try? model.engine.cachedDetails(source: ref.source, id: ref.id)) ?? nil }
         let checked = (try? model.engine.chaptersCheckedMs(source: ref.source, series: ref.id)).flatMap { $0 }
         let fresh = !force && !chapters.isEmpty && checked.map { Date().timeIntervalSince1970 * 1000 - Double($0) < 600_000 } == true
         loading = !fresh
@@ -310,6 +315,14 @@ struct SeriesView: View {
         }
         loading = false
         loadBookmarks()
+    }
+
+    /// Asks for the pages of the chapter Continue opens while the series page is read, so the reader finds them ready.
+    private func fetchPagesAhead(of chapter: String) {
+        guard fetchedAhead != chapter else { return }
+        fetchedAhead = chapter
+        let (source, series, engine) = (ref.source, ref.id, model.engine)
+        Task { _ = try? await engine.pages(source: source, series: series, chapter: chapter) }
     }
 
     private func loadKept() {

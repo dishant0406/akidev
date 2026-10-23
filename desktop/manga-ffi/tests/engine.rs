@@ -15,6 +15,9 @@ const JPEG: &[u8] = &[
 ];
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../manga/testdata");
 
+/// How many times the test server was asked for chapter 179's pages.
+static PAGE_ASKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// A server that answers by path (the query is ignored) from the madara fixtures, and serves the repository
 /// folder `repo_dir` (if any) under /repo/.
 async fn serve(repo_dir: PathBuf) -> String {
@@ -37,6 +40,11 @@ async fn serve(repo_dir: PathBuf) -> String {
                     .unwrap_or("/")
                     .to_string();
                 let method = head.split_whitespace().next().unwrap_or("GET").to_string();
+                if path == "/manga/solo-leveling/chapter-179/" {
+                    PAGE_ASKS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    // Slow enough that a second ask arrives while the first is still being answered.
+                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                }
                 let file = match (method.as_str(), path.as_str()) {
                     ("GET", "/manga/page/1/") => Some("popular.html"),
                     ("GET", "/page/1/") => Some("search.html"),
@@ -768,4 +776,31 @@ async fn a_backup_cannot_write_outside_the_covers_folder_or_name_a_picture_it_la
             None
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chapters_pages_are_asked_of_the_site_once_however_many_ask_at_once() {
+    let temp = std::env::temp_dir().join(format!("akimanga-pages-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    let (repo_dir, data_dir) = (temp.join("repo"), temp.join("data"));
+    let address = serve(repo_dir.clone()).await;
+    make_repo(&repo_dir, &address, 1, None);
+    let engine = Engine::new(data_dir.to_string_lossy().to_string()).unwrap();
+    let view = engine.add_repo(format!("{address}/repo/")).await.unwrap();
+    engine
+        .install_from_repo(view.info.base, "local".into())
+        .await
+        .unwrap();
+
+    let before = PAGE_ASKS.load(std::sync::atomic::Ordering::SeqCst);
+    let ask = || engine.pages("local".into(), "solo-leveling".into(), "chapter-179".into());
+    // The series page fetching ahead, and the reader opening a moment later.
+    let (ahead, reader) = tokio::join!(ask(), ask());
+    assert_eq!(ahead.unwrap().images, reader.unwrap().images);
+    // And once more later: from memory.
+    ask().await.unwrap();
+    assert_eq!(
+        PAGE_ASKS.load(std::sync::atomic::Ordering::SeqCst) - before,
+        1
+    );
 }

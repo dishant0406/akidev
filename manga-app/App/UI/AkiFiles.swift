@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -20,8 +19,11 @@ extension View {
 }
 
 extension View {
-    /// Asks for a picture from the photo library (no permission needed: the system shows its own picker) and hands it
+    /// Asks for a picture from the photo library (the system shows its own picker, so no permission is needed) and hands it
     /// over as a JPEG no wider than `width` points times the screen scale, small enough to keep as a cover.
+    ///
+    /// UIKit's picker rather than PhotosUI's: linking PhotosUI makes the app load audio, video and MIDI libraries at every
+    /// launch, which measured about 800 ms in the simulator.
     func akiPhotoPicker(isPresented: Binding<Bool>, width: CGFloat = 300, onPick: @escaping (Data) -> Void) -> some View {
         modifier(PhotoPicking(isPresented: isPresented, width: width, onPick: onPick))
     }
@@ -31,20 +33,42 @@ private struct PhotoPicking: ViewModifier {
     @Binding var isPresented: Bool
     let width: CGFloat
     let onPick: (Data) -> Void
-    @State private var item: PhotosPickerItem?
     @Environment(\.displayScale) private var scale
 
     func body(content: Content) -> some View {
-        content
-            .photosPicker(isPresented: $isPresented, selection: $item, matching: .images)
-            .onChange(of: item) { _, picked in
-                guard let picked else { return }
-                item = nil
-                Task {
-                    guard let data = try? await picked.loadTransferable(type: Data.self), let image = UIImage(data: data), let jpeg = coverJPEG(image, width: width * scale) else { return }
-                    onPick(jpeg)
-                }
+        content.sheet(isPresented: $isPresented) {
+            ImagePicker { image in
+                isPresented = false
+                if let image, let jpeg = coverJPEG(image, width: width * scale) { onPick(jpeg) }
             }
+            .ignoresSafeArea()
+        }
+    }
+}
+
+private struct ImagePicker: UIViewControllerRepresentable {
+    let done: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(done) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let done: (UIImage?) -> Void
+        init(_ done: @escaping (UIImage?) -> Void) { self.done = done }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            done(info[.originalImage] as? UIImage)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { done(nil) }
     }
 }
 

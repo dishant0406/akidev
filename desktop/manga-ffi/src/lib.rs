@@ -15,6 +15,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 uniffi::setup_scaffolding!();
 
@@ -454,6 +455,34 @@ fn custom_name_is_sound(name: &str) -> bool {
         })
 }
 
+/// Page lists fetched in the last few minutes, newest last: opening a chapter just seen, or one fetched ahead while the series
+/// page was on screen, does not ask the site again. A list is dropped after ten minutes (some sites sign their picture
+/// addresses for a short while) and the oldest goes when there are more than a couple of dozen.
+#[derive(Default)]
+struct PageCache {
+    lists: Vec<(String, Instant, PageList)>,
+}
+
+impl PageCache {
+    const LIFETIME: Duration = Duration::from_secs(600);
+    const MOST: usize = 24;
+
+    fn get(&self, key: &str, now: Instant) -> Option<PageList> {
+        self.lists
+            .iter()
+            .find(|(name, at, _)| name == key && now.duration_since(*at) < Self::LIFETIME)
+            .map(|(_, _, list)| list.clone())
+    }
+
+    fn put(&mut self, key: String, now: Instant, list: PageList) {
+        self.lists.retain(|(name, _, _)| *name != key);
+        self.lists.push((key, now, list));
+        if self.lists.len() > Self::MOST {
+            self.lists.remove(0);
+        }
+    }
+}
+
 fn now_ms() -> i64 {
     akidev_core::calendar::now_ms()
 }
@@ -498,6 +527,10 @@ pub struct Engine {
     sources: RwLock<BTreeMap<String, Arc<Source>>>,
     /// Chapters being downloaded now, as `source/series/chapter`, so one is never fetched twice at once.
     downloading: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// Page lists asked of a site in the last few minutes.
+    page_lists: std::sync::Mutex<PageCache>,
+    /// One turn at a time per chapter: a second ask for a chapter being fetched waits for that fetch and reuses its answer.
+    page_turns: std::sync::Mutex<BTreeMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl Engine {
@@ -756,6 +789,8 @@ impl Engine {
             themes: RwLock::default(),
             sources: RwLock::default(),
             downloading: Default::default(),
+            page_lists: Default::default(),
+            page_turns: Default::default(),
         };
         engine.reload();
         Ok(Arc::new(engine))
@@ -1029,6 +1064,7 @@ impl Engine {
             return Err(failed("a comic on the device has no page to fetch"));
         }
         let detail = self.source(&source)?.details(&id).await?;
+        self.store.keep_detail(&source, &id, &detail, now_ms())?;
         self.store.upsert_series(
             &source,
             &id,
@@ -1055,6 +1091,11 @@ impl Engine {
             entries: self.entries(&source, &id)?,
             new_ids: synced.new,
         })
+    }
+
+    /// What the site last said about a series, to show before asking it again.
+    pub fn cached_details(&self, source: String, id: String) -> Result<Option<Detail>> {
+        Ok(self.store.detail(&source, &id)?.map(Detail::from))
     }
 
     pub async fn pages(&self, source: String, series: String, chapter: String) -> Result<PageList> {
@@ -1088,7 +1129,42 @@ impl Engine {
                 });
             }
         }
-        Ok(self.source(&source)?.pages(&series, &chapter).await?.into())
+        let site = self.source(&source)?;
+        let key = format!("{source}/{series}/{chapter}");
+        let turn = self
+            .page_turns
+            .lock()
+            .unwrap()
+            .entry(key.clone())
+            .or_default()
+            .clone();
+        let result = {
+            let _held = turn.lock().await;
+            // Asked while another ask for it was running: that one has put its answer here by now.
+            let cached = self.page_lists.lock().unwrap().get(&key, Instant::now());
+            match cached {
+                Some(list) => Ok(list),
+                None => {
+                    let fetched = site.pages(&series, &chapter).await;
+                    fetched.map(PageList::from).inspect(|list| {
+                        self.page_lists.lock().unwrap().put(
+                            key.clone(),
+                            Instant::now(),
+                            list.clone(),
+                        );
+                    })
+                }
+            }
+        };
+        // The map's own handle and this one: nobody else is waiting, so the turn can go.
+        let mut turns = self.page_turns.lock().unwrap();
+        if turns
+            .get(&key)
+            .is_some_and(|held| Arc::strong_count(held) <= 2)
+        {
+            turns.remove(&key);
+        }
+        Ok(result?)
     }
 
     // --- the library ---------------------------------------------------------------------------
@@ -1686,5 +1762,40 @@ impl Engine {
                 page: row.page,
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn list(first: &str) -> PageList {
+        PageList {
+            images: vec![first.to_string()],
+            reading: Reading::Unknown,
+            headers: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_page_list_is_reused_for_ten_minutes_and_the_oldest_goes_first() {
+        let start = Instant::now();
+        let mut cache = PageCache::default();
+        assert!(cache.get("a", start).is_none());
+        cache.put("a".into(), start, list("one"));
+        assert_eq!(cache.get("a", start).unwrap().images, ["one"]);
+        assert!(cache.get("a", start + Duration::from_secs(599)).is_some());
+        assert!(cache.get("a", start + Duration::from_secs(601)).is_none());
+        // Putting the same chapter again replaces it instead of keeping two.
+        cache.put("a".into(), start, list("two"));
+        assert_eq!(cache.get("a", start).unwrap().images, ["two"]);
+        assert_eq!(cache.lists.len(), 1);
+        // Beyond the most it keeps, the oldest is dropped.
+        for n in 0..PageCache::MOST {
+            cache.put(format!("k{n}"), start, list("x"));
+        }
+        assert_eq!(cache.lists.len(), PageCache::MOST);
+        assert!(cache.get("a", start).is_none());
+        assert!(cache.get("k0", start).is_some());
     }
 }
