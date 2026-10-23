@@ -6,6 +6,7 @@ import Observation
 final class AppModel {
     let engine: Engine
     let prefs = Preferences()
+    let downloader: AutoDownloader
     /// An address to add as a repository, waiting for the person to confirm (a pasted link or an opened one).
     var pendingRepo: PendingRepo?
     /// Everything installed; `visibleSources` is what the person's content settings let through.
@@ -28,13 +29,21 @@ final class AppModel {
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AkiManga")
         engine = try! Engine(dataDir: base.path)
+        let prefs = prefs
+        downloader = AutoDownloader(engine: engine, wifiOnly: { prefs.downloadOnWifiOnly })
         refresh()
-        AppDelegate.refresh = { [weak self] in await self?.refreshLibrary(force: true) }
+        AppDelegate.refresh = { [weak self] in await self?.refreshLibrary(force: true, background: true) }
+        AppDelegate.drain = { [weak self] in await self?.resumeDownloads() }
+        AppDelegate.openUpdates = { [weak self] in self?.tab = .updates }
         Task {
             await updateSources()
             await refreshLibrary()
         }
         #if DEBUG
+        // `-simulateBackground YES` runs once what iOS runs when it wakes the app in the background, a while after start.
+        if UserDefaults.standard.bool(forKey: "simulateBackground") {
+            Task { _ = await UpdateAlerts.requestPermission(); try? await Task.sleep(for: .seconds(6)); await refreshLibrary(force: true, background: true) }
+        }
         // `-demoRepo http://127.0.0.1:8770/_demo/repo/` adds that repository and installs its `local` source at
         // start, so the app can be driven without any real site (see scripts/demo-server.py).
         if let demo = UserDefaults.standard.string(forKey: "demoRepo") {
@@ -108,7 +117,10 @@ final class AppModel {
     /// Asks the sites for the chapters of saved series that are due (not asked in the last hour, a finished series not in
     /// the last day), four at a time. Skipped when done in the last half hour unless `force` is set (a pull or a tap),
     /// which asks about every series not asked in the last minute.
-    func refreshLibrary(force: Bool = false) async {
+    ///
+    /// New chapters the answers report are, when the person asked for them, announced (only when iOS woke the app in the
+    /// background: with the app open the Updates tab already shows them) and queued for download.
+    func refreshLibrary(force: Bool = false, background: Bool = false) async {
         if refreshing || (!force && (lastRefresh.map { Date.now.timeIntervalSince($0) < 1800 } ?? false)) { return }
         refreshing = true
         defer { refreshing = false }
@@ -120,18 +132,24 @@ final class AppModel {
             return force ? age > 60_000 : age > (entry.completed ? 86_400_000 : 3_600_000)
         }
         let engine = engine
-        let results = await withTaskGroup(of: (LibraryEntry, Error?).self) { group in
+        let adult = Set(sources.filter(\.nsfw).map(\.id))
+        let results = await withTaskGroup(of: (LibraryEntry, Error?, NewChapters?).self) { group in
             func ask(_ entry: LibraryEntry) {
                 group.addTask {
-                    do { _ = try await engine.chapters(source: entry.source, id: entry.id); return (entry, nil) } catch {
+                    do {
+                        let list = try await engine.chapters(source: entry.source, id: entry.id)
+                        let fresh = Set(list.newIds)
+                        let arrived = list.entries.filter { fresh.contains($0.id) }.reversed()
+                        return (entry, nil, arrived.isEmpty ? nil : NewChapters(source: entry.source, series: entry.id, title: entry.title, adult: adult.contains(entry.source), chapters: Array(arrived)))
+                    } catch {
                         try? engine.noteFailedCheck(source: entry.source, series: entry.id)
-                        return (entry, error)
+                        return (entry, error, nil)
                     }
                 }
             }
             var waiting = due.makeIterator()
             for _ in 0..<4 { if let entry = waiting.next() { ask(entry) } }
-            var all: [(LibraryEntry, Error?)] = []
+            var all: [(LibraryEntry, Error?, NewChapters?)] = []
             for await result in group {
                 all.append(result)
                 if !Task.isCancelled, let entry = waiting.next() { ask(entry) }
@@ -142,14 +160,29 @@ final class AppModel {
         // What failed before and was not asked this time stays on the list.
         let asked = Set(results.map { "\($0.0.source)/\($0.0.id)" })
         let stillFailing = updateFailures.filter { !asked.contains($0.key) }
-        updateFailures = stillFailing + results.compactMap { entry, error in error.map { UpdateFailure(key: "\(entry.source)/\(entry.id)", title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
+        updateFailures = stillFailing + results.compactMap { entry, error, _ in error.map { UpdateFailure(key: "\(entry.source)/\(entry.id)", title: entry.title, source: name(of: entry.source), message: describe($0).message) } }
         // A source is "not working" when any of its series failed this time; one that is gone loses its mark.
         let failedSources = Set(results.filter { $0.1 != nil }.map(\.0.source))
         for source in Set(results.map(\.0.source)) { sourceProblems[source] = nil }
-        for (entry, error) in results where error != nil && failedSources.contains(entry.source) { report(entry.source, error) }
+        for (entry, error, _) in results where error != nil && failedSources.contains(entry.source) { report(entry.source, error) }
         sourceProblems = sourceProblems.filter { problem in sources.contains { $0.id == problem.key } }
         if results.isEmpty || results.contains(where: { $0.1 == nil }) { lastRefresh = .now }
         refresh()
+        let found = results.compactMap(\.2)
+        guard !found.isEmpty else { return }
+        if background && prefs.notifyUpdates { await UpdateAlerts.post(found) }
+        if prefs.autoDownload {
+            downloader.enqueue(found)
+            await downloader.run()
+            if downloader.hasWork { AppDelegate.scheduleDownloads() }
+        }
+    }
+
+    /// Carries on with downloads that were cut short or waited for Wi-Fi.
+    func resumeDownloads() async {
+        guard prefs.autoDownload else { return }
+        await downloader.run()
+        if downloader.hasWork { AppDelegate.scheduleDownloads() }
     }
 
     /// Chapters not read, across the library: the Updates badge.

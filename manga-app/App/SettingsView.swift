@@ -14,6 +14,21 @@ struct SettingsView: View {
     @State private var message: (title: String, message: String)?
     @State private var downloaded: UInt64 = 0
 
+    /// Turning alerts on asks iOS for permission; if the person said no, the switch stays off and says where to change it.
+    private var alerts: Binding<Bool> {
+        Binding(
+            get: { model.prefs.notifyUpdates },
+            set: { on in
+                guard on else { return model.prefs.notifyUpdates = false }
+                Task {
+                    let granted = await UpdateAlerts.requestPermission()
+                    model.prefs.notifyUpdates = granted
+                    if !granted { message = ("Notifications are off", "Turn them on for Akidev in the iOS Settings app, then try again.") }
+                }
+            }
+        )
+    }
+
     private var languages: [String] { Array(Set(model.sources.flatMap(\.languages))).sorted() }
 
     var body: some View {
@@ -41,6 +56,17 @@ struct SettingsView: View {
                             AkiSelect(title: "Default mode", selection: $prefs.defaultMode, options: ReadingMode.allCases.map { ($0, $0.title) })
                             AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading the left edge goes forward.", isOn: $prefs.invertTaps)
                             AkiSwitch(title: "Keep the screen on", isOn: $prefs.keepAwake)
+                        }
+                    }
+                }
+                AkiSection(title: "Updates", footer: "Akidev checks your saved series in the background when iOS allows it, usually a few times a day and less if you rarely open the app. Nothing is sent anywhere: the check and the alert happen on this device.") {
+                    AkiCard(padding: 16) {
+                        VStack(spacing: 16) {
+                            AkiSwitch(title: "New chapter alerts", subtitle: "A notification when a saved series gets a chapter.", isOn: alerts)
+                            AkiSwitch(title: "Download new chapters", subtitle: "Keeps them on this device to read offline.", isOn: $prefs.autoDownload)
+                            if prefs.autoDownload {
+                                AkiSwitch(title: "Only on Wi-Fi", isOn: $prefs.downloadOnWifiOnly)
+                            }
                         }
                     }
                 }

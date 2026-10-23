@@ -36,6 +36,12 @@ final class Preferences {
     var readerBackground: ReaderBackground { didSet { defaults.set(readerBackground.rawValue, forKey: "readerBackground") } }
     var orientation: OrientationLock { didSet { defaults.set(orientation.rawValue, forKey: "orientation") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
+    /// A notification when a saved series gets new chapters (the person is asked for permission when turning it on).
+    var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
+    /// Keep new chapters of saved series on the device without being asked.
+    var autoDownload: Bool { didSet { defaults.set(autoDownload, forKey: "autoDownload") } }
+    /// Auto downloads wait for Wi-Fi: on unless the person says otherwise.
+    var downloadOnWifiOnly: Bool { didSet { defaults.set(downloadOnWifiOnly, forKey: "downloadOnWifiOnly") } }
 
     init() {
         let defaults = UserDefaults.standard
@@ -47,5 +53,8 @@ final class Preferences {
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
+        notifyUpdates = defaults.bool(forKey: "notifyUpdates")
+        autoDownload = defaults.bool(forKey: "autoDownload")
+        downloadOnWifiOnly = defaults.object(forKey: "downloadOnWifiOnly") as? Bool ?? true
     }
 }

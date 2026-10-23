@@ -42,8 +42,8 @@ targets:
         UILaunchScreen: {}
         # Only HTTPS through the system: no export-compliance questions on every upload.
         ITSAppUsesNonExemptEncryption: false
-        UIBackgroundModes: [fetch]
-        BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh]
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh, live.akidev.manga.download]
         CFBundleURLTypes:
           - CFBundleURLName: live.akidev.manga
             CFBundleURLSchemes: [akimanga]

@@ -1,12 +1,18 @@
 import BackgroundTasks
 import SwiftUI
+import UserNotifications
 
 /// Holds what only a delegate can: the orientations the reader allows, and the background refresh task.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     static let refreshTask = "live.akidev.manga.refresh"
+    static let downloadTask = "live.akidev.manga.download"
     nonisolated(unsafe) private static var orientations: UIInterfaceOrientationMask = .allButUpsideDown
     /// What the background task runs, set by the app model.
     @MainActor static var refresh: (() async -> Void)?
+    /// What the download task runs: the queue of new chapters.
+    @MainActor static var drain: (() async -> Void)?
+    /// What tapping a new-chapters notification does.
+    @MainActor static var openUpdates: (() -> Void)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // The delegate is main-actor, so this closure is too; on the main queue the system calls it where Swift expects it.
@@ -19,7 +25,31 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             }
             task.expirationHandler = { work.cancel() }
         }
+        // Downloads can take minutes, more than a refresh is given, so the system is also asked for a longer slot.
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.downloadTask, using: .main) { task in
+            let work = Task { @MainActor in
+                await Self.drain?()
+                task.setTaskCompleted(success: !Task.isCancelled)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        await MainActor.run { Self.openUpdates?() }
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner]
+    }
+
+    /// Asks the system for time, when it suits it, to finish downloads that did not finish in the refresh.
+    static func scheduleDownloads() {
+        let request = BGProcessingTaskRequest(identifier: downloadTask)
+        request.requiresNetworkConnectivity = true
+        try? BGTaskScheduler.shared.submit(request)
     }
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask { Self.orientations }
@@ -56,7 +86,7 @@ struct AkiMangaApp: App {
                 .onOpenURL { model.propose(repository: $0.absoluteString) }
                 .onChange(of: phase) { _, new in
                     if new == .background { AppDelegate.schedule() }
-                    if new == .active { Task { await model.refreshLibrary() } }
+                    if new == .active { Task { await model.refreshLibrary(); await model.resumeDownloads() } }
                 }
         }
     }

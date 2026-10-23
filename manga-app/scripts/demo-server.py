@@ -136,7 +136,12 @@ class Handler(BaseHTTPRequestHandler):
         if method == "GET" and path.startswith("/manga/solo-leveling/chapter-"):
             return self.reply(chapter_pages(path.strip("/").split("/")[-1]))
         if (method, path) in ROUTES:
-            return self.reply(fixture(ROUTES[(method, path)]))
+            body = fixture(ROUTES[(method, path)])
+            # `touch /tmp/akidev-demo-grow` and the site gains a Chapter 180: to see new-chapter alerts and downloads.
+            if path.endswith("/ajax/chapters/") and Path("/tmp/akidev-demo-grow").exists():
+                new = f'<ul class="main version-chap no-volumn">\n<li class="wp-manga-chapter"><a href="{BASE}/manga/solo-leveling/chapter-180/">Chapter 180</a><span class="chapter-release-date"><i>today</i></span></li>\n'
+                body = body.replace(b'<ul class="main version-chap no-volumn">\n', new.encode(), 1)
+            return self.reply(body)
         if path.startswith("/_demo/sources/"):
             # The demo repository folder (desktop/manga/testdata), as GitHub would serve it.
             target = (ROOT / path[len("/_demo/sources/"):]).resolve()
