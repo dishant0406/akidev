@@ -22,6 +22,8 @@ struct AkiImage: View {
 
     var body: some View {
         GeometryReader { geometry in
+            // What is already in memory shows in the first frame; the task below only fetches what is not.
+            let image = image ?? url.flatMap(URL.init(string:)).flatMap { ImageLoader.shared.cached($0, widthPx: max(geometry.size.width, 1) * scale) }
             ZStack {
                 if let pageNumber, image == nil {
                     AkiPagePlaceholder(number: pageNumber + 1, failed: failed) { attempt += 1 }
@@ -58,6 +60,11 @@ struct AkiImage: View {
         // not the broken-image mark. A failed fetch of an address it did give is the broken case.
         guard let url, let parsed = URL(string: url) else { image = nil; failed = false; return }
         failed = false
+        if let kept = ImageLoader.shared.cached(parsed, widthPx: max(widthPoints, 1) * scale) {
+            image = kept
+            onAspect?(kept.size.width / kept.size.height)
+            return
+        }
         let loaded = await ImageLoader.shared.image(parsed, headers: headers, widthPx: max(widthPoints, 1) * scale)
         if let loaded {
             image = loaded

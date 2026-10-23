@@ -144,6 +144,13 @@ class Handler(BaseHTTPRequestHandler):
             if path.endswith("/ajax/chapters/") and Path("/tmp/akidev-demo-grow").exists():
                 new = f'<ul class="main version-chap no-volumn">\n<li class="wp-manga-chapter"><a href="{BASE}/manga/solo-leveling/chapter-180/">Chapter 180</a><span class="chapter-release-date"><i>today</i></span></li>\n'
                 body = body.replace(b'<ul class="main version-chap no-volumn">\n', new.encode(), 1)
+            # DEMO_EXTRA=8 adds eight older chapters (every third a tall webtoon strip): to scroll through a long strip of many chapters.
+            if path.endswith("/ajax/chapters/") and os.environ.get("DEMO_EXTRA"):
+                more = ""
+                for n in range(177, 177 - int(os.environ["DEMO_EXTRA"]), -1):
+                    slug = f"chapter-{n}" if n % 3 else f"chapter-{n}-5"
+                    more += f'<li class="wp-manga-chapter"><a href="{BASE}/manga/solo-leveling/{slug}/">Chapter {n}</a><span class="chapter-release-date"><i>Jan {max(1, n - 150)}, 2024</i></span></li>\n'
+                body = body.replace(b"</ul>", more.encode() + b"</ul>", 1)
             return self.reply(body)
         if path.startswith("/_demo/sources/"):
             # The demo repository folder (desktop/manga/testdata), as GitHub would serve it.

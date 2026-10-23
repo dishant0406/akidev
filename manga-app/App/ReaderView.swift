@@ -24,10 +24,15 @@ struct ReaderView: View {
                 }
             } else if let error = model.error {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
-            } else {
-                AkiOpeningLoader(label: model.chapter(model.current).map(model.label))
             }
         }
+        // One loader for the whole opening: while the chapter's pages are fetched, and while the strip is put at your place.
+        .overlay {
+            if model.error == nil && (model.segments.isEmpty || (model.mode == .strip && model.restoring)) {
+                AkiOpeningLoader(label: model.chapter(model.current).map(model.label)).transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: model.restoring)
         .overlay(alignment: .top) { if model.chrome { topBar.transition(.opacity) } }
         .overlay(alignment: .bottom) { if model.chrome, model.currentSegment != nil { bottomBar.transition(.opacity) } }
         .environment(\.colorScheme, .dark)
@@ -123,8 +128,6 @@ private struct StripReader: View {
         // The strip is laid out at once but not shown until it has been moved to where the person was: showing it first made
         // the chapter open at the top and then jump.
         .opacity(model.restoring ? 0 : 1)
-        .overlay { if model.restoring { AkiOpeningLoader(label: model.chapter(model.current).map(model.label)).transition(.opacity) } }
-        .animation(.easeOut(duration: 0.2), value: model.restoring)
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in scroll.y = y }
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.containerSize.height >= $0.contentSize.height - 2 } action: { _, end in scroll.atEnd = end }
         .onScrollPhaseChange { _, phase in
@@ -283,7 +286,7 @@ private struct StripRows: View {
         ForEach(items) { item in
             switch item.kind {
             case .page(let index, let url, let headers):
-                AkiImage(url: url, headers: headers, placeholder: model.typicalHeightRatio, onAspect: { model.noteAspect($0, of: url) }, pageNumber: index)
+                AkiImage(url: url, headers: headers, placeholder: model.aspects[url].map { 1 / $0 } ?? model.typicalHeightRatio, onAspect: { model.noteAspect($0, of: url) }, pageNumber: index)
                     .frame(width: width)
                     .onGeometryChange(for: RowSpan.self) { RowSpan(frame: $0.frame(in: .scrollView)) } action: { span in
                         if span != .off { model.report(chapter: item.chapter, page: index, offset: span.offset) }

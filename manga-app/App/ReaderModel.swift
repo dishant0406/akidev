@@ -223,7 +223,11 @@ final class ReaderModel {
         let width = Aki.screenSize.width * (mode == .strip ? zoom : 2) * scale
         for url in list.images.dropFirst(max(index, 0)).prefix(count) where warmed.insert("\(url)@\(Int(width))").inserted {
             guard let link = URL(string: url) else { continue }
-            Task.detached(priority: .utility) { _ = await ImageLoader.shared.image(link, headers: headers, widthPx: width) }
+            Task.detached(priority: .utility) { [weak self] in
+                guard let picture = await ImageLoader.shared.image(link, headers: headers, widthPx: width) else { return }
+                // The shape is noted as soon as it is known, so a row not yet on screen already has the right height.
+                await self?.noteAspect(picture.size.width / picture.size.height, of: url)
+            }
         }
     }
 
@@ -256,6 +260,8 @@ final class ReaderModel {
         scheduleSave()
         if moved, let segment = segments.first(where: { $0.chapterID == chapter }) {
             warm(segment.pages, from: page + 1, count: 3)
+            // And the pages just above: scrolling back up meets them already loaded and already the right height.
+            warm(segment.pages, from: max(page - 3, 0), count: min(3, page))
             if mode == .strip, page >= segment.pages.images.count - 3 { Task { await appendNewerIfNeeded() } }
         }
     }

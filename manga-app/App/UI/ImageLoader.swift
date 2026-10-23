@@ -5,7 +5,8 @@ import ImageIO
 /// the size it will be shown (a 12,000 px page is never held at full size).
 actor ImageLoader {
     static let shared = ImageLoader()
-    private let cache = NSCache<NSString, UIImage>()
+    /// NSCache is safe to use from any thread, which is what lets a view ask for a picture already in memory without waiting.
+    nonisolated(unsafe) private let cache = NSCache<NSString, UIImage>()
     /// Covers and pages keep their address for good, so what was fetched once is read from disk next time (and next launch).
     private let session: URLSession = {
         let configuration = URLSessionConfiguration.default
@@ -18,6 +19,12 @@ actor ImageLoader {
 
     init() {
         cache.totalCostLimit = 160 * 1024 * 1024
+    }
+
+    /// The picture if it is already decoded at that width, at once; nothing is fetched. A row scrolled back into view shows
+    /// it in its first frame instead of a placeholder that is replaced a moment later.
+    nonisolated func cached(_ url: URL, widthPx: CGFloat) -> UIImage? {
+        cache.object(forKey: "\(url.absoluteString)@\(Int(widthPx))" as NSString)
     }
 
     func clear() {
