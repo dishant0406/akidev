@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var importing = false
     @State private var message: (title: String, message: String)?
     @State private var downloaded: UInt64 = 0
+    @State private var categories: [CategoryInfo] = []
 
     /// Turning alerts on asks iOS for permission; if the person said no, the switch stays off and says where to change it.
     private var alerts: Binding<Bool> {
@@ -48,6 +49,11 @@ struct SettingsView: View {
                                           options: [("", "All")] + languages.map { ($0, $0.uppercased()) })
                             }
                         }
+                    }
+                }
+                AkiSection(title: "Library", footer: "What saving a series does about categories. Make categories from the library's menu.") {
+                    AkiCard(padding: 16) {
+                        AkiSelect(title: "When saving", selection: $prefs.saveCategory, options: [(Int64(0), "Nothing"), (Int64(-1), "Ask which")] + categories.map { ($0.id, "Put on \($0.name)") })
                     }
                 }
                 AkiSection(title: "Reading", footer: "A series keeps its own mode once you change it in the reader.") {
@@ -117,7 +123,10 @@ struct SettingsView: View {
         }
         .akiFileImporter(isPresented: $importing, types: [UTType(filenameExtension: "cbz") ?? .zip, .zip]) { url in importComic(url) }
         .akiAlert(message?.title ?? "", message: message?.message, isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } }))
-        .onAppear { downloaded = ((try? model.engine.downloads()) ?? []).reduce(0) { $0 + $1.bytes } }
+        .onAppear {
+            downloaded = ((try? model.engine.downloads()) ?? []).reduce(0) { $0 + $1.bytes }
+            categories = (try? model.engine.categories()) ?? []
+        }
     }
 
     private func makeBackup() {

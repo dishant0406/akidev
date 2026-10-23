@@ -769,6 +769,33 @@ impl Store {
         Ok(())
     }
 
+    /// Puts the categories in the order given. One not named goes after the ones that are, in the order it had; an id that
+    /// is not a category is ignored.
+    pub fn reorder_categories(&self, ids: &[i64]) -> anyhow::Result<()> {
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        let current: Vec<i64> = {
+            let mut statement = tx.prepare("SELECT id FROM category ORDER BY position, id")?;
+            statement
+                .query_map([], |row| row.get(0))?
+                .collect::<Result<_, _>>()?
+        };
+        let mut order: Vec<i64> = Vec::new();
+        for id in ids.iter().chain(&current) {
+            if current.contains(id) && !order.contains(id) {
+                order.push(*id);
+            }
+        }
+        for (position, id) in order.iter().enumerate() {
+            tx.execute(
+                "UPDATE category SET position = ?2 WHERE id = ?1",
+                params![id, position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Deletes a category; the series in it stay in the library.
     pub fn delete_category(&self, id: i64) -> anyhow::Result<()> {
         self.db()
@@ -1218,6 +1245,29 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["c3", "c2", "c1"]
         );
+    }
+
+    #[test]
+    fn categories_keep_the_order_they_are_given_and_survive_a_backup_in_it() {
+        let store = store_with_series();
+        let reading = store.add_category("Reading").unwrap();
+        store.add_category("Later").unwrap();
+        let done = store.add_category("Done").unwrap();
+        let names = |store: &Store| {
+            store
+                .categories()
+                .unwrap()
+                .into_iter()
+                .map(|category| category.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(&store), ["Reading", "Later", "Done"]);
+        // An id that is not a category is ignored; one left out keeps its place after the others.
+        store.reorder_categories(&[done, 9999, reading]).unwrap();
+        assert_eq!(names(&store), ["Done", "Reading", "Later"]);
+        let restored = Store::in_memory().unwrap();
+        restored.import(&store.export().unwrap()).unwrap();
+        assert_eq!(names(&restored), ["Done", "Reading", "Later"]);
     }
 
     #[test]

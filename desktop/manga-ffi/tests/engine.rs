@@ -403,6 +403,18 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
         .unwrap();
     assert!(engine.add_category("  ".into()).is_err());
     assert_eq!(engine.categories().unwrap()[0].count, 1);
+    // The order given is the order kept (here the only category named, with the second one added first in line).
+    let later = engine.add_category("Later".into()).unwrap();
+    engine.reorder_categories(vec![later, reading]).unwrap();
+    assert_eq!(
+        engine
+            .categories()
+            .unwrap()
+            .iter()
+            .map(|category| category.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Later", "Reading"]
+    );
 
     // A comic archive from the device sits in the library beside the rest and reads from its files.
     let archive = temp.join("Short Story.cbz");
@@ -476,8 +488,18 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
     assert_eq!(fresh.repos().unwrap().len(), 1);
     assert_eq!(fresh.sources().len(), 1);
     let library = fresh.library().unwrap();
-    assert!(library.iter().any(|item| item.title == "Solo Leveling"
-        && item.categories == [fresh.categories().unwrap()[0].id]));
+    let reading_here = fresh
+        .categories()
+        .unwrap()
+        .into_iter()
+        .find(|category| category.name == "Reading")
+        .unwrap()
+        .id;
+    assert!(
+        library
+            .iter()
+            .any(|item| item.title == "Solo Leveling" && item.categories == [reading_here])
+    );
     assert_eq!(
         fresh
             .cached_chapters("local".into(), "solo-leveling".into())

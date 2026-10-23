@@ -45,6 +45,8 @@ final class Preferences {
     /// How the library is ordered, and whether that order is turned round.
     var librarySort: LibrarySort { didSet { defaults.set(librarySort.rawValue, forKey: "librarySort") } }
     var libraryReversed: Bool { didSet { defaults.set(libraryReversed, forKey: "libraryReversed") } }
+    /// What saving a series does about categories: nothing (0), ask which (-1), or put it on that category (its id).
+    var saveCategory: Int64 { didSet { defaults.set(saveCategory, forKey: "saveCategory") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
     /// A notification when a saved series gets new chapters (the person is asked for permission when turning it on).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
@@ -63,6 +65,7 @@ final class Preferences {
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
+        saveCategory = Int64(defaults.integer(forKey: "saveCategory"))
         librarySort = LibrarySort(rawValue: defaults.string(forKey: "librarySort") ?? "") ?? .recent
         libraryReversed = defaults.bool(forKey: "libraryReversed")
         autoScrollSpeed = AutoScrollSpeed(rawValue: defaults.string(forKey: "autoScrollSpeed") ?? "") ?? .normal

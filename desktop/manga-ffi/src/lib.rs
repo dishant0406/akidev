@@ -1256,6 +1256,11 @@ impl Engine {
         Ok(self.store.rename_category(id, name.trim())?)
     }
 
+    /// Puts the categories in the order given (see `Store::reorder_categories`).
+    pub fn reorder_categories(&self, ids: Vec<i64>) -> Result<()> {
+        Ok(self.store.reorder_categories(&ids)?)
+    }
+
     pub fn delete_category(&self, id: i64) -> Result<()> {
         Ok(self.store.delete_category(id)?)
     }
