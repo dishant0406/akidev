@@ -116,8 +116,8 @@ flowchart TD
 | **Reader settings sheet** | Reader chrome | Mode, tap zones and inversion, background, orientation lock, keep awake, auto-scroll speed, brightness link | **Partial**: no tap zone presets or brightness link |
 | **Library, Saved** | Tab | Grid with unread badges | **Built** |
 | **Library, History** | Tab pill | Cards: series, chapter, date | **Built** (no delete) |
-| **Categories** | Library, long-press a series | Create, assign, reorder; filter the grid by category | **Missing** |
-| **Library sort and filter** | Library | Sort (title, last read, unread, added), filter (unread, source), grid size | **Missing** |
+| **Categories** | Library menu, long-press a series, the series menu | Create, rename, reorder, delete; assign one series or several (Select); filter the grid by category or by none; Settings says what saving does (nothing, ask, or a chosen category) | **Built** |
+| **Library sort and filter** | Library | Sort (last read, date added, title, unread, total chapters, latest chapter, random), reverse, remembered; filter (unread, category); *Missing:* source filter, grid size | **Built** |
 | **Updates** | Tab | Unread and Recent cards, refresh | **Built** (no background refresh) |
 | **Update errors** | Updates | Series whose source failed, with the reason | **Built** |
 | **Sources, Installed / Repositories** | Tab | Cards, add, remove | **Built** |
@@ -181,7 +181,7 @@ States: loading, empty ("No results"), source unreachable (Try again), source ne
 
 ### 4.6 Organise a growing library
 
-Long-press a series for a menu (Open, Mark read, Move to category, Remove). **Categories** appear as pills above the grid. Library sort and filter live behind one glass button (title, last read, unread count, date added; unread only; by source). *Missing:* all of it.
+Long-press a series for a menu (Open, Mark read, Move to category, Remove). **Categories** appear as pills above the grid. Library sort and filter live behind one glass button (seven orders and reverse, remembered; unread only; Select to put several series on categories, mark them read or remove them; Categories to manage the shelves). A series' cover can be changed from its menu (a photo, or a page from the reader sheet) and reset. *Missing:* source filter, grid size.
 
 ### 4.7 Keep sources healthy
 
