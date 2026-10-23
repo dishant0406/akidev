@@ -27,7 +27,8 @@ final class FrameClock {
 
     private func fire() {
         let now = CACurrentMediaTime()
-        tick(now - last)
+        // A long stall (a page decoding) must not become one big jump.
+        tick(min(now - last, 0.1))
         last = now
     }
 

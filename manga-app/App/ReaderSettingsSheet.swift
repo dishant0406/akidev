@@ -26,7 +26,7 @@ struct ReaderSettingsSheet: View {
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {
                         AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading the left edge goes forward.", isOn: $prefs.invertTaps)
-                        AkiSwitch(title: "Keep the screen on", isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 }))
+                        AkiSwitch(title: "Keep the screen on", isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 || model.autoScrolling }))
                     }
                 }
             }

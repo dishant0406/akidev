@@ -21,10 +21,12 @@ func chaptersLabel(_ count: UInt32?) -> String? {
 }
 
 /// The whole chapter numbers a source skips between a chapter and the next one it lists: 178.5 then 180 skips 179.
+/// A jump of more than ten is a different way of numbering (a volume, a date), not that many missing chapters.
 func skippedChapters(from number: Double, to next: Double) -> ClosedRange<Int>? {
+    guard number.isFinite, next.isFinite, abs(number) < 100_000, abs(next) < 100_000 else { return nil }
     let first = Int(number.rounded(.down)) + 1
     let last = Int(next.rounded(.down)) - 1
-    return first <= last ? first...last : nil
+    return first <= last && last - first < 10 ? first...last : nil
 }
 
 extension HistoryEntry {

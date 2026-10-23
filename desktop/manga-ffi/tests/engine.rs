@@ -486,16 +486,6 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
         0,
         "chapters are fetched again, not carried"
     );
-    let marks = fresh
-        .bookmarks("local".into(), "solo-leveling".into())
-        .unwrap();
-    assert_eq!(
-        marks
-            .iter()
-            .map(|mark| (mark.chapter.as_str(), mark.page))
-            .collect::<Vec<_>>(),
-        [("chapter-178", 4)]
-    );
     // The read state waits for the chapters to be fetched again, then shows.
     let list = fresh
         .chapters("local".into(), "solo-leveling".into())
@@ -505,6 +495,16 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
         list.entries
             .iter()
             .any(|entry| entry.id == "chapter-178" && entry.finished)
+    );
+    // A bookmark shows once its chapter is listed again.
+    assert_eq!(
+        fresh
+            .bookmarks("local".into(), "solo-leveling".into())
+            .unwrap()
+            .iter()
+            .map(|mark| (mark.chapter.as_str(), mark.page))
+            .collect::<Vec<_>>(),
+        [("chapter-178", 4)]
     );
 
     // Removing a series forgets all of it.

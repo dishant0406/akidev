@@ -49,7 +49,7 @@ details are marked UNVERIFIED in the sources. Only what has a source is stated a
 
 | Table stakes (build) | Nice to have (later) | Leave out |
 | --- | --- | --- |
-| Tabs: browse, library, updates, sources; continue reading; global search; categories; sort and filter; reader modes, tap zones, resume, zoom, chapter transitions; backup and restore; clear error states | Migration, downloads and offline, local CBZ import, trackers, widgets, Spotlight, share sheet, auto-scroll, per-series reader settings, incognito | Coins, passes, ads, accounts, comments, rankings we cannot compute, any web view |
+| Tabs: browse, library, updates, sources; continue reading; global search; categories; sort and filter; reader modes, tap zones, resume, zoom, chapter transitions; backup and restore; clear error states | Migration, downloads and offline, local CBZ import, trackers, widgets, Spotlight, share sheet, per-series reader settings, incognito | Coins, passes, ads, accounts, comments, rankings we cannot compute, any web view |
 
 ## 2. People and what they want
 
@@ -111,9 +111,9 @@ flowchart TD
 | **Home / Discover** | Tab | Glass search, source chips, Popular and Latest pills, featured card, grid, "Show more" | **Built** |
 | **Source filters** | Home (a filter button) | The filters a source defines (genre, status, sort) | **Built** |
 | **Global search** | Home search with "All sources" | Results grouped per source, each filling in as it answers | **Built** |
-| **Series** | Any grid or card | Hero, chips, Chapters and Details pills, chapter cards, Continue, save, more menu | **Built** |
-| **Reader** | A chapter | Strip, paged, right-to-left, zoom, resume, next chapter, glass chrome | **Built** |
-| **Reader settings sheet** | Reader chrome | Mode, tap zones and inversion, background, orientation lock, keep awake, brightness link | **Partial**: mode only |
+| **Series** | Any grid or card | Hero, chips, Chapters, Bookmarks and Details pills, chapter cards, Continue, save, more menu | **Built** |
+| **Reader** | A chapter | Strip, paged, right-to-left, zoom, resume, next chapter, glass chrome, auto-scroll, page bookmarks | **Built** |
+| **Reader settings sheet** | Reader chrome | Mode, tap zones and inversion, background, orientation lock, keep awake, auto-scroll speed, brightness link | **Partial**: no tap zone presets or brightness link |
 | **Library, Saved** | Tab | Grid with unread badges | **Built** |
 | **Library, History** | Tab pill | Cards: series, chapter, date | **Built** (no delete) |
 | **Categories** | Library, long-press a series | Create, assign, reorder; filter the grid by category | **Missing** |
@@ -163,11 +163,12 @@ States: loading, empty ("No results"), source unreachable (Try again), source ne
 
 1. **Series**: "Continue · Chapter N" (or "Start") is always the primary action. Tapping a chapter card opens it at its saved place; the circle on the right toggles read.
 2. **Reader** opens black. Centre tap shows or hides the glass bars; the menu switches long strip, pages left to right, pages right to left; the choice is remembered for the series.
-3. Strip: the next chapter joins on below an end-of-chapter row. Paged: the last page is an end card with **Next**. Both prefetch the next chapter.
+3. Strip: the next chapter joins on below an end-of-chapter row. Paged: the last page is an end card with **Next**, and swiping on past it opens the next chapter. Both prefetch the next chapter, and both say when the source skips a chapter ("Chapter 179 is missing from this source").
 4. Position is saved as chapter, page and how far down the page. Reopening goes to the same spot.
 5. Leave with the back button; the series page shows the new read state and "Continue" moves on.
+6. In the strip, the play button in the top bar scrolls by itself at the speed chosen in the reader sheet; a finger on the strip pauses it and it carries on a second after the finger lifts. The bookmark button beside the page count marks the page on screen (and how far down it, in the strip); the series page's **Bookmarks** tab lists them, and tapping one opens the reader there.
 
-*Built:* all of it. *Missing:* the reader settings sheet (tap zone presets, background, orientation, keep awake), a chapter jump list, a brightness hint, incognito.
+*Built:* all of it. *Missing:* tap zone presets in the reader sheet, a chapter jump list, a brightness hint, incognito.
 
 ### 4.5 Save, follow, get new chapters
 

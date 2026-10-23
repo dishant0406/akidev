@@ -74,6 +74,7 @@ final class ReaderModel {
 
     /// Notes a page's width-to-height ratio once its picture is known.
     func noteAspect(_ aspect: CGFloat, of url: String) {
+        guard aspect > 0, aspect.isFinite else { return }
         if let old = aspects[url] { heightRatios -= 1 / old }
         aspects[url] = aspect
         heightRatios += 1 / aspect
@@ -133,6 +134,7 @@ final class ReaderModel {
 
     /// Opens a chapter, at a page and how far down it, using the pages already fetched if there are.
     func open(_ chapterID: String, page: Int, offset: Double) async {
+        autoScrolling = false
         loading = true
         error = nil
         do {

@@ -140,15 +140,15 @@ struct SeriesView: View {
     private var sheet: some View {
         VStack(spacing: 18) {
             AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.bookmarks, "Bookmarks"), (SeriesTab.details, "Details")], selection: $tab)
-            if let error, chapters.isEmpty {
+            if tab == .bookmarks {
+                bookmarkList
+            } else if let error, chapters.isEmpty {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load(force: true) } })).frame(minHeight: 260)
             } else if tab == .chapters && chapters.isEmpty && !loading {
                 AkiEmptyState(title: "Nothing to read here", message: "\(model.name(of: ref.source)) lists this series but has no chapters it can show in your language. Licensed series are often only linked to the publisher's own site. Try another source, or another language in the source's settings.")
                     .frame(minHeight: 280)
             } else if tab == .chapters {
                 chapterList
-            } else if tab == .bookmarks {
-                bookmarkList
             } else {
                 details
             }
@@ -292,6 +292,7 @@ struct SeriesView: View {
             do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error) } }
         }
         loading = false
+        loadBookmarks()
     }
 
     private func loadKept() {

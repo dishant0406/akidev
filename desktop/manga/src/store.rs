@@ -173,6 +173,15 @@ pub struct Synced {
     pub first: bool,
 }
 
+/// A position within a page is 0 to 1; anything else (a damaged backup, not a number) is the top.
+fn inside_page(offset: f64) -> f64 {
+    if (0.0..=1.0).contains(&offset) {
+        offset
+    } else {
+        0.0
+    }
+}
+
 fn migrate(db: &Connection) -> anyhow::Result<()> {
     let version: i32 = db.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     anyhow::ensure!(
@@ -938,7 +947,7 @@ impl Store {
             // A bookmark already here is kept as it is.
             tx.execute(
                 "INSERT OR IGNORE INTO bookmark (source, series, chapter, page, offset, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![row.source, row.series, row.chapter, row.page, row.offset, row.created_at],
+                params![row.source, row.series, row.chapter, row.page, inside_page(row.offset), row.created_at],
             )?;
         }
         tx.commit()?;
@@ -947,7 +956,8 @@ impl Store {
 
     // --- bookmarks -----------------------------------------------------------------------------
 
-    /// Marks a page. Marking it again moves the mark inside the page and keeps when it was first made.
+    /// Marks a page. Marking it again moves the mark inside the page and keeps when it was first made. A position outside
+    /// the page (or not a number) becomes the top of it.
     pub fn add_bookmark(
         &self,
         source: &str,
@@ -960,7 +970,7 @@ impl Store {
         self.db().execute(
             "INSERT INTO bookmark (source, series, chapter, page, offset, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (source, series, chapter, page) DO UPDATE SET offset = ?5",
-            params![source, series, chapter, page, offset, now_ms],
+            params![source, series, chapter, page, inside_page(offset), now_ms],
         )?;
         Ok(())
     }
@@ -979,12 +989,13 @@ impl Store {
         Ok(())
     }
 
-    /// The pages marked in a series, newest mark first.
+    /// The pages marked in a series, newest mark first. A bookmark in a chapter the site no longer lists (or that has not been
+    /// fetched again since a restore) is kept but not shown: it could not be opened.
     pub fn bookmarks(&self, source: &str, series: &str) -> anyhow::Result<Vec<BookmarkRow>> {
         let db = self.db();
         let mut statement = db.prepare(
             "SELECT b.chapter, b.page, b.offset, b.created_at, c.number, c.title
-             FROM bookmark b LEFT JOIN chapter c ON c.source = b.source AND c.series = b.series AND c.id = b.chapter
+             FROM bookmark b JOIN chapter c ON c.source = b.source AND c.series = b.series AND c.id = b.chapter
              WHERE b.source = ?1 AND b.series = ?2 ORDER BY b.created_at DESC, b.chapter, b.page",
         )?;
         let rows = statement.query_map(params![source, series], |row| {
@@ -1233,7 +1244,33 @@ mod tests {
             [("c2", 0, 0.0, 200), ("c1", 3, 0.5, 100)]
         );
         assert_eq!(marks[1].chapter_number, Some(1.0));
+        // A position that is not inside the page is the top of it.
+        store
+            .add_bookmark("s", "a", "c2", 5, f64::NAN, 400)
+            .unwrap();
+        store.add_bookmark("s", "a", "c2", 6, 7.0, 500).unwrap();
+        assert_eq!(
+            store
+                .bookmarks("s", "a")
+                .unwrap()
+                .iter()
+                .filter(|mark| mark.page >= 5)
+                .map(|mark| mark.offset)
+                .collect::<Vec<_>>(),
+            [0.0, 0.0]
+        );
+        // A bookmark in a chapter the site stopped listing is kept but not shown.
+        store.add_bookmark("s", "a", "gone", 0, 0.0, 600).unwrap();
+        assert!(
+            store
+                .bookmarks("s", "a")
+                .unwrap()
+                .iter()
+                .all(|mark| mark.chapter != "gone")
+        );
         store.remove_bookmark("s", "a", "c2", 0).unwrap();
+        store.remove_bookmark("s", "a", "c2", 5).unwrap();
+        store.remove_bookmark("s", "a", "c2", 6).unwrap();
         assert_eq!(store.bookmarks("s", "a").unwrap().len(), 1);
         assert!(store.bookmarks("s", "other").unwrap().is_empty());
     }
@@ -1261,6 +1298,11 @@ mod tests {
         restored
             .import(&serde_json::from_value(json).unwrap())
             .unwrap();
+        // The chapters come from the site, so the bookmark shows once they have been fetched again.
+        assert!(restored.bookmarks("s", "a").unwrap().is_empty());
+        restored
+            .sync_chapters("s", "a", &[chapter("c1", 1.0)])
+            .unwrap();
         assert_eq!(restored.bookmarks("s", "a").unwrap().len(), 1);
 
         // Moving the series to another source carries a bookmark to the chapter with the same number.
@@ -1281,11 +1323,33 @@ mod tests {
 
     #[test]
     fn a_library_from_before_bookmarks_gets_the_table() {
-        let store = Store::in_memory().unwrap();
+        let store = store_with_series();
+        store
+            .set_progress(
+                "s",
+                "a",
+                "c1",
+                Progress {
+                    page: 2,
+                    offset: 0.5,
+                    finished: false,
+                },
+                100,
+            )
+            .unwrap();
         let db = store.db();
         db.execute_batch("DROP TABLE bookmark; PRAGMA user_version = 3;")
             .unwrap();
         migrate(&db).unwrap();
+        let version: i32 = db
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 4);
+        // What was there before is untouched, and the new table works.
+        let kept: i64 = db
+            .query_row("SELECT count(*) FROM progress", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(kept, 1);
         db.execute(
             "INSERT INTO bookmark (source, series, chapter, page, offset, created_at) VALUES ('s', 'a', 'c', 0, 0, 1)",
             [],
