@@ -14,6 +14,12 @@ func chapterName(number: Double?, title: String?) -> String {
     return "Chapter"
 }
 
+/// "120 chapters" for a card, when its source said how many there are.
+func chaptersLabel(_ count: UInt32?) -> String? {
+    guard let count, count > 0 else { return nil }
+    return count == 1 ? "1 chapter" : "\(count) chapters"
+}
+
 extension HistoryEntry {
     var key: String { "\(source)/\(series)" }
 }

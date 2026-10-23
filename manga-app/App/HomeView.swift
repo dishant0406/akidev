@@ -65,6 +65,8 @@ struct HomeView: View {
     @State private var choices: [String: String] = [:]
     @State private var filtering = false
     @State private var global = GlobalSearchModel()
+    /// The sources the lists on screen were asked from, so coming back to this tab does not ask again.
+    @State private var loadedKey = ""
     private static let everySource = "*"
     private var isGlobal: Bool { source == Self.everySource }
 
@@ -111,6 +113,12 @@ struct HomeView: View {
                 if !isGlobal && !model.visibleSources.contains(where: { $0.id == source }) { source = model.visibleSources.first?.id ?? "" }
                 guard !source.isEmpty else { return }
                 filters = (try? model.engine.sourceFilters(source: source)) ?? []
+                // Coming back from a series runs this again: keep the titles, the pages asked for and the scroll place.
+                if loadedKey == model.sourcesKey && (isGlobal ? !feed.shelves.isEmpty : !browse.items.isEmpty) {
+                    reading = (try? model.engine.history(limit: 24)) ?? []
+                    return
+                }
+                loadedKey = model.sourcesKey
                 await reload()
             }
         }
@@ -177,7 +185,7 @@ struct HomeView: View {
                 AkiShelf(title: shelf.title, subtitle: shelf.subtitle) {
                     ForEach(shelf.items, id: \.id) { card in
                         AkiLink(value: SeriesRef(source: shelf.source, id: card.id, title: card.title, cover: card.cover)) {
-                            AkiPoster(title: card.title, cover: card.cover)
+                            AkiPoster(title: card.title, cover: card.cover, caption: chaptersLabel(card.chapters))
                         }
                     }
                 }
@@ -213,7 +221,7 @@ struct HomeView: View {
         AkiShelf(title: "Top 10", subtitle: info?.name) {
             ForEach(Array(browse.items.prefix(10).enumerated()), id: \.element.id) { index, card in
                 AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
-                    AkiPoster(title: card.title, cover: card.cover, rank: index + 1, width: 116)
+                    AkiPoster(title: card.title, cover: card.cover, caption: chaptersLabel(card.chapters), rank: index + 1, width: 116)
                 }
             }
         }
@@ -221,7 +229,7 @@ struct HomeView: View {
             AkiShelf(title: "New releases") {
                 ForEach(feed.latest, id: \.id) { card in
                     AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
-                        AkiPoster(title: card.title, cover: card.cover)
+                        AkiPoster(title: card.title, cover: card.cover, caption: chaptersLabel(card.chapters))
                     }
                 }
             }
@@ -239,7 +247,7 @@ struct HomeView: View {
         LazyVGrid(columns: columns, spacing: 22) {
             ForEach(cards, id: \.id) { card in
                 AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
-                    AkiCoverCard(title: card.title, cover: card.cover, subtitle: info?.name)
+                    AkiCoverCard(title: card.title, cover: card.cover, subtitle: chaptersLabel(card.chapters) ?? info?.name)
                 }
             }
         }

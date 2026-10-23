@@ -8,6 +8,9 @@ pub struct Card {
     pub id: String,
     pub title: String,
     pub cover: Option<String>,
+    /// How many chapters the list says the series has, when it says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chapters: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

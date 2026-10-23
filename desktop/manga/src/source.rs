@@ -369,8 +369,19 @@ impl Source {
                 }
                 None => None,
             };
+            let chapters = match &list.card.chapters {
+                Some(chapters) => eval_text(chapters, list.format, row, &ctx)?
+                    .as_deref()
+                    .and_then(first_number),
+                None => None,
+            };
             if !items.iter().any(|have: &Card| have.id == id) {
-                items.push(Card { id, title, cover });
+                items.push(Card {
+                    id,
+                    title,
+                    cover,
+                    chapters,
+                });
             }
         }
         let has_next = if let Some(total) = &list.total {
@@ -901,6 +912,16 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The first run of digits in some text ("120 Chapters", "Ch. 45"), when there is one.
+fn first_number(text: &str) -> Option<u32> {
+    let start = text.find(|c: char| c.is_ascii_digit())?;
+    let digits: String = text[start..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1101,6 +1122,28 @@ mod tests {
         );
         assert!(source.popular(1).await.unwrap().has_next);
         assert!(!source.popular(2).await.unwrap().has_next);
+    }
+
+    #[tokio::test]
+    async fn a_card_carries_the_chapter_count_when_the_list_gives_one() {
+        // A number is read out of whatever text the list has ("120 Chapters"); no number, or no field, is no count.
+        let list = json!({"request": {"url": "{base}/list"}, "format": "json", "rows": "items", "card": {"id": "id", "title": "name", "chapters": "n"}});
+        let source = source(
+            json!({"popular": list}),
+            &[(
+                "/list",
+                r#"{"items":[{"id":"1","name":"a","n":42},{"id":"2","name":"b","n":"120 Chapters"},{"id":"3","name":"c","n":"new"},{"id":"4","name":"d"}]}"#,
+            )],
+        );
+        let counts: Vec<_> = source
+            .popular(1)
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .map(|card| card.chapters)
+            .collect();
+        assert_eq!(counts, [Some(42), Some(120), None, None]);
     }
 
     #[tokio::test]

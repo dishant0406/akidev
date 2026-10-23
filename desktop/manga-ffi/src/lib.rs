@@ -87,6 +87,7 @@ pub struct Card {
     pub id: String,
     pub title: String,
     pub cover: Option<String>,
+    pub chapters: Option<u32>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -333,6 +334,7 @@ impl From<m::Card> for Card {
             id: card.id,
             title: card.title,
             cover: card.cover,
+            chapters: card.chapters,
         }
     }
 }

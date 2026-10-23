@@ -160,6 +160,9 @@ pub struct CardDef {
     pub title: Ex,
     #[serde(default)]
     pub cover: Option<Ex>,
+    /// How many chapters the series has, or its newest chapter's number: the first number in the text is taken.
+    #[serde(default)]
+    pub chapters: Option<Ex>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
