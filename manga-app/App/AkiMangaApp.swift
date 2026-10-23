@@ -9,7 +9,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     @MainActor static var refresh: (() async -> Void)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTask, using: nil) { task in
+        // The delegate is main-actor, so this closure is too; on the main queue the system calls it where Swift expects it.
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTask, using: .main) { task in
             Self.schedule()
             let work = Task { @MainActor in
                 guard let refresh = Self.refresh else { return task.setTaskCompleted(success: false) }
