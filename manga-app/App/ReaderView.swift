@@ -114,7 +114,7 @@ private struct StripReader: View {
             // The rows are a view of their own: auto-scroll moves `position` on every frame and redraws this body, and a
             // child whose inputs have not changed is not rebuilt.
             LazyVStack(spacing: 0) {
-                StripRows(model: model, width: width * model.zoom)
+                StripRows(model: model, width: width * model.zoom, shift: keepPlace)
             }
             .scrollTargetLayout()
             .frame(width: width * model.zoom)
@@ -152,6 +152,14 @@ private struct StripReader: View {
             // The tick holds this view's state, and the state holds the clock: break the loop.
             clock.tick = { _ in }
         }
+    }
+
+    /// A page above the one being read came in taller or shorter than the room held for it: the strip is moved by the same
+    /// amount, so what is on screen stays where it was instead of jumping.
+    private func keepPlace(by change: CGFloat) {
+        scroll.y += change
+        scroll.target = scroll.target.map { $0 + change }
+        position.scrollTo(y: scroll.y)
     }
 
     private func startAutoScroll() {
@@ -219,6 +227,8 @@ private struct StripReader: View {
 private struct StripRows: View {
     let model: ReaderModel
     let width: CGFloat
+    /// Called with how much a row above the top of the screen grew (negative: shrank) when its picture arrived.
+    let shift: (CGFloat) -> Void
     @Environment(\.dismiss) private var dismiss
 
     /// Each row has an id the scroll position can name.
@@ -265,6 +275,12 @@ private struct StripRows: View {
                     .frame(width: width)
                     .onGeometryChange(for: RowSpan.self) { RowSpan(frame: $0.frame(in: .scrollView)) } action: { span in
                         if span != .off { model.report(chapter: item.chapter, page: index, offset: span.offset) }
+                    }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { old, new in
+                        guard old.height > 0, abs(new.height - old.height) > 0.5, old.minY < 0 else { return }
+                        // Wholly above the top of the screen: all of the change is above what is read. Across it: the share above.
+                        let above = old.maxY <= 0 ? 1 : min(max(-old.minY / old.height, 0), 1)
+                        shift((new.height - old.height) * above)
                     }
             case .end(let segment):
                 chapterEnd(segment)

@@ -59,6 +59,8 @@ struct LibraryView: View {
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
         }
         .onAppear { model.refresh(); history = (try? model.engine.history(limit: 60)) ?? []; loadCategories() }
+        // The counts on the shelves are read from the same place as the library: they change when it does, wherever the change came from.
+        .onChange(of: model.library) { loadCategories() }
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear { loadCategories(); model.refresh() } })
         .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: assignees).onDisappear { loadCategories(); picked = []; selecting = false } })
         .akiConfirm("Remove \(pickedShown.count) from your library?", message: "Their read state stays; you can save them again.", confirm: "Remove", isPresented: $removing) { removePicked() }
