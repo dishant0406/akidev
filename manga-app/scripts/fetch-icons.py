@@ -2,7 +2,8 @@
 """Downloads the Solar icons the app uses into App/Assets.xcassets.
 
 Solar is by 480 Design, licensed CC BY 4.0 (credit is given in Settings > About). Each name below is what the app
-calls an icon; `name` is the outline version and `name-solid` the bold one. Run it again after adding a name.
+calls an icon; `name` is the outline version and `name-solid` the bold one (only for the names in SOLID). Run it again after
+adding a name.
 """
 import json
 import pathlib
@@ -21,6 +22,9 @@ ICONS = {
     "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip", "image": "gallery",
 }
 STYLES = {"": "linear", "-solid": "bold"}
+# Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which
+# keeps the app smaller. Add a name here when the app starts to use "<name>-solid".
+SOLID = {"bookmark", "check", "close", "home", "inbox", "library", "play", "server", "sources", "warning"}
 root = pathlib.Path(__file__).resolve().parent.parent / "App" / "Assets.xcassets"
 root.mkdir(exist_ok=True)
 (root / "Contents.json").write_text(json.dumps({"info": {"author": "xcode", "version": 1}}, indent=2))
@@ -28,7 +32,7 @@ root.mkdir(exist_ok=True)
 for stale in root.glob("solar-*.imageset"):
     shutil.rmtree(stale)
 
-wanted = {f"{solar}-{style}": (name, suffix) for name, solar in ICONS.items() for suffix, style in STYLES.items()}
+wanted = {f"{solar}-{style}": (name, suffix) for name, solar in ICONS.items() for suffix, style in STYLES.items() if suffix == "" or name in SOLID}
 # One request for every icon: the service limits how often it is asked.
 url = "https://api.iconify.design/solar.json?icons=" + ",".join(wanted)
 icons = json.loads(subprocess.run(["curl", "-fsSL", url], capture_output=True, text=True, check=True).stdout)["icons"]
