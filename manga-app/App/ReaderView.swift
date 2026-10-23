@@ -25,7 +25,7 @@ struct ReaderView: View {
             } else if let error = model.error {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
             } else {
-                AkiSpinner()
+                AkiOpeningLoader(label: model.chapter(model.current).map(model.label))
             }
         }
         .overlay(alignment: .top) { if model.chrome { topBar.transition(.opacity) } }
@@ -120,6 +120,11 @@ private struct StripReader: View {
             .frame(width: width * model.zoom)
         }
         .scrollPosition($position)
+        // The strip is laid out at once but not shown until it has been moved to where the person was: showing it first made
+        // the chapter open at the top and then jump.
+        .opacity(model.restoring ? 0 : 1)
+        .overlay { if model.restoring { AkiOpeningLoader(label: model.chapter(model.current).map(model.label)).transition(.opacity) } }
+        .animation(.easeOut(duration: 0.2), value: model.restoring)
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in scroll.y = y }
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.containerSize.height >= $0.contentSize.height - 2 } action: { _, end in scroll.atEnd = end }
         .onScrollPhaseChange { _, phase in
@@ -205,21 +210,28 @@ private struct StripReader: View {
 
     /// Puts the strip back where it was: the page, and how far down it, once that page's shape is known.
     private func restore() async {
-        guard let target = model.restore, let segment = model.segments.first(where: { $0.chapterID == target.chapter }) else { return }
+        guard let target = model.restore, let segment = model.segments.first(where: { $0.chapterID == target.chapter }) else {
+            model.restoring = false
+            return
+        }
         model.restoring = true
         scroll.target = nil
-        defer { model.restoring = false }
         try? await Task.sleep(for: .milliseconds(120))
         position.scrollTo(id: "\(target.chapter)|\(target.page)", anchor: .top)
         model.restore = nil
-        guard target.offset > 0.001, segment.pages.images.indices.contains(target.page) else { return }
-        let url = segment.pages.images[target.page]
-        for _ in 0..<40 where model.aspects[url] == nil { try? await Task.sleep(for: .milliseconds(100)) }
-        try? await Task.sleep(for: .milliseconds(200))
-        if let aspect = model.aspects[url] {
-            position.scrollTo(y: scroll.y + CGFloat(target.offset) * (width * model.zoom / aspect))
-            try? await Task.sleep(for: .milliseconds(250))
+        if target.offset > 0.001, segment.pages.images.indices.contains(target.page) {
+            let url = segment.pages.images[target.page]
+            // How far down the page is only known once its picture is: waited for, but not for ever.
+            for _ in 0..<15 where model.aspects[url] == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            try? await Task.sleep(for: .milliseconds(150))
+            if let aspect = model.aspects[url] {
+                position.scrollTo(y: scroll.y + CGFloat(target.offset) * (width * model.zoom / aspect))
+                try? await Task.sleep(for: .milliseconds(150))
+            }
         }
+        // Shown now, and the page counter told where it is (nothing reports it until the person scrolls).
+        model.restoring = false
+        model.report(chapter: target.chapter, page: target.page, offset: target.offset)
     }
 }
 

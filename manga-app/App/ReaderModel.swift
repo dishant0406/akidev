@@ -61,8 +61,8 @@ final class ReaderModel {
     var error: (title: String, message: String)?
     var restore: Restore?
     var restoreToken = 0
-    /// Set while the strip is being put back where it was, so the scrolling that does it is not saved.
-    @ObservationIgnored var restoring = false
+    /// Set while the strip is being put back where it was: the scrolling that does it is not saved, and the strip is not shown.
+    var restoring = false
     @ObservationIgnored private(set) var aspects: [String: CGFloat] = [:]
     @ObservationIgnored private var heightRatios: CGFloat = 0
     /// The height, as a multiple of the width, a page is likely to have: the average of those already seen, so a page
