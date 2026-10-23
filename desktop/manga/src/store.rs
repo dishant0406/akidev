@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -138,6 +138,9 @@ pub struct ExportSeries {
     /// When it was saved to the library; none for a series only read.
     pub saved_at: Option<i64>,
     pub categories: Vec<String>,
+    /// The name of the picture the person chose as its cover (kept in the engine's `covers` folder).
+    #[serde(default)]
+    pub custom_cover: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -247,6 +250,12 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 page INTEGER NOT NULL, offset REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
                 PRIMARY KEY (source, series, chapter, page));
              PRAGMA user_version = 4;",
+        )?;
+    }
+    if version < 5 {
+        db.execute_batch(
+            "ALTER TABLE series ADD COLUMN custom_cover TEXT;
+             PRAGMA user_version = 5;",
         )?;
     }
     Ok(())
@@ -507,7 +516,7 @@ impl Store {
     pub fn library(&self) -> anyhow::Result<Vec<LibraryItem>> {
         let db = self.db();
         let mut statement = db.prepare(&format!(
-            "SELECT s.source, s.id, s.title, s.cover, coalesce(c.total, 0), coalesce(c.total, 0) - coalesce(d.done, 0),
+            "SELECT s.source, s.id, s.title, coalesce(s.custom_cover, s.cover), coalesce(c.total, 0), coalesce(c.total, 0) - coalesce(d.done, 0),
                 (SELECT max(p.updated_at) FROM progress p WHERE p.source = s.source AND p.series = s.id),
                 s.saved_at, s.checked_at, s.status IN ('completed', 'cancelled')
              FROM series s {} WHERE s.saved_at IS NOT NULL",
@@ -559,7 +568,7 @@ impl Store {
     pub fn updates(&self) -> anyhow::Result<Vec<UpdateItem>> {
         let db = self.db();
         let mut statement = db.prepare(&format!(
-            "SELECT s.source, s.id, s.title, s.cover, coalesce(c.total, 0) - coalesce(d.done, 0), l.number, l.title, l.date_ms
+            "SELECT s.source, s.id, s.title, coalesce(s.custom_cover, s.cover), coalesce(c.total, 0) - coalesce(d.done, 0), l.number, l.title, l.date_ms
              FROM series s {} LEFT JOIN chapter l ON l.source = s.source AND l.series = s.id AND l.position = 0
              WHERE s.saved_at IS NOT NULL ORDER BY l.date_ms DESC",
             Store::COUNTS
@@ -630,7 +639,7 @@ impl Store {
     pub fn history(&self, limit: u32) -> anyhow::Result<Vec<HistoryItem>> {
         let db = self.db();
         let mut statement = db.prepare(
-            "SELECT p.source, p.series, coalesce(s.title, p.series), s.cover, p.chapter, c.number, c.title, p.updated_at, p.finished
+            "SELECT p.source, p.series, coalesce(s.title, p.series), coalesce(s.custom_cover, s.cover), p.chapter, c.number, c.title, p.updated_at, p.finished
              FROM progress p
              LEFT JOIN series s ON s.source = p.source AND s.id = p.series
              LEFT JOIN chapter c ON c.source = p.source AND c.series = p.series AND c.id = p.chapter
@@ -846,7 +855,7 @@ impl Store {
     pub fn export(&self) -> anyhow::Result<Export> {
         let db = self.db();
         let mut series = Vec::new();
-        let mut statement = db.prepare("SELECT source, id, title, cover, description, status, saved_at FROM series WHERE saved_at IS NOT NULL OR EXISTS (SELECT 1 FROM progress p WHERE p.source = series.source AND p.series = series.id)")?;
+        let mut statement = db.prepare("SELECT source, id, title, cover, description, status, saved_at, custom_cover FROM series WHERE saved_at IS NOT NULL OR EXISTS (SELECT 1 FROM progress p WHERE p.source = series.source AND p.series = series.id)")?;
         for row in statement.query_map([], |row| {
             Ok(ExportSeries {
                 source: row.get(0)?,
@@ -857,6 +866,7 @@ impl Store {
                 status: row.get(5)?,
                 saved_at: row.get(6)?,
                 categories: Vec::new(),
+                custom_cover: row.get(7)?,
             })
         })? {
             series.push(row?);
@@ -949,10 +959,10 @@ impl Store {
         }
         for series in &export.series {
             tx.execute(
-                "INSERT INTO series (source, id, title, cover, description, status, saved_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO series (source, id, title, cover, description, status, saved_at, custom_cover) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                  ON CONFLICT (source, id) DO UPDATE SET title = ?3, cover = coalesce(?4, cover), description = coalesce(?5, description),
-                                                        saved_at = coalesce(saved_at, ?7)",
-                params![series.source, series.id, series.title, series.cover, series.description, series.status, series.saved_at],
+                                                        saved_at = coalesce(saved_at, ?7), custom_cover = coalesce(custom_cover, ?8)",
+                params![series.source, series.id, series.title, series.cover, series.description, series.status, series.saved_at, series.custom_cover],
             )?;
             for name in &series.categories {
                 tx.execute(
@@ -979,6 +989,36 @@ impl Store {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    // --- covers --------------------------------------------------------------------------------
+
+    /// Sets (or, with none, takes away) the cover the person chose, and gives back the name it replaces, so the caller can
+    /// delete that file.
+    pub fn set_custom_cover(
+        &self,
+        source: &str,
+        series: &str,
+        name: Option<&str>,
+    ) -> anyhow::Result<Option<String>> {
+        let old = self.custom_cover(source, series)?;
+        self.db().execute(
+            "UPDATE series SET custom_cover = ?3 WHERE source = ?1 AND id = ?2",
+            params![source, series, name],
+        )?;
+        Ok(old)
+    }
+
+    pub fn custom_cover(&self, source: &str, series: &str) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .db()
+            .query_row(
+                "SELECT custom_cover FROM series WHERE source = ?1 AND id = ?2",
+                params![source, series],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten())
     }
 
     // --- bookmarks -----------------------------------------------------------------------------
@@ -1155,6 +1195,11 @@ impl Store {
             "INSERT OR IGNORE INTO series_category (source, series, category) SELECT ?3, ?4, category FROM series_category WHERE source = ?1 AND series = ?2",
             params![from_source, from_series, to_source, to_series],
         )?;
+        // The cover the person chose goes too, unless they chose one for the other series already.
+        tx.execute(
+            "UPDATE series SET custom_cover = coalesce(custom_cover, (SELECT custom_cover FROM series WHERE source = ?1 AND id = ?2)) WHERE source = ?3 AND id = ?4",
+            params![from_source, from_series, to_source, to_series],
+        )?;
         tx.execute(
             "UPDATE series SET saved_at = NULL WHERE source = ?1 AND id = ?2",
             params![from_source, from_series],
@@ -1245,6 +1290,97 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["c3", "c2", "c1"]
         );
+    }
+
+    #[test]
+    fn a_chosen_cover_wins_over_the_sources_until_it_is_taken_away() {
+        let store = store_with_series();
+        let shown = |store: &Store| store.library().unwrap()[0].cover.clone();
+        assert_eq!(shown(&store).as_deref(), Some("c.jpg"));
+        // Setting one gives back the file it replaces, so the caller can delete it.
+        assert_eq!(
+            store
+                .set_custom_cover("s", "a", Some("custom/one.jpg"))
+                .unwrap(),
+            None
+        );
+        assert_eq!(shown(&store).as_deref(), Some("custom/one.jpg"));
+        assert_eq!(
+            store
+                .set_custom_cover("s", "a", Some("custom/two.jpg"))
+                .unwrap()
+                .as_deref(),
+            Some("custom/one.jpg")
+        );
+        // The source fetching the series again does not take it away.
+        store
+            .upsert_series("s", "a", "Alpha", Some("new.jpg"), None, Status::Ongoing)
+            .unwrap();
+        assert_eq!(shown(&store).as_deref(), Some("custom/two.jpg"));
+        assert_eq!(
+            store.custom_cover("s", "a").unwrap().as_deref(),
+            Some("custom/two.jpg")
+        );
+        // Taking it away shows the source's again.
+        assert_eq!(
+            store.set_custom_cover("s", "a", None).unwrap().as_deref(),
+            Some("custom/two.jpg")
+        );
+        assert_eq!(shown(&store).as_deref(), Some("new.jpg"));
+    }
+
+    #[test]
+    fn a_chosen_cover_goes_into_a_backup_follows_a_move_and_is_named_when_a_series_goes() {
+        let store = store_with_series();
+        store
+            .sync_chapters("s", "a", &[chapter("c1", 1.0)])
+            .unwrap();
+        store
+            .set_custom_cover("s", "a", Some("custom/one.jpg"))
+            .unwrap();
+
+        let backup = store.export().unwrap();
+        assert_eq!(
+            backup.series[0].custom_cover.as_deref(),
+            Some("custom/one.jpg")
+        );
+        // An older backup has no such key and still reads.
+        let mut older = serde_json::to_value(&backup).unwrap();
+        older["series"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("custom_cover");
+        assert_eq!(
+            serde_json::from_value::<Export>(older).unwrap().series[0].custom_cover,
+            None
+        );
+        let restored = Store::in_memory().unwrap();
+        restored.import(&backup).unwrap();
+        assert_eq!(
+            restored.custom_cover("s", "a").unwrap().as_deref(),
+            Some("custom/one.jpg")
+        );
+
+        // Moving the series to another source takes the chosen cover along, unless the target has one.
+        store
+            .upsert_series("t", "b", "Alpha", None, None, Status::Ongoing)
+            .unwrap();
+        store
+            .sync_chapters("t", "b", &[chapter("x1", 1.0)])
+            .unwrap();
+        store.migrate("s", "a", "t", "b", 500).unwrap();
+        assert_eq!(
+            store.custom_cover("t", "b").unwrap().as_deref(),
+            Some("custom/one.jpg")
+        );
+
+        // The file's name is read before the series is forgotten.
+        assert_eq!(
+            store.custom_cover("t", "b").unwrap().as_deref(),
+            Some("custom/one.jpg")
+        );
+        store.delete_series("t", "b").unwrap();
+        assert_eq!(store.custom_cover("t", "b").unwrap(), None);
     }
 
     #[test]
@@ -1372,7 +1508,7 @@ mod tests {
     }
 
     #[test]
-    fn a_library_from_before_bookmarks_gets_the_table() {
+    fn an_older_library_gets_the_newer_tables_and_columns_and_keeps_what_it_had() {
         let store = store_with_series();
         store
             .set_progress(
@@ -1388,14 +1524,16 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        db.execute_batch("DROP TABLE bookmark; PRAGMA user_version = 3;")
-            .unwrap();
+        // Take back what versions 4 and 5 added, to be left with a library as version 3 made it.
+        db.execute_batch(
+            "DROP TABLE bookmark; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+        )
+        .unwrap();
         migrate(&db).unwrap();
         let version: i32 = db
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
-        // What was there before is untouched, and the new table works.
+        assert_eq!(version, SCHEMA_VERSION);
         let kept: i64 = db
             .query_row("SELECT count(*) FROM progress", [], |row| row.get(0))
             .unwrap();
@@ -1405,6 +1543,10 @@ mod tests {
             [],
         )
         .unwrap();
+        db.execute("UPDATE series SET custom_cover = 'custom/1.jpg'", [])
+            .unwrap();
+        // Opening it again changes nothing.
+        migrate(&db).unwrap();
     }
 
     #[test]

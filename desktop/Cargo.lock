@@ -241,6 +241,7 @@ dependencies = [
  "akidev-core",
  "akidev-manga",
  "anyhow",
+ "base64 0.22.1",
  "reqwest 0.13.5",
  "serde",
  "serde_json",

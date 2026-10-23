@@ -10,6 +10,8 @@ use akidev_manga::store::{Export, Progress, Store};
 use akidev_manga::theme::Themes;
 use akidev_manga::{downloads, local};
 use anyhow::Context;
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -439,6 +441,19 @@ fn plain_name(name: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// A cover the person chose is stored as `custom/<number>.jpg`; the picture is `covers/<number>.jpg` in the data folder.
+const CUSTOM: &str = "custom/";
+/// A chosen cover is a small JPEG, made by the app at about 600 px: far more than that is not a cover.
+const MAX_COVER: usize = 2 * 1024 * 1024;
+
+fn custom_name_is_sound(name: &str) -> bool {
+    name.strip_prefix(CUSTOM)
+        .and_then(|rest| rest.strip_suffix(".jpg"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.len() <= 20 && number.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
 fn now_ms() -> i64 {
     akidev_core::calendar::now_ms()
 }
@@ -454,6 +469,9 @@ fn file_url(path: &std::path::Path) -> String {
 struct Backup {
     version: u32,
     library: Export,
+    /// The pictures chosen as covers, by name, as base64: a few tens of kilobytes each.
+    #[serde(default)]
+    covers: BTreeMap<String, String>,
     repos: Vec<String>,
     sources: Vec<BackupSource>,
 }
@@ -1104,7 +1122,7 @@ impl Engine {
                 source: item.source,
                 id: item.id,
                 title: item.title,
-                cover: item.cover,
+                cover: self.shown_cover(item.cover),
                 unread: item.unread,
                 total: item.total,
                 last_read_ms: item.last_read_ms,
@@ -1126,7 +1144,7 @@ impl Engine {
                 source: item.source,
                 id: item.id,
                 title: item.title,
-                cover: item.cover,
+                cover: self.shown_cover(item.cover),
                 unread: item.unread,
                 latest_number: item.latest_number,
                 latest_title: item.latest_title,
@@ -1165,6 +1183,44 @@ impl Engine {
             },
             now_ms(),
         )?)
+    }
+
+    // --- covers --------------------------------------------------------------------------------
+
+    /// Makes a picture (a small JPEG) the series' cover, in place of the one the source gives, until it is cleared.
+    pub fn set_custom_cover(&self, source: String, series: String, jpeg: Vec<u8>) -> Result<()> {
+        if jpeg.len() > MAX_COVER || !jpeg.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            return Err(failed("that is not a picture the app can use as a cover"));
+        }
+        let name = format!("{CUSTOM}{}.jpg", now_ms());
+        std::fs::create_dir_all(self.dir.join("covers"))
+            .map_err(|error| failed(error.to_string()))?;
+        std::fs::write(self.cover_file(&name), &jpeg).map_err(|error| failed(error.to_string()))?;
+        match self.store.set_custom_cover(&source, &series, Some(&name)) {
+            Ok(old) => {
+                if let Some(old) = old {
+                    let _ = std::fs::remove_file(self.cover_file(&old));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = std::fs::remove_file(self.cover_file(&name));
+                Err(error.into())
+            }
+        }
+    }
+
+    /// Goes back to the cover the source gives.
+    pub fn clear_custom_cover(&self, source: String, series: String) -> Result<()> {
+        if let Some(old) = self.store.set_custom_cover(&source, &series, None)? {
+            let _ = std::fs::remove_file(self.cover_file(&old));
+        }
+        Ok(())
+    }
+
+    /// The address of the cover the person chose for a series, if they did.
+    pub fn custom_cover(&self, source: String, series: String) -> Result<Option<String>> {
+        Ok(self.shown_cover(self.store.custom_cover(&source, &series)?))
     }
 
     /// Marks a page; marking it again moves the mark within the page.
@@ -1308,6 +1364,9 @@ impl Engine {
                 &row.chapter,
             ));
         }
+        if let Some(name) = self.store.custom_cover(&source, &series)? {
+            let _ = std::fs::remove_file(self.cover_file(&name));
+        }
         if source == DEVICE && plain_name(&series) {
             let _ = std::fs::remove_dir_all(self.dir.join("local").join(&series));
         }
@@ -1336,9 +1395,21 @@ impl Engine {
                 document,
             });
         }
+        let library = self.store.export()?;
+        let mut covers = BTreeMap::new();
+        for name in library
+            .series
+            .iter()
+            .filter_map(|series| series.custom_cover.as_deref())
+        {
+            if let Ok(bytes) = std::fs::read(self.cover_file(name)) {
+                covers.insert(name.to_string(), BASE64.encode(bytes));
+            }
+        }
         let backup = Backup {
             version: 1,
-            library: self.store.export()?,
+            library,
+            covers,
             repos: self
                 .store
                 .repos()?
@@ -1361,12 +1432,34 @@ impl Engine {
                 backup.version
             )));
         }
-        self.store.import(&backup.library)?;
+        // A picture is written back before the series that names it; one that cannot be is left out, and the series
+        // simply shows the source's cover.
+        let mut library = backup.library;
+        for series in &mut library.series {
+            let Some(name) = series.custom_cover.clone() else {
+                continue;
+            };
+            let bytes = custom_name_is_sound(&name)
+                .then(|| backup.covers.get(&name))
+                .flatten()
+                .and_then(|text| BASE64.decode(text).ok())
+                .filter(|bytes| bytes.len() <= MAX_COVER && bytes.starts_with(&[0xFF, 0xD8, 0xFF]));
+            match bytes {
+                Some(bytes) => {
+                    let _ = std::fs::create_dir_all(self.dir.join("covers"));
+                    if std::fs::write(self.cover_file(&name), bytes).is_err() {
+                        series.custom_cover = None;
+                    }
+                }
+                None => series.custom_cover = None,
+            }
+        }
+        self.store.import(&library)?;
         for base in &backup.repos {
             let _ = self.add_repo(base.clone()).await;
         }
         let mut report = RestoreReport {
-            series: backup.library.series.len() as u32,
+            series: library.series.len() as u32,
             sources_installed: Vec::new(),
             sources_missing: Vec::new(),
         };
@@ -1473,6 +1566,23 @@ impl Engine {
 }
 
 impl Engine {
+    fn cover_file(&self, name: &str) -> PathBuf {
+        self.dir
+            .join("covers")
+            .join(name.trim_start_matches(CUSTOM))
+    }
+
+    /// What a listing's `cover` means on screen: an address, or the name of a chosen picture, which becomes a file address.
+    fn shown_cover(&self, cover: Option<String>) -> Option<String> {
+        cover.map(|cover| {
+            if custom_name_is_sound(&cover) {
+                file_url(&self.cover_file(&cover))
+            } else {
+                cover
+            }
+        })
+    }
+
     async fn download_one(&self, source: &str, series: &str, chapter: &str) -> Result<()> {
         let (source, series, chapter) =
             (source.to_string(), series.to_string(), chapter.to_string());
@@ -1536,7 +1646,7 @@ impl Engine {
                 source: item.source,
                 series: item.series,
                 title: item.title,
-                cover: item.cover,
+                cover: self.shown_cover(item.cover),
                 chapter: item.chapter,
                 chapter_number: item.chapter_number,
                 chapter_title: item.chapter_title,

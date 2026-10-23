@@ -35,9 +35,15 @@ struct SeriesView: View {
     @State private var downloadsDone = 0
     @State private var moving = false
     @State private var choosingCategories = false
+    @State private var choosingCover = false
+    /// The cover the person chose for this series, as an address, or nil.
+    @State private var chosenCover: String?
     @State private var problem: String?
 
     private let heroHeight: CGFloat = 470
+
+    /// The cover the person chose, else the source's.
+    private var cover: String? { chosenCover ?? detail?.cover ?? ref.cover }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -75,6 +81,11 @@ struct SeriesView: View {
         .akiHaptic(.error, trigger: problem)
         .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiSheet(isPresented: $moving) { MigrateSheet(ref: ref) { dismiss() } }
+        .akiPhotoPicker(isPresented: $choosingCover) { jpeg in
+            try? model.engine.setCustomCover(source: ref.source, series: ref.id, jpeg: jpeg)
+            chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
+            model.refresh()
+        }
         .akiSheet(isPresented: $choosingCategories) { CategoryPicker(series: [CategoryPicker.Series(source: ref.source, id: ref.id)]) }
         .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $forgetting) {
             try? model.engine.forgetSeries(source: ref.source, series: ref.id)
@@ -94,7 +105,7 @@ struct SeriesView: View {
             // Pulled down, the picture grows with the pull; pushed up it scrolls away as normal.
             let stretch = max(minY, 0)
             ZStack(alignment: .bottomLeading) {
-                AkiImage(url: detail?.cover ?? ref.cover, placeholder: 1.4, fill: true, free: true)
+                AkiImage(url: cover, placeholder: 1.4, fill: true, free: true)
                     .frame(width: geo.size.width, height: heroHeight + stretch)
                 LinearGradient(colors: [Aki.scrimTop, .clear, Aki.scrimBottom], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
@@ -130,6 +141,8 @@ struct SeriesView: View {
                     AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
                     AkiMenuItem(title: "Categories", icon: "folder") { choosingCategories = true },
+                    AkiMenuItem(title: "Choose a cover", icon: "image") { choosingCover = true },
+                    AkiMenuItem(title: "Reset cover", icon: "refresh") { clearCover() },
                     AkiMenuItem(title: "Move to another source", icon: "swap") { moving = true },
                     AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
                 ])
@@ -167,7 +180,7 @@ struct SeriesView: View {
             if chapters.isEmpty && loading { AkiSpinner().padding(40) }
             ForEach(chapters, id: \.id) { chapter in
                 AkiTap(action: { target = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0)) }) {
-                    AkiListCard(thumbnail: detail?.cover ?? ref.cover, label: label(chapter),
+                    AkiListCard(thumbnail: cover, label: label(chapter),
                                 title: chapterName(number: chapter.number, title: chapter.title),
                                 badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
                         AkiTap(action: { toggleRead(chapter) }) {
@@ -193,7 +206,7 @@ struct SeriesView: View {
             }
             ForEach(bookmarks, id: \.self) { mark in
                 AkiTap(action: { target = ReaderTarget(chapterID: mark.chapter, page: Int(mark.page), offset: mark.offset) }) {
-                    AkiListCard(thumbnail: detail?.cover ?? ref.cover, label: "Page \(mark.page + 1)",
+                    AkiListCard(thumbnail: cover, label: "Page \(mark.page + 1)",
                                 title: chapterName(number: mark.chapterNumber, title: mark.chapterTitle),
                                 badges: [shortDate(mark.createdMs)].compactMap { $0 }) {
                         AkiTap(action: { removeBookmark(mark) }) {
@@ -286,6 +299,7 @@ struct SeriesView: View {
         loading = !fresh
         loadKept()
         loadBookmarks()
+        chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
         async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
         if fresh {
             do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
@@ -342,6 +356,12 @@ struct SeriesView: View {
             if saved { putOnSaveCategory() }
             model.refresh()
         } catch { self.error = describe(error) }
+    }
+
+    private func clearCover() {
+        try? model.engine.clearCustomCover(source: ref.source, series: ref.id)
+        chosenCover = nil
+        model.refresh()
     }
 
     /// What Settings says saving does about categories: nothing, ask which, or put the series on the chosen one.

@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+/// The smallest thing that starts like a JPEG: the engine checks the first bytes and the size, not the picture.
+const JPEG: &[u8] = &[
+    0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xFF,
+    0xD9,
+];
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../manga/testdata");
 
 /// A server that answers by path (the query is ignored) from the madara fixtures, and serves the repository
@@ -461,6 +466,54 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
     );
     assert_eq!(engine.library().unwrap().len(), 2);
 
+    // A cover the person chose shows in the library instead of the source's, as a file on the device.
+    engine
+        .set_custom_cover("local".into(), "solo-leveling".into(), JPEG.to_vec())
+        .unwrap();
+    let shown = |engine: &Engine| {
+        engine
+            .library()
+            .unwrap()
+            .into_iter()
+            .find(|item| item.title == "Solo Leveling")
+            .unwrap()
+            .cover
+            .unwrap()
+    };
+    let chosen = shown(&engine);
+    assert!(
+        chosen.starts_with("file://") && chosen.ends_with(".jpg"),
+        "{chosen}"
+    );
+    assert_eq!(
+        engine
+            .custom_cover("local".into(), "solo-leveling".into())
+            .unwrap()
+            .as_deref(),
+        Some(chosen.as_str())
+    );
+    assert_eq!(
+        std::fs::read(chosen.trim_start_matches("file://")).unwrap(),
+        JPEG
+    );
+    // Anything that is not a small JPEG is refused, and the cover stays as it was.
+    assert!(
+        engine
+            .set_custom_cover(
+                "local".into(),
+                "solo-leveling".into(),
+                b"not a picture".to_vec()
+            )
+            .is_err()
+    );
+    assert_eq!(shown(&engine), chosen);
+    // Choosing another deletes the file it replaces.
+    engine
+        .set_custom_cover("local".into(), "solo-leveling".into(), JPEG.to_vec())
+        .unwrap();
+    let second = shown(&engine);
+    assert_ne!(second, chosen);
+    assert!(!std::path::Path::new(chosen.trim_start_matches("file://")).exists());
     // A marked page is part of the backup.
     engine
         .add_bookmark(
@@ -517,6 +570,16 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
         list.entries
             .iter()
             .any(|entry| entry.id == "chapter-178" && entry.finished)
+    );
+    // The chosen cover comes back as a file in the new install's own folder.
+    let restored_cover = shown(&fresh);
+    assert!(
+        restored_cover.starts_with("file://") && restored_cover.contains("/two/"),
+        "{restored_cover}"
+    );
+    assert_eq!(
+        std::fs::read(restored_cover.trim_start_matches("file://")).unwrap(),
+        JPEG
     );
     // A bookmark shows once its chapter is listed again.
     assert_eq!(
