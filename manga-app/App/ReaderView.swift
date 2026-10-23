@@ -217,16 +217,18 @@ private struct StripReader: View {
 
     private func chapterEnd(_ segment: Segment) -> some View {
         let next = model.newer(than: segment.chapterID)
+        let note = model.skippedNote(after: segment.chapterID)
         return VStack(spacing: 10) {
             AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
             if let next {
                 AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .muted)
+                if let note { AkiText(note, .caption, tone: .muted) }
             } else {
                 AkiText("You are up to date", .title, tone: .onMedia)
                 AkiButton("Back to the series", action: close).padding(.top, 6)
             }
         }
-        .frame(width: width, height: next == nil ? 220 : 96)
+        .frame(width: width, height: next == nil ? 220 : note == nil ? 96 : 124)
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { top in
             if top < Aki.screenSize.height * 0.9 { model.finish(segment.chapterID) }
         }
@@ -272,11 +274,19 @@ private struct PagedReader: View {
                     .tag(index)
             }
             endPage(segment).tag(count)
+            // Swiping on past the end page opens the next chapter.
+            if let next = model.newer(than: segment.chapterID) { continuePage(next).tag(count + 1) }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // A new chapter is a new set of pages: without this the view stays on the page position of the one before.
+        .id(segment.chapterID)
         .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
-        .onChange(of: model.pagedIndex) { _, index in
-            if index >= count {
+        .onChange(of: model.pagedIndex) { was, index in
+            // Only a swipe from the end page to the one after it opens the next chapter: when a chapter is replaced the
+            // selection can briefly sit past the end of the new one, which is not a swipe.
+            if index == count + 1 {
+                if was == count, let next = model.newer(than: segment.chapterID) { Task { await model.open(next.id, page: 0, offset: 0) } }
+            } else if index == count {
                 model.finish(segment.chapterID)
             } else {
                 model.report(chapter: segment.chapterID, page: index, offset: 0)
@@ -291,14 +301,30 @@ private struct PagedReader: View {
         let step: Int? = x > 0.7 ? (flipped ? -1 : 1) : x < 0.3 ? (flipped ? 1 : -1) : nil
         guard let step else { return model.chrome.toggle() }
         let next = model.pagedIndex + step
-        if (0...count).contains(next) {
+        if (0...(count + (model.newer(than: model.current) == nil ? 0 : 1))).contains(next) {
             withAnimation(AkiMotion.quick(reduceMotion)) { model.pagedIndex = next }
         }
+    }
+
+    /// Where the swipe past the end page lands while the next chapter is fetched; if that fails it says so and can try again.
+    private func continuePage(_ next: ChapterEntry) -> some View {
+        VStack(spacing: 14) {
+            if let error = model.error {
+                AkiText(error.title, .title, tone: .onMedia)
+                AkiButton("Try again", variant: .primary) { Task { await model.open(next.id, page: 0, offset: 0) } }
+            } else {
+                AkiText(model.label(next), .eyebrow, tone: .onMedia)
+                AkiSpinner()
+            }
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func endPage(_ segment: Segment) -> some View {
         VStack(spacing: 14) {
             AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
+            if let note = model.skippedNote(after: segment.chapterID) { AkiText(note, .caption, tone: .muted) }
             if let next = model.newer(than: segment.chapterID) {
                 AkiButton("Next · \(model.label(next))", variant: .primary, size: .large) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {

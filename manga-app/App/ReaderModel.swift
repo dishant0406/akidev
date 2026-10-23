@@ -107,6 +107,12 @@ final class ReaderModel {
         return chapters[at + 1]
     }
 
+    /// "Chapter 179 is missing from this source" when the chapter after this one skips ahead, else nil.
+    func skippedNote(after id: String) -> String? {
+        guard let this = chapter(id)?.number, let next = newer(than: id)?.number, let skipped = skippedChapters(from: this, to: next) else { return nil }
+        return skipped.count == 1 ? "Chapter \(skipped.lowerBound) is missing from this source" : "Chapters \(skipped.lowerBound) to \(skipped.upperBound) are missing from this source"
+    }
+
     func label(_ chapter: ChapterEntry) -> String {
         if let title = chapter.title { return title }
         if let number = chapter.number { return "Chapter \(number.formatted(.number.precision(.fractionLength(0...2))))" }

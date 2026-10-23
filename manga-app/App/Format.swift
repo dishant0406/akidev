@@ -20,6 +20,13 @@ func chaptersLabel(_ count: UInt32?) -> String? {
     return count == 1 ? "1 chapter" : "\(count) chapters"
 }
 
+/// The whole chapter numbers a source skips between a chapter and the next one it lists: 178.5 then 180 skips 179.
+func skippedChapters(from number: Double, to next: Double) -> ClosedRange<Int>? {
+    let first = Int(number.rounded(.down)) + 1
+    let last = Int(next.rounded(.down)) - 1
+    return first <= last ? first...last : nil
+}
+
 extension HistoryEntry {
     var key: String { "\(source)/\(series)" }
 }
