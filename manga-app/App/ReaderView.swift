@@ -50,6 +50,9 @@ struct ReaderView: View {
                 .padding(.horizontal, 16).padding(.vertical, 8)
                 .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 Spacer(minLength: 0)
+                if model.mode == .strip {
+                    AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? "Stop auto-scroll" : "Auto-scroll", onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
+                }
                 AkiIconButton(symbol: "sliders", label: "Reader settings", onMedia: true, scrim: Aki.scrimStrong) { settings = true }
             }
         }
@@ -77,6 +80,18 @@ struct ReaderView: View {
 
 // MARK: long strip
 
+/// The strip's scroll offset, kept where reading it does not redraw anything.
+private final class StripScroll {
+    var y: CGFloat = 0
+    /// Where auto-scroll has taken the strip to, so a slow speed is not lost to rounding; nil until it starts moving.
+    var target: CGFloat?
+    /// A finger is on the strip, or it is coasting.
+    var touched = false
+    /// Auto-scroll waits until this moment after a finger lifts.
+    var resumeAt: CFTimeInterval = 0
+    var atEnd = false
+}
+
 /// Pages one under another with no gap, the next chapter joined on as the end nears. Pinch to zoom the
 /// width (it snaps back to the screen width below 1×); when zoomed, drag sideways too.
 private struct StripReader: View {
@@ -84,8 +99,12 @@ private struct StripReader: View {
     let close: () -> Void
     @State private var position = ScrollPosition()
     @State private var width = Aki.screenSize.width
-    @State private var contentY: CGFloat = 0
+    /// Where the strip is scrolled to. Only read when putting it back, so a plain reference: a `@State` would be written every frame.
+    @State private var scroll = StripScroll()
     @State private var live: CGFloat = 1
+    @State private var clock = FrameClock()
+    @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var phase
 
     /// Every row of every chapter laid out so far, each with an id the scroll position can name.
     private struct Item: Identifiable {
@@ -96,6 +115,21 @@ private struct StripReader: View {
         let id: String
         let chapter: String
         let kind: Kind
+    }
+
+    /// How far a row is scrolled past the top of the screen, in steps of `step` points, and its height; changes only
+    /// when a step is crossed, so reading the position is not done on every frame of a scroll.
+    private struct RowSpan: Equatable {
+        static let step: CGFloat = 40
+        var bucket: Int
+        var height: Int
+        static let off = RowSpan(bucket: -1, height: 0)
+        init(bucket: Int, height: Int) { self.bucket = bucket; self.height = height }
+        init(frame: CGRect) {
+            guard frame.minY <= 1, frame.maxY > 1 else { self = .off; return }
+            self.init(bucket: Int(-frame.minY / Self.step), height: Int(frame.height))
+        }
+        var offset: Double { min(max(Double(CGFloat(bucket) * Self.step) / Double(max(height, 1)), 0), 1) }
     }
 
     private var items: [Item] {
@@ -114,12 +148,10 @@ private struct StripReader: View {
                 ForEach(items) { item in
                     switch item.kind {
                     case .page(let index, let url, let headers):
-                        AkiImage(url: url, headers: headers, placeholder: model.typicalHeightRatio, onAspect: { model.aspects[url] = $0 }, pageNumber: index)
+                        AkiImage(url: url, headers: headers, placeholder: model.typicalHeightRatio, onAspect: { model.noteAspect($0, of: url) }, pageNumber: index)
                             .frame(width: width * model.zoom)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { frame in
-                                if frame.minY <= 1, frame.maxY > 1 {
-                                    model.report(chapter: item.chapter, page: index, offset: min(max(-frame.minY / max(frame.height, 1), 0), 1))
-                                }
+                            .onGeometryChange(for: RowSpan.self) { RowSpan(frame: $0.frame(in: .scrollView)) } action: { span in
+                                if span != .off { model.report(chapter: item.chapter, page: index, offset: span.offset) }
                             }
                     case .end(let segment):
                         chapterEnd(segment)
@@ -130,7 +162,14 @@ private struct StripReader: View {
             .frame(width: width * model.zoom)
         }
         .scrollPosition($position)
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in contentY = y }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, y in scroll.y = y }
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.containerSize.height >= $0.contentSize.height - 2 } action: { _, end in scroll.atEnd = end }
+        .onScrollPhaseChange { _, phase in
+            scroll.touched = phase == .tracking || phase == .interacting || phase == .decelerating
+            // After a finger lifts, auto-scroll carries on from wherever the strip came to rest.
+            scroll.target = nil
+            if !scroll.touched { scroll.resumeAt = CACurrentMediaTime() + 1 }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .scaleEffect(live)
         .simultaneousGesture(
@@ -143,6 +182,37 @@ private struct StripReader: View {
         )
         .onTapGesture { model.chrome.toggle() }
         .task(id: model.restoreToken) { await restore() }
+        .onAppear { clock.tick = { step($0) } }
+        .onChange(of: model.autoScrolling) { _, on in on ? startAutoScroll() : stopAutoScroll() }
+        .onChange(of: phase) { _, new in if new != .active { model.autoScrolling = false } }
+        .onDisappear { model.autoScrolling = false; clock.stop() }
+    }
+
+    private func startAutoScroll() {
+        scroll.target = nil
+        model.chrome = false
+        UIApplication.shared.isIdleTimerDisabled = true
+        clock.start()
+    }
+
+    private func stopAutoScroll() {
+        clock.stop()
+        UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake
+    }
+
+    /// Moves the strip on by the time since the last frame times the speed. A finger on the strip, or just off it, holds it
+    /// still; so does the end of the last chapter (auto-scroll then stops) and a next chapter still being fetched.
+    private func step(_ seconds: CFTimeInterval) {
+        guard model.autoScrolling else { return }
+        if scroll.touched || CACurrentMediaTime() < scroll.resumeAt { return scroll.target = nil }
+        if scroll.atEnd {
+            scroll.target = nil
+            if model.segments.last.flatMap({ model.newer(than: $0.chapterID) }) == nil { model.autoScrolling = false }
+            return
+        }
+        let next = (scroll.target ?? scroll.y) + CGFloat(seconds) * app.prefs.autoScrollSpeed.points
+        scroll.target = next
+        position.scrollTo(y: next)
     }
 
     private func chapterEnd(_ segment: Segment) -> some View {
@@ -175,7 +245,7 @@ private struct StripReader: View {
         for _ in 0..<40 where model.aspects[url] == nil { try? await Task.sleep(for: .milliseconds(100)) }
         try? await Task.sleep(for: .milliseconds(200))
         if let aspect = model.aspects[url] {
-            position.scrollTo(y: contentY + CGFloat(target.offset) * (width * model.zoom / aspect))
+            position.scrollTo(y: scroll.y + CGFloat(target.offset) * (width * model.zoom / aspect))
             try? await Task.sleep(for: .milliseconds(250))
         }
     }

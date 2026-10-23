@@ -43,6 +43,8 @@ targets:
         # Only HTTPS through the system: no export-compliance questions on every upload.
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [fetch, processing]
+        # Lets a display link (the strip's auto-scroll) run above 60 Hz on iPhones with a ProMotion screen.
+        CADisableMinimumFrameDurationOnPhone: true
         BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh, live.akidev.manga.download]
         CFBundleURLTypes:
           - CFBundleURLName: live.akidev.manga

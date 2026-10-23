@@ -47,9 +47,10 @@ struct AkiPagePlaceholder: View {
             .frame(width: width, height: height)
     }
 
-    /// A band of light crossing left to right, slow and faint; the clock gives its place so nothing is started or stopped.
+    /// A band of light crossing left to right, slow and faint, drawn 30 times a second (it is slow, and several can be on screen
+    /// while the strip scrolls at the display's full rate); the clock gives its place so nothing is started or stopped.
     private var shimmer: some View {
-        TimelineView(.animation(paused: reduceMotion)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { timeline in
             GeometryReader { geometry in
                 let phase = reduceMotion ? 0.5 : (timeline.date.timeIntervalSinceReferenceDate / 1.6).truncatingRemainder(dividingBy: 1)
                 LinearGradient(colors: [.clear, Aki.onMedia.opacity(0.08), .clear], startPoint: .leading, endPoint: .trailing)

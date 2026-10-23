@@ -14,6 +14,9 @@ struct ReaderSettingsSheet: View {
                 choice("Reading mode, this series") {
                     AkiTabs(items: ReadingMode.allCases.map { ($0, $0.shortTitle) }, selection: Binding(get: { model.mode }, set: { model.setMode($0) }))
                 }
+                choice("Auto-scroll speed") {
+                    AkiTabs(items: AutoScrollSpeed.allCases.map { ($0, $0.title) }, selection: $prefs.autoScrollSpeed)
+                }
                 choice("Background") {
                     AkiTabs(items: ReaderBackground.allCases.map { ($0, $0.title) }, selection: $prefs.readerBackground)
                 }

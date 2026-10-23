@@ -16,7 +16,7 @@ ICONS = {
     "trash": "trash-bin-minimalistic", "folder": "folder", "folder-add": "add-folder", "filter": "filter",
     "order": "sort-from-top-to-bottom", "sliders": "tuning-2", "search": "magnifier", "bookmark": "bookmark",
     "bookmark-off": "bookmark-off", "check": "check-circle", "tick": "check", "clock": "clock-circle",
-    "more": "menu-dots", "play": "play", "previous": "skip-previous", "next": "skip-next", "keyboard": "keyboard",
+    "more": "menu-dots", "play": "play", "pause": "pause", "previous": "skip-previous", "next": "skip-next", "keyboard": "keyboard",
     "server": "server-2", "sparkles": "stars-minimalistic", "list": "list", "warning": "danger-triangle",
     "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip", "image": "gallery",
 }

@@ -53,19 +53,28 @@ final class ReaderModel {
     var page = 0
     var pagedIndex = 0
     var chrome = true
+    /// The strip is scrolling by itself.
+    var autoScrolling = false
     var loading = false
     var error: (title: String, message: String)?
     var restore: Restore?
     var restoreToken = 0
     /// Set while the strip is being put back where it was, so the scrolling that does it is not saved.
     @ObservationIgnored var restoring = false
-    @ObservationIgnored var aspects: [String: CGFloat] = [:]
+    @ObservationIgnored private(set) var aspects: [String: CGFloat] = [:]
+    @ObservationIgnored private var heightRatios: CGFloat = 0
     /// The height, as a multiple of the width, a page is likely to have: the average of those already seen, so a page
     /// that has not arrived holds about the room it will take and the strip does not jump when it does.
     var typicalHeightRatio: CGFloat {
         guard !aspects.isEmpty else { return 1.4 }
-        let average = aspects.values.reduce(0) { $0 + 1 / $1 } / CGFloat(aspects.count)
-        return min(max(average, 0.8), 8)
+        return min(max(heightRatios / CGFloat(aspects.count), 0.8), 8)
+    }
+
+    /// Notes a page's width-to-height ratio once its picture is known.
+    func noteAspect(_ aspect: CGFloat, of url: String) {
+        if let old = aspects[url] { heightRatios -= 1 / old }
+        aspects[url] = aspect
+        heightRatios += 1 / aspect
     }
     @ObservationIgnored private var cache: [String: PageList] = [:]
     @ObservationIgnored private var latest: (chapter: String, page: Int, offset: Double)?
@@ -143,6 +152,7 @@ final class ReaderModel {
 
     func setMode(_ new: ReadingMode) {
         guard new != mode, let segment = currentSegment else { return }
+        autoScrolling = false
         UserDefaults.standard.set(new.rawValue, forKey: "mode.\(ref.source).\(ref.id)")
         let offset = latest?.chapter == current ? latest?.offset ?? 0 : 0
         mode = new

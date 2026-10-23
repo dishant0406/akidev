@@ -35,6 +35,8 @@ final class Preferences {
     var invertTaps: Bool { didSet { defaults.set(invertTaps, forKey: "invertTaps") } }
     var readerBackground: ReaderBackground { didSet { defaults.set(readerBackground.rawValue, forKey: "readerBackground") } }
     var orientation: OrientationLock { didSet { defaults.set(orientation.rawValue, forKey: "orientation") } }
+    /// How fast the reader's strip scrolls when set going.
+    var autoScrollSpeed: AutoScrollSpeed { didSet { defaults.set(autoScrollSpeed.rawValue, forKey: "autoScrollSpeed") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
     /// A notification when a saved series gets new chapters (the person is asked for permission when turning it on).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
@@ -53,6 +55,7 @@ final class Preferences {
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
         keepAwake = defaults.bool(forKey: "keepAwake")
+        autoScrollSpeed = AutoScrollSpeed(rawValue: defaults.string(forKey: "autoScrollSpeed") ?? "") ?? .normal
         notifyUpdates = defaults.bool(forKey: "notifyUpdates")
         autoDownload = defaults.bool(forKey: "autoDownload")
         downloadOnWifiOnly = defaults.object(forKey: "downloadOnWifiOnly") as? Bool ?? true
