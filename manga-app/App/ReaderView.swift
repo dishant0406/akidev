@@ -42,15 +42,15 @@ struct ReaderView: View {
     private var topBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "back", label: "Back") { dismiss() }
+                AkiIconButton(symbol: "back", label: "Back", onMedia: true, scrim: Aki.scrimStrong) { dismiss() }
                 VStack(alignment: .leading, spacing: 0) {
                     AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
-                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .muted, lines: 1) }
+                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .onMedia, lines: 1).opacity(0.78) }
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
-                .akiGlass(.capsule, interactive: false)
+                .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 Spacer(minLength: 0)
-                AkiIconButton(symbol: "sliders", label: "Reader settings") { settings = true }
+                AkiIconButton(symbol: "sliders", label: "Reader settings", onMedia: true, scrim: Aki.scrimStrong) { settings = true }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -60,14 +60,14 @@ struct ReaderView: View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 if let older = model.older(than: model.current) {
-                    AkiIconButton(symbol: "previous", label: "Previous chapter") { Task { await model.open(older.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "previous", label: "Previous chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
                 let count = model.currentSegment?.pages.images.count ?? 0
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia)
                     .monospacedDigit()
-                    .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, interactive: false)
+                    .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 if let newer = model.newer(than: model.current) {
-                    AkiIconButton(symbol: "next", label: "Next chapter") { Task { await model.open(newer.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "next", label: "Next chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(newer.id, page: 0, offset: 0) } }
                 }
             }
         }
