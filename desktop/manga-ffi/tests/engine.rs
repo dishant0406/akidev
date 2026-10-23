@@ -449,6 +449,17 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
     );
     assert_eq!(engine.library().unwrap().len(), 2);
 
+    // A marked page is part of the backup.
+    engine
+        .add_bookmark(
+            "local".into(),
+            "solo-leveling".into(),
+            "chapter-178".into(),
+            4,
+            0.3,
+        )
+        .unwrap();
+
     // The backup goes into a fresh install: the library comes back, and the source is fetched again from its repository.
     let backup = engine.backup().unwrap();
     let fresh = Engine::new(temp.join("two").to_string_lossy().to_string()).unwrap();
@@ -474,6 +485,16 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
             .len(),
         0,
         "chapters are fetched again, not carried"
+    );
+    let marks = fresh
+        .bookmarks("local".into(), "solo-leveling".into())
+        .unwrap();
+    assert_eq!(
+        marks
+            .iter()
+            .map(|mark| (mark.chapter.as_str(), mark.page))
+            .collect::<Vec<_>>(),
+        [("chapter-178", 4)]
     );
     // The read state waits for the chapters to be fetched again, then shows.
     let list = fresh

@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -103,11 +103,26 @@ pub struct HistoryItem {
     pub finished: bool,
 }
 
+/// A page the person marked, with the chapter's number and title for showing it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BookmarkRow {
+    pub chapter: String,
+    pub page: u32,
+    /// How far down the page, 0 to 1 of its height (a long-strip page can be many screens tall).
+    pub offset: f64,
+    pub created_at: i64,
+    pub chapter_number: Option<f64>,
+    pub chapter_title: Option<String>,
+}
+
 /// What a backup holds of the library.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Export {
     pub series: Vec<ExportSeries>,
     pub progress: Vec<ExportProgress>,
+    /// Absent from backups made before bookmarks existed.
+    #[serde(default)]
+    pub bookmarks: Vec<ExportBookmark>,
     /// Category names in order.
     pub categories: Vec<String>,
 }
@@ -137,6 +152,16 @@ pub struct ExportProgress {
     /// Kept so a restore can say which chapter it was.
     pub chapter_number: Option<f64>,
     pub chapter_title: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExportBookmark {
+    pub source: String,
+    pub series: String,
+    pub chapter: String,
+    pub page: u32,
+    pub offset: f64,
+    pub created_at: i64,
 }
 
 /// What `sync_chapters` found.
@@ -204,6 +229,15 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
              CREATE TABLE listing (source TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (source, kind));
              CREATE INDEX series_saved ON series (saved_at) WHERE saved_at IS NOT NULL;
              PRAGMA user_version = 3;",
+        )?;
+    }
+    if version < 4 {
+        db.execute_batch(
+            "CREATE TABLE bookmark (
+                source TEXT NOT NULL, series TEXT NOT NULL, chapter TEXT NOT NULL,
+                page INTEGER NOT NULL, offset REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+                PRIMARY KEY (source, series, chapter, page));
+             PRAGMA user_version = 4;",
         )?;
     }
     Ok(())
@@ -827,6 +861,21 @@ impl Store {
         })? {
             progress.push(row?);
         }
+        let mut bookmarks = Vec::new();
+        let mut statement =
+            db.prepare("SELECT source, series, chapter, page, offset, created_at FROM bookmark")?;
+        for row in statement.query_map([], |row| {
+            Ok(ExportBookmark {
+                source: row.get(0)?,
+                series: row.get(1)?,
+                chapter: row.get(2)?,
+                page: row.get(3)?,
+                offset: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })? {
+            bookmarks.push(row?);
+        }
         let mut statement = db.prepare("SELECT name FROM category ORDER BY position, id")?;
         let categories = statement
             .query_map([], |row| row.get(0))?
@@ -834,6 +883,7 @@ impl Store {
         Ok(Export {
             series,
             progress,
+            bookmarks,
             categories,
         })
     }
@@ -848,6 +898,10 @@ impl Store {
                 .all(|series| sound(&series.source) && sound(&series.id))
                 && export
                     .progress
+                    .iter()
+                    .all(|row| sound(&row.source) && sound(&row.series) && sound(&row.chapter))
+                && export
+                    .bookmarks
                     .iter()
                     .all(|row| sound(&row.source) && sound(&row.series) && sound(&row.chapter)),
             "the backup holds a name that cannot be right"
@@ -880,8 +934,70 @@ impl Store {
                 params![row.source, row.series, row.chapter, row.page, row.offset, row.finished, row.updated_at],
             )?;
         }
+        for row in &export.bookmarks {
+            // A bookmark already here is kept as it is.
+            tx.execute(
+                "INSERT OR IGNORE INTO bookmark (source, series, chapter, page, offset, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![row.source, row.series, row.chapter, row.page, row.offset, row.created_at],
+            )?;
+        }
         tx.commit()?;
         Ok(())
+    }
+
+    // --- bookmarks -----------------------------------------------------------------------------
+
+    /// Marks a page. Marking it again moves the mark inside the page and keeps when it was first made.
+    pub fn add_bookmark(
+        &self,
+        source: &str,
+        series: &str,
+        chapter: &str,
+        page: u32,
+        offset: f64,
+        now_ms: i64,
+    ) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO bookmark (source, series, chapter, page, offset, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (source, series, chapter, page) DO UPDATE SET offset = ?5",
+            params![source, series, chapter, page, offset, now_ms],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_bookmark(
+        &self,
+        source: &str,
+        series: &str,
+        chapter: &str,
+        page: u32,
+    ) -> anyhow::Result<()> {
+        self.db().execute(
+            "DELETE FROM bookmark WHERE source = ?1 AND series = ?2 AND chapter = ?3 AND page = ?4",
+            params![source, series, chapter, page],
+        )?;
+        Ok(())
+    }
+
+    /// The pages marked in a series, newest mark first.
+    pub fn bookmarks(&self, source: &str, series: &str) -> anyhow::Result<Vec<BookmarkRow>> {
+        let db = self.db();
+        let mut statement = db.prepare(
+            "SELECT b.chapter, b.page, b.offset, b.created_at, c.number, c.title
+             FROM bookmark b LEFT JOIN chapter c ON c.source = b.source AND c.series = b.series AND c.id = b.chapter
+             WHERE b.source = ?1 AND b.series = ?2 ORDER BY b.created_at DESC, b.chapter, b.page",
+        )?;
+        let rows = statement.query_map(params![source, series], |row| {
+            Ok(BookmarkRow {
+                chapter: row.get(0)?,
+                page: row.get(1)?,
+                offset: row.get(2)?,
+                created_at: row.get(3)?,
+                chapter_number: row.get(4)?,
+                chapter_title: row.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     // --- downloads -----------------------------------------------------------------------------
@@ -990,6 +1106,11 @@ impl Store {
                 params![from_source, from_series, to_source, to_series, new_id, now_ms, old_id],
             )?;
             carried += moved as u32;
+            tx.execute(
+                "INSERT OR IGNORE INTO bookmark (source, series, chapter, page, offset, created_at)
+                 SELECT ?3, ?4, ?5, page, offset, created_at FROM bookmark WHERE source = ?1 AND series = ?2 AND chapter = ?6",
+                params![from_source, from_series, to_source, to_series, new_id, old_id],
+            )?;
         }
         tx.execute("UPDATE series SET saved_at = coalesce(saved_at, (SELECT saved_at FROM series WHERE source = ?1 AND id = ?2), ?5) WHERE source = ?3 AND id = ?4", params![from_source, from_series, to_source, to_series, now_ms])?;
         tx.execute(
@@ -1004,11 +1125,17 @@ impl Store {
         Ok(carried)
     }
 
-    /// Forgets a series: its entry, chapters, progress, categories and downloads.
+    /// Forgets a series: its entry, chapters, progress, bookmarks, categories and downloads.
     pub fn delete_series(&self, source: &str, series: &str) -> anyhow::Result<()> {
         let mut db = self.db();
         let tx = db.transaction()?;
-        for table in ["series_category", "progress", "download", "chapter"] {
+        for table in [
+            "series_category",
+            "progress",
+            "bookmark",
+            "download",
+            "chapter",
+        ] {
             tx.execute(
                 &format!("DELETE FROM {table} WHERE source = ?1 AND series = ?2"),
                 params![source, series],
@@ -1080,6 +1207,90 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["c3", "c2", "c1"]
         );
+    }
+
+    #[test]
+    fn a_page_is_bookmarked_once_and_the_list_is_newest_first() {
+        let store = store_with_series();
+        store
+            .sync_chapters("s", "a", &[chapter("c2", 2.0), chapter("c1", 1.0)])
+            .unwrap();
+        store.add_bookmark("s", "a", "c1", 3, 0.25, 100).unwrap();
+        store.add_bookmark("s", "a", "c2", 0, 0.0, 200).unwrap();
+        // Bookmarking the same page again moves the mark inside it and keeps when it was first made.
+        store.add_bookmark("s", "a", "c1", 3, 0.5, 300).unwrap();
+        let marks = store.bookmarks("s", "a").unwrap();
+        assert_eq!(
+            marks
+                .iter()
+                .map(|mark| (
+                    mark.chapter.as_str(),
+                    mark.page,
+                    mark.offset,
+                    mark.created_at
+                ))
+                .collect::<Vec<_>>(),
+            [("c2", 0, 0.0, 200), ("c1", 3, 0.5, 100)]
+        );
+        assert_eq!(marks[1].chapter_number, Some(1.0));
+        store.remove_bookmark("s", "a", "c2", 0).unwrap();
+        assert_eq!(store.bookmarks("s", "a").unwrap().len(), 1);
+        assert!(store.bookmarks("s", "other").unwrap().is_empty());
+    }
+
+    #[test]
+    fn bookmarks_go_into_a_backup_follow_a_move_and_leave_with_the_series() {
+        let store = store_with_series();
+        store
+            .sync_chapters("s", "a", &[chapter("c1", 1.0)])
+            .unwrap();
+        store.add_bookmark("s", "a", "c1", 2, 0.1, 100).unwrap();
+
+        // A backup carries them, and an older backup without the key still reads.
+        let backup = store.export().unwrap();
+        let json = serde_json::to_value(&backup).unwrap();
+        let mut older = json.clone();
+        older.as_object_mut().unwrap().remove("bookmarks");
+        assert!(
+            serde_json::from_value::<Export>(older)
+                .unwrap()
+                .bookmarks
+                .is_empty()
+        );
+        let restored = Store::in_memory().unwrap();
+        restored
+            .import(&serde_json::from_value(json).unwrap())
+            .unwrap();
+        assert_eq!(restored.bookmarks("s", "a").unwrap().len(), 1);
+
+        // Moving the series to another source carries a bookmark to the chapter with the same number.
+        store
+            .upsert_series("t", "b", "Alpha", None, None, Status::Ongoing)
+            .unwrap();
+        store
+            .sync_chapters("t", "b", &[chapter("x1", 1.0)])
+            .unwrap();
+        store.migrate("s", "a", "t", "b", 500).unwrap();
+        let moved = store.bookmarks("t", "b").unwrap();
+        assert_eq!((moved[0].chapter.as_str(), moved[0].page), ("x1", 2));
+
+        // Forgetting a series forgets its bookmarks.
+        store.delete_series("s", "a").unwrap();
+        assert!(store.bookmarks("s", "a").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_library_from_before_bookmarks_gets_the_table() {
+        let store = Store::in_memory().unwrap();
+        let db = store.db();
+        db.execute_batch("DROP TABLE bookmark; PRAGMA user_version = 3;")
+            .unwrap();
+        migrate(&db).unwrap();
+        db.execute(
+            "INSERT INTO bookmark (source, series, chapter, page, offset, created_at) VALUES ('s', 'a', 'c', 0, 0, 1)",
+            [],
+        )
+        .unwrap();
     }
 
     #[test]

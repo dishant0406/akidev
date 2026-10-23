@@ -259,6 +259,18 @@ pub struct UpdateEntry {
     pub latest_date_ms: Option<i64>,
 }
 
+/// A page the person marked.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Bookmark {
+    pub chapter: String,
+    pub page: u32,
+    /// How far down the page, 0 to 1 of its height.
+    pub offset: f64,
+    pub created_ms: i64,
+    pub chapter_number: Option<f64>,
+    pub chapter_title: Option<String>,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CategoryInfo {
     pub id: i64,
@@ -1153,6 +1165,49 @@ impl Engine {
             },
             now_ms(),
         )?)
+    }
+
+    /// Marks a page; marking it again moves the mark within the page.
+    pub fn add_bookmark(
+        &self,
+        source: String,
+        series: String,
+        chapter: String,
+        page: u32,
+        offset: f64,
+    ) -> Result<()> {
+        Ok(self
+            .store
+            .add_bookmark(&source, &series, &chapter, page, offset, now_ms())?)
+    }
+
+    pub fn remove_bookmark(
+        &self,
+        source: String,
+        series: String,
+        chapter: String,
+        page: u32,
+    ) -> Result<()> {
+        Ok(self
+            .store
+            .remove_bookmark(&source, &series, &chapter, page)?)
+    }
+
+    /// The pages marked in a series, newest first.
+    pub fn bookmarks(&self, source: String, series: String) -> Result<Vec<Bookmark>> {
+        Ok(self
+            .store
+            .bookmarks(&source, &series)?
+            .into_iter()
+            .map(|row| Bookmark {
+                chapter: row.chapter,
+                page: row.page,
+                offset: row.offset,
+                created_ms: row.created_at,
+                chapter_number: row.chapter_number,
+                chapter_title: row.chapter_title,
+            })
+            .collect())
     }
 
     pub fn mark(
