@@ -41,21 +41,23 @@ private struct PhotoPicking: ViewModifier {
                 guard let picked else { return }
                 item = nil
                 Task {
-                    guard let data = try? await picked.loadTransferable(type: Data.self), let jpeg = coverJPEG(data, width: width * scale) else { return }
+                    guard let data = try? await picked.loadTransferable(type: Data.self), let image = UIImage(data: data), let jpeg = coverJPEG(image, width: width * scale) else { return }
                     onPick(jpeg)
                 }
             }
     }
 }
 
-/// A picture's bytes as a JPEG at most `width` pixels wide (never enlarged): a cover is shown small.
-func coverJPEG(_ data: Data, width: CGFloat) -> Data? {
-    guard let image = UIImage(data: data), image.size.width > 0 else { return nil }
+/// A picture as a JPEG for a cover: at most `width` pixels wide (never enlarged) and no taller than a book cover is, the
+/// top of a tall picture (a webtoon strip) kept. Encoded once.
+func coverJPEG(_ image: UIImage, width: CGFloat) -> Data? {
+    guard image.size.width > 0, image.size.height > 0 else { return nil }
     let scale = min(1, width / image.size.width)
-    let size = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+    let drawn = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+    let size = CGSize(width: drawn.width, height: min(drawn.height, (drawn.width * 1.6).rounded()))
     let format = UIGraphicsImageRendererFormat.default()
     format.scale = 1
-    return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+    return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in image.draw(in: CGRect(origin: .zero, size: drawn)) }
 }
 
 /// Hands a file to the share sheet (save to Files, AirDrop, Messages).

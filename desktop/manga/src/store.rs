@@ -254,8 +254,10 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
     }
     if version < 5 {
         db.execute_batch(
-            "ALTER TABLE series ADD COLUMN custom_cover TEXT;
-             PRAGMA user_version = 5;",
+            "BEGIN;
+             ALTER TABLE series ADD COLUMN custom_cover TEXT;
+             PRAGMA user_version = 5;
+             COMMIT;",
         )?;
     }
     Ok(())
@@ -994,18 +996,28 @@ impl Store {
     // --- covers --------------------------------------------------------------------------------
 
     /// Sets (or, with none, takes away) the cover the person chose, and gives back the name it replaces, so the caller can
-    /// delete that file.
+    /// delete that file. The series must exist.
     pub fn set_custom_cover(
         &self,
         source: &str,
         series: &str,
         name: Option<&str>,
     ) -> anyhow::Result<Option<String>> {
-        let old = self.custom_cover(source, series)?;
-        self.db().execute(
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        let old: Option<String> = tx
+            .query_row(
+                "SELECT custom_cover FROM series WHERE source = ?1 AND id = ?2",
+                params![source, series],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| anyhow::anyhow!("no such series"))?;
+        tx.execute(
             "UPDATE series SET custom_cover = ?3 WHERE source = ?1 AND id = ?2",
             params![source, series, name],
         )?;
+        tx.commit()?;
         Ok(old)
     }
 
@@ -1195,10 +1207,15 @@ impl Store {
             "INSERT OR IGNORE INTO series_category (source, series, category) SELECT ?3, ?4, category FROM series_category WHERE source = ?1 AND series = ?2",
             params![from_source, from_series, to_source, to_series],
         )?;
-        // The cover the person chose goes too, unless they chose one for the other series already.
+        // The cover the person chose goes too (unless they chose one for the other series already), and the old series lets go
+        // of it: a file has one owner, so forgetting either series cannot take the picture from the other.
         tx.execute(
             "UPDATE series SET custom_cover = coalesce(custom_cover, (SELECT custom_cover FROM series WHERE source = ?1 AND id = ?2)) WHERE source = ?3 AND id = ?4",
             params![from_source, from_series, to_source, to_series],
+        )?;
+        tx.execute(
+            "UPDATE series SET custom_cover = NULL WHERE source = ?1 AND id = ?2",
+            params![from_source, from_series],
         )?;
         tx.execute(
             "UPDATE series SET saved_at = NULL WHERE source = ?1 AND id = ?2",
@@ -1374,13 +1391,38 @@ mod tests {
             Some("custom/one.jpg")
         );
 
-        // The file's name is read before the series is forgotten.
-        assert_eq!(
-            store.custom_cover("t", "b").unwrap().as_deref(),
-            Some("custom/one.jpg")
-        );
         store.delete_series("t", "b").unwrap();
         assert_eq!(store.custom_cover("t", "b").unwrap(), None);
+    }
+
+    #[test]
+    fn a_chosen_cover_needs_a_series_and_a_move_leaves_one_owner_of_the_file() {
+        let store = store_with_series();
+        // No such series: refused, not silently dropped.
+        assert!(
+            store
+                .set_custom_cover("s", "nope", Some("custom/1.jpg"))
+                .is_err()
+        );
+        store
+            .sync_chapters("s", "a", &[chapter("c1", 1.0)])
+            .unwrap();
+        store
+            .set_custom_cover("s", "a", Some("custom/1.jpg"))
+            .unwrap();
+        store
+            .upsert_series("t", "b", "Alpha", None, None, Status::Ongoing)
+            .unwrap();
+        store
+            .sync_chapters("t", "b", &[chapter("x1", 1.0)])
+            .unwrap();
+        store.migrate("s", "a", "t", "b", 500).unwrap();
+        // The file is now the other series' alone: forgetting the first one cannot take it away.
+        assert_eq!(store.custom_cover("s", "a").unwrap(), None);
+        assert_eq!(
+            store.custom_cover("t", "b").unwrap().as_deref(),
+            Some("custom/1.jpg")
+        );
     }
 
     #[test]

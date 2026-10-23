@@ -507,6 +507,32 @@ async fn the_library_survives_a_backup_into_a_fresh_install_and_holds_files_from
             .is_err()
     );
     assert_eq!(shown(&engine), chosen);
+    // Several in a row never share a file, however fast: the last one keeps its picture.
+    for _ in 0..5 {
+        engine
+            .set_custom_cover("local".into(), "solo-leveling".into(), JPEG.to_vec())
+            .unwrap();
+        let now = shown(&engine);
+        assert!(
+            std::path::Path::new(now.trim_start_matches("file://")).exists(),
+            "{now}"
+        );
+    }
+    // A series that does not exist cannot be given one, and nothing is left behind for it.
+    let before = std::fs::read_dir(temp.join("one").join("covers"))
+        .unwrap()
+        .count();
+    assert!(
+        engine
+            .set_custom_cover("local".into(), "nope".into(), JPEG.to_vec())
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_dir(temp.join("one").join("covers"))
+            .unwrap()
+            .count(),
+        before
+    );
     // Choosing another deletes the file it replaces.
     engine
         .set_custom_cover("local".into(), "solo-leveling".into(), JPEG.to_vec())
@@ -694,4 +720,52 @@ async fn a_pasted_source_carries_its_theme_and_outlives_it() {
         2
     );
     let _ = std::fs::remove_dir_all(&temp);
+}
+
+#[tokio::test]
+async fn a_backup_cannot_write_outside_the_covers_folder_or_name_a_picture_it_lacks() {
+    let temp = std::env::temp_dir().join(format!("akimanga-covers-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    std::fs::create_dir_all(&temp).unwrap();
+    let archive = temp.join("Story.cbz");
+    let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+    writer
+        .start_file("1.jpg", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(b"image").unwrap();
+    writer.finish().unwrap();
+    let engine = Engine::new(temp.join("one").to_string_lossy().to_string()).unwrap();
+    let id = engine
+        .import_file(archive.to_string_lossy().to_string())
+        .unwrap();
+    engine
+        .set_custom_cover("device".into(), id.clone(), JPEG.to_vec())
+        .unwrap();
+    let backup: serde_json::Value = serde_json::from_str(&engine.backup().unwrap()).unwrap();
+    assert_eq!(backup["covers"].as_object().unwrap().len(), 1);
+
+    // A name that climbs out of the folder, and a name whose picture the backup does not carry.
+    for (name, carried) in [("../../escaped.jpg", true), ("custom/123.jpg", false)] {
+        let mut hostile = backup.clone();
+        hostile["library"]["series"][0]["custom_cover"] = name.into();
+        if carried {
+            hostile["covers"] = serde_json::json!({ name: "/9j/4AAQ" });
+        } else {
+            hostile["covers"] = serde_json::json!({});
+        }
+        let fresh_dir = temp.join(format!("fresh-{carried}"));
+        let fresh = Engine::new(fresh_dir.to_string_lossy().to_string()).unwrap();
+        fresh.restore(hostile.to_string()).await.unwrap();
+        let cover = fresh.library().unwrap()[0].cover.clone();
+        // Not a picture of ours: the series simply has no custom cover, and nothing was written beside the folder.
+        assert!(
+            cover.is_none_or(|cover| !cover.contains("/covers/")),
+            "{name}"
+        );
+        assert!(!temp.join("escaped.jpg").exists() && !fresh_dir.join("escaped.jpg").exists());
+        assert_eq!(
+            fresh.custom_cover("device".into(), id.clone()).unwrap(),
+            None
+        );
+    }
 }

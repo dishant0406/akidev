@@ -22,6 +22,8 @@ struct LibraryView: View {
     @State private var selecting = false
     @State private var picked: Set<String> = []
     @State private var assigning = false
+    /// The series the category picker is for, fixed when it opens (the picked ones are cleared as it closes).
+    @State private var assignees: [CategoryPicker.Series] = []
     @State private var removing = false
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
 
@@ -29,7 +31,7 @@ struct LibraryView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Library", subtitle: selecting ? "\(picked.count) selected" : "\(model.library.count) saved") {
+                    AkiHeader(title: "Library", subtitle: selecting ? "\(pickedShown.count) selected" : "\(model.library.count) saved") {
                         AkiMenu(symbol: "filter", label: "Sort and filter", items:
                             LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.librarySort) { choose(option) } }
                             + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
@@ -51,15 +53,15 @@ struct LibraryView: View {
                 loadCategories()
             }
             .underTabBar()
-            .overlay(alignment: .bottom) { if selecting && !picked.isEmpty { selectionBar } }
+            .overlay(alignment: .bottom) { if tab == .saved && selecting && !pickedShown.isEmpty { selectionBar } }
             .background(AkiBackdrop())
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
         }
         .onAppear { model.refresh(); history = (try? model.engine.history(limit: 60)) ?? []; loadCategories() }
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear { loadCategories(); model.refresh() } })
-        .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: picked.compactMap(pickedSeries)).onDisappear { loadCategories(); picked = []; selecting = false } })
-        .akiConfirm("Remove \(picked.count) from your library?", message: "Their read state stays; you can save them again.", confirm: "Remove", isPresented: $removing) { removePicked() }
+        .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: assignees).onDisappear { loadCategories(); picked = []; selecting = false } })
+        .akiConfirm("Remove \(pickedShown.count) from your library?", message: "Their read state stays; you can save them again.", confirm: "Remove", isPresented: $removing) { removePicked() }
     }
 
     private var shown: [LibraryEntry] {
@@ -77,9 +79,8 @@ struct LibraryView: View {
         }
     }
 
-    private func pickedSeries(_ key: String) -> CategoryPicker.Series? {
-        model.library.first { $0.key == key }.map { CategoryPicker.Series(source: $0.source, id: $0.id) }
-    }
+    /// The series picked that are on screen: filtering after picking does not leave hidden ones to be changed unseen.
+    private var pickedShown: [LibraryEntry] { shown.filter { picked.contains($0.key) } }
 
     /// Each order puts the biggest first (the most recent, the most unread), except the title, which is A to Z. Ties fall back
     /// to the title so the order never reshuffles on its own.
@@ -147,7 +148,7 @@ struct LibraryView: View {
     private var selectionBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "folder", label: "Categories") { assigning = true }
+                AkiIconButton(symbol: "folder", label: "Categories") { assignees = pickedShown.map { CategoryPicker.Series(source: $0.source, id: $0.id) }; assigning = true }
                 AkiIconButton(symbol: "check", label: "Mark as read") { markPickedRead() }
                 AkiIconButton(symbol: "bookmark-off", label: "Remove from library", tint: Aki.destructive) { removing = true }
             }
@@ -156,7 +157,7 @@ struct LibraryView: View {
     }
 
     private func markPickedRead() {
-        for item in model.library where picked.contains(item.key) {
+        for item in pickedShown {
             let ids = ((try? model.engine.cachedChapters(source: item.source, series: item.id)) ?? []).map(\.id)
             try? model.engine.mark(source: item.source, series: item.id, chapters: ids, read: true)
         }
@@ -166,7 +167,7 @@ struct LibraryView: View {
     }
 
     private func removePicked() {
-        let chosen = model.library.filter { picked.contains($0.key) }
+        let chosen = pickedShown
         Task {
             for item in chosen { try? await model.engine.setInLibrary(source: item.source, id: item.id, saved: false) }
             model.refresh()
@@ -193,7 +194,11 @@ struct LibraryView: View {
         ]
     }
 
-    private func loadCategories() { categories = (try? model.engine.categories()) ?? [] }
+    /// Reads the categories, and leaves a shelf that has gone (deleted in the manage sheet) for All.
+    private func loadCategories() {
+        categories = (try? model.engine.categories()) ?? []
+        if category >= 0 && !categories.contains(where: { $0.id == category }) || category == -2 && categories.isEmpty { category = -1 }
+    }
 
     @ViewBuilder private var historyList: some View {
         if history.isEmpty {

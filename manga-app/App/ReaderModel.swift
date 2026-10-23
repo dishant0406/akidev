@@ -181,7 +181,7 @@ final class ReaderModel {
     func useCurrentPageAsCover() async -> Bool {
         guard let segment = currentSegment, segment.pages.images.indices.contains(page), let link = URL(string: segment.pages.images[page]),
               let image = await ImageLoader.shared.image(link, headers: segment.headers, widthPx: 600),
-              let jpeg = coverJPEG(image.jpegData(compressionQuality: 1) ?? Data(), width: 600) else { return false }
+              let jpeg = coverJPEG(image, width: 600) else { return false }
         return (try? engine.setCustomCover(source: ref.source, series: ref.id, jpeg: jpeg)) != nil
     }
 

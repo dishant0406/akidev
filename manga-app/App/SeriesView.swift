@@ -369,7 +369,9 @@ struct SeriesView: View {
         switch model.prefs.saveCategory {
         case 0: break
         case -1: choosingCategories = true
-        case let id: try? model.engine.setCategory(source: ref.source, series: ref.id, category: id, member: true)
+        // A category that has since been deleted (or came back from a backup under another number) is not one to put it on.
+        case let id where ((try? model.engine.categories()) ?? []).contains { $0.id == id }: try? model.engine.setCategory(source: ref.source, series: ref.id, category: id, member: true)
+        default: break
         }
     }
 

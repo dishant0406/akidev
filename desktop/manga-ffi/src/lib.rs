@@ -443,7 +443,7 @@ fn plain_name(name: &str) -> bool {
 
 /// A cover the person chose is stored as `custom/<number>.jpg`; the picture is `covers/<number>.jpg` in the data folder.
 const CUSTOM: &str = "custom/";
-/// A chosen cover is a small JPEG, made by the app at about 600 px: far more than that is not a cover.
+/// A chosen cover is a small JPEG (the app makes one under a megabyte at most); far more than this is not a cover.
 const MAX_COVER: usize = 2 * 1024 * 1024;
 
 fn custom_name_is_sound(name: &str) -> bool {
@@ -1192,13 +1192,18 @@ impl Engine {
         if jpeg.len() > MAX_COVER || !jpeg.starts_with(&[0xFF, 0xD8, 0xFF]) {
             return Err(failed("that is not a picture the app can use as a cover"));
         }
-        let name = format!("{CUSTOM}{}.jpg", now_ms());
         std::fs::create_dir_all(self.dir.join("covers"))
             .map_err(|error| failed(error.to_string()))?;
+        // The time in milliseconds, or the next number free: two covers set in one millisecond must not share a file.
+        let mut number = now_ms();
+        while self.cover_file(&format!("{CUSTOM}{number}.jpg")).exists() {
+            number += 1;
+        }
+        let name = format!("{CUSTOM}{number}.jpg");
         std::fs::write(self.cover_file(&name), &jpeg).map_err(|error| failed(error.to_string()))?;
         match self.store.set_custom_cover(&source, &series, Some(&name)) {
             Ok(old) => {
-                if let Some(old) = old {
+                if let Some(old) = old.filter(|old| *old != name) {
                     let _ = std::fs::remove_file(self.cover_file(&old));
                 }
                 Ok(())
@@ -1432,29 +1437,36 @@ impl Engine {
                 backup.version
             )));
         }
-        // A picture is written back before the series that names it; one that cannot be is left out, and the series
-        // simply shows the source's cover.
-        let mut library = backup.library;
-        for series in &mut library.series {
-            let Some(name) = series.custom_cover.clone() else {
+        let library = backup.library;
+        self.store.import(&library)?;
+        // Then the pictures the library now names: one for a series that already had a cover of its own is not wanted, and
+        // one that cannot be read or written leaves that series with the source's cover.
+        for series in &library.series {
+            let Some(name) = series.custom_cover.as_deref() else {
                 continue;
             };
-            let bytes = custom_name_is_sound(&name)
-                .then(|| backup.covers.get(&name))
+            if self
+                .store
+                .custom_cover(&series.source, &series.id)?
+                .as_deref()
+                != Some(name)
+            {
+                continue;
+            }
+            let bytes = custom_name_is_sound(name)
+                .then(|| backup.covers.get(name))
                 .flatten()
                 .and_then(|text| BASE64.decode(text).ok())
                 .filter(|bytes| bytes.len() <= MAX_COVER && bytes.starts_with(&[0xFF, 0xD8, 0xFF]));
-            match bytes {
-                Some(bytes) => {
-                    let _ = std::fs::create_dir_all(self.dir.join("covers"));
-                    if std::fs::write(self.cover_file(&name), bytes).is_err() {
-                        series.custom_cover = None;
-                    }
-                }
-                None => series.custom_cover = None,
+            let written = bytes.is_some_and(|bytes| {
+                std::fs::create_dir_all(self.dir.join("covers")).is_ok()
+                    && std::fs::write(self.cover_file(name), bytes).is_ok()
+            });
+            if !written {
+                self.store
+                    .set_custom_cover(&series.source, &series.id, None)?;
             }
         }
-        self.store.import(&library)?;
         for base in &backup.repos {
             let _ = self.add_repo(base.clone()).await;
         }
@@ -1572,15 +1584,16 @@ impl Engine {
             .join(name.trim_start_matches(CUSTOM))
     }
 
-    /// What a listing's `cover` means on screen: an address, or the name of a chosen picture, which becomes a file address.
+    /// What a listing's `cover` means on screen: an address, or the name of a chosen picture, which becomes a file address
+    /// (nothing, if the picture is gone).
     fn shown_cover(&self, cover: Option<String>) -> Option<String> {
-        cover.map(|cover| {
-            if custom_name_is_sound(&cover) {
-                file_url(&self.cover_file(&cover))
-            } else {
-                cover
-            }
-        })
+        let cover = cover?;
+        if !custom_name_is_sound(&cover) {
+            return Some(cover);
+        }
+        // A picture that is gone (a restore that lacked it, iOS clearing storage) is no cover, not a broken one.
+        let file = self.cover_file(&cover);
+        file.exists().then(|| file_url(&file))
     }
 
     async fn download_one(&self, source: &str, series: &str, chapter: &str) -> Result<()> {

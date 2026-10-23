@@ -53,7 +53,7 @@ struct SettingsView: View {
                 }
                 AkiSection(title: "Library", footer: "What saving a series does about categories. Make categories from the library's menu.") {
                     AkiCard(padding: 16) {
-                        AkiSelect(title: "When saving", selection: $prefs.saveCategory, options: [(Int64(0), "Nothing"), (Int64(-1), "Ask which")] + categories.map { ($0.id, "Put on \($0.name)") })
+                        AkiSelect(title: "When saving", selection: Binding(get: { categories.contains { $0.id == prefs.saveCategory } || prefs.saveCategory == -1 ? prefs.saveCategory : 0 }, set: { prefs.saveCategory = $0 }), options: [(Int64(0), "Nothing"), (Int64(-1), "Ask which")] + categories.map { ($0.id, "Put on \($0.name)") })
                     }
                 }
                 AkiSection(title: "Reading", footer: "A series keeps its own mode once you change it in the reader.") {
