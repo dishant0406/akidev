@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -124,6 +124,21 @@ pub struct BookRow {
     pub offset: u32,
     pub progress: f64,
     pub finished: bool,
+}
+
+/// A highlight in a book, with the words highlighted and the reader's note if there is one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BookMarkRow {
+    pub id: i64,
+    pub book: String,
+    pub chapter: u32,
+    pub start: u32,
+    pub end: u32,
+    /// Which of the highlight colours, counting from 0.
+    pub colour: u8,
+    pub note: Option<String>,
+    pub quote: String,
+    pub created_at: i64,
 }
 
 const BOOK_COLUMNS: &str = "id, title, authors, language, rtl, file, bytes, cover, added_at, opened_at, chapter, offset, progress, finished";
@@ -326,6 +341,20 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 chapter INTEGER NOT NULL DEFAULT 0, offset INTEGER NOT NULL DEFAULT 0,
                 progress REAL NOT NULL DEFAULT 0, finished INTEGER NOT NULL DEFAULT 0);
              PRAGMA user_version = 7;
+             COMMIT;",
+        )?;
+    }
+    if version < 8 {
+        // A highlight, with a note if the reader wrote one. `quote` is the words themselves, so the mark can be read
+        // (and exported) without opening the book.
+        db.execute_batch(
+            "BEGIN;
+             CREATE TABLE book_mark (
+                id INTEGER PRIMARY KEY, book TEXT NOT NULL REFERENCES book(id) ON DELETE CASCADE,
+                chapter INTEGER NOT NULL, start INTEGER NOT NULL, end INTEGER NOT NULL,
+                colour INTEGER NOT NULL DEFAULT 0, note TEXT, quote TEXT NOT NULL, created_at INTEGER NOT NULL);
+             CREATE INDEX book_mark_by_book ON book_mark (book, chapter, start);
+             PRAGMA user_version = 8;
              COMMIT;",
         )?;
     }
@@ -1193,6 +1222,51 @@ impl Store {
         Ok(())
     }
 
+    pub fn add_book_mark(&self, mark: &BookMarkRow) -> anyhow::Result<i64> {
+        let db = self.db();
+        db.execute(
+            "INSERT INTO book_mark (book, chapter, start, end, colour, note, quote, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![mark.book, mark.chapter, mark.start, mark.end, mark.colour, mark.note, mark.quote, mark.created_at],
+        )?;
+        Ok(db.last_insert_rowid())
+    }
+
+    /// A book's marks in reading order.
+    pub fn book_marks(&self, book: &str) -> anyhow::Result<Vec<BookMarkRow>> {
+        let db = self.db();
+        let mut statement = db.prepare(
+            "SELECT id, book, chapter, start, end, colour, note, quote, created_at FROM book_mark WHERE book = ?1 ORDER BY chapter, start",
+        )?;
+        let rows = statement.query_map(params![book], |row| {
+            Ok(BookMarkRow {
+                id: row.get(0)?,
+                book: row.get(1)?,
+                chapter: row.get(2)?,
+                start: row.get(3)?,
+                end: row.get(4)?,
+                colour: row.get(5)?,
+                note: row.get(6)?,
+                quote: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn set_book_mark(&self, id: i64, colour: u8, note: Option<&str>) -> anyhow::Result<()> {
+        self.db().execute(
+            "UPDATE book_mark SET colour = ?2, note = ?3 WHERE id = ?1",
+            params![id, colour, note.filter(|note| !note.trim().is_empty())],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_book_mark(&self, id: i64) -> anyhow::Result<()> {
+        self.db()
+            .execute("DELETE FROM book_mark WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     /// Takes a book off the shelf and returns it, so its files can be deleted.
     pub fn remove_book(&self, id: &str) -> anyhow::Result<Option<BookRow>> {
         let book = self.book(id)?;
@@ -1760,9 +1834,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 to 7 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 8 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();
@@ -1831,6 +1905,61 @@ mod tests {
         assert_eq!(removed.file, "a.epub");
         assert_eq!(ids(&store), ["b"]);
         assert!(store.remove_book("a").unwrap().is_none());
+    }
+
+    #[test]
+    fn marks_belong_to_a_book_are_kept_in_reading_order_and_go_with_it() {
+        let store = Store::in_memory().unwrap();
+        let book = BookRow {
+            id: "b".into(),
+            title: "T".into(),
+            authors: String::new(),
+            language: None,
+            rtl: false,
+            file: "b.epub".into(),
+            bytes: 1,
+            cover: None,
+            added_at: 1,
+            opened_at: None,
+            chapter: 0,
+            offset: 0,
+            progress: 0.0,
+            finished: false,
+        };
+        store.add_book(&book).unwrap();
+        let mark = |chapter, start| BookMarkRow {
+            id: 0,
+            book: "b".into(),
+            chapter,
+            start,
+            end: start + 5,
+            colour: 1,
+            note: None,
+            quote: format!("words {chapter}:{start}"),
+            created_at: 9,
+        };
+        let later = store.add_book_mark(&mark(2, 10)).unwrap();
+        store.add_book_mark(&mark(0, 50)).unwrap();
+        store.add_book_mark(&mark(0, 5)).unwrap();
+        let quotes: Vec<String> = store
+            .book_marks("b")
+            .unwrap()
+            .into_iter()
+            .map(|m| m.quote)
+            .collect();
+        assert_eq!(quotes, ["words 0:5", "words 0:50", "words 2:10"]);
+        store.set_book_mark(later, 3, Some("  a thought ")).unwrap();
+        let changed = store.book_marks("b").unwrap().pop().unwrap();
+        assert_eq!(
+            (changed.colour, changed.note.as_deref()),
+            (3, Some("  a thought "))
+        );
+        store.set_book_mark(later, 3, Some("   ")).unwrap();
+        assert_eq!(store.book_marks("b").unwrap().pop().unwrap().note, None);
+        store.remove_book_mark(later).unwrap();
+        assert_eq!(store.book_marks("b").unwrap().len(), 2);
+        store.remove_book("b").unwrap();
+        assert!(store.book_marks("b").unwrap().is_empty());
     }
 
     #[test]

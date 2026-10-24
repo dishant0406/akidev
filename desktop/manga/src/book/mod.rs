@@ -127,6 +127,128 @@ pub trait BookFile: Send {
     fn cover(&self) -> Option<String>;
     /// Which chapter a link written in the book points into, and where in it.
     fn target(&mut self, link: &str) -> Option<(usize, Option<String>)>;
+
+    /// Every place in one chapter where `query` is written, ignoring case.
+    fn search(&mut self, index: usize, query: &str) -> anyhow::Result<Vec<Hit>> {
+        let needle: Vec<char> = query.trim().chars().map(fold).collect();
+        if needle.is_empty() {
+            return Ok(Vec::new());
+        }
+        let chapter = self.chapter(index)?;
+        let mut hits = Vec::new();
+        for block in &chapter.blocks {
+            let Kind::Text(runs) = &block.kind else {
+                continue;
+            };
+            let chars: Vec<char> = runs.iter().flat_map(|run| run.text.chars()).collect();
+            let folded: Vec<char> = chars.iter().copied().map(fold).collect();
+            let mut at = 0;
+            while at + needle.len() <= folded.len() {
+                if folded[at..at + needle.len()] != needle[..] {
+                    at += 1;
+                    continue;
+                }
+                let before: usize = chars[..at].iter().map(|c| c.len_utf16()).sum();
+                hits.push(Hit {
+                    chapter: index as u32,
+                    offset: block.start + before as u32,
+                    snippet: snippet(&chars, at, needle.len()),
+                });
+                at += needle.len();
+            }
+        }
+        Ok(hits)
+    }
+
+    /// The text of the note a link points at, when it points at a short passage that is not a heading: what a footnote
+    /// mark shows in a card instead of taking the reader away.
+    fn note(&mut self, link: &str) -> Option<String> {
+        let (index, anchor) = self.target(link)?;
+        let chapter = self.chapter(index).ok()?;
+        let offset = chapter
+            .anchors
+            .iter()
+            .find(|found| found.id == anchor.as_deref().unwrap_or(""))?
+            .offset;
+        let next = chapter
+            .anchors
+            .iter()
+            .map(|found| found.offset)
+            .filter(|&at| at > offset)
+            .min()
+            .unwrap_or(u32::MAX);
+        let first = chapter
+            .blocks
+            .partition_point(|block| block.start <= offset)
+            .checked_sub(1)?;
+        let mut text = String::new();
+        for block in &chapter.blocks[first..] {
+            let Kind::Text(runs) = &block.kind else {
+                break;
+            };
+            if block.heading > 0 || (!text.is_empty() && block.start >= next) {
+                break;
+            }
+            if !text.is_empty() {
+                text.push_str("\n\n");
+            }
+            text.extend(runs.iter().map(|run| run.text.as_str()));
+            if text.chars().count() > NOTE_LIMIT {
+                return None;
+            }
+        }
+        let text = clean_note(&text);
+        Some(text).filter(|text| !text.is_empty())
+    }
+}
+
+/// A note longer than this is a chapter, not a note.
+const NOTE_LIMIT: usize = 700;
+
+/// One place a search found: the chapter, the position in it, and the words around it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hit {
+    pub chapter: u32,
+    pub offset: u32,
+    pub snippet: String,
+}
+
+fn fold(c: char) -> char {
+    c.to_lowercase().next().unwrap_or(c)
+}
+
+/// The words around a match, about a line's worth, with … where it is cut.
+fn snippet(chars: &[char], at: usize, length: usize) -> String {
+    let from = at.saturating_sub(32);
+    let to = (at + length + 48).min(chars.len());
+    let text: String = chars[from..to]
+        .iter()
+        .map(|c| if *c == '\u{2028}' { ' ' } else { *c })
+        .collect();
+    format!(
+        "{}{}{}",
+        if from > 0 { "…" } else { "" },
+        text.trim(),
+        if to < chars.len() { "…" } else { "" }
+    )
+}
+
+/// A note's text without its number ("1.", "[2]", "*") in front or the way back (↩) behind.
+fn clean_note(text: &str) -> String {
+    let text = text
+        .trim()
+        .trim_end_matches(['↩', '\u{fe0e}', '\u{fe0f}', ' '])
+        .trim();
+    let (first, rest) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
+    let is_mark = first.chars().count() <= 5
+        && first.chars().all(|c| {
+            c.is_ascii_digit() || matches!(c, '[' | ']' | '.' | ')' | '(' | '*' | '†' | '‡')
+        });
+    if is_mark && !rest.trim().is_empty() {
+        rest.trim().to_string()
+    } else {
+        text.to_string()
+    }
 }
 
 /// Opens the book at `path`, by what kind of file it is.

@@ -69,28 +69,64 @@ struct BookSettingsSheet: View {
     }
 }
 
-/// The book's table of contents: tap an entry to go there. The part being read is yellow.
+/// The book's table of contents, and what you highlighted: tap an entry to go there. The part being read is yellow.
 struct BookContentsSheet: View {
     let model: BookModel
     let close: () -> Void
+    @State private var tab = Tab.contents
+    @State private var exported: URL?
+
+    private enum Tab: Hashable { case contents, marks }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        AkiText("Contents", .title)
+                        AkiText(tab == .contents ? "Contents" : "Highlights", .title)
                         AkiText(model.info.title, .caption, tone: .muted, lines: 1)
                     }
-                    LazyVStack(spacing: 10) {
-                        ForEach(Array(model.contents.enumerated()), id: \.offset) { index, entry in
-                            row(entry, current: index == currentIndex).id(index)
+                    AkiTabs(items: [(Tab.contents, "Contents"), (Tab.marks, "Highlights \(model.marks.count)")], selection: $tab)
+                    switch tab {
+                    case .contents:
+                        LazyVStack(spacing: 10) {
+                            ForEach(Array(model.contents.enumerated()), id: \.offset) { index, entry in
+                                row(entry, current: index == currentIndex).id(index)
+                            }
                         }
+                    case .marks: marks
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 32)
             }
             .onAppear { DispatchQueue.main.async { proxy.scrollTo(currentIndex, anchor: .center) } }
+        }
+    }
+
+    @ViewBuilder private var marks: some View {
+        if model.marks.isEmpty {
+            AkiEmptyState(title: "No highlights yet", message: "Press and hold a word in the book, then drag the handles to choose what to highlight.").frame(minHeight: 240)
+        } else {
+            LazyVStack(spacing: 10) {
+                ForEach(model.marks, id: \.id) { mark in
+                    AkiTap(action: { model.open(mark); close() }) {
+                        HStack(alignment: .top, spacing: 12) {
+                            HighlightDot(colour: Int(mark.colour)).padding(.top, 5)
+                            VStack(alignment: .leading, spacing: 6) {
+                                AkiText(mark.quote, .body, lines: 4)
+                                if let note = mark.note { AkiText(note, .caption, tone: .muted, lines: 4) }
+                                AkiText(model.title(ofChapter: Int(mark.chapter)), .caption, tone: .muted, lines: 1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 18).padding(.vertical, 14)
+                        .background(Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
+                    .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { model.remove(mark) }])
+                }
+            }
+            if let exported { AkiShare(title: "Share as Markdown", icon: "share", file: exported) }
         }
     }
 
@@ -109,6 +145,101 @@ struct BookContentsSheet: View {
             .padding(.leading, 18 + CGFloat(min(entry.depth, 3)) * 16).padding(.trailing, 18).padding(.vertical, 14)
             .background(current ? Aki.primary : Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+}
+
+/// Words in the book, and where they are.
+struct BookSearchSheet: View {
+    let model: BookModel
+    let close: () -> Void
+    @State private var query = ""
+    @State private var asked = ""
+    @State private var hits: [BookHit] = []
+    @State private var searching = false
+    @State private var task: Task<Void, Never>?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AkiText("Search", .title)
+                AkiInput(placeholder: "Words in this book", text: $query, icon: "search", onSubmit: run, onClear: { task?.cancel(); hits = []; asked = ""; searching = false })
+                if searching && hits.isEmpty {
+                    AkiSpinner().frame(maxWidth: .infinity, minHeight: 80)
+                } else if !asked.isEmpty && hits.isEmpty {
+                    AkiText("Nothing for “\(asked)”.", .body, tone: .muted)
+                }
+                LazyVStack(spacing: 10) {
+                    ForEach(Array(hits.enumerated()), id: \.offset) { _, hit in
+                        AkiTap(action: { model.open(hit, length: asked.utf16.count); close() }) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                AkiText(hit.snippet, .body, lines: 3)
+                                AkiText(model.title(ofChapter: Int(hit.chapter)), .caption, tone: .muted, lines: 1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 18).padding(.vertical, 14)
+                            .background(Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        }
+                    }
+                }
+                if searching && !hits.isEmpty { AkiSpinner().frame(maxWidth: .infinity) }
+            }
+            .padding(24)
+        }
+        .onDisappear { task?.cancel() }
+    }
+
+    private func run() {
+        let words = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        task?.cancel()
+        hits = []
+        asked = words
+        guard !words.isEmpty else { return }
+        searching = true
+        task = Task {
+            await model.search(words) { found in hits += found }
+            if !Task.isCancelled { searching = false }
+        }
+    }
+}
+
+/// A note on a highlight.
+struct BookNoteSheet: View {
+    let model: BookModel
+    @State var draft: NoteDraft
+    let close: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AkiText("Note", .title)
+                AkiText(draft.quote, .caption, tone: .muted, lines: 4)
+                AkiTextArea(text: $draft.text, height: 140, prose: true)
+                AkiButton("Save", variant: .primary, size: .large, fullWidth: true) { model.saveNote(draft); close() }
+            }
+            .padding(24)
+        }
+    }
+}
+
+/// A footnote, in a card over the page, with a way to go to it.
+struct BookFootnoteSheet: View {
+    let model: BookModel
+    let note: Footnote
+    let close: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                AkiText("Note", .title)
+                AkiText(note.text, .body)
+                AkiButton("Go to the note", icon: "forward", fullWidth: true) {
+                    close()
+                    Task { await model.follow(inBook: note.link) }
+                }
+            }
+            .padding(24)
         }
     }
 }

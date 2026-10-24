@@ -546,3 +546,32 @@ fn odd_inputs_do_not_break_a_book() {
             .all(|block| block.first_line.is_finite() && block.left.is_finite())
     );
 }
+
+#[test]
+fn search_finds_every_place_with_its_position_and_notes_come_out_as_text() {
+    let mut book = book::open(&standard("r.epub")).unwrap();
+    let hits = book.search(0, "DARK and").unwrap();
+    assert_eq!(hits.len(), 1);
+    let chapter = book.chapter(0).unwrap();
+    // The position is where the words are in the chapter: the paragraph's start plus the words before.
+    assert_eq!(
+        hits[0].offset,
+        chapter.blocks[1].start + "It was a ".encode_utf16().count() as u32
+    );
+    assert!(hits[0].snippet.contains("a dark and stormy"));
+    assert_eq!(book.search(0, "the").unwrap().len(), 1);
+    assert!(book.search(0, "  ").unwrap().is_empty());
+    assert!(book.search(0, "zzzz").unwrap().is_empty());
+    assert!(book.search(9, "a").is_err());
+
+    // The mark in the first chapter links to a short passage in the second: that passage is the note, which runs to the
+    // next id or the end of the file.
+    assert_eq!(
+        book.note("OEBPS/text/two.xhtml#note1").as_deref(),
+        Some("A note.\n\nUnclosed bold")
+    );
+    // A heading is not a note, a file with no id is not a note, and neither is a link to nowhere.
+    assert_eq!(book.note("OEBPS/text/one.xhtml#second"), None);
+    assert_eq!(book.note("OEBPS/text/two.xhtml"), None);
+    assert_eq!(book.note("OEBPS/nowhere.xhtml#x"), None);
+}

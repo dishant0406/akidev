@@ -6,7 +6,7 @@ use akidev_manga::fetch::{Challenge, Unreachable};
 use akidev_manga::model as m;
 use akidev_manga::repo;
 use akidev_manga::source::{Info, Source};
-use akidev_manga::store::{BookRow, Export, Progress, Store};
+use akidev_manga::store::{BookMarkRow, BookRow, Export, Progress, Store};
 use akidev_manga::theme::Themes;
 use akidev_manga::{downloads, local};
 use anyhow::Context;
@@ -1884,6 +1884,42 @@ pub struct BookRun {
     pub link: Option<String>,
 }
 
+/// A place a search found.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookHit {
+    pub chapter: u32,
+    pub offset: u32,
+    pub snippet: String,
+}
+
+/// A highlight, with the reader's note if there is one.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookHighlight {
+    pub id: i64,
+    pub chapter: u32,
+    pub start: u32,
+    pub end: u32,
+    pub colour: u8,
+    pub note: Option<String>,
+    pub quote: String,
+    pub created_ms: i64,
+}
+
+impl From<BookMarkRow> for BookHighlight {
+    fn from(row: BookMarkRow) -> BookHighlight {
+        BookHighlight {
+            id: row.id,
+            chapter: row.chapter,
+            start: row.start,
+            end: row.end,
+            colour: row.colour,
+            note: row.note,
+            quote: row.quote,
+            created_ms: row.created_at,
+        }
+    }
+}
+
 /// Where a link inside a book goes.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BookTarget {
@@ -1988,6 +2024,27 @@ impl BookReader {
         Ok(self.book.lock().unwrap().resource(&path)?)
     }
 
+    /// Every place in one chapter where the words are written. Call it chapter by chapter, off the main thread.
+    pub fn search(&self, chapter: u32, query: String) -> Result<Vec<BookHit>> {
+        Ok(self
+            .book
+            .lock()
+            .unwrap()
+            .search(chapter as usize, &query)?
+            .into_iter()
+            .map(|hit| BookHit {
+                chapter: hit.chapter,
+                offset: hit.offset,
+                snippet: hit.snippet,
+            })
+            .collect())
+    }
+
+    /// The text of the footnote a link points at, when it points at one.
+    pub fn note(&self, link: String) -> Option<String> {
+        self.book.lock().unwrap().note(&link)
+    }
+
     /// Which chapter a link in the text goes to, when it goes into the book.
     pub fn target(&self, link: String) -> Option<BookTarget> {
         let (chapter, anchor) = self.book.lock().unwrap().target(&link)?;
@@ -2068,6 +2125,48 @@ impl Engine {
         Ok(self
             .store
             .set_book_progress(&id, chapter, offset, progress, finished, now_ms())?)
+    }
+
+    /// Keeps a highlight: the chapter, where it starts and ends, a colour (0 to 3) and the words themselves.
+    pub fn add_book_mark(
+        &self,
+        book: String,
+        chapter: u32,
+        start: u32,
+        end: u32,
+        colour: u8,
+        quote: String,
+    ) -> Result<i64> {
+        Ok(self.store.add_book_mark(&BookMarkRow {
+            id: 0,
+            book,
+            chapter,
+            start,
+            end,
+            colour,
+            note: None,
+            quote,
+            created_at: now_ms(),
+        })?)
+    }
+
+    /// A book's highlights in reading order.
+    pub fn book_marks(&self, book: String) -> Result<Vec<BookHighlight>> {
+        Ok(self
+            .store
+            .book_marks(&book)?
+            .into_iter()
+            .map(BookHighlight::from)
+            .collect())
+    }
+
+    /// Changes a highlight's colour and note (an empty note is none).
+    pub fn set_book_mark(&self, id: i64, colour: u8, note: Option<String>) -> Result<()> {
+        Ok(self.store.set_book_mark(id, colour, note.as_deref())?)
+    }
+
+    pub fn remove_book_mark(&self, id: i64) -> Result<()> {
+        Ok(self.store.remove_book_mark(id)?)
     }
 
     /// Takes a book off the shelf and deletes its file.

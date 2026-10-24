@@ -44,13 +44,14 @@ struct BooksView: View {
         }
         .onAppear(perform: load)
         #if DEBUG
-        // `-openBook 2` opens the third book on the shelf, to drive the reader from a script.
+        // `-openBook 2` opens the third book on the shelf, `-openBook Pride` the first whose title has that word, to drive the reader
+        // from a script.
         .task {
-            guard UserDefaults.standard.object(forKey: "openBook") != nil else { return }
-            let index = UserDefaults.standard.integer(forKey: "openBook")
+            guard let which = UserDefaults.standard.string(forKey: "openBook") else { return }
             load()
-            for _ in 0..<20 where !books.indices.contains(index) { try? await Task.sleep(for: .milliseconds(200)) }
-            if books.indices.contains(index) { reading = books[index] }
+            func pick() -> BookInfo? { Int(which).flatMap { books.indices.contains($0) ? books[$0] : nil } ?? books.first { $0.title.localizedCaseInsensitiveContains(which) } }
+            for _ in 0..<20 where pick() == nil { try? await Task.sleep(for: .milliseconds(200)) }
+            reading = pick()
         }
         #endif
         .onChange(of: model.addingBook, initial: true) { _, now in if now { model.addingBook = false; importing = true } }

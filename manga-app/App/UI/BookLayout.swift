@@ -93,6 +93,77 @@ final class ChapterLayout: @unchecked Sendable {
         return CTFramesetterCreateFrame(framesetter, CFRange(location: range.location, length: range.length), CGPath(rect: CGRect(origin: .zero, size: size), transform: nil), nil)
     }
 
+    /// The boxes a stretch of the book's text takes on a page, one for each line it touches, in the text area with y down.
+    func boxes(from start: Int, to end: Int, page: Int, in frame: CTFrame) -> [CGRect] {
+        let range = pages[page]
+        let from = max(display(of: start), range.location), to = min(display(of: end), NSMaxRange(range))
+        guard from < to else { return [] }
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        var boxes: [CGRect] = []
+        for (line, origin) in zip(lines, origins) {
+            let covered = CTLineGetStringRange(line)
+            let low = max(from, covered.location), high = min(to, covered.location + covered.length)
+            guard low < high else { continue }
+            var ascent: CGFloat = 0, descent: CGFloat = 0
+            CTLineGetTypographicBounds(line, &ascent, &descent, nil)
+            let left = origin.x + CTLineGetOffsetForStringIndex(line, low, nil)
+            let right = origin.x + CTLineGetOffsetForStringIndex(line, high, nil)
+            boxes.append(CGRect(x: left, y: size.height - origin.y - ascent, width: max(right - left, 2), height: ascent + descent))
+        }
+        return boxes
+    }
+
+    /// Where in the book's text a point (in the text area, y down) is: the nearest letter, on the nearest line.
+    func position(at point: CGPoint, page: Int) -> Int? {
+        let frame = frame(page: page)
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        guard !lines.isEmpty else { return nil }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        let y = size.height - point.y
+        // The line whose middle is nearest: a point in the upper half of a line belongs to that line, not the one above.
+        func middle(_ index: Int) -> CGFloat {
+            var ascent: CGFloat = 0, descent: CGFloat = 0
+            CTLineGetTypographicBounds(lines[index], &ascent, &descent, nil)
+            return origins[index].y + (ascent - descent) / 2
+        }
+        let nearest = lines.indices.min { abs(middle($0) - y) < abs(middle($1) - y) }!
+        let at = CTLineGetStringIndexForPosition(lines[nearest], CGPoint(x: point.x - origins[nearest].x, y: 0))
+        guard at != kCFNotFound else { return nil }
+        let range = pages[page]
+        return source(of: min(max(at, range.location), max(NSMaxRange(range) - 1, range.location)))
+    }
+
+    /// The word around a position, as a stretch of the book's text.
+    func word(around position: Int) -> (start: Int, end: Int)? {
+        let string = text.string as NSString
+        var low = display(of: position), high = low
+        guard low < string.length else { return nil }
+        func inWord(_ index: Int) -> Bool {
+            let c = string.character(at: index)
+            guard let scalar = Unicode.Scalar(c) else { return true }
+            return CharacterSet.alphanumerics.contains(scalar) || c == 0x00AD || c == 0x2019 || c == 0x27
+        }
+        // A point between a word and the space after it belongs to the word.
+        if !inWord(low), low > 0, inWord(low - 1) { low -= 1; high = low }
+        guard inWord(low) else { return nil }
+        while low > 0, inWord(low - 1) { low -= 1 }
+        while high < string.length, inWord(high) { high += 1 }
+        return (source(of: low), source(of: high))
+    }
+
+    /// The words of a stretch of the book's text, as a person would read them.
+    func words(from start: Int, to end: Int) -> String {
+        let string = text.string as NSString
+        let from = display(of: start), to = min(display(of: end), string.length)
+        guard from < to else { return "" }
+        return string.substring(with: NSRange(location: from, length: to - from))
+            .replacingOccurrences(of: "\u{00AD}", with: "").replacingOccurrences(of: "\u{FFFC}", with: "")
+            .replacingOccurrences(of: "\u{2028}", with: " ").replacingOccurrences(of: "\n", with: " ")
+    }
+
     /// What a tap at `point` (in the text area, y down) lands on: the link under it, if any.
     func link(at point: CGPoint, page: Int) -> String? {
         let frame = frame(page: page)

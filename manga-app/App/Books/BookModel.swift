@@ -12,8 +12,8 @@ final class BookModel: BookPaging {
     let info: BookInfo
     let contents: [BookEntry]
     let chapterCount: Int
-    private let reader: BookReader
-    private let engine: Engine
+    let reader: BookReader
+    let engine: Engine
     private let sizes: [UInt64]
     private let saveStyle: (BookStyle) -> Void
     private let invertTaps: Bool
@@ -37,12 +37,23 @@ final class BookModel: BookPaging {
     /// A link to a web page, waiting for the person to say whether to leave the app.
     var externalLink: URL?
     /// Where the person was before following a link inside the book: the way back.
-    private(set) var trail: [Spot] = []
+    var trail: [Spot] = []
     var systemDark = false
+    /// The reader's highlights, in reading order.
+    var marks: [BookHighlight] { didSet { overlaysChanged() } }
+    /// The words selected now, while a long press or the handles are at work.
+    var selection: BookSpan? { didSet { overlaysChanged() } }
+    /// The words a search found, shown until the page is turned.
+    var found: BookSpan? { didSet { overlaysChanged() } }
+    @ObservationIgnored var foundPage: BookPlace?
+    /// A highlight whose note is being written.
+    var noteDraft: NoteDraft?
+    /// A footnote shown in a card.
+    var footnote: Footnote?
     private(set) var screen = CGSize.zero
     private(set) var safe = UIEdgeInsets.zero
 
-    @ObservationIgnored private var layouts: [Int: ChapterLayout] = [:]
+    @ObservationIgnored var layouts: [Int: ChapterLayout] = [:]
     @ObservationIgnored private var building: Set<Int> = []
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var jumps = 0
@@ -59,19 +70,22 @@ final class BookModel: BookPaging {
         var offset: Int?
         var anchor: String?
         var fraction: Double?
+        /// How long a stretch from `offset` to mark as found.
+        var highlight: Int?
     }
 
     /// Opens the book, off the main thread: reading its contents can take a moment for a large one.
     static func open(_ info: BookInfo, engine: Engine, style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) async throws -> BookModel {
-        let (reader, contents, sizes) = try await Task.detached(priority: .userInitiated) {
+        let (reader, contents, sizes, marks) = try await Task.detached(priority: .userInitiated) {
             let reader = try engine.openBook(id: info.id)
-            return (reader, reader.contents(), reader.chapterSizes())
+            return (reader, reader.contents(), reader.chapterSizes(), (try? engine.bookMarks(book: info.id)) ?? [])
         }.value
-        return BookModel(info: info, engine: engine, reader: reader, contents: contents, sizes: sizes, style: style, invertTaps: invertTaps, saveStyle: saveStyle)
+        return BookModel(info: info, engine: engine, reader: reader, contents: contents, sizes: sizes, marks: marks, style: style, invertTaps: invertTaps, saveStyle: saveStyle)
     }
 
-    private init(info: BookInfo, engine: Engine, reader: BookReader, contents: [BookEntry], sizes: [UInt64], style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) {
+    private init(info: BookInfo, engine: Engine, reader: BookReader, contents: [BookEntry], sizes: [UInt64], marks: [BookHighlight], style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) {
         self.info = info
+        self.marks = marks
         self.engine = engine
         self.reader = reader
         self.contents = contents
@@ -127,6 +141,8 @@ final class BookModel: BookPaging {
 
     func turned(to place: BookPlace) {
         self.place = place
+        if selection != nil { selection = nil }
+        if found != nil, foundPage != place { found = nil }
         // A page counted from the end waits for its chapter to be set in type.
         guard let layout = layouts[place.chapter], place.page >= 0 else { return }
         progress = progress(of: place, in: layout)
@@ -183,6 +199,10 @@ final class BookModel: BookPaging {
             page = 0
         }
         let target = BookPlace(chapter: layout.index, page: page)
+        if let length = spot.highlight, let offset = spot.offset {
+            found = BookSpan(chapter: layout.index, start: offset, end: offset + length)
+            foundPage = target
+        }
         jumps += 1
         jump = BookJump(id: jumps, place: target, forward: forward, animated: animated)
         turned(to: target)
@@ -237,10 +257,20 @@ final class BookModel: BookPaging {
         let reader = reader
         Task {
             // Finding where a link goes can mean reading a large file: not on the main thread.
-            guard let target = await Task.detached(priority: .userInitiated, operation: { reader.target(link: link) }).value else { return }
-            if let place, let layout = layouts[place.chapter] { trail.append(Spot(chapter: place.chapter, offset: layout.start(of: place.page))) }
-            go(to: Spot(chapter: Int(target.chapter), offset: target.anchor == nil ? 0 : nil, anchor: target.anchor), forward: true, animated: false)
+            if let text = await Task.detached(priority: .userInitiated, operation: { reader.note(link: link) }).value {
+                footnote = Footnote(text: text, link: link)
+                return
+            }
+            await follow(inBook: link)
         }
+    }
+
+    /// Goes where a link in the book goes, with a way back.
+    func follow(inBook link: String) async {
+        let reader = reader
+        guard let target = await Task.detached(priority: .userInitiated, operation: { reader.target(link: link) }).value else { return }
+        if let place, let layout = layouts[place.chapter] { trail.append(Spot(chapter: place.chapter, offset: layout.start(of: place.page))) }
+        go(to: Spot(chapter: Int(target.chapter), offset: target.anchor == nil ? 0 : nil, anchor: target.anchor), forward: true, animated: false)
     }
 
     /// Back to where the person was before a link inside the book took them away.

@@ -9,12 +9,13 @@ struct BookReaderView: View {
     @Environment(AppModel.self) private var app
     @State private var settings = false
     @State private var contents = false
+    @State private var searching = false
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 model.theme.paperColor
-                BookPager(paging: model, jump: model.jump, still: model.style.ink)
+                BookPager(paging: model, jump: model.jump, still: model.style.ink, locked: model.selection != nil)
                     .saturation(model.style.ink ? 0 : 1)
                 BookComfortOverlay(style: model.style)
                 if model.place == nil { AkiOpeningLoader(label: model.info.title) }
@@ -40,6 +41,9 @@ struct BookReaderView: View {
         .akiAnimation(quick: true, value: model.trail.count)
         .akiSheet(isPresented: $settings) { BookSettingsSheet(model: model) }
         .akiSheet(isPresented: $contents, full: true) { BookContentsSheet(model: model) { contents = false } }
+        .akiSheet(isPresented: $searching, full: true) { BookSearchSheet(model: model) { searching = false } }
+        .akiSheet(item: $model.noteDraft) { draft in BookNoteSheet(model: model, draft: draft) { model.noteDraft = nil } }
+        .akiSheet(item: $model.footnote) { note in BookFootnoteSheet(model: model, note: note) { model.footnote = nil } }
         .akiConfirm("Open this link?", message: model.externalLink?.absoluteString ?? "", confirm: "Open", isPresented: Binding(get: { model.externalLink != nil }, set: { if !$0 { model.externalLink = nil } })) {
             if let url = model.externalLink { UIApplication.shared.open(url) }
         }
@@ -62,6 +66,7 @@ struct BookReaderView: View {
                 }
                 .accessibilityLabel("Contents")
                 Spacer(minLength: 0)
+                AkiIconButton(symbol: "search", label: "Search in this book") { searching = true }
                 AkiIconButton(symbol: "sliders", label: "Type and theme") { settings = true }
             }
         }

@@ -23,12 +23,19 @@ struct BookPlace: Equatable {
     func tapped(_ zone: BookTapZone, link: String?)
     /// One page forward or back, without the page-turn motion (a swipe in ink mode).
     func turnPage(forward: Bool)
+    var overlays: BookOverlays { get }
+    /// The selection moved (nil to drop it); a selection is made by a long press and moved by its handles.
+    func select(_ span: BookSpan?)
+    /// The words of a stretch of a chapter, from the page that is showing it.
+    func perform(_ action: BookAction, on span: BookSpan, mark: Int64?, words: String)
 }
 
 enum BookTapZone { case back, forward, middle }
 
 extension Notification.Name {
     static let bookLayoutReady = Notification.Name("aki.book.layout.ready")
+    /// Highlights, the selection or the place found changed.
+    static let bookOverlaysChanged = Notification.Name("aki.book.overlays.changed")
 }
 
 /// Draws one page: the text, the pictures and the foot line.
@@ -39,6 +46,7 @@ final class BookPageView: UIView {
     var footer: (title: String, number: String) = ("", "")
     var insets = UIEdgeInsets.zero
     weak var paging: (any BookPaging)?
+    var overlays = BookOverlays()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -60,10 +68,26 @@ final class BookPageView: UIView {
         context.textMatrix = .identity
         context.setFillColor(theme.ink.cgColor)
         let frame = layout.frame(page: page)
+        drawOverlays(frame, layout: layout, in: context)
+        context.setFillColor(theme.ink.cgColor)
         CTFrameDraw(frame, context)
         drawAttachments(of: frame, in: context)
         context.restoreGState()
         drawFooter()
+    }
+
+    /// Highlights, the selection and the place a search found, under the text. The context has y up here, so each box is turned over.
+    private func drawOverlays(_ frame: CTFrame, layout: ChapterLayout, in context: CGContext) {
+        func fill(_ span: BookSpan, _ colour: UIColor) {
+            guard span.chapter == layout.index else { return }
+            context.setFillColor(colour.cgColor)
+            for box in layout.boxes(from: span.start, to: span.end, page: page, in: frame) {
+                context.fill(CGRect(x: box.minX, y: layout.size.height - box.maxY, width: box.width, height: box.height).insetBy(dx: -1, dy: 1))
+            }
+        }
+        for mark in overlays.marks { fill(mark.span, HighlightColour.fill(mark.colour)) }
+        if let found = overlays.found { fill(found, HighlightColour.fill(0)) }
+        if let selection = overlays.selection { fill(selection, HighlightColour.selection.withAlphaComponent(0.28)) }
     }
 
     /// Pictures, rules and strike-throughs: what Core Text leaves a place for and does not draw.
@@ -135,10 +159,17 @@ final class BookPageView: UIView {
 }
 
 /// One page in the pager. While its chapter is being set in type it shows only the paper, then draws itself.
-final class BookPageController: UIViewController {
+///
+/// A long press selects a word, the handles move the ends, and a menu offers what can be done with it; a tap on a highlight opens
+/// the same menu for it. All of that is drawn and worked out here and in `ChapterLayout`: there is no text view.
+final class BookPageController: UIViewController, @preconcurrency UIEditMenuInteractionDelegate {
     let place: BookPlace
     private unowned let paging: any BookPaging
     private let canvas = BookPageView()
+    private let handles = [BookHandle(atStart: true), BookHandle(atStart: false)]
+    private var menu: UIEditMenuInteraction?
+    /// What the menu now open is about: a selection, or a highlight tapped.
+    private var target: (span: BookSpan, mark: Int64?)?
 
     init(place: BookPlace, paging: any BookPaging) {
         self.place = place
@@ -161,13 +192,27 @@ final class BookPageController: UIViewController {
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(canvas)
         view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
+        let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
+        press.minimumPressDuration = 0.4
+        view.addGestureRecognizer(press)
+        for handle in handles {
+            handle.isHidden = true
+            handle.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
+            view.addSubview(handle)
+        }
+        let menu = UIEditMenuInteraction(delegate: self)
+        view.addInteraction(menu)
+        self.menu = menu
         NotificationCenter.default.addObserver(self, selector: #selector(layoutReady(_:)), name: .bookLayoutReady, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(overlaysChanged), name: .bookOverlaysChanged, object: nil)
         show()
     }
 
     @objc private func layoutReady(_ note: Notification) {
         if note.object as? Int == place.chapter { show() }
     }
+
+    @objc private func overlaysChanged() { show() }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -182,23 +227,96 @@ final class BookPageController: UIViewController {
     func show() {
         canvas.theme = paging.theme
         canvas.insets = paging.pageInsets
+        canvas.overlays = paging.overlays
         guard let layout = paging.layout(chapter: place.chapter), let resolved else {
             canvas.layout = nil
             canvas.setNeedsDisplay()
+            handles.forEach { $0.isHidden = true }
             return
         }
         canvas.layout = layout
         canvas.page = resolved.page
         canvas.footer = paging.footer(for: resolved, of: layout)
         canvas.setNeedsDisplay()
+        placeHandles(layout: layout, page: resolved.page)
+    }
+
+    private func placeHandles(layout: ChapterLayout, page: Int) {
+        guard let selection = paging.overlays.selection, selection.chapter == layout.index else {
+            handles.forEach { $0.isHidden = true }
+            return
+        }
+        let boxes = layout.boxes(from: selection.start, to: selection.end, page: page, in: layout.frame(page: page))
+        guard let first = boxes.first, let last = boxes.last else {
+            handles.forEach { $0.isHidden = true }
+            return
+        }
+        let insets = canvas.insets
+        handles[0].center = CGPoint(x: insets.left + first.minX, y: insets.top + first.minY - 6)
+        handles[1].center = CGPoint(x: insets.left + last.maxX, y: insets.top + last.maxY + 10)
+        handles.forEach { $0.isHidden = false }
+    }
+
+    /// A point of the page in the text area's own coordinates.
+    private func inText(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x - canvas.insets.left, y: point.y - canvas.insets.top)
     }
 
     @objc private func tapped(_ tap: UITapGestureRecognizer) {
         let point = tap.location(in: view)
-        let insets = canvas.insets
-        let link = resolved.flatMap { paging.layout(chapter: $0.chapter)?.link(at: CGPoint(x: point.x - insets.left, y: point.y - insets.top), page: $0.page) }
+        guard let resolved, let layout = paging.layout(chapter: resolved.chapter) else { return }
+        if paging.overlays.selection != nil { return paging.select(nil) }
+        let inside = inText(point)
+        let frame = layout.frame(page: resolved.page)
+        if let mark = paging.overlays.marks.last(where: { mark in
+            mark.span.chapter == layout.index && layout.boxes(from: mark.span.start, to: mark.span.end, page: resolved.page, in: frame).contains { $0.insetBy(dx: -4, dy: -4).contains(inside) }
+        }) {
+            return open(menu: (mark.span, mark.id), at: point)
+        }
+        let link = layout.link(at: inside, page: resolved.page)
         let zone: BookTapZone = point.x < view.bounds.width * 0.3 ? .back : point.x > view.bounds.width * 0.7 ? .forward : .middle
         paging.tapped(zone, link: link)
+    }
+
+    @objc private func pressed(_ press: UILongPressGestureRecognizer) {
+        guard press.state == .began, let resolved, let layout = paging.layout(chapter: resolved.chapter) else { return }
+        let point = press.location(in: view)
+        guard let at = layout.position(at: inText(point), page: resolved.page), let word = layout.word(around: at) else { return }
+        let span = BookSpan(chapter: layout.index, start: word.start, end: word.end)
+        paging.select(span)
+        open(menu: (span, nil), at: point)
+    }
+
+    @objc private func dragged(_ pan: UIPanGestureRecognizer) {
+        guard let handle = pan.view as? BookHandle, let selection = paging.overlays.selection, let resolved,
+              let layout = paging.layout(chapter: resolved.chapter) else { return }
+        if pan.state == .ended { return open(menu: (selection, nil), at: handle.center) }
+        // The dot is above or below the line it belongs to: the point read is the line's own.
+        let point = CGPoint(x: pan.location(in: view).x, y: pan.location(in: view).y + (handle.atStart ? 14 : -14))
+        guard let at = layout.position(at: inText(point), page: resolved.page) else { return }
+        var span = selection
+        if handle.atStart { span.start = min(at, selection.end - 1) } else { span.end = max(at, selection.start + 1) }
+        paging.select(span)
+    }
+
+    private func open(menu target: (span: BookSpan, mark: Int64?), at point: CGPoint) {
+        self.target = target
+        menu?.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        guard let target, let layout = paging.layout(chapter: target.span.chapter) else { return nil }
+        let words = layout.words(from: target.span.start, to: target.span.end)
+        func act(_ action: BookAction) { paging.perform(action, on: target.span, mark: target.mark, words: words) }
+        let colours = UIMenu(title: "Colour", image: HighlightColour.swatch(0), children: HighlightColour.names.indices.map { index in
+            UIAction(title: HighlightColour.names[index], image: HighlightColour.swatch(index)) { _ in act(.highlight(colour: index)) }
+        })
+        var actions: [UIMenuElement] = []
+        if target.mark == nil { actions.append(UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { _ in act(.highlight(colour: 0)) }) }
+        actions += [colours, UIAction(title: "Note", image: UIImage(systemName: "square.and.pencil")) { _ in act(.note) },
+                    UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in act(.copy) }]
+        if target.mark != nil { actions.append(UIAction(title: "Remove highlight", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in act(.remove) }) }
+        return UIMenu(children: actions)
     }
 }
 
@@ -233,6 +351,8 @@ struct BookPager: UIViewControllerRepresentable {
     let jump: BookJump?
     /// A still display: no page-turn motion.
     let still: Bool
+    /// A selection is being made: turning pages by touch waits.
+    let locked: Bool
 
     func makeUIViewController(context: Context) -> UIPageViewController {
         let controller = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: [.interPageSpacing: 0])
@@ -252,8 +372,8 @@ struct BookPager: UIViewControllerRepresentable {
         coordinator.paging = paging
         controller.view.backgroundColor = paging.theme.paper
         // Still: the system's sliding scroll is turned off, and a swipe turns the page at once.
-        for case let scroll as UIScrollView in controller.view.subviews { scroll.isScrollEnabled = !still }
-        controller.view.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.forEach { $0.isEnabled = still }
+        for case let scroll as UIScrollView in controller.view.subviews { scroll.isScrollEnabled = !still && !locked }
+        controller.view.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.forEach { $0.isEnabled = still && !locked }
         if let jump, jump.id != coordinator.shown {
             coordinator.shown = jump.id
             let page = BookPageController(place: jump.place, paging: paging)
