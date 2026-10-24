@@ -350,3 +350,45 @@ and 3 17 times, and a Release binary built the same way as before is 18.3 MB wit
 are built at 3 (`[profile.ios.package.*]` in `desktop/Cargo.toml`). The +6.2 MB (uncompressed, unstripped) is over the 3.5 MB this plan allowed; most of it is `ptts`, its
 tokenizer library and the matrix kernels for every number type. Launch cost: `AVFAudio` is already loaded by SwiftUI (0.1 ms); `MediaPlayer`, for the lock screen,
 adds about 22 ms in the simulator (PhotosUI measured 1093 ms the same way).
+
+## 12. Why the voice sounds flat (researched 2026-10-25)
+
+**What the documentation says.** Neither the Phonon 31M model card, the `ptts` README, the `phonon-voices` card nor Gradium's evaluation post has any control for
+emotion, style or expressiveness: no tags in the text, no style setting, no temperature or guidance advice. The only delivery controls named are the voice itself
+and a speaking-rate condition (`duration_delta`). Long text is split into sentences and spoken one after another, "so prosody does not carry across the whole text".
+The `happy_01`, `question_01`, `support_01` and `exclamation_02` files in the voices repository are only sample lines recorded per voice, not styles to select.
+Emotion in Phonon is therefore a property of the **voice embedding** (a 1×512×125 speaker prompt) and of the model's reading of the punctuation.
+
+**What was wrong in our app** (measured with `ptts` 0.4.0 on a 13 s passage with dialogue, exclamations and a question; pitch spread is the standard deviation of
+fundamental frequency in semitones, loudness spread in dB):
+
+| Setting | Pitch spread | Loudness spread |
+| --- | --- | --- |
+| The `default-voice` we ship, temperature 0.3, 0.6, 0.8 or 1.0 | 3.4, 3.2, 3.1, 3.3 | 8.7 to 8.9 |
+| Voice Hugh (British male, "lively pitch movement") | 5.1 | 9.5 |
+| Voice Fairy Godmother | 4.5 | 9.7 |
+| Voice Master Aldric (character) | 3.8 | 11.0 |
+| Voice Zoey, Micah, Miles, Everly | 3.7, 3.9, 3.3, 2.8 | 8.3 to 9.1 |
+
+1. We only offer the `default-voice`, which is among the flattest of the voices tried. Voices differ by up to 65% in pitch movement, and their descriptions
+   (`voices.jsonl`) say which are lively ("lively pitch movement", "genuine dynamic range", theatrical characters) and which are even and steady.
+2. Temperature does nothing for expressiveness here (3.1 to 3.4 semitones whatever it is), so there is nothing to tune there. Classifier-free guidance cannot be used with
+   a precomputed voice embedding in this model (`ptts` refuses), so that route is closed too.
+3. Each sentence is spoken alone with the same voice, so a line of dialogue sounds like narration: the model has no idea who is speaking or how they feel.
+4. Phonon is a small (31M) model trained for conversational and assistant speech; its evaluation covers accuracy and speaker similarity, not acting. Reading a novel with
+   feeling is outside what it was built for, and no setting will change that much.
+
+**What can be done, in order of effect for effort:**
+
+- **Offer the other voices** (the 102 in `gradium/phonon-voices`, Apache 2.0; each is a 256 KB file). The definition gains a `voices` list (id, name, gender, accent, description,
+  file, hash); the Voice model screen lets the person pick one and downloads only that. Choose by the descriptions, with the lively ones first. This is the one change that
+  is cheap and measurable. A voice file works with every Phonon checkpoint.
+- **Narrator and characters:** quoted speech (`"…"`, `“…”`) is found in the sentence splitter and spoken by a second voice chosen by the person (a lively one, or a character
+  voice), so dialogue stands apart from narration. This is a real step toward acting and costs a flag on each unit, a second voice choice and a second queue entry; it does
+  not need new models.
+- **Phonon 40M** is the other lever (better quality by Gradium's account), but it is CC BY-NC and gated, so it is not for the shipped app.
+- **A different family** is the long-term answer if emotion matters more than size: models trained for expressive reading. None of the small ones researched in section 10
+  (Kokoro, Kitten, Piper, Supertonic) documents emotion control either; the repository mechanism in section 10 makes trying one a definition file plus, for a new
+  family, one release.
+
+Sources: <https://huggingface.co/gradium/phonon-31m-en>, <https://huggingface.co/gradium/phonon-voices>, <https://github.com/gradium-ai/xn-ptts>, <https://gradium.ai/blog/evaluating-phonon>.
