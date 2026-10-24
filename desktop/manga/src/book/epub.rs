@@ -368,11 +368,21 @@ impl Epub {
             }
         }
         let ends = 6;
+        // The id the book's package gives each file ("pg-header", "coverpage-wrapper") says what it is as often as its name.
+        let ids: HashMap<String, String> = package
+            .select(&selector("manifest item"))
+            .filter_map(|item| {
+                Some((
+                    join(package_path, item.value().attr("href")?).to_lowercase(),
+                    item.value().attr("id")?.to_string(),
+                ))
+            })
+            .collect();
         let own: Vec<(usize, Vec<String>)> = (0..files.len())
             .filter(|&index| index < ends || index + ends >= files.len())
             .filter_map(|index| {
                 let document = self.read_markup(&files[index], MAX_CHAPTER_BYTES).ok()?;
-                let words = document
+                let words: Vec<String> = document
                     .select(&selector(
                         "body, body > section, body > article, body > div",
                     ))
@@ -390,7 +400,16 @@ impl Epub {
                             .collect::<Vec<_>>()
                     })
                     .collect();
-                Some((index, words))
+                // The page's own title and first heading, when that is only the name of a section.
+                let mut titled: Vec<String> = ["title", "h1", "h2"]
+                    .iter()
+                    .filter_map(|name| document.select(&selector(name)).next())
+                    .flat_map(|element| {
+                        sections::words_of_title(&element.text().collect::<String>())
+                    })
+                    .collect();
+                titled.extend(words);
+                Some((index, titled))
             })
             .collect();
         let mut all: Vec<Vec<String>> = files
@@ -404,6 +423,9 @@ impl Epub {
         for (index, words) in all.iter_mut().enumerate() {
             if words.is_empty() {
                 *words = sections::words_of_name(&files[index]);
+                if let Some(id) = ids.get(&files[index].to_lowercase()) {
+                    words.extend(sections::words_of_name(id));
+                }
             }
         }
         let (by_file, start) = sections::classify(&all);
