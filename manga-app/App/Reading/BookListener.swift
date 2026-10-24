@@ -109,6 +109,12 @@ final class BookListener {
 
     func toggle() { state == .paused ? resume() : pause() }
 
+    /// Reads on from `offset` in `chapter`, wherever it was.
+    func jump(chapter: Int, offset: Int) {
+        guard state != .stopped, speaker != nil else { return }
+        run(chapter: chapter, offset: offset)
+    }
+
     /// Goes to the sentence after or before the one being heard.
     func skip(forward: Bool) {
         guard let current else { return }

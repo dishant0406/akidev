@@ -30,6 +30,7 @@ enum BookAction {
     case highlight(colour: Int)
     case note
     case copy
+    case read
     case remove
 }
 

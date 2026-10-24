@@ -24,8 +24,9 @@ struct BookPlace: Equatable {
     /// A picture of the book at about the size wanted, nil until it is decoded (`ready` is called then).
     func picture(path: String, width: CGFloat, ready: @escaping @MainActor @Sendable () -> Void) -> CGImage?
     func turned(to place: BookPlace)
-    /// A tap on the page: where, and the link under it if any (`isNote` when that link is a raised mark, a footnote's number).
-    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool)
+    /// A tap on the page: where, the link under it if any (`isNote` when that link is a raised mark, a footnote's number),
+    /// and the word under it if any.
+    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool, word: BookSpan?)
     /// One page forward or back, without the page-turn motion (a swipe in ink mode).
     func turnPage(forward: Bool)
     var overlays: BookOverlays { get }
@@ -35,6 +36,8 @@ struct BookPlace: Equatable {
     func select(_ span: BookSpan?)
     /// The words of a stretch of a chapter, from the page that is showing it.
     func perform(_ action: BookAction, on span: BookSpan, mark: Int64?, words: String)
+    /// A voice model is on the phone, so "Read from here" is offered.
+    var canRead: Bool { get }
 }
 
 enum BookTapZone { case back, forward, middle }
@@ -309,7 +312,12 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         }
         let link = layout.link(at: inside, page: resolved.page)
         let zone: BookTapZone = point.x < view.bounds.width * 0.3 ? .back : point.x > view.bounds.width * 0.7 ? .forward : .middle
-        paging.tapped(zone, link: link?.link, isNote: link?.raised ?? false)
+        // The word the finger is on: the point must be on its letters, not between the lines.
+        let word = layout.position(at: inside, page: resolved.page).flatMap { layout.word(around: $0) }.flatMap { word in
+            layout.boxes(from: word.start, to: word.end, page: resolved.page, in: frame).contains { $0.insetBy(dx: -4, dy: -4).contains(inside) }
+                ? BookSpan(chapter: layout.index, start: word.start, end: word.end) : nil
+        }
+        paging.tapped(zone, link: link?.link, isNote: link?.raised ?? false, word: word)
     }
 
     @objc private func pressed(_ press: UILongPressGestureRecognizer) {
@@ -346,6 +354,7 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
             UIAction(title: HighlightColour.names[index], image: HighlightColour.swatch(index)) { _ in act(.highlight(colour: index)) }
         })
         var actions: [UIMenuElement] = []
+        if paging.canRead { actions.append(UIAction(title: "Read from here", image: UIImage(systemName: "play.circle")) { _ in act(.read) }) }
         if target.mark == nil { actions.append(UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { _ in act(.highlight(colour: 0)) }) }
         actions += [colours, UIAction(title: "Note", image: UIImage(systemName: "square.and.pencil")) { _ in act(.note) },
                     UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in act(.copy) }]

@@ -27,7 +27,7 @@ struct BookReaderView: View {
                 BookComfortOverlay(style: model.style)
                 if model.place == nil { AkiOpeningLoader(label: model.info.title) }
             }
-            .onAppear { model.systemDark = scheme == .dark; model.resize(proxy.size, safe: BookGeometry.safe) }
+            .onAppear { model.speech = (app.readAloud, app.prefs); model.systemDark = scheme == .dark; model.resize(proxy.size, safe: BookGeometry.safe) }
             .onChange(of: proxy.size) { _, size in model.resize(size, safe: BookGeometry.safe) }
             .onChange(of: scheme) { _, now in model.systemDark = now == .dark }
         }
@@ -79,7 +79,7 @@ struct BookReaderView: View {
                 .accessibilityLabel("Contents")
                 Spacer(minLength: 0)
                 if model.listener == nil, app.readAloud.current != nil {
-                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen(readAloud: app.readAloud, prefs: app.prefs) }
+                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen() }
                 }
                 AkiIconButton(symbol: "search", label: "Search in this book") { searching = true }
                 AkiIconButton(symbol: "sliders", label: "Type and theme") { settings = true }

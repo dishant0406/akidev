@@ -48,6 +48,9 @@ extension BookModel {
             reloadMarks()
             if let id, let made = marks.first(where: { $0.id == id }) { noteDraft = NoteDraft(id: id, quote: made.quote, text: made.note ?? "") }
             return
+        case .read:
+            read(from: span)
+            return
         case .copy:
             UIPasteboard.general.string = words
             return

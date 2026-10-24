@@ -56,6 +56,8 @@ final class BookModel: BookPaging {
     @ObservationIgnored var foundPage: BookPlace?
     /// Reading aloud, while it goes on, and the sentence being read.
     var listener: BookListener?
+    /// What reading aloud needs from the app: the models and the person's settings, given by the reader's screen.
+    @ObservationIgnored var speech: (readAloud: ReadAloudModel, prefs: Preferences)?
     var speaking: BookSpan? { didSet { overlaysChanged() } }
     /// A highlight whose note is being written.
     var noteDraft: NoteDraft?
@@ -177,8 +179,10 @@ final class BookModel: BookPaging {
         for chapter in layouts.keys where abs(chapter - place.chapter) > (style.scroll ? 6 : 2) { layouts[chapter] = nil }
     }
 
-    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool) {
+    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool, word: BookSpan?) {
         if let link { return follow(link, isNote: isNote) }
+        // While it reads aloud, a tap on a word in the middle of the page reads on from there.
+        if listener != nil, zone == .middle, let word { return read(from: word) }
         switch zone {
         case .middle:
             if style.ink { chromeVisible.toggle() } else { withAnimation(.snappy(duration: 0.25)) { chromeVisible.toggle() } }
