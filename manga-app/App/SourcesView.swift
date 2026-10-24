@@ -31,6 +31,9 @@ struct SourcesView: View {
                         }
                         AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
                     }
+                    AkiSection(title: "Books", footer: "Add an EPUB from your device. Books are read in the Books tab and stay on this phone.") {
+                        AkiButton("Add an EPUB book", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
+                    }
                     AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
                         if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
                         ForEach(model.repos, id: \.base) { repo in

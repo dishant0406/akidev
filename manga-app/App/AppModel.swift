@@ -18,6 +18,8 @@ final class AppModel {
     private var loadingLibrary = false
     private var libraryChanged = false
     var tab: AppTab = .home
+    /// Set to open the file picker on the Books tab (from the Sources screen).
+    var addingBook = false
     /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
     var barHiders = 0
     var tabBarHidden: Bool { barHiders > 0 }
@@ -40,6 +42,13 @@ final class AppModel {
             await refreshLibrary()
         }
         #if DEBUG
+        // `-importBooks /folder` adds every EPUB in that folder to the shelf at start (the simulator can read the Mac's folders).
+        if let folder = UserDefaults.standard.string(forKey: "importBooks") {
+            let engine = engine
+            for file in (try? FileManager.default.contentsOfDirectory(atPath: folder))?.sorted() ?? [] where file.hasSuffix(".epub") {
+                _ = try? engine.importBook(path: "\(folder)/\(file)")
+            }
+        }
         // `-simulateBackground YES` runs once what iOS runs when it wakes the app in the background, a while after start.
         if UserDefaults.standard.bool(forKey: "simulateBackground") {
             Task { _ = await UpdateAlerts.requestPermission(); try? await Task.sleep(for: .seconds(6)); await refreshLibrary(force: true, background: true) }

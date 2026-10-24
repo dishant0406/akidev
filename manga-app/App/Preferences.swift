@@ -47,6 +47,8 @@ final class Preferences {
     var libraryReversed: Bool { didSet { defaults.set(libraryReversed, forKey: "libraryReversed") } }
     /// What saving a series does about categories: nothing (0), ask which (-1), or put it on that category (its id).
     var saveCategory: Int64 { didSet { defaults.set(saveCategory, forKey: "saveCategory") } }
+    /// How books look: the type, the margins and the theme.
+    var bookStyle: BookStyle { didSet { defaults.set(try? JSONEncoder().encode(bookStyle), forKey: "bookStyle") } }
     var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: "keepAwake") } }
     /// A notification when a saved series gets new chapters (the person is asked for permission when turning it on).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: "notifyUpdates") } }
@@ -64,6 +66,7 @@ final class Preferences {
         invertTaps = defaults.bool(forKey: "invertTaps")
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
+        bookStyle = defaults.data(forKey: "bookStyle").flatMap { try? JSONDecoder().decode(BookStyle.self, from: $0) } ?? BookStyle()
         keepAwake = defaults.bool(forKey: "keepAwake")
         saveCategory = Int64(defaults.integer(forKey: "saveCategory"))
         librarySort = LibrarySort(rawValue: defaults.string(forKey: "librarySort") ?? "") ?? .recent

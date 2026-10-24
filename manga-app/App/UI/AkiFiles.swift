@@ -19,6 +19,24 @@ extension View {
 }
 
 extension View {
+    /// Asks for one or more files from the device and hands over copies the app may read, all together.
+    func akiFilesImporter(isPresented: Binding<Bool>, types: [UTType], onPick: @escaping ([URL]) -> Void) -> some View {
+        fileImporter(isPresented: isPresented, allowedContentTypes: types, allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result else { return }
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("picked-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let copies: [URL] = urls.compactMap { url in
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let copy = folder.appendingPathComponent(url.lastPathComponent)
+                return (try? FileManager.default.copyItem(at: url, to: copy)) != nil ? copy : nil
+            }
+            onPick(copies)
+        }
+    }
+}
+
+extension View {
     /// Asks for a picture from the photo library (the system shows its own picker, so no permission is needed) and hands it
     /// over as a JPEG no wider than `width` points times the screen scale, small enough to keep as a cover.
     ///

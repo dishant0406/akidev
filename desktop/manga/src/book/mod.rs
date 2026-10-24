@@ -120,6 +120,9 @@ pub trait BookFile: Send {
     /// How many chapters it has, in reading order.
     fn chapters(&self) -> usize;
     fn contents(&self) -> &[Entry];
+    /// How big each chapter is, in bytes of its file: the weights for "how far through the book", read without
+    /// reading the chapters.
+    fn sizes(&self) -> &[u64];
     fn chapter(&mut self, index: usize) -> anyhow::Result<Chapter>;
     /// The bytes of a picture or other file inside the book.
     fn resource(&mut self, path: &str) -> anyhow::Result<Vec<u8>>;

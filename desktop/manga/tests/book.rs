@@ -117,6 +117,7 @@ fn the_book_says_what_it_is() {
     assert_eq!(book.meta().language.as_deref(), Some("en"));
     assert!(!book.meta().rtl);
     assert_eq!(book.chapters(), 2);
+    assert_eq!(book.sizes(), [ONE.len() as u64, TWO.len() as u64]);
     assert_eq!(book.cover().as_deref(), Some("OEBPS/images/Cover.jpg"));
 }
 
@@ -390,4 +391,45 @@ fn adding_a_book_copies_it_once_and_a_bad_file_leaves_nothing() {
             .contains("only EPUB")
     );
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+/// Every `.epub` in the folder named by `AKI_BOOK_CORPUS` is opened and every chapter read: nothing may fail, every position
+/// must agree with the text, and the speed is printed. Run with `cargo test --test book corpus -- --ignored --nocapture`.
+#[test]
+#[ignore = "needs real books: set AKI_BOOK_CORPUS to a folder of them"]
+fn corpus() {
+    let folder = std::env::var("AKI_BOOK_CORPUS").expect("AKI_BOOK_CORPUS");
+    for entry in std::fs::read_dir(folder).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|ext| ext != "epub") {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let mut book = book::open(&path).unwrap();
+        let opened = started.elapsed();
+        let (mut blocks, mut characters, mut slowest) = (0, 0, std::time::Duration::ZERO);
+        for index in 0..book.chapters() {
+            let started = std::time::Instant::now();
+            let chapter = book.chapter(index).unwrap();
+            slowest = slowest.max(started.elapsed());
+            let mut at = 0u32;
+            for block in &chapter.blocks {
+                assert_eq!(block.start, at, "{} chapter {index}", path.display());
+                at += text_of(block).encode_utf16().count() as u32 + 1;
+            }
+            blocks += chapter.blocks.len();
+            characters += at;
+        }
+        println!(
+            "{:<18} open {:>6.1?}  {:>3} chapters  {:>6} blocks  {:>8} chars  slowest chapter {:>7.1?}  contents {}  cover {}",
+            path.file_name().unwrap().to_string_lossy(),
+            opened,
+            book.chapters(),
+            blocks,
+            characters,
+            slowest,
+            book.contents().len(),
+            book.cover().is_some()
+        );
+    }
 }

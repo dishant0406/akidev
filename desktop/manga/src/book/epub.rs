@@ -32,6 +32,7 @@ pub struct Epub {
     meta: Meta,
     /// The chapters' paths, in reading order.
     spine: Vec<String>,
+    sizes: Vec<u64>,
     contents: Vec<Entry>,
     cover: Option<String>,
 }
@@ -55,6 +56,7 @@ impl Epub {
             names,
             meta: Meta::default(),
             spine: Vec::new(),
+            sizes: Vec::new(),
             contents: Vec::new(),
             cover: None,
         };
@@ -136,6 +138,16 @@ impl Epub {
             .take(MAX_SPINE)
             .collect();
         anyhow::ensure!(!self.spine.is_empty(), "the book has no chapters");
+        self.sizes = self
+            .spine
+            .iter()
+            .map(|path| {
+                self.names
+                    .get(&path.to_lowercase())
+                    .and_then(|name| self.zip.by_name(name).ok())
+                    .map_or(0, |file| file.size())
+            })
+            .collect();
 
         // The details are `dc:title` and the like; a selector cannot name a prefix, so they are found by the
         // name after it.
@@ -309,6 +321,10 @@ impl BookFile for Epub {
 
     fn contents(&self) -> &[Entry] {
         &self.contents
+    }
+
+    fn sizes(&self) -> &[u64] {
+        &self.sizes
     }
 
     fn chapter(&mut self, index: usize) -> anyhow::Result<Chapter> {

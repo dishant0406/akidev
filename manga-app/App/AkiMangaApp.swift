@@ -115,6 +115,7 @@ struct RootView: View {
             TabView(selection: $model.tab) {
                 Tab(value: AppTab.home) { HomeView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.library) { LibraryView().toolbarVisibility(.hidden, for: .tabBar) }
+                Tab(value: AppTab.books) { BooksView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.updates) { UpdatesView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.sources) { SourcesView().toolbarVisibility(.hidden, for: .tabBar) }
             }

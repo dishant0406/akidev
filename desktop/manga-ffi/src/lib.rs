@@ -1962,6 +1962,11 @@ impl BookReader {
         self.book.lock().unwrap().chapters() as u32
     }
 
+    /// The size of each chapter's file: how much of the book each is, for "how far through".
+    pub fn chapter_sizes(&self) -> Vec<u64> {
+        self.book.lock().unwrap().sizes().to_vec()
+    }
+
     pub fn contents(&self) -> Vec<BookEntry> {
         self.book
             .lock()

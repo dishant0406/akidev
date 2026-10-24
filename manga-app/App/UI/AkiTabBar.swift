@@ -19,7 +19,7 @@ struct AkiTabBar: View {
                         withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab }
                     } label: {
                         AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onPrimary : .muted)
-                            .frame(width: 70, height: 58)
+                            .frame(width: 62, height: 58)
                             .contentShape(RoundedRectangle(cornerRadius: inner, style: .continuous))
                             .overlay(alignment: .topTrailing) {
                                 if let count = badge[tab], count > 0 { AkiCount(value: count, tinted: false).offset(x: -2, y: 2) }
