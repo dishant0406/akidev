@@ -488,7 +488,9 @@ fn unscramble(bytes: &mut [u8], how: Scrambling, identifier: &str) {
                 .filter_map(|c| c.to_digit(16).map(|digit| digit as u8))
                 .collect();
             let key: Vec<u8> = digits
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| pair[0] * 16 + pair[1])
                 .collect();
             // A key that is not a whole UUID is no key: the font is left as it is.
