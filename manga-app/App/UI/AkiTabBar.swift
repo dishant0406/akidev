@@ -3,6 +3,7 @@ import SwiftUI
 /// The floating tab bar: a glass capsule, with the current tab as a yellow glass circle that flows to the next.
 struct AkiTabBar: View {
     var tabs: [AppTab] = AppTab.allCases
+    var kind: ReaderKind?
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]
     @Namespace private var space
@@ -27,7 +28,7 @@ struct AkiTabBar: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(tab.title)
+                    .accessibilityLabel(tab.title(for: kind))
                     .akiGlassIf(on, .rounded(inner), tint: Aki.primary)
                     .glassEffectID(tab, in: space)
                 }

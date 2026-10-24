@@ -113,14 +113,16 @@ struct RootView: View {
         @Bindable var model = model
         return ZStack(alignment: .bottom) {
             TabView(selection: $model.tab) {
-                Tab(value: AppTab.home) { HomeView().toolbarVisibility(.hidden, for: .tabBar) }
+                Tab(value: AppTab.home) {
+                    Group { if model.prefs.readerKind == .books { BooksHomeView() } else { HomeView() } }.toolbarVisibility(.hidden, for: .tabBar)
+                }
                 Tab(value: AppTab.library) { LibraryView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.books) { BooksView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.updates) { UpdatesView().toolbarVisibility(.hidden, for: .tabBar) }
                 Tab(value: AppTab.sources) { SourcesView().toolbarVisibility(.hidden, for: .tabBar) }
             }
             if !model.tabBarHidden {
-                AkiTabBar(tabs: model.tabs, selection: $model.tab, badge: [.updates: model.unreadTotal])
+                AkiTabBar(tabs: model.tabs, kind: model.prefs.readerKind, selection: $model.tab, badge: [.updates: model.unreadTotal])
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }

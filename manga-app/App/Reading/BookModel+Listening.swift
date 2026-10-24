@@ -15,6 +15,7 @@ extension BookModel {
             ended: { [weak self] failure in self?.listenerEnded(failure) }
         )
         self.listener = listener
+        userMoved = false
         let (chapter, offset) = word.map { ($0.chapter, $0.start) } ?? (place.chapter, layout.start(of: place.page))
         Task { await listener.start(chapter: chapter, offset: offset) }
     }
@@ -23,16 +24,21 @@ extension BookModel {
 
     /// Reads on from a word the person pointed at: from there at once if it is already reading, otherwise it starts there.
     func read(from word: BookSpan) {
+        userMoved = false
         if let listener { listener.jump(chapter: word.chapter, offset: word.start) } else { listen(from: word) }
     }
 
-    /// The page goes where the voice is, and marks the sentence.
+    /// The sentence is marked, and the page goes where the voice is, unless the person has turned away from it: then the page stays
+    /// where they put it, and follows again once they are back on the page being read.
     private func heard(_ span: BookSpan) {
         speaking = span
-        if let place, place.chapter == span.chapter, place.page >= 0, let layout = layouts[span.chapter] {
-            guard layout.page(containing: span.start) != place.page else { return }
+        let spoken = layouts[span.chapter].map { BookPlace(chapter: span.chapter, page: $0.page(containing: span.start)) }
+        if userMoved {
+            if let spoken, spoken == place { userMoved = false }
+            return
         }
-        go(to: Spot(chapter: span.chapter, offset: span.start), forward: true, animated: !style.ink)
+        guard spoken != place else { return }
+        go(to: Spot(chapter: span.chapter, offset: span.start, speech: true), forward: true, animated: !style.ink)
     }
 
     private func listenerEnded(_ problem: (title: String, message: String)?) {

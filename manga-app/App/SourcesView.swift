@@ -25,36 +25,14 @@ struct SourcesView: View {
                             }
                         }
                     }
-                    AkiSection(title: "Installed") {
-                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .muted) } }
-                        ForEach(model.sources, id: \.id) { source in
-                            AkiLink(value: source.id) {
-                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
-                            }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
-                        }
-                        AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
+                    if model.prefs.readerKind == .books {
+                        booksSection
+                        installedSection
+                    } else {
+                        installedSection
+                        booksSection
                     }
-                    AkiSection(title: "Books", footer: "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.") {
-                        ForEach(catalogues, id: \.url) { catalogue in
-                            AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
-                                AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
-                            }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
-                        }
-                        AkiButton("Add an EPUB book", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
-                        AkiButton("Add a book catalogue", icon: "add", fullWidth: true) { addingCatalogue = true }
-                    }
-                    AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
-                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
-                        ForEach(model.repos, id: \.base) { repo in
-                            AkiLink(value: repo) {
-                                AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
-                            }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
-                        }
-                        AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
-                    }
+                    repositoriesSection
                     if let note = model.note { AkiText(note, .caption, tone: .muted) }
                 }
                 .padding(.horizontal, 20).padding(.top, 8)
@@ -87,6 +65,47 @@ struct SourcesView: View {
             .akiAlert(catalogueProblem?.title ?? "", message: catalogueProblem?.message, isPresented: Binding(get: { catalogueProblem != nil }, set: { if !$0 { catalogueProblem = nil } }))
             .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
+    }
+}
+
+extension SourcesView {
+    @ViewBuilder fileprivate var installedSection: some View {
+                    AkiSection(title: "Installed") {
+                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .muted) } }
+                        ForEach(model.sources, id: \.id) { source in
+                            AkiLink(value: source.id) {
+                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
+                            }
+                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
+                        }
+                        AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
+                    }
+    }
+
+    @ViewBuilder fileprivate var booksSection: some View {
+                    AkiSection(title: "Books", footer: "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.") {
+                        ForEach(catalogues, id: \.url) { catalogue in
+                            AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
+                                AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
+                            }
+                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
+                        }
+                        AkiButton("Add an EPUB book", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
+                        AkiButton("Add a book catalogue", icon: "add", fullWidth: true) { addingCatalogue = true }
+                    }
+    }
+
+    @ViewBuilder fileprivate var repositoriesSection: some View {
+                    AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
+                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
+                        ForEach(model.repos, id: \.base) { repo in
+                            AkiLink(value: repo) {
+                                AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
+                            }
+                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
+                        }
+                        AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
+                    }
     }
 }
 

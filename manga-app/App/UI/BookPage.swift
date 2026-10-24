@@ -547,7 +547,8 @@ final class BookScrollController: UIViewController, UICollectionViewDataSource, 
 
     private func scroll(to place: BookPlace, animated: Bool) {
         guard isViewLoaded, place.chapter < collection.numberOfSections else { return }
-        guard let found = tiles[place.chapter] ?? paging.layout(chapter: place.chapter).map(measure) else {
+        if tiles[place.chapter] == nil, let layout = paging.layout(chapter: place.chapter) { learn(layout) }
+        guard let found = tiles[place.chapter] else {
             waiting = (place, animated)
             return
         }
@@ -559,20 +560,24 @@ final class BookScrollController: UIViewController, UICollectionViewDataSource, 
     }
 
     /// The heights of a chapter's pages, kept.
-    private func measure(_ layout: ChapterLayout) -> [CGFloat] {
-        let heights = (0..<layout.count).map { layout.leading(of: $0) + layout.extent(of: $0) }
-        tiles[layout.index] = heights
-        return heights
+    private func measure(_ layout: ChapterLayout) {
+        tiles[layout.index] = (0..<layout.count).map { layout.leading(of: $0) + layout.extent(of: $0) }
+    }
+
+    /// A chapter has been set in type: its pages are measured and its section, which held one placeholder, is reloaded. Measuring
+    /// anywhere else would change the number of pages the collection view is told about without telling it, and it stops the app.
+    /// A chapter above the one being read grows: the collection view keeps what is on screen where it is.
+    private func learn(_ layout: ChapterLayout) {
+        measure(layout)
+        UIView.performWithoutAnimation {
+            collection.reloadSections(IndexSet(integer: layout.index))
+            collection.layoutIfNeeded()
+        }
     }
 
     @objc private func layoutReady(_ note: Notification) {
         guard let chapter = note.object as? Int, isViewLoaded, tiles[chapter] == nil, let layout = paging.peek(chapter: chapter) else { return }
-        // A chapter above the one being read grows when it is set in type: the collection view keeps what is on screen where it is.
-        _ = measure(layout)
-        UIView.performWithoutAnimation {
-            collection.reloadSections(IndexSet(integer: chapter))
-            collection.layoutIfNeeded()
-        }
+        learn(layout)
         if let waiting, waiting.place.chapter == chapter { scroll(to: waiting.place, animated: waiting.animated) }
     }
 
