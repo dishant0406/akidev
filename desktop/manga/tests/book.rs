@@ -575,3 +575,66 @@ fn search_finds_every_place_with_its_position_and_notes_come_out_as_text() {
     assert_eq!(book.note("OEBPS/text/two.xhtml"), None);
     assert_eq!(book.note("OEBPS/nowhere.xhtml#x"), None);
 }
+
+/// Against the real Project Gutenberg catalogue: `cargo test --test book opds_live -- --ignored --nocapture`.
+#[test]
+#[ignore = "needs the network"]
+fn opds_live() {
+    use akidev_manga::book::opds;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let root = opds::fetch("https://www.gutenberg.org/ebooks.opds/")
+            .await
+            .unwrap();
+        println!(
+            "{} / {} items / search {:?}",
+            root.title,
+            root.items.len(),
+            root.search
+        );
+        let address = opds::search_address(root.search.as_deref().unwrap(), "alice wonderland")
+            .await
+            .unwrap();
+        println!("search at {address}");
+        let found = opds::fetch(&address).await.unwrap();
+        // A result may be the book's own page, a feed of one entry.
+        let first = found
+            .items
+            .iter()
+            .find(|item| {
+                item.get.is_some()
+                    || item
+                        .open
+                        .as_deref()
+                        .is_some_and(|open| open.ends_with(".opds") && open.contains("/ebooks/1"))
+            })
+            .expect("a result");
+        let page = match &first.open {
+            Some(open) => opds::fetch(open).await.unwrap(),
+            None => found.clone(),
+        };
+        let book = page
+            .items
+            .iter()
+            .find(|item| item.get.is_some())
+            .expect("a book");
+        println!(
+            "{} by {:?}: {:?} next {:?}",
+            book.title, book.author, book.get, found.next
+        );
+        let folder = std::env::temp_dir().join(format!("aki-opds-{}", std::process::id()));
+        let file = opds::download(book.get.as_ref().unwrap(), &folder)
+            .await
+            .unwrap();
+        let opened = book::open(&file).unwrap();
+        println!(
+            "opened {} with {} chapters",
+            opened.meta().title,
+            opened.chapters()
+        );
+        std::fs::remove_dir_all(folder).unwrap();
+    });
+}

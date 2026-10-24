@@ -8,6 +8,10 @@ struct SourcesView: View {
     @State private var adding = false
     @State private var pasting = false
     @State private var link = ""
+    @State private var catalogues: [CatalogueInfo] = []
+    @State private var addingCatalogue = false
+    @State private var catalogueAddress = ""
+    @State private var catalogueProblem: (title: String, message: String)?
 
     var body: some View {
         NavigationStack {
@@ -31,8 +35,15 @@ struct SourcesView: View {
                         }
                         AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
                     }
-                    AkiSection(title: "Books", footer: "Add an EPUB from your device. Books are read in the Books tab and stay on this phone.") {
+                    AkiSection(title: "Books", footer: "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.") {
+                        ForEach(catalogues, id: \.url) { catalogue in
+                            AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
+                                AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
+                            }
+                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
+                        }
                         AkiButton("Add an EPUB book", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
+                        AkiButton("Add a book catalogue", icon: "add", fullWidth: true) { addingCatalogue = true }
                     }
                     AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
                         if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
@@ -56,12 +67,29 @@ struct SourcesView: View {
             .background(AkiBackdrop())
             .akiNoNavigationBar()
             .akiDestination(for: RepoInfo.self) { RepoScreen(repo: $0) }
+            .akiDestination(for: CatalogueRef.self) { CatalogueView(ref: $0) }
             .akiDestination(for: String.self) { SourceSettingsView(source: $0) }
             .akiDestination(for: SettingsRoute.self) { _ in SettingsView() }
             .akiSheet(isPresented: $pasting) { SourceAddSheet() }
+            .onAppear(perform: loadCatalogues)
+            .akiPrompt("Add a book catalogue", message: "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add", text: $catalogueAddress, isPresented: $addingCatalogue) {
+                let address = catalogueAddress
+                catalogueAddress = ""
+                Task {
+                    do {
+                        _ = try await model.engine.addCatalogue(url: address)
+                        loadCatalogues()
+                    } catch { catalogueProblem = describe(error) }
+                }
+            }
+            .akiAlert(catalogueProblem?.title ?? "", message: catalogueProblem?.message, isPresented: Binding(get: { catalogueProblem != nil }, set: { if !$0 { catalogueProblem = nil } }))
             .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
     }
+}
+
+extension SourcesView {
+    fileprivate func loadCatalogues() { catalogues = (try? model.engine.catalogues()) ?? [] }
 }
 
 /// What a repository offers, with install and update.

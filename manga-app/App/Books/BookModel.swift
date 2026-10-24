@@ -101,6 +101,7 @@ final class BookModel: BookPaging {
     // MARK: BookPaging
 
     var theme: BookTheme { style.theme.resolved(dark: systemDark) }
+    var rightToLeft: Bool { info.rtl }
     var pageInsets: UIEdgeInsets { BookGeometry.insets(width: screen.width, safe: safe, margin: style.margin, typeSize: style.size) }
 
     func layout(chapter: Int) -> ChapterLayout? {

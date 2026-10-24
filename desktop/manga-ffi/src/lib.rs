@@ -1920,6 +1920,54 @@ impl From<BookMarkRow> for BookHighlight {
     }
 }
 
+/// A catalogue of books the person added.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CatalogueInfo {
+    pub url: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CatalogueFeed {
+    pub title: String,
+    pub items: Vec<CatalogueItem>,
+    pub next: Option<String>,
+    pub search: Option<String>,
+}
+
+/// A book to get or a shelf to open in a catalogue.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CatalogueItem {
+    pub title: String,
+    pub author: Option<String>,
+    pub summary: Option<String>,
+    pub cover: Option<String>,
+    pub open: Option<String>,
+    pub get: Option<String>,
+}
+
+impl From<akidev_manga::book::opds::Feed> for CatalogueFeed {
+    fn from(feed: akidev_manga::book::opds::Feed) -> CatalogueFeed {
+        CatalogueFeed {
+            title: feed.title,
+            items: feed
+                .items
+                .into_iter()
+                .map(|item| CatalogueItem {
+                    title: item.title,
+                    author: item.author,
+                    summary: item.summary,
+                    cover: item.cover,
+                    open: item.open,
+                    get: item.get,
+                })
+                .collect(),
+            next: feed.next,
+            search: feed.search,
+        }
+    }
+}
+
 /// Where a link inside a book goes.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BookTarget {
@@ -2055,8 +2103,65 @@ impl BookReader {
     }
 }
 
+#[uniffi::export(async_runtime = "tokio")]
+impl Engine {
+    /// Adds a catalogue of books by its address, after reading it once to see that it is one.
+    pub async fn add_catalogue(&self, url: String) -> Result<CatalogueInfo> {
+        let url = url.trim().to_string();
+        let url = if url.contains("://") {
+            url
+        } else {
+            format!("https://{url}")
+        };
+        let feed = akidev_manga::book::opds::fetch(&url).await?;
+        let name = if feed.title.is_empty() {
+            url.clone()
+        } else {
+            feed.title
+        };
+        self.store.add_catalogue(&url, &name, now_ms())?;
+        Ok(CatalogueInfo { url, name })
+    }
+
+    /// One page of a catalogue.
+    pub async fn catalogue_feed(&self, url: String) -> Result<CatalogueFeed> {
+        Ok(akidev_manga::book::opds::fetch(&url).await?.into())
+    }
+
+    /// The results of a search of a catalogue, from what its `search` said.
+    pub async fn catalogue_search(&self, search: String, term: String) -> Result<CatalogueFeed> {
+        let address = akidev_manga::book::opds::search_address(&search, &term).await?;
+        Ok(akidev_manga::book::opds::fetch(&address).await?.into())
+    }
+
+    /// Downloads a book from a catalogue and puts it on the shelf.
+    pub async fn get_book(&self, url: String) -> Result<BookInfo> {
+        let folder = self.dir.join(format!("get-{}", now_ms()));
+        let result = async {
+            let file = akidev_manga::book::opds::download(&url, &folder).await?;
+            self.import_book(file.to_string_lossy().into_owned())
+        }
+        .await;
+        let _ = std::fs::remove_dir_all(&folder);
+        result
+    }
+}
+
 #[uniffi::export]
 impl Engine {
+    pub fn catalogues(&self) -> Result<Vec<CatalogueInfo>> {
+        Ok(self
+            .store
+            .catalogues()?
+            .into_iter()
+            .map(|(url, name)| CatalogueInfo { url, name })
+            .collect())
+    }
+
+    pub fn remove_catalogue(&self, url: String) -> Result<()> {
+        Ok(self.store.remove_catalogue(&url)?)
+    }
+
     /// Adds a book from the device to the shelf. A book already on the shelf is found, not added twice.
     pub fn import_book(&self, path: String) -> Result<BookInfo> {
         let imported = akidev_manga::book::import(

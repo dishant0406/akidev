@@ -501,7 +501,7 @@ static SELF_CLOSED: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Markup as the HTML parser should see it.
-fn parse(bytes: &[u8]) -> Html {
+pub(super) fn parse(bytes: &[u8]) -> Html {
     let text = String::from_utf8_lossy(bytes);
     let text = text.trim_start_matches('\u{feff}');
     let text = SELF_CLOSED.replace_all(text, |found: &Captures| {

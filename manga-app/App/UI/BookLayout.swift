@@ -230,6 +230,9 @@ struct ChapterTypesetter {
         var headings: [NSRange] = []
         var source = 0
 
+        // A page that is one picture and nothing else (a comic's page, a cover) fills the page.
+        var pictureOnly = false
+        if chapter.blocks.count == 1, case .image = chapter.blocks[0].kind { pictureOnly = true }
         for block in chapter.blocks {
             let blockStart = out.length
             if block.pageBreakBefore, blockStart > 0 { breaks.append(blockStart) }
@@ -252,7 +255,7 @@ struct ChapterTypesetter {
                     source += run.text.utf16.count
                 }
             case .image(let path, let ink):
-                let attachment = BookAttachment(kind: .image(path: path, ink: ink), size: fit(pictureSize(path)))
+                let attachment = BookAttachment(kind: .image(path: path, ink: ink), size: fit(pictureSize(path), fill: pictureOnly))
                 out.append(placeholder(attachment, paragraph: paragraph, base: base))
                 source += 1
             case .rule:
@@ -271,8 +274,12 @@ struct ChapterTypesetter {
 
     /// A picture's size on the page: half its pixels at most, never wider than the page or most of its height. One that cannot be
     /// read still gets a small box, so the text around it keeps its place.
-    private func fit(_ pixels: CGSize?) -> CGSize {
+    private func fit(_ pixels: CGSize?, fill: Bool) -> CGSize {
         guard let pixels, pixels.width > 0, pixels.height > 0 else { return CGSize(width: size.width * 0.3, height: size.width * 0.3) }
+        if fill {
+            let scale = min(size.width / pixels.width, size.height / pixels.height)
+            return CGSize(width: (pixels.width * scale).rounded(.down), height: (pixels.height * scale).rounded(.down))
+        }
         let scale = min(size.width / pixels.width * 2, size.height * 0.85 / pixels.height * 2, 2) / 2
         return CGSize(width: (pixels.width * scale).rounded(), height: (pixels.height * scale).rounded())
     }

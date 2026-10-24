@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 8;
+const SCHEMA_VERSION: i32 = 9;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -355,6 +355,15 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 colour INTEGER NOT NULL DEFAULT 0, note TEXT, quote TEXT NOT NULL, created_at INTEGER NOT NULL);
              CREATE INDEX book_mark_by_book ON book_mark (book, chapter, start);
              PRAGMA user_version = 8;
+             COMMIT;",
+        )?;
+    }
+    if version < 9 {
+        // A catalogue of books the person added by its address.
+        db.execute_batch(
+            "BEGIN;
+             CREATE TABLE catalogue (url TEXT PRIMARY KEY, name TEXT NOT NULL, added_at INTEGER NOT NULL);
+             PRAGMA user_version = 9;
              COMMIT;",
         )?;
     }
@@ -1222,6 +1231,28 @@ impl Store {
         Ok(())
     }
 
+    pub fn add_catalogue(&self, url: &str, name: &str, now_ms: i64) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT INTO catalogue (url, name, added_at) VALUES (?1, ?2, ?3) ON CONFLICT (url) DO UPDATE SET name = ?2",
+            params![url, name, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// The catalogues, in the order they were added, as (address, name).
+    pub fn catalogues(&self) -> anyhow::Result<Vec<(String, String)>> {
+        let db = self.db();
+        let mut statement = db.prepare("SELECT url, name FROM catalogue ORDER BY added_at, url")?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn remove_catalogue(&self, url: &str) -> anyhow::Result<()> {
+        self.db()
+            .execute("DELETE FROM catalogue WHERE url = ?1", params![url])?;
+        Ok(())
+    }
+
     pub fn add_book_mark(&self, mark: &BookMarkRow) -> anyhow::Result<i64> {
         let db = self.db();
         db.execute(
@@ -1834,9 +1865,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 to 8 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 9 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE catalogue; DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();
@@ -1960,6 +1991,29 @@ mod tests {
         assert_eq!(store.book_marks("b").unwrap().len(), 2);
         store.remove_book("b").unwrap();
         assert!(store.book_marks("b").unwrap().is_empty());
+    }
+
+    #[test]
+    fn catalogues_are_kept_in_the_order_added_and_renamed_when_added_again() {
+        let store = Store::in_memory().unwrap();
+        store
+            .add_catalogue("https://b.example/opds", "B", 2)
+            .unwrap();
+        store
+            .add_catalogue("https://a.example/opds", "A", 1)
+            .unwrap();
+        store
+            .add_catalogue("https://b.example/opds", "B again", 9)
+            .unwrap();
+        let names: Vec<String> = store
+            .catalogues()
+            .unwrap()
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        assert_eq!(names, ["A", "B again"]);
+        store.remove_catalogue("https://a.example/opds").unwrap();
+        assert_eq!(store.catalogues().unwrap().len(), 1);
     }
 
     #[test]

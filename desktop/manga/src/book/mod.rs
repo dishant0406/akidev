@@ -10,6 +10,7 @@
 mod css;
 mod epub;
 mod html;
+pub mod opds;
 
 use std::path::Path;
 

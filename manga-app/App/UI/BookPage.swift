@@ -24,6 +24,8 @@ struct BookPlace: Equatable {
     /// One page forward or back, without the page-turn motion (a swipe in ink mode).
     func turnPage(forward: Bool)
     var overlays: BookOverlays { get }
+    /// The book is read from right to left: the pages turn the other way.
+    var rightToLeft: Bool { get }
     /// The selection moved (nil to drop it); a selection is made by a long press and moved by its handles.
     func select(_ span: BookSpan?)
     /// The words of a stretch of a chapter, from the page that is showing it.
@@ -377,7 +379,8 @@ struct BookPager: UIViewControllerRepresentable {
         if let jump, jump.id != coordinator.shown {
             coordinator.shown = jump.id
             let page = BookPageController(place: jump.place, paging: paging)
-            let direction: UIPageViewController.NavigationDirection = jump.forward ? .forward : .reverse
+            // In a book read from right to left the next page comes in from the left.
+            let direction: UIPageViewController.NavigationDirection = jump.forward != paging.rightToLeft ? .forward : .reverse
             controller.setViewControllers([page], direction: direction, animated: jump.animated)
         } else if let page = controller.viewControllers?.first as? BookPageController {
             page.show()
@@ -393,10 +396,20 @@ struct BookPager: UIViewControllerRepresentable {
         init(paging: any BookPaging) { self.paging = paging }
 
         @objc func swiped(_ swipe: UISwipeGestureRecognizer) {
-            paging.turnPage(forward: swipe.direction == .left)
+            // Forward is to the left in a book read from left to right, and to the right in the other.
+            paging.turnPage(forward: (swipe.direction == .left) != paging.rightToLeft)
         }
 
+        // The system's "after" is to the right of the page. In a book read from right to left that is the page before.
         func pageViewController(_ controller: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
+            paging.rightToLeft ? previous(viewController) : next(viewController)
+        }
+
+        func pageViewController(_ controller: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
+            paging.rightToLeft ? next(viewController) : previous(viewController)
+        }
+
+        private func next(_ viewController: UIViewController) -> UIViewController? {
             guard let page = viewController as? BookPageController, let place = page.resolved else { return nil }
             guard let layout = paging.layout(chapter: place.chapter) else { return nil }
             if place.page + 1 < layout.count { return BookPageController(place: BookPlace(chapter: place.chapter, page: place.page + 1), paging: paging) }
@@ -404,7 +417,7 @@ struct BookPager: UIViewControllerRepresentable {
             return BookPageController(place: BookPlace(chapter: place.chapter + 1, page: 0), paging: paging)
         }
 
-        func pageViewController(_ controller: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
+        private func previous(_ viewController: UIViewController) -> UIViewController? {
             guard let page = viewController as? BookPageController, let place = page.resolved else { return nil }
             if place.page > 0 { return BookPageController(place: BookPlace(chapter: place.chapter, page: place.page - 1), paging: paging) }
             guard place.chapter > 0 else { return nil }
