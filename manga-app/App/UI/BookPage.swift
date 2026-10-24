@@ -21,6 +21,8 @@ struct BookPlace: Equatable {
     func picture(path: String, width: CGFloat, ready: @escaping @MainActor @Sendable () -> Void) -> CGImage?
     func turned(to place: BookPlace)
     func tapped(_ zone: BookTapZone, link: String?)
+    /// One page forward or back, without the page-turn motion (a swipe in ink mode).
+    func turnPage(forward: Bool)
 }
 
 enum BookTapZone { case back, forward, middle }
@@ -206,12 +208,14 @@ enum BookGeometry {
     static func bottom(safe: UIEdgeInsets) -> CGFloat { max(safe.bottom, 12) + 30 }
 
     /// The text area of a screen of `size` with `safe` insets and the style's margins, and its place on the screen.
-    static func insets(safe: UIEdgeInsets, margin: BookMargin) -> UIEdgeInsets {
-        UIEdgeInsets(top: top(safe: safe), left: margin.points, bottom: bottom(safe: safe), right: margin.points)
+    static func insets(width: CGFloat, safe: UIEdgeInsets, margin: BookMargin, typeSize: Double) -> UIEdgeInsets {
+        // A line of more than about seventy characters is tiring to follow: on a wide screen the margins grow to keep it shorter.
+        let side = max(margin.points, (width - CGFloat(typeSize) * 34) / 2)
+        return UIEdgeInsets(top: top(safe: safe), left: side, bottom: bottom(safe: safe), right: side)
     }
 
-    static func textSize(screen size: CGSize, safe: UIEdgeInsets, margin: BookMargin) -> CGSize {
-        let insets = insets(safe: safe, margin: margin)
+    static func textSize(screen size: CGSize, safe: UIEdgeInsets, margin: BookMargin, typeSize: Double) -> CGSize {
+        let insets = insets(width: size.width, safe: safe, margin: margin, typeSize: typeSize)
         return CGSize(width: size.width - insets.left - insets.right, height: size.height - insets.top - insets.bottom)
     }
 
@@ -227,12 +231,19 @@ struct BookPager: UIViewControllerRepresentable {
     let paging: any BookPaging
     /// Changes when the reader should show `place` now (a jump, or the type changing) rather than wait to be turned.
     let jump: BookJump?
+    /// A still display: no page-turn motion.
+    let still: Bool
 
     func makeUIViewController(context: Context) -> UIPageViewController {
         let controller = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: [.interPageSpacing: 0])
         controller.dataSource = context.coordinator
         controller.delegate = context.coordinator
         controller.view.backgroundColor = paging.theme.paper
+        for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
+            let swipe = UISwipeGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.swiped(_:)))
+            swipe.direction = direction
+            controller.view.addGestureRecognizer(swipe)
+        }
         return controller
     }
 
@@ -240,6 +251,9 @@ struct BookPager: UIViewControllerRepresentable {
         let coordinator = context.coordinator
         coordinator.paging = paging
         controller.view.backgroundColor = paging.theme.paper
+        // Still: the system's sliding scroll is turned off, and a swipe turns the page at once.
+        for case let scroll as UIScrollView in controller.view.subviews { scroll.isScrollEnabled = !still }
+        controller.view.gestureRecognizers?.compactMap { $0 as? UISwipeGestureRecognizer }.forEach { $0.isEnabled = still }
         if let jump, jump.id != coordinator.shown {
             coordinator.shown = jump.id
             let page = BookPageController(place: jump.place, paging: paging)
@@ -257,6 +271,10 @@ struct BookPager: UIViewControllerRepresentable {
         var shown = -1
 
         init(paging: any BookPaging) { self.paging = paging }
+
+        @objc func swiped(_ swipe: UISwipeGestureRecognizer) {
+            paging.turnPage(forward: swipe.direction == .left)
+        }
 
         func pageViewController(_ controller: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
             guard let page = viewController as? BookPageController, let place = page.resolved else { return nil }

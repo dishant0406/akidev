@@ -22,6 +22,7 @@ struct BookSettingsSheet: View {
                     AkiText("Margins", .captionStrong, tone: .muted)
                     AkiTabs(items: BookMargin.allCases.map { ($0, $0.title) }, selection: $model.style.margin)
                 }
+                light($model)
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {
                         AkiSwitch(title: "Justify text", isOn: $model.style.justify)
@@ -30,6 +31,29 @@ struct BookSettingsSheet: View {
                 }
             }
             .padding(24)
+        }
+    }
+
+    /// Brightness, warmth and the paper-like display.
+    private func light(_ model: Bindable<BookModel>) -> some View {
+        AkiCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 18) {
+                AkiSwitch(title: "Set the brightness here", subtitle: "Goes lower than the phone's lowest, and is given back when you close the book.", isOn: Binding(
+                    get: { model.wrappedValue.style.brightness != nil },
+                    set: { model.wrappedValue.style.brightness = $0 ? 0.6 : nil }
+                ))
+                if let brightness = model.wrappedValue.style.brightness {
+                    stepper("Brightness", value: Binding(get: { brightness }, set: { model.wrappedValue.style.brightness = $0 }), range: 0...1, small: "−", large: "+")
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    AkiText("Warm tint", .bodyStrong)
+                    AkiTabs(items: BookWarmth.allCases.map { ($0, $0.title) }, selection: model.style.warmth)
+                }
+                if model.wrappedValue.style.warmth != .off {
+                    stepper("Warmth", value: model.style.warmthAmount, range: 0.1...0.8, small: "−", large: "+")
+                }
+                AkiSwitch(title: "Ink display", subtitle: "Grey, still and quiet like paper: no page-turn motion.", isOn: model.style.ink)
+            }
         }
     }
 

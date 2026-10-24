@@ -14,7 +14,9 @@ struct BookReaderView: View {
         GeometryReader { proxy in
             ZStack {
                 model.theme.paperColor
-                BookPager(paging: model, jump: model.jump)
+                BookPager(paging: model, jump: model.jump, still: model.style.ink)
+                    .saturation(model.style.ink ? 0 : 1)
+                BookComfortOverlay(style: model.style)
                 if model.place == nil { AkiOpeningLoader(label: model.info.title) }
             }
             .onAppear { model.systemDark = scheme == .dark; model.resize(proxy.size, safe: BookGeometry.safe) }
@@ -41,8 +43,9 @@ struct BookReaderView: View {
         .akiConfirm("Open this link?", message: model.externalLink?.absoluteString ?? "", confirm: "Open", isPresented: Binding(get: { model.externalLink != nil }, set: { if !$0 { model.externalLink = nil } })) {
             if let url = model.externalLink { UIApplication.shared.open(url) }
         }
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; BookComfort.apply(model.style.brightness) }
+        .onChange(of: model.style.brightness) { _, now in BookComfort.apply(now) }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false; BookComfort.restore() }
     }
 
     private var topBar: some View {

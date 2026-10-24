@@ -12,6 +12,14 @@ struct BookStyle: Codable, Equatable {
     var justify = true
     var hyphenate = true
     var theme = BookTheme.auto
+    /// How bright the screen is while reading, 0 to 1, or nil to leave the phone's own. Below the lowest the phone goes, a dark
+    /// layer over the page takes it further.
+    var brightness: Double?
+    var warmth = BookWarmth.off
+    /// How strong the warm tint is, 0 to 1.
+    var warmthAmount: Double = 0.35
+    /// A paper-like display: grey, still, no page-turn motion.
+    var ink = false
 
     init() {}
 
@@ -26,7 +34,14 @@ struct BookStyle: Codable, Equatable {
         justify = try values.decodeIfPresent(Bool.self, forKey: .justify) ?? defaults.justify
         hyphenate = try values.decodeIfPresent(Bool.self, forKey: .hyphenate) ?? defaults.hyphenate
         theme = try values.decodeIfPresent(BookTheme.self, forKey: .theme) ?? defaults.theme
+        brightness = try values.decodeIfPresent(Double.self, forKey: .brightness)
+        warmth = try values.decodeIfPresent(BookWarmth.self, forKey: .warmth) ?? defaults.warmth
+        warmthAmount = try values.decodeIfPresent(Double.self, forKey: .warmthAmount) ?? defaults.warmthAmount
+        ink = try values.decodeIfPresent(Bool.self, forKey: .ink) ?? defaults.ink
     }
+
+    /// The choices that change where words fall on a page; the others only change how the page is lit or coloured.
+    var affectsType: [AnyHashable] { [font, size, lineSpacing, margin, justify, hyphenate] }
 
     static let sizes: ClosedRange<Double> = 14...34
     static let spacings: ClosedRange<Double> = 1.1...1.9
@@ -96,13 +111,14 @@ enum BookMargin: String, Codable, CaseIterable {
 /// The reading surface: paper and ink. Not the app's tokens, which are for the app's own screens.
 enum BookTheme: String, Codable, CaseIterable {
     /// White by day, night by night: whichever the phone is in.
-    case auto, paper, sepia, night, black
+    case auto, paper, sepia, ink, night, black
 
     var title: String {
         switch self {
         case .auto: "Auto"
         case .paper: "Paper"
         case .sepia: "Sepia"
+        case .ink: "Ink"
         case .night: "Night"
         case .black: "Black"
         }
@@ -115,6 +131,7 @@ enum BookTheme: String, Codable, CaseIterable {
         switch self {
         case .auto, .paper: UIColor(hex: 0xFAFAF8)
         case .sepia: UIColor(hex: 0xF3EAD7)
+        case .ink: UIColor(hex: 0xDADAD6)
         case .night: UIColor(hex: 0x1C1C1E)
         case .black: UIColor(hex: 0x000000)
         }
@@ -124,6 +141,7 @@ enum BookTheme: String, Codable, CaseIterable {
         switch self {
         case .auto, .paper: UIColor(hex: 0x1A1A1A)
         case .sepia: UIColor(hex: 0x4B3B2A)
+        case .ink: UIColor(hex: 0x262626)
         case .night: UIColor(hex: 0xD6D6DA)
         case .black: UIColor(hex: 0xBDBDC2)
         }
@@ -145,7 +163,7 @@ struct BookThemePicker: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             ForEach(BookTheme.allCases, id: \.self) { theme in
                 let shown = theme.resolved(dark: scheme == .dark)
                 let chosen = theme == selection
@@ -155,7 +173,7 @@ struct BookThemePicker: View {
                             Circle().fill(shown.paperColor)
                             Text("Aa").font(.system(size: 15, weight: .semibold, design: .serif)).foregroundStyle(shown.inkColor)
                         }
-                        .frame(width: 54, height: 54)
+                        .frame(width: 46, height: 46)
                         .overlay(Circle().strokeBorder(chosen ? Aki.primary : Aki.secondary, lineWidth: chosen ? 3 : 1))
                         AkiText(theme.title, .caption, tone: chosen ? .text : .muted, lines: 1)
                     }

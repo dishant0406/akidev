@@ -125,6 +125,14 @@ struct BookReaderScreen: View {
         .task {
             guard model == nil else { return }
             let prefs = app.prefs
+            #if DEBUG
+            // `-bookInk YES`, `-bookWarmth always`, `-bookBrightness 0.1`, `-bookTheme ink`: the reader's comfort settings, from a script.
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: "bookInk") != nil { prefs.bookStyle.ink = defaults.bool(forKey: "bookInk") }
+            if let warmth = defaults.string(forKey: "bookWarmth").flatMap(BookWarmth.init(rawValue:)) { prefs.bookStyle.warmth = warmth }
+            if defaults.object(forKey: "bookBrightness") != nil { prefs.bookStyle.brightness = defaults.double(forKey: "bookBrightness") }
+            if let theme = defaults.string(forKey: "bookTheme").flatMap(BookTheme.init(rawValue:)) { prefs.bookStyle.theme = theme }
+            #endif
             do {
                 model = try await BookModel.open(book, engine: app.engine, style: prefs.bookStyle, invertTaps: prefs.invertTaps, saveStyle: { prefs.bookStyle = $0 })
             } catch { failure = describe(error).message }

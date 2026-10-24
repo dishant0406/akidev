@@ -22,9 +22,7 @@ final class BookModel: BookPaging {
         didSet {
             guard style != oldValue else { return }
             saveStyle(style)
-            var type = style
-            type.theme = oldValue.theme
-            if type != oldValue { typeChanged() }
+            if style.affectsType != oldValue.affectsType { typeChanged() }
         }
     }
 
@@ -89,7 +87,7 @@ final class BookModel: BookPaging {
     // MARK: BookPaging
 
     var theme: BookTheme { style.theme.resolved(dark: systemDark) }
-    var pageInsets: UIEdgeInsets { BookGeometry.insets(safe: safe, margin: style.margin) }
+    var pageInsets: UIEdgeInsets { BookGeometry.insets(width: screen.width, safe: safe, margin: style.margin, typeSize: style.size) }
 
     func layout(chapter: Int) -> ChapterLayout? {
         if let layout = layouts[chapter] { return layout }
@@ -143,7 +141,8 @@ final class BookModel: BookPaging {
     func tapped(_ zone: BookTapZone, link: String?) {
         if let link { return follow(link) }
         switch zone {
-        case .middle: withAnimation(.snappy(duration: 0.25)) { chromeVisible.toggle() }
+        case .middle:
+            if style.ink { chromeVisible.toggle() } else { withAnimation(.snappy(duration: 0.25)) { chromeVisible.toggle() } }
         case .back: turn(by: invertTaps ? 1 : -1)
         case .forward: turn(by: invertTaps ? -1 : 1)
         }
@@ -196,15 +195,17 @@ final class BookModel: BookPaging {
         if page >= 0, page < layout.count {
             move(to: BookPlace(chapter: place.chapter, page: page), forward: step > 0)
         } else if step > 0, place.chapter + 1 < chapterCount {
-            go(to: Spot(chapter: place.chapter + 1, offset: 0), forward: true, animated: true)
+            go(to: Spot(chapter: place.chapter + 1, offset: 0), forward: true, animated: !style.ink)
         } else if step < 0, place.chapter > 0 {
-            go(to: Spot(chapter: place.chapter - 1, offset: nil, fraction: 1), forward: false, animated: true)
+            go(to: Spot(chapter: place.chapter - 1, offset: nil, fraction: 1), forward: false, animated: !style.ink)
         }
     }
 
+    func turnPage(forward: Bool) { turn(by: forward ? 1 : -1) }
+
     private func move(to target: BookPlace, forward: Bool) {
         jumps += 1
-        jump = BookJump(id: jumps, place: target, forward: forward, animated: true)
+        jump = BookJump(id: jumps, place: target, forward: forward, animated: !style.ink)
         turned(to: target)
     }
 
@@ -255,7 +256,7 @@ final class BookModel: BookPaging {
         guard chapter >= 0, chapter < chapterCount, screen != .zero, layouts[chapter] == nil, building.insert(chapter).inserted else { return }
         let typesetter = ChapterTypesetter(
             style: style,
-            size: BookGeometry.textSize(screen: screen, safe: safe, margin: style.margin),
+            size: BookGeometry.textSize(screen: screen, safe: safe, margin: style.margin, typeSize: style.size),
             language: info.language,
             pictureSize: { [reader] path in
                 guard let data = try? reader.resource(path: path), let source = CGImageSourceCreateWithData(data as CFData, nil),
