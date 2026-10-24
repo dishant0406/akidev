@@ -280,3 +280,43 @@ themes, type settings, contents, scrubber, link trail), resume where you stopped
 always shown, free, backups will include files (not built). Skipped for now by the owner: VoiceOver and dictionary lookup.
 Not built: highlights and notes, search, footnote popovers, custom fonts and embedded fonts, OPDS catalogue, per-book settings,
 text to speech, vertical and right-to-left layout, fixed layout.
+
+## 12. Round two: reading comfort, reading tools, catalogues, fonts and layouts (2026-10-24)
+
+Research done with web search (TinyFish) the same day; sources at the end of this section. What it says, and what we build from it.
+
+### 12.1 Eye comfort: what is true and what we build
+
+| Finding | Evidence | What we do |
+| --- | --- | --- |
+| People want a screen **dimmer than the system minimum** at night: threads in r/Android, r/iphone, r/DoesAnybodyElse ("minimum brightness is still too bright in bed"), third-party dimmers exist for it | several Reddit threads | In-reader **brightness** slider that goes below the system's lowest by laying a black layer over the page (on an OLED a darker picture is a dimmer screen, and a layer adds no flicker, unlike PWM dimming, which is worst at low brightness) |
+| **Warm light** schedules are loved on Kindle and Kobo (sunset to sunrise, manual) | Kindle/Kobo guides, r/ereader | **Warmth**: a warm tint over the page, off, always, or at night (a clock window, no location permission) |
+| **Blue light** claims are weak: the American Academy of Ophthalmology and a 2023 systematic review find blue-blocking lenses do not reduce digital eye strain; sleep effects come from light amount and timing | AAO, PubMed review | We say what warmth is for (less glare, less light at night, a paper feel), never that it "protects eyes" |
+| **Dark vs light**: light text on dark is not better for everyone; visual performance is usually better in light mode, dark helps in dim rooms and glare; pure white on pure black is harshest | NN/g, All About Vision, accessibility reviews | Keep both. Themes use soft ink on dark paper, never pure white; **Black** stays for OLED |
+| **E-ink as a reason to read on a phone**: people turn on greyscale, matte protectors, "eye comfort" modes; Moon+ added an **E INK mode** whose main point is *no animation*; "Paper Mode" apps sell paper and e-ink styles | Reddit, Good e-Reader, App Store | **Ink mode**: greyscale page, paper-grain colour with softer contrast, **no page-turn animation or glass motion**, optional full-page flash off; chrome stays quiet. A tick in settings, plus a theme "Ink" (light grey paper, charcoal ink) and "Ink dark" |
+| **Line length**: 50 to 75 characters is the researched sweet spot; 66 ideal | Baymard, literature review | Margins adjust to the type size so a line is at most about 70 characters; the Margin choice is the minimum |
+| **Bionic reading and speed tools**: studies are mixed to unconvincing | The Conversation, 2025 PMC study | Not built |
+
+### 12.2 Reading tools
+
+- **Highlights and notes.** Kindle's model is what readers know: press and drag to select, handles to adjust, a menu (colours, note, copy), tap a highlight to change it. Users export to Markdown/Obsidian (several vendor tools exist only for this). We build our own selection on Core Text (word under the finger, drag handles, menu), four colours, a note on any highlight, a list of all marks in the contents sheet, **export as Markdown**, stored by (chapter, start, end) in the same position units as everything else; a quote of the text is kept with each so a mark survives a font change and can be found again if the book is re-set.
+- **Search in the book**: full text across chapters, results with a line of context, tap to go there; runs in the engine over the parsed chapters one at a time.
+- **Footnote popups.** Apple, Kobo and Kindle all show the note in a small card when its mark is tapped (the standard is `epub:type="noteref"` pointing at an `<aside epub:type="footnote">`). Many books do not use the markup, so: a link whose target is in the book and is short (a few lines) and sits at a chapter's end or in an aside/notes file shows as a card; anything else follows the link with the "back" pill.
+
+### 12.3 Catalogues (OPDS)
+
+OPDS 1.2 is Atom: a navigation feed lists sub-catalogues, an acquisition feed lists books with `rel="http://opds-spec.org/acquisition"` links (to an EPUB), cover/thumbnail image links, a `search` link (OpenSearch template) and `next` links for paging. We add **Book catalogues** to Sources: paste an address, browse, search, tap Get. The engine fetches and parses the feed (the Atom is read with the HTML parser we already link, so no new library) and downloads the file through the same import as a local file. No catalogue is built in or endorsed. Basic-auth catalogues (Calibre-Web) take a user name and password stored in the keychain... not built in this round: public catalogues first.
+
+### 12.4 Fonts and layouts
+
+- **Embedded fonts.** EPUB fonts may be scrambled ("obfuscated") by a standard rule: the first 1040 bytes are XORed with a SHA-1 of the book's identifier (IDPF), or the first 1024 with a key from a UUID (Adobe). We undo it, register the font with Core Text for the session and use it for runs whose CSS `font-family` names it, behind a setting "Use the book's fonts" (default on). Needs one tiny dependency (`sha1`).
+- **Right to left and vertical text.** Core Text supports both (`kCTFrameProgressionAttributeName`, `kCTVerticalFormsAttributeName`). The engine reports the book's direction (package `page-progression-direction`, CSS `direction`, `writing-mode`); Arabic/Hebrew paragraphs set right to left with natural alignment; page turning reverses for right-to-left books; Japanese vertical books are set in columns from the right. Tap sides and swipe follow the book's direction.
+- **Fixed layout.** Most fixed-layout EPUBs people actually read are manga and picture books: one picture per page. Pages that are an image (or an SVG wrapping one) are shown as full pages, zoomable, in the book's direction. Fixed-layout pages with positioned text need a web engine and are not drawn as designed: they are set as reflowable text, in order, and the book says so once.
+
+### 12.5 Order of work
+
+1. Comfort (brightness, warmth, ink mode, theme tuning, line length). 2. Footnote popups, search. 3. Selection, highlights, notes, export. 4. Embedded fonts, right to left, vertical, fixed-layout pictures. 5. OPDS. Each step ends with tests, a simulator check and a commit.
+
+### 12.6 Sources
+
+Dimming and flicker: <https://oledtest.org/blog/oled-eye-strain-pwm-flicker-test/>, <https://daylightcomputer.com/blog/screen-flicker-101>; Reddit threads "Extra Dim is a godsend" (r/Android), "DAE wish they could make their screen dimmer than..." (r/DoesAnybodyElse), "Is there any app I can dim my screen brightness for the night?" (r/iphone). Warm light: <https://www.xda-developers.com/how-to-enable-warm-light-amazon-kindle/>. Blue light: <https://www.aao.org/eye-health/tips-prevention/are-computer-glasses-worth-it>, <https://pubmed.ncbi.nlm.nih.gov/37593770/>. Dark vs light: <https://www.nngroup.com/articles/dark-mode/>, <https://www.allaboutvision.com/conditions/computer-vision-syndrome/digital-eye-strain/is-dark-mode-better-for-eyes/>. E-ink on a phone: <https://goodereader.com/blog/spotlight-on-android/moon-reader-unveils-new-e-ink-mode>, r/ereader "My favorite ereader is my phone with AMOLED display in grayscale mode". Line length: <https://baymard.com/research-articles/line-length-readability>. Bionic reading: <https://theconversation.com/can-bionic-reading-make-you-a-speed-reader-not-so-fast-183905>. Core Text vertical: <https://developer.apple.com/documentation/coretext/kctverticalformsattributename>. Font obfuscation: <https://idpf.org/epub/20/spec/FontManglingSpec.html>. OPDS: <https://specs.opds.io/opds-1.2.html>. Fixed layout: <https://kb.daisy.org/publishing/docs/fxl/overview.html>, <https://github.com/w3c/epub-specs/issues/2985>. Footnotes: <https://help.apple.com/itc/booksassetguide/en.lproj/itccf8ecf5c8.html>, <https://www.mobileread.com/forums/showthread.php?t=355359>. Highlight export: <https://www.clippings.io/export-kindle-highlights-to-markdown/>.
