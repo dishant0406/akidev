@@ -54,6 +54,9 @@ final class BookModel: BookPaging {
     /// The words a search found, shown until the page is turned.
     var found: BookSpan? { didSet { overlaysChanged() } }
     @ObservationIgnored var foundPage: BookPlace?
+    /// Reading aloud, while it goes on, and the sentence being read.
+    var listener: BookListener?
+    var speaking: BookSpan? { didSet { overlaysChanged() } }
     /// A highlight whose note is being written.
     var noteDraft: NoteDraft?
     /// A footnote shown in a card.

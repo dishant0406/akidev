@@ -20,6 +20,7 @@ ICONS = {
     "more": "menu-dots", "play": "play", "pause": "pause", "previous": "skip-previous", "next": "skip-next", "keyboard": "keyboard",
     "server": "server-2", "sparkles": "stars-minimalistic", "list": "list", "warning": "danger-triangle",
     "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip", "image": "gallery", "book": "book-2",
+    "headphones": "headphones-round",
 }
 STYLES = {"": "linear", "-solid": "bold"}
 # Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which

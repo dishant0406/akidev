@@ -6,6 +6,7 @@
 //! index.json.sig      optional: a signature over index.json, hex, by the key the index names
 //! themes/madara.json  a theme (a base definition other sources extend)
 //! sources/xyz.json    a source
+//! voices/abc.json     a voice model (see `voice.rs`); a repository of voices has these and nothing else
 //! ```
 //!
 //! The index names every file with its version and the SHA-256 of its content, so a file that is not
@@ -36,6 +37,8 @@ pub struct Index {
     pub sources: Vec<IndexSource>,
     #[serde(default)]
     pub themes: Vec<IndexTheme>,
+    #[serde(default)]
+    pub voices: Vec<IndexVoice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,6 +58,26 @@ pub struct IndexSource {
     /// Themes this source extends: installed with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+}
+
+/// A voice model a repository offers: enough to list it; the definition file has the files to download.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IndexVoice {
+    pub id: String,
+    pub name: String,
+    pub version: u64,
+    pub path: String,
+    pub sha256: String,
+    pub family: String,
+    pub languages: Vec<String>,
+    /// Everything it downloads, in bytes.
+    pub bytes: u64,
+    pub licence: String,
+    /// The licence allows use in a product that earns money.
+    pub commercial: bool,
+    /// The oldest app version that can run this model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_app: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -100,7 +123,7 @@ impl Index {
             "the repository has no usable name"
         );
         ensure!(
-            self.sources.len() <= 500 && self.themes.len() <= 100,
+            self.sources.len() <= 500 && self.themes.len() <= 100 && self.voices.len() <= 200,
             "the repository lists too much"
         );
         if let Some(key) = &self.key {
@@ -162,8 +185,40 @@ impl Index {
                 theme.id
             );
         }
+        let mut seen = std::collections::HashSet::new();
+        for voice in &self.voices {
+            ensure!(
+                plain(&voice.id),
+                "voice id {:?} is not lowercase letters, digits and dashes",
+                voice.id
+            );
+            ensure!(
+                seen.insert(voice.id.as_str()),
+                "voice {} is listed twice",
+                voice.id
+            );
+            ensure!(
+                inside(&voice.path),
+                "voice {}: the path must stay inside the repository",
+                voice.id
+            );
+            ensure!(
+                is_hex_hash(&voice.sha256),
+                "voice {}: sha256 must be 64 hex digits",
+                voice.id
+            );
+        }
         Ok(())
     }
+}
+
+/// The address is `https`, or `http` to this machine (for development and tests).
+pub fn https_or_local(url: &Url) -> bool {
+    let local = matches!(
+        url.host_str().map(str::to_lowercase).as_deref(),
+        Some("localhost" | "127.0.0.1" | "[::1]" | "::1")
+    );
+    url.scheme() == "https" || (url.scheme() == "http" && local)
 }
 
 /// Where a repository's files are, as a folder address ending in `/`, from what a person pastes:
@@ -181,9 +236,8 @@ pub fn base_of(link: &str) -> anyhow::Result<String> {
         .host_str()
         .context("the address has no host")?
         .to_lowercase();
-    let loopback = matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]" | "::1");
     ensure!(
-        url.scheme() == "https" || (url.scheme() == "http" && loopback),
+        https_or_local(&url),
         "a repository must be served over https"
     );
     ensure!(
@@ -390,12 +444,38 @@ pub fn build_index(dir: &std::path::Path, key: Option<String>) -> anyhow::Result
             id,
         });
     }
+    let mut voices = Vec::new();
+    for path in files("voices")? {
+        let (bytes, _) = read(&path)?;
+        let def = crate::voice::VoiceDef::parse(&bytes)
+            .with_context(|| format!("{} is not a voice model", path.display()))?;
+        ensure!(
+            path.file_stem().and_then(|stem| stem.to_str()) == Some(def.id.as_str()),
+            "{} must be named {}.json after its id",
+            path.display(),
+            def.id
+        );
+        voices.push(IndexVoice {
+            path: format!("voices/{}.json", def.id),
+            sha256: sha256_hex(&bytes),
+            bytes: def.files.iter().map(|file| file.bytes).sum(),
+            licence: def.licence.name.clone(),
+            commercial: def.licence.commercial,
+            id: def.id,
+            name: def.name,
+            version: def.version,
+            family: def.family,
+            languages: def.languages,
+            min_app: def.min_app,
+        });
+    }
     let index = Index {
         schema: SCHEMA,
         name,
         key,
         sources,
         themes,
+        voices,
     };
     index.validate()?;
     Ok(index)
@@ -519,6 +599,7 @@ mod tests {
                 path: "themes/t.json".into(),
                 sha256: "1".repeat(64),
             }],
+            voices: vec![],
         }
     }
 

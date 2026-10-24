@@ -7,6 +7,7 @@ final class AppModel {
     let engine: Engine
     let prefs = Preferences()
     let downloader: AutoDownloader
+    let readAloud: ReadAloudModel
     /// An address to add as a repository, waiting for the person to confirm (a pasted link or an opened one).
     var pendingRepo: PendingRepo?
     /// Everything installed; `visibleSources` is what the person's content settings let through.
@@ -33,6 +34,7 @@ final class AppModel {
         engine = try! Engine(dataDir: base.path)
         let prefs = prefs
         downloader = AutoDownloader(engine: engine, wifiOnly: { prefs.downloadOnWifiOnly })
+        readAloud = ReadAloudModel(engine: engine, prefs: prefs)
         refresh()
         AppDelegate.refresh = { [weak self] in await self?.refreshLibrary(force: true, background: true) }
         AppDelegate.drain = { [weak self] in await self?.resumeDownloads() }

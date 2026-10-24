@@ -13,6 +13,7 @@ mod html;
 pub mod opds;
 mod search;
 mod sections;
+pub mod speech;
 pub use search::{Hit, search};
 pub use sections::Section;
 

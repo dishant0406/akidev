@@ -176,10 +176,11 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
             println!(
-                "{}: {} sources, {} themes{}",
+                "{}: {} sources, {} themes, {} voices{}",
                 index.name,
                 index.sources.len(),
                 index.themes.len(),
+                index.voices.len(),
                 if key.is_some() {
                     ", signed"
                 } else {

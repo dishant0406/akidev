@@ -20,7 +20,8 @@ extension BookModel {
         BookOverlays(
             marks: marks.map { BookMarkSpan(id: $0.id, span: BookSpan(chapter: Int($0.chapter), start: Int($0.start), end: Int($0.end)), colour: Int($0.colour), hasNote: $0.note != nil) },
             selection: selection,
-            found: found
+            found: found,
+            speaking: speaking
         )
     }
 

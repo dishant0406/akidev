@@ -323,3 +323,30 @@ its iOS runtime size question: <https://github.com/k2-fsa/sherpa-onnx/issues/264
 Supertonic (ONNX, OpenRAIL-M): <https://huggingface.co/Supertone/supertonic-3>. Pocket TTS: <https://github.com/kyutai-labs/pocket-tts>, <https://kyutai.org/blog/2026-10-20-pocket-tts-small/>, Core ML and ONNX bundles: <https://soniqo.audio/guides/pocket-tts>.
 Kokoro Core ML: <https://huggingface.co/mattmireles/kokoro-coreml>, FluidAudio: <https://swiftpackageindex.com/FluidInference/FluidAudio>. MLX Audio: <https://github.com/Blaizzy/mlx-audio>.
 The repository format reused: `desktop/manga/src/repo.rs`.
+
+## 11. What was built (2026-10-25)
+
+The owner chose: the models live in **their own repository** (`dishant0406/akidev-voices`, local copy `~/projects/akidev-voices`, Phonon 31M first),
+and **Settings checks the repository when it is opened, not at launch, and shows Reading aloud and the model list only if it answered**.
+This follows section 10 and replaces parts of sections 5 to 7:
+
+- **Repository and definitions:** as in 10.3, with the index extended (`repo.rs`: `voices` next to `sources` and `themes`; the same
+  `akidev-manga-cli index` writes it). A definition names its files (url, SHA-256, size), its `family` and its licence. Four files make
+  Phonon 31M (62 MB): config, tokenizer, weights (q8), default voice.
+- **Engine** (`desktop/manga/src/voice.rs`): downloads into `<id>.part`, checks size and hash as the bytes arrive, loads the model and
+  makes it say one sentence, and only then gives the folder its name; a failure leaves nothing. https only (and this machine for tests);
+  redirects only to https. Speaking is the `ptts` crate (0.4.0, pinned) on the CPU. The folder is the registry: no database table.
+- **Sentences** (`desktop/manga/src/book/speech.rs`): UAX 29 sentence breaks, with abbreviations (Mr., Dr., St.) kept in one; footnote marks and
+  soft hyphens not read; each sentence has its UTF-16 place in the chapter, so highlighting needs no mapping.
+- **Playback** (`App/Reading/BookListener.swift`): speech is made three sentences ahead off the main thread and queued on an `AVAudioPlayerNode`; speed
+  is `AVAudioUnitTimePitch` (pitch holds); a heading is followed by a pause; background audio, lock screen and headphone controls, pause on a call or
+  unplugging. The voice is let go when reading stops or after three minutes paused.
+- **Not built:** the phone voice (`AVSpeechSynthesizer`) is dropped: with the gate, reading aloud exists only where a model does. Other voices of a model
+  (the 102 in `gradium/phonon-voices`), a sleep timer, adding a model by Hugging Face id, Phonon 40M (not listed: CC BY-NC and gated), a second family (Kokoro).
+
+Measured on a Mac (M-series, CPU): load 45 ms, first sound 40 ms, peak memory 372 MB; 19.6 s of speech took 1.13 s in a plain release build (17 times faster
+than real time). A phone has not been measured yet. Under the iPhone profile (`opt-level` "z", fat LTO) the same text speaks 6 times faster than real time, "s" 12 times
+and 3 17 times, and a Release binary built the same way as before is 18.3 MB without speech, 24.5 MB with it at 3 and 26.0 MB at "s": so the speech crates
+are built at 3 (`[profile.ios.package.*]` in `desktop/Cargo.toml`). The +6.2 MB (uncompressed, unstripped) is over the 3.5 MB this plan allowed; most of it is `ptts`, its
+tokenizer library and the matrix kernels for every number type. Launch cost: `AVFAudio` is already loaded by SwiftUI (0.1 ms); `MediaPlayer`, for the lock screen,
+adds about 22 ms in the simulator (PhotosUI measured 1093 ms the same way).

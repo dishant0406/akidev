@@ -531,6 +531,8 @@ pub struct Engine {
     page_lists: std::sync::Mutex<PageCache>,
     /// One turn at a time per chapter: a second ask for a chapter being fetched waits for that fetch and reuses its answer.
     page_turns: std::sync::Mutex<BTreeMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Voice models being downloaded now.
+    installing: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl Engine {
@@ -783,6 +785,7 @@ impl Engine {
         let store = Store::open(&dir.join("manga.db"))?;
         store.fail_interrupted_downloads()?;
         downloads::clear_unfinished(&dir.join("downloads"));
+        akidev_manga::voice::clear_unfinished(&dir.join("voices"));
         let engine = Engine {
             dir,
             store,
@@ -791,6 +794,7 @@ impl Engine {
             downloading: Default::default(),
             page_lists: Default::default(),
             page_turns: Default::default(),
+            installing: Default::default(),
         };
         engine.reload();
         Ok(Arc::new(engine))
@@ -2374,5 +2378,179 @@ impl Engine {
             progress: row.progress,
             finished: row.finished,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reading aloud
+// ---------------------------------------------------------------------------------------------
+
+/// A voice model: one a repository offers, or one on the device.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct VoiceModel {
+    pub id: String,
+    pub name: String,
+    pub languages: Vec<String>,
+    pub bytes: u64,
+    pub licence: String,
+    /// The licence allows use in a product that earns money.
+    pub commercial: bool,
+    /// This app can run it: it knows the kind of model and is new enough.
+    pub usable: bool,
+}
+
+/// Told how far a download has got, in bytes.
+#[uniffi::export(with_foreign)]
+pub trait VoiceProgress: Send + Sync {
+    fn update(&self, done: u64, total: u64);
+}
+
+/// One sentence of a chapter to read, and where it is.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookSpeech {
+    pub start: u32,
+    pub length: u32,
+    pub text: String,
+    pub heading: bool,
+}
+
+/// A voice model loaded and ready to speak.
+#[derive(uniffi::Object)]
+pub struct VoiceSpeaker {
+    speaker: akidev_manga::voice::Speaker,
+}
+
+#[uniffi::export]
+impl VoiceSpeaker {
+    /// The speech for `text`: mono samples at `sample_rate()`. It takes a moment: call it off the main thread.
+    pub fn speak(&self, text: String) -> Result<Vec<f32>> {
+        Ok(self.speaker.speak(&text)?)
+    }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.speaker.sample_rate()
+    }
+}
+
+#[uniffi::export]
+impl BookReader {
+    /// The sentences of one chapter, in reading order, for reading aloud.
+    pub fn speech(&self, chapter: u32) -> Result<Vec<BookSpeech>> {
+        let chapter = self.book.lock().unwrap().chapter(chapter as usize)?;
+        Ok(akidev_manga::book::speech::units(&chapter)
+            .into_iter()
+            .map(|unit| BookSpeech {
+                start: unit.start,
+                length: unit.length,
+                text: unit.text,
+                heading: unit.heading,
+            })
+            .collect())
+    }
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+impl Engine {
+    /// The voice models a repository offers. Reading the index is also how the app learns the repository can be
+    /// reached: an error means it cannot.
+    pub async fn voices_offered(&self, link: String) -> Result<Vec<VoiceModel>> {
+        let base = repo::base_of(&link)?;
+        let index = repo::fetch_index(&base).await?.index;
+        Ok(index
+            .voices
+            .into_iter()
+            .map(|offered| VoiceModel {
+                usable: akidev_manga::voice::runs(&offered, APP_VERSION),
+                id: offered.id,
+                name: offered.name,
+                languages: offered.languages,
+                bytes: offered.bytes,
+                licence: offered.licence,
+                commercial: offered.commercial,
+            })
+            .collect())
+    }
+
+    /// Downloads a model a repository offers, checks it and keeps it on the device.
+    pub async fn install_voice(
+        &self,
+        link: String,
+        id: String,
+        progress: Arc<dyn VoiceProgress>,
+    ) -> Result<()> {
+        let base = repo::base_of(&link)?;
+        let offered = repo::fetch_index(&base)
+            .await?
+            .index
+            .voices
+            .into_iter()
+            .find(|voice| voice.id == id)
+            .ok_or_else(|| failed(format!("the repository has no model called {id}")))?;
+        if !self.installing.lock().unwrap().insert(id.clone()) {
+            return Err(failed("that model is already downloading"));
+        }
+        let _downloading = Downloading {
+            set: &self.installing,
+            id,
+        };
+        akidev_manga::voice::install(
+            &self.voices_dir(),
+            &base,
+            &offered,
+            APP_VERSION,
+            |done, total| progress.update(done, total),
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+#[uniffi::export]
+impl Engine {
+    pub fn voices_installed(&self) -> Vec<VoiceModel> {
+        akidev_manga::voice::installed(&self.voices_dir())
+            .into_iter()
+            .map(|model| VoiceModel {
+                bytes: model.def.files.iter().map(|file| file.bytes).sum(),
+                id: model.def.id,
+                name: model.def.name,
+                languages: model.def.languages,
+                licence: model.def.licence.name,
+                commercial: model.def.licence.commercial,
+                usable: true,
+            })
+            .collect()
+    }
+
+    pub fn remove_voice(&self, id: String) -> Result<()> {
+        Ok(akidev_manga::voice::remove(&self.voices_dir(), &id)?)
+    }
+
+    /// Loads an installed model so it can speak. It takes a moment: call it off the main thread.
+    pub fn open_speaker(&self, id: String) -> Result<Arc<VoiceSpeaker>> {
+        let model = akidev_manga::voice::installed(&self.voices_dir())
+            .into_iter()
+            .find(|model| model.def.id == id)
+            .ok_or_else(|| failed("that voice model is not on this device"))?;
+        let speaker = akidev_manga::voice::Speaker::open(&model.folder, &model.def.lang)?;
+        Ok(Arc::new(VoiceSpeaker { speaker }))
+    }
+}
+
+/// A model being downloaded: it leaves the set when this goes, even if the download is abandoned half way.
+struct Downloading<'a> {
+    set: &'a std::sync::Mutex<std::collections::HashSet<String>>,
+    id: String,
+}
+
+impl Drop for Downloading<'_> {
+    fn drop(&mut self) {
+        self.set.lock().unwrap().remove(&self.id);
+    }
+}
+
+impl Engine {
+    fn voices_dir(&self) -> PathBuf {
+        self.dir.join("voices")
     }
 }

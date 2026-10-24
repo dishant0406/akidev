@@ -110,6 +110,7 @@ final class BookPageView: UIView {
         }
         for mark in overlays.marks { fill(mark.span, HighlightColour.fill(mark.colour)) }
         if let found = overlays.found { fill(found, HighlightColour.fill(0)) }
+        if let speaking = overlays.speaking { fill(speaking, HighlightColour.fill(0)) }
         if let selection = overlays.selection { fill(selection, HighlightColour.selection.withAlphaComponent(0.28)) }
     }
 

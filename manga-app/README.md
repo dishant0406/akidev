@@ -50,6 +50,20 @@ reading library. A format is a `BookFile` in the engine, so another format is on
 `-importBooks /folder` adds every EPUB in it, `-openBook 2` opens the third book on the shelf. Tests: `cargo test -p akidev-manga --test book`;
 with `AKI_BOOK_CORPUS=/folder cargo test -p akidev-manga --test book corpus -- --ignored --nocapture` every EPUB in a folder is read and timed.
 
+## Reading aloud
+
+A book can be read aloud by a voice model that runs on the phone (Phonon 31M today). Models come from a **voices repository**, a
+folder with the same signed-index layout as the source repositories (`desktop/manga/src/repo.rs`, `voices/<id>.json`); the one
+the app asks is [dishant0406/akidev-voices](https://github.com/dishant0406/akidev-voices), which is the only address built in
+(models are not content). Settings asks it when Settings is opened, never at launch, and shows Reading aloud only if it answered.
+A model is downloaded, checked (it must say a test sentence) and kept in `voices/<id>/`; after that reading needs no network.
+The engine side is `desktop/manga/src/voice.rs` (definitions, download, speaking with the `ptts` crate) and
+`src/book/speech.rs` (a chapter's sentences with their places); the app side is `App/Reading/` (`BookListener` makes the speech a
+few sentences ahead and queues it on an `AVAudioEngine`; the page follows the sentence). Adding a model needs no app release as long
+as it is a kind the app runs (`family`, only `ptts` now): see `pipeline/TTS_PLAN.md`, section 11. Debug builds take
+`-voicesRepo http://127.0.0.1:8771/` to read another repository; `AKI_VOICE_MODEL=/folder cargo test -p akidev-manga --release --test voice -- --ignored`
+runs the test that needs a real model.
+
 ## What the app ships with
 
 Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address

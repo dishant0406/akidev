@@ -21,6 +21,8 @@ struct BookOverlays: Equatable {
     var marks: [BookMarkSpan] = []
     var selection: BookSpan?
     var found: BookSpan?
+    /// The sentence being read aloud.
+    var speaking: BookSpan?
 }
 
 /// What the reader can do with a selection or a highlight, from the menu that opens over it.

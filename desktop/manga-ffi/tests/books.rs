@@ -61,6 +61,13 @@ fn a_book_goes_on_the_shelf_is_read_remembered_and_removed() {
     };
     assert_eq!(runs[0].text, "World");
     assert!(reader.chapter(5).is_err());
+    let speech = reader.speech(0).unwrap();
+    let said: Vec<(&str, u32, bool)> = speech
+        .iter()
+        .map(|unit| (unit.text.as_str(), unit.start, unit.heading))
+        .collect();
+    assert_eq!(said, [("Hello", 0, true), ("World", 6, false)]);
+    assert!(reader.speech(5).is_err());
 
     engine
         .save_book_position(info.id.clone(), 0, 6, 0.5, false)

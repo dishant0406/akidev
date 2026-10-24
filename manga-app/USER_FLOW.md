@@ -225,7 +225,9 @@ Reading tools: press and hold a word, drag the handles, then Highlight (four col
 
 Catalogues: Sources, Add a book catalogue, the address of an OPDS feed. Open its shelves, search it, tap Get: the book goes on the shelf.
 
-Not yet: dictionary and VoiceOver (skipped for now), text to speech, per-book settings, highlights and links in vertical text, backup of the books. The plan is `pipeline/BOOKS_PLAN.md`.
+Reading aloud: Settings shows a Reading aloud section only while the voices repository can be reached (asked each time Settings opens). Voice model lists what it offers with size, language and licence (a model not for commercial use says so); Get downloads and checks it, Use picks it, the bin removes it. With a model on the phone the reader's top bar has a headphones button: it reads from the top of the page, marks the sentence, turns the page by itself and goes on through the chapters (not the cover, contents or back matter). The bar has previous and next sentence, play and pause, speed (0.75× to 2×) and stop. It keeps going with the screen off, pauses for a call or when headphones come out, and answers the lock screen and headphone buttons. Closing the book stops it.
+
+Not yet: dictionary and VoiceOver (skipped for now), per-book settings, a sleep timer, picking another voice of a model, highlights and links in vertical text, backup of the books. The plan is `pipeline/BOOKS_PLAN.md`.
 
 ### 4.11 Later flows, sketched
 

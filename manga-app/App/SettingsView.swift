@@ -65,6 +65,13 @@ struct SettingsView: View {
                         }
                     }
                 }
+                if model.readAloud.reachable {
+                    AkiSection(title: "Reading aloud", footer: "Books are read in a voice that runs on this phone. Get a model once; reading then needs no network.") {
+                        AkiLink(value: VoicesRoute()) {
+                            AkiRow(title: "Voice model", subtitle: model.readAloud.current?.name ?? "None yet: choose one to get", icon: "headphones", showsChevron: true)
+                        }
+                    }
+                }
                 AkiSection(title: "Updates", footer: "Akidev checks your saved series in the background when iOS allows it, usually a few times a day and less if you rarely open the app. Nothing is sent anywhere: the check and the alert happen on this device.") {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
@@ -123,6 +130,7 @@ struct SettingsView: View {
         }
         .akiFileImporter(isPresented: $importing, types: [UTType(filenameExtension: "cbz") ?? .zip, .zip]) { url in importComic(url) }
         .akiAlert(message?.title ?? "", message: message?.message, isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } }))
+        .task { await model.readAloud.check() }
         .onAppear {
             downloaded = ((try? model.engine.downloads()) ?? []).reduce(0) { $0 + $1.bytes }
             categories = (try? model.engine.categories()) ?? []

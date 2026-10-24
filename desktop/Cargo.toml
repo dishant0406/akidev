@@ -32,3 +32,24 @@ inherits = "release"
 opt-level = "z"
 lto = "fat"
 codegen-units = 1
+
+# Speech is arithmetic that must run faster than it plays, so the crates that do it are not built at "z" like the rest.
+# Measured on a Mac with the same text under this profile: "z" speaks 6 times faster than real time, "s" 12 times, 3 17 times.
+[profile.ios.package.ptts]
+opt-level = 3
+[profile.ios.package.xn]
+opt-level = 3
+[profile.ios.package.xn-gemm]
+opt-level = 3
+[profile.ios.package.xn-gemm-common]
+opt-level = 3
+[profile.ios.package.xn-gemm-f16]
+opt-level = 3
+[profile.ios.package.xn-gemm-f32]
+opt-level = 3
+[profile.ios.package.xn-gemm-f64]
+opt-level = 3
+[profile.ios.package.xn-gemm-c32]
+opt-level = 3
+[profile.ios.package.xn-gemm-c64]
+opt-level = 3

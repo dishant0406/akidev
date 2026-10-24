@@ -36,6 +36,7 @@ struct BookReaderView: View {
         .overlay(alignment: .bottom) {
             VStack(spacing: 12) {
                 if !model.trail.isEmpty { backToPage.transition(.opacity) }
+                if let listener = model.listener { ListenBar(listener: listener).transition(.opacity) }
                 if model.chromeVisible { bottomBar.transition(.opacity) }
             }
             .padding(.bottom, 24)
@@ -46,11 +47,13 @@ struct BookReaderView: View {
         .persistentSystemOverlays(model.chromeVisible ? .automatic : .hidden)
         .akiAnimation(quick: true, value: model.chromeVisible)
         .akiAnimation(quick: true, value: model.trail.count)
+        .akiAnimation(quick: true, value: model.listener != nil)
         .akiSheet(isPresented: $settings) { BookSettingsSheet(model: model) }
         .akiSheet(isPresented: $contents, full: true) { BookContentsSheet(model: model) { contents = false } }
         .akiSheet(isPresented: $searching, full: true) { BookSearchSheet(model: model) { searching = false } }
         .akiSheet(item: $model.noteDraft) { draft in BookNoteSheet(model: model, draft: draft) { model.noteDraft = nil } }
         .akiSheet(item: $model.footnote) { note in BookFootnoteSheet(model: model, note: note) { model.footnote = nil } }
+        .akiAlert(model.failure?.title ?? "", message: model.failure?.message, isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } }))
         .akiConfirm("Open this link?", message: model.externalLink?.absoluteString ?? "", confirm: "Open", isPresented: Binding(get: { model.externalLink != nil }, set: { if !$0 { model.externalLink = nil } })) {
             if let url = model.externalLink { UIApplication.shared.open(url) }
         }
@@ -58,7 +61,7 @@ struct BookReaderView: View {
         .onChange(of: model.style.brightness) { _, now in BookComfort.apply(now) }
         // The phone's brightness is the phone's: it is given back when the app is left and taken again when it returns.
         .onChange(of: phase) { _, now in if now == .active { BookComfort.apply(model.style.brightness) } else { BookComfort.restore() } }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false; BookComfort.restore() }
+        .onDisappear { model.stopListening(); UIApplication.shared.isIdleTimerDisabled = false; BookComfort.restore() }
     }
 
     private var topBar: some View {
@@ -75,6 +78,9 @@ struct BookReaderView: View {
                 }
                 .accessibilityLabel("Contents")
                 Spacer(minLength: 0)
+                if model.listener == nil, let voice = app.readAloud.current {
+                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen(voice: voice, prefs: app.prefs) }
+                }
                 AkiIconButton(symbol: "search", label: "Search in this book") { searching = true }
                 AkiIconButton(symbol: "sliders", label: "Type and theme") { settings = true }
             }
