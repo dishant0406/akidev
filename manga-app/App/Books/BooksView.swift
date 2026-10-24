@@ -53,7 +53,7 @@ struct BooksView: View {
             if books.indices.contains(index) { reading = books[index] }
         }
         #endif
-        .onChange(of: model.addingBook) { _, now in if now { model.addingBook = false; importing = true } }
+        .onChange(of: model.addingBook, initial: true) { _, now in if now { model.addingBook = false; importing = true } }
         .akiFilesImporter(isPresented: $importing, types: [.epub], onPick: add)
         .akiFullScreen(item: $reading, onDismiss: load) { book in BookReaderScreen(book: book) }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
@@ -93,9 +93,8 @@ struct BooksView: View {
                 adding = (index, files.count)
                 let result = await Task.detached { Result { try engine.importBook(path: file.path) } }.value
                 if case .failure(let error) = result { failures.append("\(file.deletingPathExtension().lastPathComponent): \(describe(error).message)") }
-                try? FileManager.default.removeItem(at: file)
+                try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
             }
-            try? FileManager.default.removeItem(at: files[0].deletingLastPathComponent())
             adding = nil
             load()
             if !failures.isEmpty {
@@ -117,15 +116,17 @@ struct BookReaderScreen: View {
         Group {
             if let model {
                 BookReaderView(model: model, close: { dismiss() })
+            } else if let failure {
+                AkiEmptyState(title: "This book cannot be opened", message: failure, action: ("Close", { dismiss() }))
             } else {
-                AkiEmptyState(title: "This book cannot be opened", message: failure ?? "", action: ("Close", { dismiss() }))
+                AkiOpeningLoader(label: book.title)
             }
         }
         .task {
             guard model == nil else { return }
             let prefs = app.prefs
             do {
-                model = try BookModel(info: book, engine: app.engine, style: prefs.bookStyle, invertTaps: prefs.invertTaps, saveStyle: { prefs.bookStyle = $0 })
+                model = try await BookModel.open(book, engine: app.engine, style: prefs.bookStyle, invertTaps: prefs.invertTaps, saveStyle: { prefs.bookStyle = $0 })
             } catch { failure = describe(error).message }
         }
     }

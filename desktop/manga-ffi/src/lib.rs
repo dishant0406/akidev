@@ -1852,14 +1852,13 @@ pub struct BookBlock {
     pub left: f32,
     pub first_line: f32,
     pub space_before: f32,
-    pub line_height: Option<f32>,
     pub page_break_before: bool,
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum BookKind {
     Text { runs: Vec<BookRun> },
-    Image { src: String, alt: String, ink: bool },
+    Image { src: String, ink: bool },
     Rule,
 }
 
@@ -1882,7 +1881,6 @@ pub struct BookRun {
     pub mono: bool,
     pub shift: i8,
     pub size: f32,
-    pub color: Option<u32>,
     pub link: Option<String>,
 }
 
@@ -1924,12 +1922,11 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
                                     mono: run.look.mono,
                                     shift: run.look.shift,
                                     size: run.look.size,
-                                    color: run.look.color,
                                     link: run.look.link,
                                 })
                                 .collect(),
                         },
-                        b::Kind::Image { src, alt, ink } => BookKind::Image { src, alt, ink },
+                        b::Kind::Image { src, ink } => BookKind::Image { src, ink },
                         b::Kind::Rule => BookKind::Rule,
                     },
                     heading: block.heading,
@@ -1942,7 +1939,6 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
                     left: block.left,
                     first_line: block.first_line,
                     space_before: block.space_before,
-                    line_height: block.line_height,
                     page_break_before: block.page_break_before,
                 })
                 .collect(),
@@ -1999,15 +1995,6 @@ impl BookReader {
             chapter: chapter as u32,
             anchor,
         })
-    }
-
-    /// Where an id falls in a chapter's text.
-    pub fn offset_of(&self, chapter: u32, anchor: String) -> Result<u32> {
-        Ok(self
-            .book
-            .lock()
-            .unwrap()
-            .offset_of(chapter as usize, &anchor)?)
     }
 }
 

@@ -206,12 +206,12 @@ enum BookGeometry {
     static func bottom(safe: UIEdgeInsets) -> CGFloat { max(safe.bottom, 12) + 30 }
 
     /// The text area of a screen of `size` with `safe` insets and the style's margins, and its place on the screen.
-    static func insets(screen size: CGSize, safe: UIEdgeInsets, margin: BookMargin) -> UIEdgeInsets {
+    static func insets(safe: UIEdgeInsets, margin: BookMargin) -> UIEdgeInsets {
         UIEdgeInsets(top: top(safe: safe), left: margin.points, bottom: bottom(safe: safe), right: margin.points)
     }
 
     static func textSize(screen size: CGSize, safe: UIEdgeInsets, margin: BookMargin) -> CGSize {
-        let insets = insets(screen: size, safe: safe, margin: margin)
+        let insets = insets(safe: safe, margin: margin)
         return CGSize(width: size.width - insets.left - insets.right, height: size.height - insets.top - insets.bottom)
     }
 
@@ -274,8 +274,9 @@ struct BookPager: UIViewControllerRepresentable {
         }
 
         func pageViewController(_ controller: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-            guard completed, let place = (controller.viewControllers?.first as? BookPageController)?.resolved else { return }
-            paging.turned(to: place)
+            guard completed, let page = controller.viewControllers?.first as? BookPageController else { return }
+            // A chapter not yet set in type is told by its own place: the last page is counted when it is ready.
+            paging.turned(to: page.resolved ?? page.place)
         }
     }
 }

@@ -130,7 +130,7 @@ final class ChapterLayout: @unchecked Sendable {
                 end = heading.location
             }
             // What is left after this page is only blank lines: they belong to it.
-            if end < total, characters.substring(from: end).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { end = total }
+            if end < total, characters.rangeOfCharacter(from: CharacterSet.whitespacesAndNewlines.inverted, options: [], range: NSRange(location: end, length: total - end)).location == NSNotFound { end = total }
             pages.append(NSRange(location: position, length: end - position))
             position = end
         }
@@ -180,7 +180,7 @@ struct ChapterTypesetter {
                     out.append(NSAttributedString(string: String(run.text[from...]), attributes: attributes))
                     source += run.text.utf16.count
                 }
-            case .image(let path, _, let ink):
+            case .image(let path, let ink):
                 let attachment = BookAttachment(kind: .image(path: path, ink: ink), size: fit(pictureSize(path)))
                 out.append(placeholder(attachment, paragraph: paragraph, base: base))
                 source += 1
@@ -198,7 +198,7 @@ struct ChapterTypesetter {
         return ChapterLayout(index: index, text: out, size: size, breaks: breaks, headings: headings, hyphens: hyphens, anchors: anchors)
     }
 
-    /// A picture's size on the page: about half its pixels, never wider than the page or most of its height. One that cannot be
+    /// A picture's size on the page: half its pixels at most, never wider than the page or most of its height. One that cannot be
     /// read still gets a small box, so the text around it keeps its place.
     private func fit(_ pixels: CGSize?) -> CGSize {
         guard let pixels, pixels.width > 0, pixels.height > 0 else { return CGSize(width: size.width * 0.3, height: size.width * 0.3) }

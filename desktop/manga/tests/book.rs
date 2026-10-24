@@ -193,7 +193,7 @@ fn a_chapter_keeps_its_text_styles_and_order() {
     assert!(quiet.look.italic && (quiet.look.size - 0.8).abs() < 0.01);
     // The picture's path is whole and decoded.
     assert!(
-        matches!(&chapter.blocks[8].kind, Kind::Image { src, alt, ink: false } if src == "OEBPS/images/Pic 1.png" && alt == "A picture")
+        matches!(&chapter.blocks[8].kind, Kind::Image { src, ink: false } if src == "OEBPS/images/Pic 1.png")
     );
 }
 
@@ -213,10 +213,6 @@ fn positions_count_utf16_units_over_the_text_with_a_newline_per_block() {
     let mark =
         chapter.blocks[1].start + "It was a dark and stormy night.".encode_utf16().count() as u32;
     assert_eq!(anchor("mark"), mark);
-    assert_eq!(
-        book.offset_of(0, "second").unwrap(),
-        chapter.blocks[3].start
-    );
 }
 
 #[test]
@@ -505,5 +501,48 @@ fn a_very_large_chapter_file_is_read_as_pieces_cut_between_paragraphs() {
         Some((piece, Some("mid".to_string())))
     );
     assert_eq!(book.target("OEBPS/text/one.xhtml"), Some((0, None)));
-    assert_eq!(book.offset_of(piece, "mid").unwrap(), offset);
+}
+
+#[test]
+fn odd_inputs_do_not_break_a_book() {
+    // A single-quoted DRM algorithm is still DRM; an oversize number in CSS is ignored; a cover that is a page is no cover.
+    let drm = "<encryption><EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/></encryption>";
+    let path = write_book(
+        "p.epub",
+        &[
+            ("META-INF/container.xml", CONTAINER),
+            ("META-INF/encryption.xml", drm),
+            ("OEBPS/content.opf", PACKAGE),
+            ("OEBPS/text/one.xhtml", ONE),
+            ("OEBPS/text/two.xhtml", TWO),
+        ],
+    );
+    assert!(book::open(&path).err().unwrap().to_string().contains("DRM"));
+
+    let opf = PACKAGE.replace(
+        r#"href="images/Cover.jpg" media-type="image/jpeg""#,
+        r#"href="text/two.xhtml" media-type="application/xhtml+xml""#,
+    );
+    let odd = ONE.replace(
+        "<body>",
+        r#"<body style="font-size: nanem; text-indent: infem; margin-left: NaN">"#,
+    );
+    let path = write_book(
+        "q.epub",
+        &[
+            ("META-INF/container.xml", CONTAINER),
+            ("OEBPS/content.opf", &opf),
+            ("OEBPS/text/one.xhtml", &odd),
+            ("OEBPS/text/two.xhtml", TWO),
+        ],
+    );
+    let mut book = book::open(&path).unwrap();
+    assert_eq!(book.cover(), None);
+    let chapter = book.chapter(0).unwrap();
+    assert!(
+        chapter
+            .blocks
+            .iter()
+            .all(|block| block.first_line.is_finite() && block.left.is_finite())
+    );
 }

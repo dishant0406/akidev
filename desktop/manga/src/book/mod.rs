@@ -63,8 +63,6 @@ pub struct Block {
     pub first_line: f32,
     /// Space above, in em: already the larger of the one above and the one below, as CSS joins them.
     pub space_before: f32,
-    /// Line height as a multiple of the font size, when the book sets it.
-    pub line_height: Option<f32>,
     /// The book wants this block on a new page.
     pub page_break_before: bool,
 }
@@ -72,11 +70,10 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Text(Vec<Run>),
-    /// A picture: its path inside the book, what it shows in words, and whether it is dark ink on a clear background
+    /// A picture: its path inside the book, and whether it is dark ink on a clear background
     /// (a title page, an ornament), which must be drawn in the text's colour to be seen on a dark page.
     Image {
         src: String,
-        alt: String,
         ink: bool,
     },
     /// A horizontal rule.
@@ -110,8 +107,6 @@ pub struct Look {
     pub shift: i8,
     /// Size relative to the reader's body size.
     pub size: f32,
-    /// 0xRRGGBB, when the book sets one.
-    pub color: Option<u32>,
     /// Where the text links to: a path inside the book with an optional `#id`, or a web address.
     pub link: Option<String>,
 }
@@ -132,15 +127,6 @@ pub trait BookFile: Send {
     fn cover(&self) -> Option<String>;
     /// Which chapter a link written in the book points into, and where in it.
     fn target(&mut self, link: &str) -> Option<(usize, Option<String>)>;
-    /// Where in a chapter an anchor falls: the start, when it is not there.
-    fn offset_of(&mut self, index: usize, anchor: &str) -> anyhow::Result<u32> {
-        let chapter = self.chapter(index)?;
-        Ok(chapter
-            .anchors
-            .iter()
-            .find(|found| found.id == anchor)
-            .map_or(0, |found| found.offset))
-    }
 }
 
 /// Opens the book at `path`, by what kind of file it is.
@@ -202,7 +188,10 @@ pub fn import(path: &Path, books_dir: &Path, covers_dir: &Path) -> anyhow::Resul
     let copy = books_dir.join(&file);
     let is_new = !copy.exists();
     if is_new {
-        std::fs::copy(path, &copy)?;
+        // Copied under another name first, so a copy cut short is never taken for the book.
+        let partial = books_dir.join(format!("{file}.partial"));
+        std::fs::copy(path, &partial)?;
+        std::fs::rename(&partial, &copy)?;
     }
     let read = (|| {
         let mut book = open(&copy)?;

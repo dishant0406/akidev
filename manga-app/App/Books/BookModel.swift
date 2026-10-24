@@ -11,6 +11,7 @@ import SwiftUI
 final class BookModel: BookPaging {
     let info: BookInfo
     let contents: [BookEntry]
+    let chapterCount: Int
     private let reader: BookReader
     private let engine: Engine
     private let sizes: [UInt64]
@@ -51,6 +52,8 @@ final class BookModel: BookPaging {
     @ObservationIgnored private var restyle: Task<Void, Never>?
     @ObservationIgnored private let pictures = NSCache<NSString, CGImage>()
     @ObservationIgnored private var loadingPictures: Set<String> = []
+    /// Pictures that could not be read, so a page redrawn does not try them again.
+    @ObservationIgnored private var brokenPictures: Set<String> = []
 
     /// A place in the book that is not yet a page: the chapter, and either a position, an id or how far through it.
     struct Spot: Equatable {
@@ -60,24 +63,33 @@ final class BookModel: BookPaging {
         var fraction: Double?
     }
 
-    init(info: BookInfo, engine: Engine, style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) throws {
+    /// Opens the book, off the main thread: reading its contents can take a moment for a large one.
+    static func open(_ info: BookInfo, engine: Engine, style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) async throws -> BookModel {
+        let (reader, contents, sizes) = try await Task.detached(priority: .userInitiated) {
+            let reader = try engine.openBook(id: info.id)
+            return (reader, reader.contents(), reader.chapterSizes())
+        }.value
+        return BookModel(info: info, engine: engine, reader: reader, contents: contents, sizes: sizes, style: style, invertTaps: invertTaps, saveStyle: saveStyle)
+    }
+
+    private init(info: BookInfo, engine: Engine, reader: BookReader, contents: [BookEntry], sizes: [UInt64], style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) {
         self.info = info
         self.engine = engine
+        self.reader = reader
+        self.contents = contents
+        self.sizes = sizes
+        chapterCount = sizes.count
         self.style = style
         self.saveStyle = saveStyle
         self.invertTaps = invertTaps != info.rtl
-        reader = try engine.openBook(id: info.id)
-        contents = reader.contents()
-        sizes = reader.chapterSizes()
         progress = info.progress
         pictures.totalCostLimit = 40 * 1024 * 1024
     }
 
     // MARK: BookPaging
 
-    var chapterCount: Int { Int(reader.chapterCount()) }
     var theme: BookTheme { style.theme.resolved(dark: systemDark) }
-    var pageInsets: UIEdgeInsets { BookGeometry.insets(screen: screen, safe: safe, margin: style.margin) }
+    var pageInsets: UIEdgeInsets { BookGeometry.insets(safe: safe, margin: style.margin) }
 
     func layout(chapter: Int) -> ChapterLayout? {
         if let layout = layouts[chapter] { return layout }
@@ -94,7 +106,7 @@ final class BookModel: BookPaging {
         let pixels = Int((width * Aki.screenScale).rounded())
         let key = "\(path)|\(pixels)"
         if let found = pictures.object(forKey: key as NSString) { return found }
-        guard loadingPictures.insert(key).inserted else { return nil }
+        guard !brokenPictures.contains(key), loadingPictures.insert(key).inserted else { return nil }
         let reader = reader
         Task.detached(priority: .userInitiated) {
             let image = (try? reader.resource(path: path)).flatMap { data -> CGImage? in
@@ -104,7 +116,11 @@ final class BookModel: BookPaging {
             }
             await MainActor.run {
                 self.loadingPictures.remove(key)
-                if let image { self.pictures.setObject(image, forKey: key as NSString, cost: image.bytesPerRow * image.height) }
+                guard let image else {
+                    self.brokenPictures.insert(key)
+                    return
+                }
+                self.pictures.setObject(image, forKey: key as NSString, cost: image.bytesPerRow * image.height)
                 ready()
             }
         }
@@ -113,7 +129,8 @@ final class BookModel: BookPaging {
 
     func turned(to place: BookPlace) {
         self.place = place
-        guard let layout = layouts[place.chapter] else { return }
+        // A page counted from the end waits for its chapter to be set in type.
+        guard let layout = layouts[place.chapter], place.page >= 0 else { return }
         progress = progress(of: place, in: layout)
         let finished = place.chapter == chapterCount - 1 && place.page >= layout.count - 1
         engine.saveBookPositionQuietly(id: info.id, chapter: place.chapter, offset: layout.start(of: place.page), progress: progress, finished: finished)
@@ -174,7 +191,7 @@ final class BookModel: BookPaging {
 
     /// Turns the page by one, across chapter ends.
     private func turn(by step: Int) {
-        guard let place, let layout = layouts[place.chapter] else { return }
+        guard let place, place.page >= 0, let layout = layouts[place.chapter] else { return }
         let page = place.page + step
         if page >= 0, page < layout.count {
             move(to: BookPlace(chapter: place.chapter, page: page), forward: step > 0)
@@ -212,11 +229,16 @@ final class BookModel: BookPaging {
     }
 
     private func follow(_ link: String) {
-        if let target = reader.target(link: link) {
+        if let url = URL(string: link), url.scheme == "http" || url.scheme == "https" {
+            externalLink = url
+            return
+        }
+        let reader = reader
+        Task {
+            // Finding where a link goes can mean reading a large file: not on the main thread.
+            guard let target = await Task.detached(priority: .userInitiated, operation: { reader.target(link: link) }).value else { return }
             if let place, let layout = layouts[place.chapter] { trail.append(Spot(chapter: place.chapter, offset: layout.start(of: place.page))) }
             go(to: Spot(chapter: Int(target.chapter), offset: target.anchor == nil ? 0 : nil, anchor: target.anchor), forward: true, animated: false)
-        } else if let url = URL(string: link), url.scheme == "http" || url.scheme == "https" {
-            externalLink = url
         }
     }
 
@@ -257,11 +279,12 @@ final class BookModel: BookPaging {
         layouts[layout.index] = layout
         NotificationCenter.default.post(name: .bookLayoutReady, object: layout.index)
         arrive(layout)
+        if let place, place.chapter == layout.index, place.page < 0 { turned(to: BookPlace(chapter: place.chapter, page: layout.count - 1)) }
     }
 
     /// Takes the place of a chapter that cannot be read, so the book still opens and turns.
     nonisolated private static let unreadable = BookChapter(
-        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, color: nil, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, lineHeight: nil, pageBreakBefore: false)],
+        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
         anchors: []
     )
 

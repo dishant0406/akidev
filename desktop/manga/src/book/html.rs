@@ -86,9 +86,8 @@ const MAX_DEPTH: usize = 200;
 struct State {
     look: Look,
     align: Align,
-    /// First-line indent in em, and line height as a multiple, as CSS inherits them.
+    /// First-line indent in em, as CSS inherits it.
     indent: f32,
-    line_height: Option<f32>,
     /// Distance from the left edge in em, and the heading level of the block being written.
     left: f32,
     heading: u8,
@@ -110,7 +109,6 @@ struct Props {
     align: Align,
     left: f32,
     first_line: f32,
-    line_height: Option<f32>,
 }
 
 /// A paragraph being written: the text so far and how it is set.
@@ -211,7 +209,7 @@ impl Builder<'_> {
                     .value()
                     .classes()
                     .any(|class| class.ends_with("black-on-transparent"));
-                return self.image(attribute(&element, "src"), element.value().attr("alt"), ink);
+                return self.image(attribute(&element, "src"), ink);
             }
             "svg" => return self.svg(element),
             "br" => return self.text("\u{2028}", &state, true),
@@ -379,7 +377,6 @@ impl Builder<'_> {
             left: props.left,
             first_line: props.first_line,
             space_before: self.space,
-            line_height: props.line_height,
             page_break_before: std::mem::take(&mut self.page_break),
         });
         self.space = 0.0;
@@ -387,14 +384,13 @@ impl Builder<'_> {
         self.offset += length + 1;
     }
 
-    fn image(&mut self, src: Option<&str>, alt: Option<&str>, ink: bool) {
+    fn image(&mut self, src: Option<&str>, ink: bool) {
         let Some(src) = src.filter(|src| !src.starts_with("data:")) else {
             return;
         };
         self.flush();
         let kind = Kind::Image {
             src: join(self.path, src),
-            alt: alt.unwrap_or("").to_string(),
             ink,
         };
         self.push(kind, centered());
@@ -404,7 +400,7 @@ impl Builder<'_> {
     fn svg(&mut self, svg: ElementRef) {
         for node in svg.descendants() {
             if let Some(element) = ElementRef::wrap(node).filter(|e| e.value().name() == "image") {
-                self.image(attribute(&element, "href"), None, false);
+                self.image(attribute(&element, "href"), false);
             }
         }
     }
@@ -422,12 +418,10 @@ impl State {
                 mono: false,
                 shift: 0,
                 size: 1.0,
-                color: None,
                 link: None,
             },
             align: Align::Start,
             indent: 0.0,
-            line_height: None,
             left: 0.0,
             heading: 0,
             pre: false,
@@ -441,7 +435,6 @@ impl State {
             align: self.align,
             left: self.left,
             first_line: self.indent,
-            line_height: self.line_height,
         }
     }
 }
@@ -636,7 +629,6 @@ impl Style {
                     state.look.size = size.clamp(0.4, 4.0);
                 }
             }
-            "color" => state.look.color = color(&value),
             "vertical-align" => {
                 state.look.shift = match value.as_str() {
                     "super" => 1,
@@ -656,18 +648,6 @@ impl Style {
             "text-indent" => {
                 if let Some(indent) = length(&value, state.look.size) {
                     state.indent = indent.clamp(-3.0, 6.0);
-                }
-            }
-            "line-height" => {
-                state.line_height = match value.as_str() {
-                    "normal" => None,
-                    value => value
-                        .strip_suffix('%')
-                        .and_then(|percent| percent.parse::<f32>().ok())
-                        .map(|percent| percent / 100.0)
-                        .or_else(|| value.parse::<f32>().ok())
-                        .or_else(|| length(value, 1.0))
-                        .map(|height| height.clamp(0.8, 3.0)),
                 }
             }
             "white-space" => state.pre = value.starts_with("pre"),
@@ -766,39 +746,5 @@ fn font_size(value: &str, parent: f32) -> Option<f32> {
                 .or_else(|| number("pt").map(|pt| pt / 12.0))
                 .or_else(|| number("px").map(|px| px / 16.0))
         }
-    }
-}
-
-fn color(value: &str) -> Option<u32> {
-    if let Some(hex) = value.strip_prefix('#') {
-        return match hex.len() {
-            6 => u32::from_str_radix(hex, 16).ok(),
-            3 => {
-                let short = u32::from_str_radix(hex, 16).ok()?;
-                let (r, g, b) = ((short >> 8) & 0xf, (short >> 4) & 0xf, short & 0xf);
-                Some(((r * 17) << 16) | ((g * 17) << 8) | (b * 17))
-            }
-            _ => None,
-        };
-    }
-    if let Some(args) = value
-        .strip_prefix("rgb(")
-        .and_then(|rest| rest.strip_suffix(')'))
-    {
-        let parts: Vec<u32> = args
-            .split(',')
-            .filter_map(|part| part.trim().parse().ok())
-            .collect();
-        if let [r, g, b] = parts[..] {
-            return Some(r.min(255) << 16 | g.min(255) << 8 | b.min(255));
-        }
-    }
-    match value {
-        "black" => Some(0x000000),
-        "white" => Some(0xffffff),
-        "red" => Some(0xff0000),
-        "blue" => Some(0x0000ff),
-        "gray" | "grey" => Some(0x808080),
-        _ => None,
     }
 }

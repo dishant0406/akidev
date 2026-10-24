@@ -23,11 +23,12 @@ extension View {
     func akiFilesImporter(isPresented: Binding<Bool>, types: [UTType], onPick: @escaping ([URL]) -> Void) -> some View {
         fileImporter(isPresented: isPresented, allowedContentTypes: types, allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("picked-\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let copies: [URL] = urls.compactMap { url in
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                // A folder of its own for each, so two files with one name from different places do not meet.
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("picked-\(UUID().uuidString)")
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let copy = folder.appendingPathComponent(url.lastPathComponent)
                 return (try? FileManager.default.copyItem(at: url, to: copy)) != nil ? copy : nil
             }

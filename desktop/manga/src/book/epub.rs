@@ -38,6 +38,8 @@ pub struct Epub {
     /// The last large file read, whole, while its pieces are being asked for one after another.
     whole: Option<(String, Chapter)>,
     sizes: Vec<u64>,
+    /// Where each file's first chapter is, by lower-case path.
+    first: HashMap<String, usize>,
     contents: Vec<Entry>,
     cover: Option<String>,
 }
@@ -63,6 +65,7 @@ impl Epub {
             spine: Vec::new(),
             whole: None,
             sizes: Vec::new(),
+            first: HashMap::new(),
             contents: Vec::new(),
             cover: None,
         };
@@ -77,9 +80,12 @@ impl Epub {
         };
         let text = String::from_utf8_lossy(&bytes);
         let locked = text
-            .split("Algorithm=\"")
+            .split("Algorithm=")
             .skip(1)
-            .filter_map(|rest| rest.split('"').next())
+            .filter_map(|rest| {
+                let quote = rest.chars().next().filter(|c| matches!(c, '"' | '\''))?;
+                rest[1..].split(quote).next()
+            })
             .any(|algorithm| !FONT_SCRAMBLING.contains(&algorithm));
         anyhow::ensure!(
             !locked,
@@ -150,7 +156,15 @@ impl Epub {
                 .get(&path.to_lowercase())
                 .and_then(|name| self.zip.by_name(name).ok())
                 .map_or(0, |file| file.size());
-            let pieces = size.div_ceil(PIECE_BYTES).max(1) as usize;
+            // A file too large to read at all is one chapter that says so, not hundreds of pieces.
+            let pieces = if size > MAX_CHAPTER_BYTES {
+                1
+            } else {
+                size.div_ceil(PIECE_BYTES).max(1) as usize
+            };
+            self.first
+                .entry(path.to_lowercase())
+                .or_insert(self.spine.len());
             for piece in 0..pieces {
                 self.spine.push(Part {
                     path: path.clone(),
@@ -196,6 +210,8 @@ impl Epub {
                     .attr("content")?;
                 manifest.get(id)
             })
+            // A cover that is a page of markup is not a picture to show.
+            .filter(|item| item.kind.starts_with("image/"))
             .map(|item| item.path.clone());
 
         let nav = manifest
@@ -382,10 +398,7 @@ impl BookFile for Epub {
             None => (link, None),
         };
         let wanted = path.to_lowercase();
-        let first = self
-            .spine
-            .iter()
-            .position(|part| part.path.to_lowercase() == wanted)?;
+        let first = *self.first.get(&wanted)?;
         let pieces = self.spine[first].pieces;
         let Some(id) = anchor.as_ref().filter(|_| pieces > 1) else {
             return Some((first, anchor));

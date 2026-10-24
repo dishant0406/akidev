@@ -13,6 +13,21 @@ struct BookStyle: Codable, Equatable {
     var hyphenate = true
     var theme = BookTheme.auto
 
+    init() {}
+
+    /// What is missing is the default, so a setting added later does not reset the ones already chosen.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = BookStyle()
+        font = try values.decodeIfPresent(BookFont.self, forKey: .font) ?? defaults.font
+        size = try values.decodeIfPresent(Double.self, forKey: .size) ?? defaults.size
+        lineSpacing = try values.decodeIfPresent(Double.self, forKey: .lineSpacing) ?? defaults.lineSpacing
+        margin = try values.decodeIfPresent(BookMargin.self, forKey: .margin) ?? defaults.margin
+        justify = try values.decodeIfPresent(Bool.self, forKey: .justify) ?? defaults.justify
+        hyphenate = try values.decodeIfPresent(Bool.self, forKey: .hyphenate) ?? defaults.hyphenate
+        theme = try values.decodeIfPresent(BookTheme.self, forKey: .theme) ?? defaults.theme
+    }
+
     static let sizes: ClosedRange<Double> = 14...34
     static let spacings: ClosedRange<Double> = 1.1...1.9
 }

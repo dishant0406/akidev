@@ -59,7 +59,6 @@ fn a_book_goes_on_the_shelf_is_read_remembered_and_removed() {
         panic!()
     };
     assert_eq!(runs[0].text, "World");
-    assert_eq!(reader.offset_of(0, "t".into()).unwrap(), 0);
     assert!(reader.chapter(5).is_err());
 
     engine
