@@ -26,13 +26,16 @@ struct AkiText: View {
     var style: AkiTextStyle = .body
     var tone: AkiTone = .text
     var lines: Int?
+    /// Takes the room of all `lines` lines even when the text is shorter, so a row of these stays one height.
+    var reserves = false
     var align: TextAlignment = .leading
 
-    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .text, lines: Int? = nil, align: TextAlignment = .leading) {
+    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .text, lines: Int? = nil, reserves: Bool = false, align: TextAlignment = .leading) {
         self.text = text
         self.style = style
         self.tone = tone
         self.lines = lines
+        self.reserves = reserves
         self.align = align
     }
 
@@ -42,7 +45,7 @@ struct AkiText: View {
             .tracking(tracking)
             .lineSpacing(style == .display ? -2 : 0)
             .foregroundStyle(tone.color.opacity(style == .eyebrow ? 0.7 : 1))
-            .lineLimit(lines)
+            .lineLimit(lines ?? Int.max, reservesSpace: reserves && lines != nil)
             .multilineTextAlignment(align)
     }
 

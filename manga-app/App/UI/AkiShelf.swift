@@ -31,10 +31,11 @@ struct AkiPoster: View {
     var width: CGFloat = 128
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
+        // The numeral sits on the bottom edge of the cover, whatever the title below it takes: a cover is a fixed shape, a title is not.
+        HStack(alignment: .top, spacing: 0) {
             if let rank {
                 AkiText("\(rank)", .numeral, tone: .muted)
-                    .frame(width: rank >= 10 ? 70 : 46, alignment: .trailing)
+                    .frame(width: rank >= 10 ? 70 : 46, height: width * 1.5, alignment: .bottomTrailing)
                     .padding(.trailing, 4)
                     .accessibilityHidden(true)
             }
@@ -43,7 +44,7 @@ struct AkiPoster: View {
                     .frame(width: width)
                     .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
-                AkiText(title, .captionStrong, lines: 2).frame(width: width, alignment: .leading)
+                AkiText(title, .captionStrong, lines: 2, reserves: true).frame(width: width, alignment: .leading)
                 if let caption { AkiText(caption, .caption, tone: .muted, lines: 1).frame(width: width, alignment: .leading) }
             }
         }

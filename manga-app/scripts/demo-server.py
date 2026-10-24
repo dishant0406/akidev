@@ -144,6 +144,11 @@ class Handler(BaseHTTPRequestHandler):
             if path.endswith("/ajax/chapters/") and Path("/tmp/akidev-demo-grow").exists():
                 new = f'<ul class="main version-chap no-volumn">\n<li class="wp-manga-chapter"><a href="{BASE}/manga/solo-leveling/chapter-180/">Chapter 180</a><span class="chapter-release-date"><i>today</i></span></li>\n'
                 body = body.replace(b'<ul class="main version-chap no-volumn">\n', new.encode(), 1)
+            # DEMO_POPULAR=12 makes the popular list twelve series with titles of every length: to see the Top 10 shelf line up.
+            if path == "/manga/page/1/" and os.environ.get("DEMO_POPULAR"):
+                titles = ["Solo", "A Fortune-Telling Princess", "Try Begging Me", "The Regressed Extra Who Was Only Trying To Live Quietly In The Academy", "Tower", "Secret Love Affair Between a Former Saint and the Dark Duke", "Eleceed", "I", "Return of the Mount Hua Sect", "The Beginning After the End Season Two", "Omniscient Reader", "Lookism"]
+                cards = "".join(f'<div class="page-item-detail manga"><div class="item-thumb"><a href="{BASE}/manga/series-{i}/"><img src="/wp-content/c/{i}.jpg"></a></div><div class="item-summary"><div class="post-title font-title"><h3 class="h5"><a href="{BASE}/manga/series-{i}/">{t}</a></h3></div></div></div>' for i, t in enumerate(titles[: int(os.environ["DEMO_POPULAR"])]))
+                body = f'<html><body><div class="c-page">{cards}</div></body></html>'.encode()
             # DEMO_EXTRA=8 adds eight older chapters (every third a tall webtoon strip): to scroll through a long strip of many chapters.
             if path.endswith("/ajax/chapters/") and os.environ.get("DEMO_EXTRA"):
                 more = ""
