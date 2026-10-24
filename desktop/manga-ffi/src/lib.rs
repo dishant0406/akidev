@@ -2390,6 +2390,7 @@ impl Engine {
 pub struct VoiceModel {
     pub id: String,
     pub name: String,
+    pub version: u64,
     pub languages: Vec<String>,
     pub bytes: u64,
     pub licence: String,
@@ -2397,6 +2398,21 @@ pub struct VoiceModel {
     pub commercial: bool,
     /// This app can run it: it knows the kind of model and is new enough.
     pub usable: bool,
+    /// The other voices it can speak in (for a model on the device).
+    pub voices: Vec<VoiceOption>,
+}
+
+/// A voice a model can speak in.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct VoiceOption {
+    pub id: String,
+    pub name: String,
+    pub gender: Option<String>,
+    pub accent: Option<String>,
+    pub age: Option<String>,
+    pub description: String,
+    /// It has been fetched, so the model can speak in it now.
+    pub downloaded: bool,
 }
 
 /// Told how far a download has got, in bytes.
@@ -2423,8 +2439,8 @@ pub struct VoiceSpeaker {
 #[uniffi::export]
 impl VoiceSpeaker {
     /// The speech for `text`: mono samples at `sample_rate()`. It takes a moment: call it off the main thread.
-    pub fn speak(&self, text: String) -> Result<Vec<f32>> {
-        Ok(self.speaker.speak(&text)?)
+    pub fn speak(&self, text: String, voice: Option<String>) -> Result<Vec<f32>> {
+        Ok(self.speaker.speak(&text, voice.as_deref())?)
     }
 
     pub fn sample_rate(&self) -> u32 {
@@ -2460,6 +2476,7 @@ impl Engine {
             .voices
             .into_iter()
             .map(|offered| VoiceModel {
+                version: offered.version,
                 usable: akidev_manga::voice::runs(&offered, APP_VERSION),
                 id: offered.id,
                 name: offered.name,
@@ -2467,8 +2484,14 @@ impl Engine {
                 bytes: offered.bytes,
                 licence: offered.licence,
                 commercial: offered.commercial,
+                voices: Vec::new(),
             })
             .collect())
+    }
+
+    /// Fetches one of a model's other voices, so it can be chosen.
+    pub async fn get_voice_choice(&self, model: String, voice: String) -> Result<()> {
+        Ok(akidev_manga::voice::get_choice(&self.voices_dir(), &model, &voice).await?)
     }
 
     /// Downloads a model a repository offers, checks it and keeps it on the device.
@@ -2511,6 +2534,7 @@ impl Engine {
         akidev_manga::voice::installed(&self.voices_dir())
             .into_iter()
             .map(|model| VoiceModel {
+                version: model.def.version,
                 bytes: model.def.files.iter().map(|file| file.bytes).sum(),
                 id: model.def.id,
                 name: model.def.name,
@@ -2518,6 +2542,20 @@ impl Engine {
                 licence: model.def.licence.name,
                 commercial: model.def.licence.commercial,
                 usable: true,
+                voices: model
+                    .def
+                    .voices
+                    .into_iter()
+                    .map(|voice| VoiceOption {
+                        downloaded: akidev_manga::voice::has_choice(&model.folder, &voice.id),
+                        id: voice.id,
+                        name: voice.name,
+                        gender: voice.gender,
+                        accent: voice.accent,
+                        age: voice.age,
+                        description: voice.description,
+                    })
+                    .collect(),
             })
             .collect()
     }

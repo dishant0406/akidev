@@ -78,8 +78,8 @@ struct BookReaderView: View {
                 }
                 .accessibilityLabel("Contents")
                 Spacer(minLength: 0)
-                if model.listener == nil, let voice = app.readAloud.current {
-                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen(voice: voice, prefs: app.prefs) }
+                if model.listener == nil, app.readAloud.current != nil {
+                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen(readAloud: app.readAloud, prefs: app.prefs) }
                 }
                 AkiIconButton(symbol: "search", label: "Search in this book") { searching = true }
                 AkiIconButton(symbol: "sliders", label: "Type and theme") { settings = true }

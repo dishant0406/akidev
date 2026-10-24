@@ -60,6 +60,21 @@ fn definition(base: &str, files: &[(&str, &[u8])]) -> Value {
     })
 }
 
+/// The definition with other voices listed, each served at `files/<id>.safetensors`.
+fn with_voices(mut def: Value, base: &str, voices: &[(&str, &[u8])]) -> Value {
+    def["voices"] = voices
+        .iter()
+        .map(|(id, bytes)| {
+            json!({
+                "id": id, "name": format!("Voice {id}"), "description": "A voice.",
+                "url": format!("{base}files/{id}.safetensors"),
+                "sha256": sha256_hex(bytes), "bytes": bytes.len(),
+            })
+        })
+        .collect();
+    def
+}
+
 fn offered(def: &[u8]) -> IndexVoice {
     let parsed = VoiceDef::parse(def).unwrap();
     IndexVoice {
@@ -133,6 +148,83 @@ fn a_definition_must_stay_plain_and_known() {
     assert!(broken(&|d| d["files"][0]["sha256"] = "abc".into()));
     assert!(broken(&|d| d["files"] = json!([])));
     assert!(broken(&|d| d["languages"] = json!([])));
+}
+
+#[test]
+fn a_models_other_voices_must_stay_plain() {
+    let good = with_voices(
+        definition("https://example.org/", &[("config.json", b"{}")]),
+        "https://example.org/",
+        &[("Ab_c-1", b"v")],
+    );
+    assert!(VoiceDef::parse(good.to_string().as_bytes()).is_ok());
+    let broken = |change: &dyn Fn(&mut Value)| {
+        let mut def = good.clone();
+        change(&mut def);
+        VoiceDef::parse(def.to_string().as_bytes()).is_err()
+    };
+    assert!(broken(&|d| d["voices"][0]["id"] = "a/b".into()));
+    assert!(broken(&|d| d["voices"][0]["id"] = "..".into()));
+    assert!(broken(
+        &|d| d["voices"][0]["url"] = "http://example.org/v".into()
+    ));
+    assert!(broken(&|d| d["voices"][0]["sha256"] = "abc".into()));
+    assert!(broken(&|d| d["voices"][0]["bytes"] = u64::MAX.into()));
+    assert!(broken(
+        &|d| d["voices"] = json!([d["voices"][0].clone(), d["voices"][0].clone()])
+    ));
+}
+
+#[tokio::test]
+async fn another_voice_is_fetched_checked_and_kept_and_a_bad_one_leaves_nothing() {
+    let root = root("choice");
+    let (listener, base) = bind().await;
+    let good: &[u8] = b"voice bytes";
+    let held = HashMap::from([
+        ("files/good.safetensors".to_string(), good.to_vec()),
+        (
+            "files/bad.safetensors".to_string(),
+            b"not what was promised".to_vec(),
+        ),
+    ]);
+    serve(listener, held);
+    let mut def = with_voices(
+        definition(&base, &[("config.json", b"{}")]),
+        &base,
+        &[("good", good), ("bad", b"promised")],
+    );
+    def["voices"][1]["bytes"] = 21.into();
+    let folder = root.join("test-model");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("definition.json"), def.to_string()).unwrap();
+
+    assert!(!voice::has_choice(&folder, "good"));
+    voice::get_choice(&root, "test-model", "good")
+        .await
+        .unwrap();
+    assert!(voice::has_choice(&folder, "good"));
+    assert_eq!(
+        std::fs::read(folder.join("voices/good.safetensors")).unwrap(),
+        good
+    );
+
+    let error = voice::get_choice(&root, "test-model", "bad")
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("hash differs"), "{error}");
+    assert!(!voice::has_choice(&folder, "bad"));
+    assert_eq!(std::fs::read_dir(folder.join("voices")).unwrap().count(), 1);
+    assert!(
+        voice::get_choice(&root, "test-model", "missing")
+            .await
+            .is_err()
+    );
+    assert!(
+        voice::get_choice(&root, "other-model", "good")
+            .await
+            .is_err()
+    );
+    std::fs::remove_dir_all(&root).unwrap();
 }
 
 #[tokio::test]
@@ -259,7 +351,29 @@ async fn a_real_model_installs_speaks_and_is_removed() {
         .zip(&bytes)
         .map(|(name, bytes)| (*name, bytes.as_slice()))
         .collect();
-    let (base, voice) = repository(&files, &files).await;
+    // A voice to choose, when the folder has a `voices` folder with one in it.
+    let other = std::fs::read_dir(source.join("voices"))
+        .ok()
+        .and_then(|mut entries| entries.find_map(|entry| Some(entry.ok()?.path())));
+    let other_bytes = other.as_ref().map(|path| std::fs::read(path).unwrap());
+    let other_id = other
+        .as_ref()
+        .map(|path| path.file_stem().unwrap().to_string_lossy().into_owned());
+    let (listener, base) = bind().await;
+    let mut def = definition(&base, &files);
+    if let (Some(id), Some(bytes)) = (&other_id, &other_bytes) {
+        def = with_voices(def, &base, &[(id.as_str(), bytes.as_slice())]);
+    }
+    let def = def.to_string().into_bytes();
+    let mut held = HashMap::from([("voices/test-model.json".to_string(), def.clone())]);
+    for (name, bytes) in &files {
+        held.insert(format!("files/{name}"), bytes.to_vec());
+    }
+    if let (Some(id), Some(bytes)) = (&other_id, &other_bytes) {
+        held.insert(format!("files/{id}.safetensors"), bytes.clone());
+    }
+    serve(listener, held);
+    let voice = offered(&def);
     let root = root("real");
     let mut last = (0, 0);
     voice::install(&root, &base, &voice, "1.0.0", |done, total| {
@@ -271,11 +385,43 @@ async fn a_real_model_installs_speaks_and_is_removed() {
     let model = voice::installed(&root).remove(0);
     let speaker = voice::Speaker::open(&model.folder, &model.def.lang).unwrap();
     let pcm = speaker
-        .speak("It is a truth universally acknowledged.")
+        .speak("It is a truth universally acknowledged.", None)
         .unwrap();
     let seconds = pcm.len() as f32 / speaker.sample_rate() as f32;
     assert!((1.0..8.0).contains(&seconds), "{seconds} seconds");
     assert!(pcm.iter().any(|sample| sample.abs() > 0.01));
+    if let Some(id) = &other_id {
+        voice::get_choice(&root, &model.def.id, id).await.unwrap();
+        let speaker = voice::Speaker::open(&model.folder, &model.def.lang).unwrap();
+        let again = speaker
+            .speak("It is a truth universally acknowledged.", Some(id))
+            .unwrap();
+        assert!(again.iter().any(|sample| sample.abs() > 0.01));
+        assert_ne!(again, pcm, "another voice sounds different");
+    }
+    // An update fetches nothing that has not changed: this server holds the new definition and no files at all.
+    let (listener, base) = bind().await;
+    let mut def = definition(&base, &files);
+    def["version"] = 2.into();
+    if let (Some(id), Some(bytes)) = (&other_id, &other_bytes) {
+        def = with_voices(def, &base, &[(id.as_str(), bytes.as_slice())]);
+    }
+    let def = def.to_string().into_bytes();
+    serve(
+        listener,
+        HashMap::from([("voices/test-model.json".to_string(), def.clone())]),
+    );
+    voice::install(&root, &base, &offered(&def), "1.0.0", |_, _| {})
+        .await
+        .unwrap();
+    let model = voice::installed(&root).remove(0);
+    assert_eq!(model.def.version, 2);
+    if let Some(id) = &other_id {
+        assert!(
+            voice::has_choice(&model.folder, id),
+            "the fetched voice is kept"
+        );
+    }
     voice::remove(&root, &model.def.id).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
 }

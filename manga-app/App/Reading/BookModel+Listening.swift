@@ -3,10 +3,10 @@ import SwiftUI
 
 extension BookModel {
     /// Starts reading aloud from the top of the page being read, in the voice of the model in use.
-    func listen(voice: VoiceModel, prefs: Preferences) {
-        guard listener == nil, let place, place.page >= 0, let layout = layouts[place.chapter] else { return }
+    func listen(readAloud: ReadAloudModel, prefs: Preferences) {
+        guard listener == nil, let model = readAloud.current, let place, place.page >= 0, let layout = layouts[place.chapter] else { return }
         let listener = BookListener(
-            reader: reader, engine: engine, title: info.title, author: info.authors.first, model: voice.id, sections: sections, rate: prefs.speechRate,
+            reader: reader, engine: engine, title: info.title, author: info.authors.first, model: model.id, voice: readAloud.chosenVoice?.id, sections: sections, rate: prefs.speechRate,
             saveRate: { prefs.speechRate = $0 },
             follow: { [weak self] in self?.heard($0) },
             ended: { [weak self] failure in self?.listenerEnded(failure) }

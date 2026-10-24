@@ -24,6 +24,8 @@ final class BookListener {
     private let title: String
     private let author: String?
     private let model: String
+    /// The voice of the model that reads, or nothing for the model's own.
+    private let voice: String?
     private let sections: [BookSection]
     private let saveRate: (Double) -> Void
     /// Told each time another sentence starts, to move the page to it.
@@ -49,12 +51,13 @@ final class BookListener {
     /// How many sentences the queue holds, counting the one being heard.
     private let queueLimit = 3
 
-    init(reader: BookReader, engine: Engine, title: String, author: String?, model: String, sections: [BookSection], rate: Double, saveRate: @escaping (Double) -> Void, follow: @escaping (BookSpan) -> Void, ended: @escaping ((title: String, message: String)?) -> Void) {
+    init(reader: BookReader, engine: Engine, title: String, author: String?, model: String, voice: String?, sections: [BookSection], rate: Double, saveRate: @escaping (Double) -> Void, follow: @escaping (BookSpan) -> Void, ended: @escaping ((title: String, message: String)?) -> Void) {
         self.reader = reader
         self.engine = engine
         self.title = title
         self.author = author
         self.model = model
+        self.voice = voice
         self.sections = sections
         self.rate = rate
         self.saveRate = saveRate
@@ -222,10 +225,10 @@ final class BookListener {
             for sentence in list[start...] {
                 while queued.count >= queueLimit, mine == generation { try? await Task.sleep(for: .milliseconds(100)) }
                 guard mine == generation, let speaker else { return }
-                let text = sentence.text
+                let text = sentence.text, voice = voice
                 let samples: [Float]
                 do {
-                    samples = try await Task.detached(priority: .userInitiated) { try speaker.speak(text: text) }.value
+                    samples = try await Task.detached(priority: .userInitiated) { try speaker.speak(text: text, voice: voice) }.value
                 } catch {
                     failures += 1
                     if failures >= 3, mine == generation { stop(failure: describe(error)) }

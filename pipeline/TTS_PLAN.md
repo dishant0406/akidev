@@ -341,8 +341,13 @@ This follows section 10 and replaces parts of sections 5 to 7:
 - **Playback** (`App/Reading/BookListener.swift`): speech is made three sentences ahead off the main thread and queued on an `AVAudioPlayerNode`; speed
   is `AVAudioUnitTimePitch` (pitch holds); a heading is followed by a pause; background audio, lock screen and headphone controls, pause on a call or
   unplugging. The voice is let go when reading stops or after three minutes paused.
-- **Not built:** the phone voice (`AVSpeechSynthesizer`) is dropped: with the gate, reading aloud exists only where a model does. Other voices of a model
-  (the 102 in `gradium/phonon-voices`), a sleep timer, adding a model by Hugging Face id, Phonon 40M (not listed: CC BY-NC and gated), a second family (Kokoro).
+- **Voices of a model (2026-10-25, after section 12):** a definition may list `voices`, each a small file fetched on its own and kept in the model's `voices` folder;
+  `ptts` registers every file there by name. The repository carries the 37 English Phonon voices (`voice-files/`, Apache 2.0, with a `NOTICE`), pinned by commit in
+  the definition. Voice choice screen: American, British and character groups with the repository's descriptions, Hear (the model says a sentence on the phone) and
+  Use (fetches the voice if needed). A new `version` of a definition shows as Update, and an update keeps files and voices whose hash has not changed instead of
+  fetching them again. The chosen voice is read when reading starts; changing it takes effect the next time Reading aloud is started.
+- **Not built:** the phone voice (`AVSpeechSynthesizer`) is dropped: with the gate, reading aloud exists only where a model does. The other 65 Phonon voices
+  (French, German, Spanish, Portuguese: the 31M model speaks English), a sleep timer, adding a model by Hugging Face id, Phonon 40M (not listed: CC BY-NC and gated), a second family (Kokoro).
 
 Measured on a Mac (M-series, CPU): load 45 ms, first sound 40 ms, peak memory 372 MB; 19.6 s of speech took 1.13 s in a plain release build (17 times faster
 than real time). A phone has not been measured yet. Under the iPhone profile (`opt-level` "z", fat LTO) the same text speaks 6 times faster than real time, "s" 12 times

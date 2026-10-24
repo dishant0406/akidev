@@ -19,6 +19,7 @@ use std::time::Duration;
 use url::Url;
 
 const MAX_MODEL: u64 = 1024 * 1024 * 1024;
+const MAX_VOICE: u64 = 16 * 1024 * 1024;
 const FAMILIES: [&str; 1] = ["ptts"];
 const TEST_SENTENCE: &str = "Hello, this is a test.";
 
@@ -35,8 +36,28 @@ pub struct VoiceDef {
     pub languages: Vec<String>,
     pub licence: Licence,
     pub files: Vec<VoiceFile>,
+    /// Other voices the model can speak in, each fetched on its own when chosen.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub voices: Vec<VoiceChoice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_app: Option<String>,
+}
+
+/// A voice a model can speak in: a small file that goes in the model's `voices` folder, named by its id.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VoiceChoice {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gender: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub age: Option<String>,
+    pub description: String,
+    pub url: String,
+    pub sha256: String,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,6 +134,43 @@ impl VoiceDef {
             total += file.bytes;
         }
         ensure!(total <= MAX_MODEL, "the model is larger than allowed");
+        ensure!(def.voices.len() <= 300, "the model lists too many voices");
+        let mut seen = std::collections::HashSet::new();
+        for voice in &def.voices {
+            ensure!(
+                !voice.id.is_empty()
+                    && voice.id.len() <= 64
+                    && voice
+                        .id
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b)),
+                "the voice id {:?} is not a plain name",
+                voice.id
+            );
+            ensure!(seen.insert(&voice.id), "voice {} is listed twice", voice.id);
+            ensure!(
+                !voice.name.trim().is_empty()
+                    && voice.name.len() <= 80
+                    && voice.description.len() <= 600,
+                "voice {} has no usable name or too long a description",
+                voice.id
+            );
+            ensure!(
+                voice.sha256.len() == 64 && voice.sha256.bytes().all(|b| b.is_ascii_hexdigit()),
+                "voice {}: sha256 must be 64 hex digits",
+                voice.id
+            );
+            ensure!(
+                Url::parse(&voice.url).is_ok_and(|url| repo::https_or_local(&url)),
+                "voice {}: the address must be https",
+                voice.id
+            );
+            ensure!(
+                voice.bytes <= MAX_VOICE,
+                "voice {} is larger than allowed",
+                voice.id
+            );
+        }
         Ok(def)
     }
 }
@@ -212,19 +270,30 @@ pub async fn install(
     let result = async {
         let total: u64 = def.files.iter().map(|file| file.bytes).sum();
         let client = download_client()?;
+        // An update keeps what has not changed: a file, or a voice, that is already here with the right hash is not fetched again.
+        let old = root.join(&def.id);
         let mut done = 0;
         for file in &def.files {
             let before = done;
-            fetch_file(&client, file, &staging.join(&file.path), |read| {
-                progress(before + read, total)
-            })
-            .await?;
+            let target = staging.join(&file.path);
+            if !reuse(&old.join(&file.path), &target, &file.sha256) {
+                fetch_file(&client, file, &target, |read| {
+                    progress(before + read, total)
+                })
+                .await?;
+            }
             done += file.bytes;
+            progress(done, total);
+        }
+        std::fs::create_dir_all(staging.join("voices"))?;
+        for voice in &def.voices {
+            let name = format!("voices/{}.safetensors", voice.id);
+            reuse(&old.join(&name), &staging.join(&name), &voice.sha256);
         }
         std::fs::write(staging.join("definition.json"), &text)?;
         let (folder, lang) = (staging.clone(), def.lang.clone());
         let heard = tokio::task::spawn_blocking(move || {
-            Speaker::open(&folder, &lang)?.speak(TEST_SENTENCE)
+            Speaker::open(&folder, &lang)?.speak(TEST_SENTENCE, None)
         })
         .await??;
         ensure!(!heard.is_empty(), "the model made no sound");
@@ -237,6 +306,64 @@ pub async fn install(
         let _ = std::fs::remove_dir_all(&staging);
     }
     result
+}
+
+/// Copies `from` to `to` when it is there and is the file with this hash.
+fn reuse(from: &Path, to: &Path, sha256: &str) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(from) else {
+        return false;
+    };
+    let mut hash = Sha256::new();
+    let mut buffer = vec![0u8; 256 * 1024];
+    while let Ok(read) = file.read(&mut buffer) {
+        if read == 0 {
+            let found: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+            return found.eq_ignore_ascii_case(sha256) && std::fs::copy(from, to).is_ok();
+        }
+        hash.update(&buffer[..read]);
+    }
+    false
+}
+
+/// Whether a model's voice has been fetched.
+pub fn has_choice(folder: &Path, voice: &str) -> bool {
+    folder
+        .join("voices")
+        .join(format!("{voice}.safetensors"))
+        .is_file()
+}
+
+/// Fetches one of an installed model's other voices, checks it and puts it in the model's `voices` folder.
+pub async fn get_choice(root: &Path, model: &str, voice: &str) -> anyhow::Result<()> {
+    let model = installed(root)
+        .into_iter()
+        .find(|found| found.def.id == model)
+        .with_context(|| format!("{model} is not on this device"))?;
+    let choice = model
+        .def
+        .voices
+        .iter()
+        .find(|found| found.id == voice)
+        .with_context(|| format!("{} has no voice {voice}", model.def.name))?;
+    let folder = model.folder.join("voices");
+    std::fs::create_dir_all(&folder)?;
+    let part = folder.join(format!("{voice}.part"));
+    let file = VoiceFile {
+        path: voice.to_string(),
+        url: choice.url.clone(),
+        sha256: choice.sha256.clone(),
+        bytes: choice.bytes,
+    };
+    let result = fetch_file(&download_client()?, &file, &part, |_| {}).await;
+    match result {
+        Ok(()) => std::fs::rename(&part, folder.join(format!("{voice}.safetensors")))?,
+        Err(error) => {
+            let _ = std::fs::remove_file(&part);
+            return Err(error);
+        }
+    }
+    Ok(())
 }
 
 /// Fetches one file to `target`, checking its size and hash as it arrives.
@@ -308,9 +435,14 @@ impl Speaker {
         Ok(Speaker { synth })
     }
 
-    /// The speech for `text`, mono samples at `sample_rate()`.
-    pub fn speak(&self, text: &str) -> anyhow::Result<Vec<f32>> {
-        Ok(self.synth.say(text)?)
+    /// The speech for `text` in one of the model's voices (its own when none is named), mono samples at `sample_rate()`.
+    pub fn speak(&self, text: &str, voice: Option<&str>) -> anyhow::Result<Vec<f32>> {
+        use ptts::synth::SpeechOptions;
+        let options = match voice {
+            Some(voice) => SpeechOptions::default().voice(voice),
+            None => SpeechOptions::default(),
+        };
+        Ok(self.synth.say_with(text, &options)?)
     }
 
     pub fn sample_rate(&self) -> u32 {

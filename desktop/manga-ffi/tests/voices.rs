@@ -122,3 +122,45 @@ async fn a_repository_lists_models_and_a_bad_one_installs_nothing() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn an_installed_model_lists_its_other_voices_and_which_are_fetched() {
+    let dir = std::env::temp_dir().join(format!("aki-voice-options-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let folder = dir.join("voices/test-model");
+    std::fs::create_dir_all(&folder).unwrap();
+    let hash = "0".repeat(64);
+    let definition = json!({
+        "id": "test-model", "name": "Test model", "version": 1, "family": "ptts", "lang": "en",
+        "languages": ["en"],
+        "licence": { "name": "MIT", "url": "https://example.org", "commercial": true },
+        "files": [{ "path": "config.json", "url": "https://example.org/c", "sha256": hash, "bytes": 2 }],
+        "voices": [
+            { "id": "zed", "name": "Zed", "gender": "male", "description": "Dry.",
+              "url": "https://example.org/zed", "sha256": hash, "bytes": 4 },
+            { "id": "ann", "name": "Ann", "description": "Warm.",
+              "url": "https://example.org/ann", "sha256": hash, "bytes": 4 },
+        ],
+    });
+    std::fs::write(folder.join("definition.json"), definition.to_string()).unwrap();
+    let engine = Engine::new(dir.to_string_lossy().into()).unwrap();
+
+    let options = |engine: &Engine| {
+        engine.voices_installed()[0]
+            .voices
+            .iter()
+            .map(|voice| (voice.id.clone(), voice.downloaded, voice.gender.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        options(&engine),
+        [
+            ("zed".into(), false, Some("male".into())),
+            ("ann".into(), false, None)
+        ]
+    );
+    std::fs::create_dir_all(folder.join("voices")).unwrap();
+    std::fs::write(folder.join("voices/ann.safetensors"), b"x").unwrap();
+    assert!(options(&engine)[1].1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

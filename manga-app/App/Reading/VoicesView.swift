@@ -20,6 +20,13 @@ struct VoicesView: View {
                 ForEach(model.models, id: \.id) { voice in
                     AkiRow(title: voice.name, subtitle: details(of: voice)) { control(for: voice) }
                 }
+                if let current = model.current, !current.voices.isEmpty {
+                    AkiSection(title: "Voice") {
+                        AkiLink(value: VoiceChoiceRoute()) {
+                            AkiRow(title: "Voice of \(current.name)", subtitle: model.chosenVoice?.name ?? "Standard", icon: "headphones", showsChevron: true)
+                        }
+                    }
+                }
                 AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", .caption, tone: .muted)
             }
             .padding(.horizontal, 20).padding(.top, 8)
@@ -41,7 +48,9 @@ struct VoicesView: View {
             AkiProgressBar(fraction: fraction).frame(width: 64)
         } else if model.has(voice) {
             HStack(spacing: 8) {
-                if model.current?.id == voice.id {
+                if model.hasUpdate(voice) {
+                    AkiButton("Update", variant: .primary, size: .small) { Task { await model.install(voice) } }
+                } else if model.current?.id == voice.id {
                     AkiText("In use", .captionStrong, tone: .muted)
                 } else {
                     AkiButton("Use", size: .small) { model.use(voice) }

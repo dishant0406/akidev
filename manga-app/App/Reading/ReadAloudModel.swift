@@ -26,6 +26,10 @@ final class ReadAloudModel {
     /// How far each model being downloaded has got, 0 to 1.
     private(set) var progress: [String: Double] = [:]
     var failure: (title: String, message: String)?
+    /// The voices being fetched now, and the one being heard (empty for the model's own).
+    private(set) var fetching: Set<String> = []
+    private(set) var hearing: String?
+    private let preview = VoicePreview()
 
     init(engine: Engine, prefs: Preferences) {
         self.engine = engine
@@ -37,6 +41,15 @@ final class ReadAloudModel {
     var current: VoiceModel? { installed.first { $0.id == prefs.voiceModel } ?? installed.first }
 
     func has(_ model: VoiceModel) -> Bool { installed.contains { $0.id == model.id } }
+
+    /// The repository offers a newer version of a model that is on the phone.
+    func hasUpdate(_ model: VoiceModel) -> Bool { installed.first { $0.id == model.id }.map { $0.version < model.version } ?? false }
+
+    /// The voice that reads, when one of the model's other voices is chosen and on the phone; otherwise the model's own.
+    var chosenVoice: VoiceOption? { current?.voices.first { $0.id == prefs.voiceName && $0.downloaded } }
+
+    /// The id of the voice that is in use: empty for the model's own.
+    var voiceInUse: String { chosenVoice?.id ?? "" }
 
     /// Every model to show: the repository's, then any on the device the repository no longer lists.
     var models: [VoiceModel] {
@@ -66,7 +79,46 @@ final class ReadAloudModel {
         } catch { failure = describe(error) }
     }
 
-    func use(_ model: VoiceModel) { prefs.voiceModel = model.id }
+    func use(_ model: VoiceModel) {
+        prefs.voiceModel = model.id
+        prefs.voiceName = ""
+    }
+
+    /// Chooses a voice of the model in use, fetching it first if it is not on the phone yet; nothing is the model's own.
+    func choose(_ voice: VoiceOption?) async {
+        if let voice, !(await fetch(voice)) { return }
+        prefs.voiceName = voice?.id ?? ""
+    }
+
+    /// Says a sentence in a voice (the model's own when nothing), fetching the voice first if need be.
+    func hear(_ voice: VoiceOption?) async {
+        guard let model = current else { return }
+        if let voice, !(await fetch(voice)) { return }
+        let engine = engine, id = model.id, name = voice?.id
+        hearing = voice?.id ?? ""
+        defer { hearing = nil }
+        let heard = try? await Task.detached(priority: .userInitiated) { () throws -> (samples: [Float], rate: Int) in
+            let speaker = try engine.openSpeaker(id: id)
+            return (try speaker.speak(text: "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice: name), Int(speaker.sampleRate()))
+        }.value
+        guard let heard else { return failure = ("That did not work", "The voice could not be played.") }
+        preview.play(heard.samples, rate: heard.rate)
+    }
+
+    /// Fetches one of the model's voices; whether it is on the phone after.
+    private func fetch(_ voice: VoiceOption) async -> Bool {
+        guard !voice.downloaded, let model = current else { return true }
+        guard fetching.insert(voice.id).inserted else { return false }
+        defer { fetching.remove(voice.id) }
+        do {
+            try await engine.getVoiceChoice(model: model.id, voice: voice.id)
+            installed = engine.voicesInstalled()
+            return true
+        } catch {
+            failure = describe(error)
+            return false
+        }
+    }
 
     func remove(_ model: VoiceModel) {
         do {

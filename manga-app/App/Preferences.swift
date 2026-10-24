@@ -58,6 +58,8 @@ final class Preferences {
     var downloadOnWifiOnly: Bool { didSet { defaults.set(downloadOnWifiOnly, forKey: "downloadOnWifiOnly") } }
     /// The voice model that reads books aloud (its id); empty until one is chosen.
     var voiceModel: String { didSet { defaults.set(voiceModel, forKey: "voiceModel") } }
+    /// The voice of that model that reads (its id); empty is the model's own.
+    var voiceName: String { didSet { defaults.set(voiceName, forKey: "voiceName") } }
     /// How fast a book is read aloud, as a multiple of the voice's own pace.
     var speechRate: Double { didSet { defaults.set(speechRate, forKey: "speechRate") } }
 
@@ -80,6 +82,7 @@ final class Preferences {
         autoDownload = defaults.bool(forKey: "autoDownload")
         downloadOnWifiOnly = defaults.object(forKey: "downloadOnWifiOnly") as? Bool ?? true
         voiceModel = defaults.string(forKey: "voiceModel") ?? ""
+        voiceName = defaults.string(forKey: "voiceName") ?? ""
         speechRate = defaults.object(forKey: "speechRate") as? Double ?? 1
     }
 }

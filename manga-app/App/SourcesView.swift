@@ -71,6 +71,7 @@ struct SourcesView: View {
             .akiDestination(for: String.self) { SourceSettingsView(source: $0) }
             .akiDestination(for: SettingsRoute.self) { _ in SettingsView() }
             .akiDestination(for: VoicesRoute.self) { _ in VoicesView() }
+            .akiDestination(for: VoiceChoiceRoute.self) { _ in VoiceChoiceView() }
             .akiSheet(isPresented: $pasting) { SourceAddSheet() }
             .onAppear(perform: loadCatalogues)
             .akiPrompt("Add a book catalogue", message: "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add", text: $catalogueAddress, isPresented: $addingCatalogue) {
