@@ -20,7 +20,8 @@ struct BookPlace: Equatable {
     /// A picture of the book at about the size wanted, nil until it is decoded (`ready` is called then).
     func picture(path: String, width: CGFloat, ready: @escaping @MainActor @Sendable () -> Void) -> CGImage?
     func turned(to place: BookPlace)
-    func tapped(_ zone: BookTapZone, link: String?)
+    /// A tap on the page: where, and the link under it if any (`isNote` when that link is a raised mark, a footnote's number).
+    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool)
     /// One page forward or back, without the page-turn motion (a swipe in ink mode).
     func turnPage(forward: Bool)
     var overlays: BookOverlays { get }
@@ -164,7 +165,7 @@ final class BookPageView: UIView {
 ///
 /// A long press selects a word, the handles move the ends, and a menu offers what can be done with it; a tap on a highlight opens
 /// the same menu for it. All of that is drawn and worked out here and in `ChapterLayout`: there is no text view.
-final class BookPageController: UIViewController, @preconcurrency UIEditMenuInteractionDelegate {
+final class BookPageController: UIViewController, @preconcurrency UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
     let place: BookPlace
     private unowned let paging: any BookPaging
     private let canvas = BookPageView()
@@ -193,9 +194,12 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         canvas.frame = view.bounds
         canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(canvas)
-        view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
         let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
         press.minimumPressDuration = 0.4
+        press.delegate = self
         view.addGestureRecognizer(press)
         for handle in handles {
             handle.isHidden = true
@@ -259,6 +263,11 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         handles.forEach { $0.isHidden = false }
     }
 
+    /// A touch on a selection handle belongs to the handle, not to the page under it.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is BookHandle)
+    }
+
     /// A point of the page in the text area's own coordinates.
     private func inText(_ point: CGPoint) -> CGPoint {
         CGPoint(x: point.x - canvas.insets.left, y: point.y - canvas.insets.top)
@@ -277,7 +286,7 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         }
         let link = layout.link(at: inside, page: resolved.page)
         let zone: BookTapZone = point.x < view.bounds.width * 0.3 ? .back : point.x > view.bounds.width * 0.7 ? .forward : .middle
-        paging.tapped(zone, link: link)
+        paging.tapped(zone, link: link?.link, isNote: link?.raised ?? false)
     }
 
     @objc private func pressed(_ press: UILongPressGestureRecognizer) {
@@ -295,7 +304,7 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         if pan.state == .ended { return open(menu: (selection, nil), at: handle.center) }
         // The dot is above or below the line it belongs to: the point read is the line's own.
         let point = CGPoint(x: pan.location(in: view).x, y: pan.location(in: view).y + (handle.atStart ? 14 : -14))
-        guard let at = layout.position(at: inText(point), page: resolved.page) else { return }
+        guard let at = layout.position(at: inText(point), page: resolved.page, end: !handle.atStart) else { return }
         var span = selection
         if handle.atStart { span.start = min(at, selection.end - 1) } else { span.end = max(at, selection.start + 1) }
         paging.select(span)

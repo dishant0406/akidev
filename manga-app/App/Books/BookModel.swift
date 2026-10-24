@@ -156,8 +156,8 @@ final class BookModel: BookPaging {
         for chapter in layouts.keys where abs(chapter - place.chapter) > 2 { layouts[chapter] = nil }
     }
 
-    func tapped(_ zone: BookTapZone, link: String?) {
-        if let link { return follow(link) }
+    func tapped(_ zone: BookTapZone, link: String?, isNote: Bool) {
+        if let link { return follow(link, isNote: isNote) }
         switch zone {
         case .middle:
             if style.ink { chromeVisible.toggle() } else { withAnimation(.snappy(duration: 0.25)) { chromeVisible.toggle() } }
@@ -251,7 +251,7 @@ final class BookModel: BookPaging {
         go(to: Spot(chapter: Int(entry.chapter), offset: entry.anchor == nil ? 0 : nil, anchor: entry.anchor), forward: Int(entry.chapter) >= (place?.chapter ?? 0))
     }
 
-    private func follow(_ link: String) {
+    private func follow(_ link: String, isNote: Bool) {
         if let url = URL(string: link), url.scheme == "http" || url.scheme == "https" {
             externalLink = url
             return
@@ -259,7 +259,8 @@ final class BookModel: BookPaging {
         let reader = reader
         Task {
             // Finding where a link goes can mean reading a large file: not on the main thread.
-            if let text = await Task.detached(priority: .userInitiated, operation: { reader.note(link: link) }).value {
+            // A footnote's number shows the note in a card; any other link goes where it points.
+            if isNote, let text = await Task.detached(priority: .userInitiated, operation: { reader.note(link: link) }).value {
                 footnote = Footnote(text: text, link: link)
                 return
             }

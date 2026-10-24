@@ -1914,7 +1914,6 @@ pub struct BookHighlight {
     pub colour: u8,
     pub note: Option<String>,
     pub quote: String,
-    pub created_ms: i64,
 }
 
 impl From<BookMarkRow> for BookHighlight {
@@ -1927,7 +1926,6 @@ impl From<BookMarkRow> for BookHighlight {
             colour: row.colour,
             note: row.note,
             quote: row.quote,
-            created_ms: row.created_at,
         }
     }
 }
@@ -1952,7 +1950,6 @@ pub struct CatalogueFeed {
 pub struct CatalogueItem {
     pub title: String,
     pub author: Option<String>,
-    pub summary: Option<String>,
     pub cover: Option<String>,
     pub open: Option<String>,
     pub get: Option<String>,
@@ -1968,7 +1965,6 @@ impl From<akidev_manga::book::opds::Feed> for CatalogueFeed {
                 .map(|item| CatalogueItem {
                     title: item.title,
                     author: item.author,
-                    summary: item.summary,
                     cover: item.cover,
                     open: item.open,
                     get: item.get,

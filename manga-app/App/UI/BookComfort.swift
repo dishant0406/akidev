@@ -41,18 +41,22 @@ enum BookWarmth: String, Codable, CaseIterable {
     }
 
     private static var original: CGFloat?
+    /// What this set the brightness to: it is given back only if that is still what it is, so a change the person made meanwhile stands.
+    private static var applied: CGFloat?
 
     /// Sets the phone's brightness for reading (remembering what it was), or gives it back when `value` is nil.
     static func apply(_ value: Double?) {
         guard let screen else { return }
         guard let value else { return restore() }
         if original == nil { original = screen.brightness }
-        screen.brightness = levels(for: value).screen
+        applied = levels(for: value).screen
+        screen.brightness = applied!
     }
 
     static func restore() {
-        if let original { screen?.brightness = original }
+        if let original, let applied, let screen, abs(screen.brightness - applied) < 0.02 { screen.brightness = original }
         original = nil
+        applied = nil
     }
 }
 

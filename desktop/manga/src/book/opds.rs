@@ -22,7 +22,6 @@ pub struct Feed {
 pub struct Item {
     pub title: String,
     pub author: Option<String>,
-    pub summary: Option<String>,
     pub cover: Option<String>,
     /// Another page of the catalogue this opens, for a shelf.
     pub open: Option<String>,
@@ -33,12 +32,15 @@ pub struct Item {
 const MAX_FEED_BYTES: usize = 8 * 1024 * 1024;
 const MAX_BOOK_BYTES: usize = 150 * 1024 * 1024;
 
-/// The address as a secure one: a catalogue that still lists `http` addresses is read over `https`, which the phone requires anyway.
-/// A server on the same machine or network (a catalogue being tried) is left alone.
+/// The address as a secure one: a catalogue that still lists `http` addresses is read over `https`, so nothing is fetched in the
+/// clear. A server on the same machine or network (an address with no dot, `.local`, or a number) is left alone.
 fn secure(mut address: Url) -> Url {
-    let local = address.host_str().is_none_or(|host| {
-        host == "localhost" || host.ends_with(".local") || host.parse::<std::net::IpAddr>().is_ok()
-    });
+    let local = match address.host() {
+        Some(url::Host::Domain(host)) => {
+            host == "localhost" || host.ends_with(".local") || !host.contains('.')
+        }
+        _ => true,
+    };
     if address.scheme() == "http" && !local {
         let _ = address.set_scheme("https");
     }
@@ -59,15 +61,20 @@ fn text_of(element: &ElementRef, name: &str) -> Option<String> {
 /// Reads a feed fetched from `at`; every address in it is made whole against that.
 pub fn read(xml: &[u8], at: &Url) -> Feed {
     let document = parse(xml);
-    let whole = |href: &str| at.join(href.trim()).ok().map(String::from);
+    // Only web addresses are followed: a feed cannot point the app at a file on the phone.
+    let whole = |href: &str| {
+        at.join(href.trim())
+            .ok()
+            .filter(|address| matches!(address.scheme(), "http" | "https"))
+            .map(String::from)
+    };
     let mut feed = Feed::default();
-    // The feed's own links come before its first entry.
-    let first_entry = document
-        .select(&selector("entry"))
-        .next()
-        .map(|entry| entry.id());
+    // The feed's own links are the ones outside every entry.
     for link in document.select(&selector("link")) {
-        if first_entry.is_some_and(|entry| link.ancestors().any(|ancestor| ancestor.id() == entry))
+        if link
+            .ancestors()
+            .filter_map(ElementRef::wrap)
+            .any(|ancestor| ancestor.value().name() == "entry")
         {
             continue;
         }
@@ -104,7 +111,6 @@ pub fn read(xml: &[u8], at: &Url) -> Feed {
         let mut item = Item {
             title: text_of(&entry, "title").unwrap_or_default(),
             author: text_of(&entry, "author name"),
-            summary: text_of(&entry, "summary").or_else(|| text_of(&entry, "content")),
             ..Item::default()
         };
         let mut thumbnail = None;
@@ -177,10 +183,15 @@ pub async fn fetch(address: &str) -> anyhow::Result<Feed> {
 pub async fn search_address(search: &str, term: &str) -> anyhow::Result<String> {
     let encoded: String = url::form_urlencoded::byte_serialize(term.as_bytes()).collect();
     if search.contains("{searchTerms}") {
-        return Ok(search.replace("{searchTerms}", &encoded));
+        return Ok(drop_optional(&search.replace("{searchTerms}", &encoded)));
     }
     let at = secure(Url::parse(search).context("that is not a web address")?);
     let response = crate::http::client().get(at.clone()).send().await?;
+    anyhow::ensure!(
+        response.status().is_success(),
+        "the catalogue answered {}",
+        response.status()
+    );
     let body = crate::http::read_capped(response, MAX_FEED_BYTES).await?;
     let description = parse(&body);
     let template = description
@@ -192,16 +203,20 @@ pub async fn search_address(search: &str, term: &str) -> anyhow::Result<String> 
         })
         .find_map(|url| url.value().attr("template"))
         .context("the catalogue does not say how to search it")?;
-    let template = template.replace("{searchTerms}", &encoded);
-    // Optional parts of a template ({startPage?}) are left out.
-    let mut address = template;
+    let address = drop_optional(&template.replace("{searchTerms}", &encoded));
+    Ok(at.join(&address)?.to_string())
+}
+
+/// A template without its optional parts (`{startPage?}`), which are left out.
+fn drop_optional(template: &str) -> String {
+    let mut address = template.to_string();
     while let (Some(open), Some(close)) = (address.find('{'), address.find('}')) {
         if close < open {
             break;
         }
         address.replace_range(open..=close, "");
     }
-    Ok(at.join(&address)?.to_string())
+    address
 }
 
 /// Downloads an EPUB into `folder` (which the caller makes, and removes), named after its address, and returns the path.
@@ -224,7 +239,6 @@ pub async fn download(
         "the catalogue answered {}",
         response.status()
     );
-    let body = crate::http::read_capped(response, MAX_BOOK_BYTES).await?;
     std::fs::create_dir_all(folder)?;
     let last = at
         .path_segments()
@@ -236,7 +250,15 @@ pub async fn download(
         "book.epub".to_string()
     };
     let path = folder.join(name);
-    std::fs::write(&path, body)?;
+    // Written as it arrives: a large book is never all in memory.
+    let mut file = std::fs::File::create(&path)?;
+    let mut size = 0usize;
+    let mut response = response;
+    while let Some(chunk) = response.chunk().await? {
+        size += chunk.len();
+        anyhow::ensure!(size <= MAX_BOOK_BYTES, "the book is too large");
+        std::io::Write::write_all(&mut file, &chunk)?;
+    }
     Ok(path)
 }
 
@@ -256,7 +278,6 @@ mod tests {
   <entry>
     <title>A &amp; B</title>
     <author><name>Jane Doe</name></author>
-    <summary>Short   text.</summary>
     <link rel="http://opds-spec.org/image" type="image/jpeg" href="/covers/1.jpg"/>
     <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="/covers/1t.jpg"/>
     <link rel="http://opds-spec.org/acquisition/open-access" type="text/html" href="/read/1"/>
@@ -291,12 +312,8 @@ mod tests {
         );
         let book = &feed.items[1];
         assert_eq!(
-            (
-                book.title.as_str(),
-                book.author.as_deref(),
-                book.summary.as_deref()
-            ),
-            ("A & B", Some("Jane Doe"), Some("Short text."))
+            (book.title.as_str(), book.author.as_deref()),
+            ("A & B", Some("Jane Doe"))
         );
         assert_eq!(
             book.get.as_deref(),
@@ -324,6 +341,17 @@ mod tests {
             "war & peace",
         ));
         assert_eq!(address.unwrap(), "https://lib.example/s?q=war+%26+peace");
+    }
+
+    #[test]
+    fn only_addresses_on_this_machine_or_network_may_stay_plain() {
+        let kept = |address: &str| secure(Url::parse(address).unwrap()).scheme() == "http";
+        assert!(kept("http://localhost:8080/opds"));
+        assert!(kept("http://nas:8083/opds"));
+        assert!(kept("http://192.168.1.5/opds"));
+        assert!(kept("http://[::1]/opds"));
+        assert!(kept("http://books.local/opds"));
+        assert!(!kept("http://lib.example/opds"));
     }
 
     fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {

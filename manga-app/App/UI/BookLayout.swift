@@ -6,6 +6,7 @@ extension NSAttributedString.Key {
     /// Where a run of text links to, as the book wrote it.
     static let bookLink = NSAttributedString.Key("aki.link")
     static let bookStrike = NSAttributedString.Key("aki.strike")
+    static let bookRaised = NSAttributedString.Key("aki.raised")
     /// The picture or rule a placeholder character stands for.
     static let bookAttachment = NSAttributedString.Key("aki.attachment")
 }
@@ -112,15 +113,16 @@ final class ChapterLayout: @unchecked Sendable {
             guard low < high else { continue }
             var ascent: CGFloat = 0, descent: CGFloat = 0
             CTLineGetTypographicBounds(line, &ascent, &descent, nil)
-            let left = origin.x + CTLineGetOffsetForStringIndex(line, low, nil)
-            let right = origin.x + CTLineGetOffsetForStringIndex(line, high, nil)
-            boxes.append(CGRect(x: left, y: size.height - origin.y - ascent, width: max(right - left, 2), height: ascent + descent))
+            // In right-to-left text the end of a stretch is to the left of its start.
+            let one = origin.x + CTLineGetOffsetForStringIndex(line, low, nil)
+            let other = origin.x + CTLineGetOffsetForStringIndex(line, high, nil)
+            boxes.append(CGRect(x: min(one, other), y: size.height - origin.y - ascent, width: max(abs(other - one), 2), height: ascent + descent))
         }
         return boxes
     }
 
     /// Where in the book's text a point (in the text area, y down) is: the nearest letter, on the nearest line.
-    func position(at point: CGPoint, page: Int) -> Int? {
+    func position(at point: CGPoint, page: Int, end: Bool = false) -> Int? {
         guard !vertical else { return nil }
         let frame = frame(page: page)
         let lines = CTFrameGetLines(frame) as! [CTLine]
@@ -138,7 +140,7 @@ final class ChapterLayout: @unchecked Sendable {
         let at = CTLineGetStringIndexForPosition(lines[nearest], CGPoint(x: point.x - origins[nearest].x, y: 0))
         guard at != kCFNotFound else { return nil }
         let range = pages[page]
-        return source(of: min(max(at, range.location), max(NSMaxRange(range) - 1, range.location)))
+        return source(of: min(max(at, range.location), end ? NSMaxRange(range) : max(NSMaxRange(range) - 1, range.location)))
     }
 
     /// The word around a position, as a stretch of the book's text.
@@ -170,7 +172,7 @@ final class ChapterLayout: @unchecked Sendable {
     }
 
     /// What a tap at `point` (in the text area, y down) lands on: the link under it, if any.
-    func link(at point: CGPoint, page: Int) -> String? {
+    func link(at point: CGPoint, page: Int) -> (link: String, raised: Bool)? {
         guard !vertical else { return nil }
         let frame = frame(page: page)
         let lines = CTFrameGetLines(frame) as! [CTLine]
@@ -183,7 +185,9 @@ final class ChapterLayout: @unchecked Sendable {
             guard y >= origin.y - descent - 4, y <= origin.y + ascent + 4, point.x >= origin.x, point.x <= origin.x + width else { continue }
             let at = CTLineGetStringIndexForPosition(line, CGPoint(x: point.x - origin.x, y: 0))
             guard at != kCFNotFound, at < text.length else { return nil }
-            return text.attribute(.bookLink, at: at, effectiveRange: nil) as? String
+            guard let link = text.attribute(.bookLink, at: at, effectiveRange: nil) as? String else { return nil }
+            // A raised mark is a note's number; a link in the middle of a line is not.
+            return (link, text.attribute(.bookRaised, at: at, effectiveRange: nil) != nil)
         }
         return nil
     }
@@ -357,6 +361,7 @@ struct ChapterTypesetter {
         if run.smallCaps { features.append([.type: kLowerCaseType, .selector: kLowerCaseSmallCapsSelector]) }
         if !features.isEmpty { font = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: size) }
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
+        if run.shift > 0 { attributes[.bookRaised] = true }
         if run.shift != 0 {
             // A raised or lowered mark (a footnote number): its own baseline, moved up or down from the line's.
             let offset = -CGFloat(run.shift) * (run.shift > 0 ? 0.38 : 0.2) * base

@@ -480,15 +480,19 @@ fn unscramble(bytes: &mut [u8], how: Scrambling, identifier: &str) {
             (Sha1::digest(clean.as_bytes()).to_vec(), 1040)
         }
         Scrambling::Adobe => {
-            let hex: String = identifier
+            // The identifier's hexadecimal digits, two to a byte; anything else in it is left out.
+            let digits: Vec<u8> = identifier
+                .to_lowercase()
                 .trim_start_matches("urn:uuid:")
                 .chars()
-                .filter(|c| *c != '-')
+                .filter_map(|c| c.to_digit(16).map(|digit| digit as u8))
                 .collect();
-            let key: Vec<u8> = (0..hex.len() / 2)
-                .filter_map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok())
+            let key: Vec<u8> = digits
+                .chunks_exact(2)
+                .map(|pair| pair[0] * 16 + pair[1])
                 .collect();
-            (key, 1024)
+            // A key that is not a whole UUID is no key: the font is left as it is.
+            (if key.len() == 16 { key } else { Vec::new() }, 1024)
         }
     };
     if key.is_empty() {
@@ -593,4 +597,39 @@ pub(super) fn parse(bytes: &[u8]) -> Html {
         }
     });
     Html::parse_document(&text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_odd_identifier_leaves_a_font_alone_instead_of_failing() {
+        let font = vec![7u8; 2000];
+        for identifier in [
+            "urn:uuid:é–✓-not-hex",
+            "",
+            "URN:UUID:123e4567-e89b-12d3-a456-426614174000x",
+        ] {
+            let mut bytes = font.clone();
+            unscramble(&mut bytes, Scrambling::Adobe, identifier);
+            assert_eq!(bytes.len(), font.len());
+        }
+        // A whole UUID, in any case, makes a key.
+        let mut upper = font.clone();
+        unscramble(
+            &mut upper,
+            Scrambling::Adobe,
+            "URN:UUID:123E4567-E89B-12D3-A456-426614174000",
+        );
+        let mut lower = font.clone();
+        unscramble(
+            &mut lower,
+            Scrambling::Adobe,
+            "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
+        );
+        assert_eq!(upper, lower);
+        assert_ne!(upper, font);
+        assert_eq!(upper[1024..], font[1024..]);
+    }
 }

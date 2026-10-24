@@ -6,6 +6,7 @@ struct BookReaderView: View {
     @State var model: BookModel
     let close: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var phase
     @Environment(AppModel.self) private var app
     @State private var settings = false
     @State private var contents = false
@@ -49,6 +50,8 @@ struct BookReaderView: View {
         }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; BookComfort.apply(model.style.brightness) }
         .onChange(of: model.style.brightness) { _, now in BookComfort.apply(now) }
+        // The phone's brightness is the phone's: it is given back when the app is left and taken again when it returns.
+        .onChange(of: phase) { _, now in if now == .active { BookComfort.apply(model.style.brightness) } else { BookComfort.restore() } }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false; BookComfort.restore() }
     }
 
