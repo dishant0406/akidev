@@ -347,8 +347,11 @@ This follows section 10 and replaces parts of sections 5 to 7:
 Measured on a Mac (M-series, CPU): load 45 ms, first sound 40 ms, peak memory 372 MB; 19.6 s of speech took 1.13 s in a plain release build (17 times faster
 than real time). A phone has not been measured yet. Under the iPhone profile (`opt-level` "z", fat LTO) the same text speaks 6 times faster than real time, "s" 12 times
 and 3 17 times, and a Release binary built the same way as before is 18.3 MB without speech, 24.5 MB with it at 3 and 26.0 MB at "s": so the speech crates
-are built at 3 (`[profile.ios.package.*]` in `desktop/Cargo.toml`). The +6.2 MB (uncompressed, unstripped) is over the 3.5 MB this plan allowed; most of it is `ptts`, its
-tokenizer library and the matrix kernels for every number type. Launch cost: `AVFAudio` is already loaded by SwiftUI (0.1 ms); `MediaPlayer`, for the lock screen,
+are built at 3 (`[profile.ios.package.*]` in `desktop/Cargo.toml`). The +6.2 MB (unstripped binary) is mostly the symbol table, which the App Store strips: compared section by section, the code and data speech adds is about 3.6 MB
+(`__text` +2.6, exception tables and unwind data +0.5, constants +0.4), about what this plan allowed. By crate, the speech part of `__text` is `ptts` 650 KB, `xn` 540 KB,
+`tokenizers` 400 KB (with `rayon` and the tokenizer's own helpers), the rest in matrix kernels and shared regex code. The one cut that is clearly available is writing the
+small Unigram tokenizer ourselves behind `ptts`'s `Tokenizer` trait and turning its `hf` feature off (about 0.6 MB, to be checked against the library on real text);
+the bigger fix is not to link a speech runtime at all (a Core ML export of the model, run by the system, adds no code). Launch cost: `AVFAudio` is already loaded by SwiftUI (0.1 ms); `MediaPlayer`, for the lock screen,
 adds about 22 ms in the simulator (PhotosUI measured 1093 ms the same way).
 
 ## 12. Why the voice sounds flat (researched 2026-10-25)
