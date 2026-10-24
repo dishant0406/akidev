@@ -97,8 +97,15 @@ extension BookModel {
         (contents.last { Int($0.chapter) <= chapter }?.title) ?? info.title
     }
 
-    /// The highlights and notes as Markdown, for a notes app.
-    func markdown() -> String {
+    /// The highlights and notes as a Markdown file in the temporary folder, for the share sheet; nil when there are none.
+    func exportMarkdown() -> URL? {
+        guard !marks.isEmpty else { return nil }
+        let name = info.title.replacingOccurrences(of: "/", with: "-")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("\(name) highlights.md")
+        return (try? markdown().write(to: file, atomically: true, encoding: .utf8)) != nil ? file : nil
+    }
+
+    private func markdown() -> String {
         var lines = ["# \(info.title)"]
         if !info.authors.isEmpty { lines.append("*\(info.authors.joined(separator: ", "))*") }
         var part: String?

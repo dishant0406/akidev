@@ -101,6 +101,8 @@ struct BookContentsSheet: View {
                 .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 32)
             }
             .onAppear { DispatchQueue.main.async { proxy.scrollTo(currentIndex, anchor: .center) } }
+            .onChange(of: tab) { _, now in if now == .marks { exported = model.exportMarkdown() } }
+            .onChange(of: model.marks.count) { exported = tab == .marks ? model.exportMarkdown() : nil }
         }
     }
 
