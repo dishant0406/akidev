@@ -16,8 +16,14 @@ struct BookReaderView: View {
         GeometryReader { proxy in
             ZStack {
                 model.theme.paperColor
-                BookPager(paging: model, jump: model.jump, still: model.style.ink, locked: model.selection != nil)
-                    .saturation(model.style.ink ? 0 : 1)
+                Group {
+                    if model.style.scroll {
+                        BookScroller(paging: model, jump: model.jump)
+                    } else {
+                        BookPager(paging: model, jump: model.jump, still: model.style.ink, locked: model.selection != nil)
+                    }
+                }
+                .saturation(model.style.ink ? 0 : 1)
                 BookComfortOverlay(style: model.style)
                 if model.place == nil { AkiOpeningLoader(label: model.info.title) }
             }

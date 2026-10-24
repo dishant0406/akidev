@@ -20,6 +20,8 @@ struct BookStyle: Codable, Equatable {
     var warmthAmount: Double = 0.35
     /// A paper-like display: grey, still, no page-turn motion.
     var ink = false
+    /// The book is read by scrolling, one chapter running into the next, instead of in pages.
+    var scroll = false
     /// Headings and the like are set in the fonts the book carries, when it carries them.
     var bookFonts = true
 
@@ -41,6 +43,7 @@ struct BookStyle: Codable, Equatable {
         warmthAmount = try values.decodeIfPresent(Double.self, forKey: .warmthAmount) ?? defaults.warmthAmount
         ink = try values.decodeIfPresent(Bool.self, forKey: .ink) ?? defaults.ink
         bookFonts = try values.decodeIfPresent(Bool.self, forKey: .bookFonts) ?? defaults.bookFonts
+        scroll = try values.decodeIfPresent(Bool.self, forKey: .scroll) ?? defaults.scroll
     }
 
     /// The choices that change where words fall on a page; the others only change how the page is lit or coloured.

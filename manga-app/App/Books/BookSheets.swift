@@ -11,6 +11,10 @@ struct BookSettingsSheet: View {
             VStack(alignment: .leading, spacing: 22) {
                 AkiText("Type and theme", .title)
                 BookThemePicker(selection: $model.style.theme)
+                VStack(alignment: .leading, spacing: 10) {
+                    AkiText("Reading", .captionStrong, tone: .muted)
+                    AkiTabs(items: [(false, "Pages"), (true, "Scroll")], selection: $model.style.scroll)
+                }
                 AkiCard(padding: 16) {
                     VStack(spacing: 18) {
                         AkiSelect(title: "Font", selection: $model.style.font, options: BookFont.allCases.map { ($0, $0.title) })

@@ -22,6 +22,11 @@ final class BookModel: BookPaging {
         didSet {
             guard style != oldValue else { return }
             saveStyle(style)
+            // Pages and scrolling show the same pages: changing between them keeps the place, and nothing is set in type again.
+            if style.scroll != oldValue.scroll, let place {
+                jumps += 1
+                jump = BookJump(id: jumps, place: place)
+            }
             if style.affectsType != oldValue.affectsType { typeChanged() }
         }
     }
@@ -103,7 +108,15 @@ final class BookModel: BookPaging {
 
     var theme: BookTheme { style.theme.resolved(dark: systemDark) }
     var rightToLeft: Bool { info.rtl }
-    var pageInsets: UIEdgeInsets { BookGeometry.insets(width: screen.width, safe: safe, margin: style.margin, typeSize: style.size) }
+    var pageInsets: UIEdgeInsets {
+        var insets = BookGeometry.insets(width: screen.width, safe: safe, margin: style.margin, typeSize: style.size)
+        // A scrolled book has no foot line: the page runs on into the next.
+        if style.scroll { insets.top = 0; insets.bottom = 0 }
+        return insets
+    }
+    var scrolling: Bool { style.scroll }
+
+    func peek(chapter: Int) -> ChapterLayout? { layouts[chapter] }
 
     func layout(chapter: Int) -> ChapterLayout? {
         if let layout = layouts[chapter] { return layout }
@@ -153,7 +166,7 @@ final class BookModel: BookPaging {
         // The chapters around this one are made ready before they are needed; the ones far away are let go.
         if place.page >= layout.count - 3 { build(place.chapter + 1) }
         if place.page <= 2 { build(place.chapter - 1) }
-        for chapter in layouts.keys where abs(chapter - place.chapter) > 2 { layouts[chapter] = nil }
+        for chapter in layouts.keys where abs(chapter - place.chapter) > (style.scroll ? 6 : 2) { layouts[chapter] = nil }
     }
 
     func tapped(_ zone: BookTapZone, link: String?, isNote: Bool) {

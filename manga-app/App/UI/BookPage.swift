@@ -14,6 +14,10 @@ struct BookPlace: Equatable {
     var theme: BookTheme { get }
     /// Where the text area sits on the screen.
     var pageInsets: UIEdgeInsets { get }
+    /// The book is read by scrolling: pages are stacked without their feet and with no space above and below.
+    var scrolling: Bool { get }
+    /// The layout of a chapter if it has been set in type already; asking does not start it.
+    func peek(chapter: Int) -> ChapterLayout?
     /// The chapter's type, or nil while it is being set (it then tells the pages with `.bookLayoutReady`).
     func layout(chapter: Int) -> ChapterLayout?
     func footer(for place: BookPlace, of layout: ChapterLayout) -> (title: String, number: String)
@@ -50,6 +54,8 @@ final class BookPageView: UIView {
     var insets = UIEdgeInsets.zero
     weak var paging: (any BookPaging)?
     var overlays = BookOverlays()
+    /// Part of a scrolled book: there is no foot line.
+    var scrolling = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -76,7 +82,7 @@ final class BookPageView: UIView {
         CTFrameDraw(frame, context)
         drawAttachments(of: frame, in: context)
         context.restoreGState()
-        drawFooter()
+        if !scrolling { drawFooter() }
     }
 
     /// Highlights, the selection and the place a search found, under the text. The context has y up here, so each box is turned over.
@@ -233,6 +239,7 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
     func show() {
         canvas.theme = paging.theme
         canvas.insets = paging.pageInsets
+        canvas.scrolling = paging.scrolling
         canvas.overlays = paging.overlays
         guard let layout = paging.layout(chapter: place.chapter), let resolved else {
             canvas.layout = nil
@@ -242,6 +249,7 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         }
         canvas.layout = layout
         canvas.page = resolved.page
+        if paging.scrolling { canvas.insets.top = layout.leading(of: resolved.page) }
         canvas.footer = paging.footer(for: resolved, of: layout)
         canvas.setNeedsDisplay()
         placeHandles(layout: layout, page: resolved.page)
@@ -447,4 +455,169 @@ struct BookJump: Equatable {
     var place: BookPlace
     var forward = true
     var animated = false
+}
+
+/// A book read by scrolling: every chapter's pages one under another, the next chapter joined on as the end nears.
+struct BookScroller: UIViewControllerRepresentable {
+    let paging: any BookPaging
+    let jump: BookJump?
+
+    func makeUIViewController(context: Context) -> BookScrollController { BookScrollController(paging: paging) }
+
+    func updateUIViewController(_ controller: BookScrollController, context: Context) {
+        controller.paging = paging
+        controller.refresh()
+        controller.apply(jump)
+    }
+}
+
+final class BookScrollController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+    var paging: any BookPaging
+    private let collection: UICollectionView
+    private var shownJump = -1
+    /// A place to scroll to as soon as its chapter has been set in type.
+    private var waiting: (place: BookPlace, animated: Bool)?
+    /// What each chapter's pages came to once set in type, kept when the chapter is let go, so the scroll does not jump.
+    private var tiles: [Int: [CGFloat]] = [:]
+    private var reported: IndexPath?
+    private static let placeholder: CGFloat = 480
+
+    init(paging: any BookPaging) {
+        self.paging = paging
+        let flow = UICollectionViewFlowLayout()
+        flow.minimumLineSpacing = 0
+        flow.minimumInteritemSpacing = 0
+        collection = UICollectionView(frame: .zero, collectionViewLayout: flow)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        collection.frame = view.bounds
+        collection.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        collection.dataSource = self
+        collection.delegate = self
+        collection.register(BookTileCell.self, forCellWithReuseIdentifier: "tile")
+        collection.contentInsetAdjustmentBehavior = .never
+        collection.showsVerticalScrollIndicator = false
+        view.addSubview(collection)
+        NotificationCenter.default.addObserver(self, selector: #selector(layoutReady(_:)), name: .bookLayoutReady, object: nil)
+        refresh()
+    }
+
+    /// The colours and the room above and below the text, which the reader can change.
+    func refresh() {
+        guard isViewLoaded else { return }
+        view.backgroundColor = paging.theme.paper
+        collection.backgroundColor = paging.theme.paper
+        collection.contentInset = UIEdgeInsets(top: BookGeometry.top(safe: BookGeometry.safe), left: 0, bottom: BookGeometry.bottom(safe: BookGeometry.safe), right: 0)
+    }
+
+    func apply(_ jump: BookJump?) {
+        guard let jump, jump.id != shownJump else { return }
+        shownJump = jump.id
+        scroll(to: jump.place, animated: jump.animated)
+    }
+
+    private func scroll(to place: BookPlace, animated: Bool) {
+        guard isViewLoaded, place.chapter < collection.numberOfSections else { return }
+        guard let found = tiles[place.chapter] ?? paging.layout(chapter: place.chapter).map(measure) else {
+            waiting = (place, animated)
+            return
+        }
+        waiting = nil
+        let item = place.page < 0 ? found.count - 1 : min(place.page, found.count - 1)
+        collection.layoutIfNeeded()
+        collection.scrollToItem(at: IndexPath(item: item, section: place.chapter), at: .top, animated: animated)
+        if !animated { collection.layoutIfNeeded() }
+    }
+
+    /// The heights of a chapter's pages, kept.
+    private func measure(_ layout: ChapterLayout) -> [CGFloat] {
+        let heights = (0..<layout.count).map { layout.leading(of: $0) + layout.extent(of: $0) }
+        tiles[layout.index] = heights
+        return heights
+    }
+
+    @objc private func layoutReady(_ note: Notification) {
+        guard let chapter = note.object as? Int, isViewLoaded, tiles[chapter] == nil, let layout = paging.peek(chapter: chapter) else { return }
+        // A chapter above the one being read grows when it is set in type: the collection view keeps what is on screen where it is.
+        _ = measure(layout)
+        UIView.performWithoutAnimation {
+            collection.reloadSections(IndexSet(integer: chapter))
+            collection.layoutIfNeeded()
+        }
+        if let waiting, waiting.place.chapter == chapter { scroll(to: waiting.place, animated: waiting.animated) }
+    }
+
+    // MARK: Data
+
+    func numberOfSections(in collectionView: UICollectionView) -> Int { paging.chapterCount }
+
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        tiles[section]?.count ?? 1
+    }
+
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "tile", for: indexPath) as! BookTileCell
+        cell.show(BookPlace(chapter: indexPath.section, page: indexPath.item), paging: paging, in: self)
+        return cell
+    }
+
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let known = tiles[indexPath.section]
+        return CGSize(width: collectionView.bounds.width, height: known.map { $0[min(indexPath.item, $0.count - 1)] } ?? Self.placeholder)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        // The chapters around the one on screen are set in type before they are reached.
+        for chapter in [indexPath.section - 1, indexPath.section, indexPath.section + 1] where chapter >= 0 && chapter < paging.chapterCount {
+            _ = paging.layout(chapter: chapter)
+        }
+    }
+
+    // MARK: Where the person is
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let probe = CGPoint(x: scrollView.bounds.midX, y: scrollView.contentOffset.y + scrollView.contentInset.top + 24)
+        guard let at = collection.indexPathForItem(at: probe), at != reported, tiles[at.section] != nil else { return }
+        reported = at
+        paging.turned(to: BookPlace(chapter: at.section, page: at.item))
+    }
+}
+
+/// One page of a scrolled book: the page's own controller inside a cell.
+final class BookTileCell: UICollectionViewCell {
+    private var host: BookPageController?
+
+    func show(_ place: BookPlace, paging: any BookPaging, in parent: UIViewController) {
+        if host?.place == place { return host?.show() ?? () }
+        clear()
+        let page = BookPageController(place: place, paging: paging)
+        parent.addChild(page)
+        page.view.frame = contentView.bounds
+        page.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        contentView.addSubview(page.view)
+        page.didMove(toParent: parent)
+        host = page
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        host?.view.frame = contentView.bounds
+    }
+
+    private func clear() {
+        host?.willMove(toParent: nil)
+        host?.view.removeFromSuperview()
+        host?.removeFromParent()
+        host = nil
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        clear()
+    }
 }

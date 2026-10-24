@@ -90,6 +90,29 @@ final class ChapterLayout: @unchecked Sendable {
 
     func offset(of anchor: String) -> Int? { anchors[anchor] }
 
+    // MARK: Scrolling
+
+    /// How tall a page's text really is: the pages are cut at the foot of the text area, a scrolled book stacks them, and what
+    /// is empty under the last line is not kept.
+    func extent(of page: Int) -> CGFloat {
+        let frame = frame(page: page)
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        guard let last = lines.last else { return 0 }
+        var origin = CGPoint.zero
+        CTFrameGetLineOrigins(frame, CFRange(location: lines.count - 1, length: 1), &origin)
+        var descent: CGFloat = 0
+        CTLineGetTypographicBounds(last, nil, &descent, nil)
+        return ceil(size.height - (origin.y - descent)) + 2
+    }
+
+    /// The space a paragraph asks for above it, which the frame leaves out at the top of a page: put back, a scrolled book keeps it.
+    func leading(of page: Int) -> CGFloat {
+        let start = pages[page].location
+        guard page > 0, start > 0, start < text.length, (text.string as NSString).character(at: start - 1) == 0x0A,
+              let style = text.attribute(.paragraphStyle, at: start, effectiveRange: nil) as? NSParagraphStyle else { return 0 }
+        return style.paragraphSpacingBefore
+    }
+
     // MARK: Drawing
 
     func frame(page: Int) -> CTFrame {

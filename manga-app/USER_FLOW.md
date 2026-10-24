@@ -217,6 +217,8 @@ The shelf is covers in a grid with how far through you are (New, a percentage, F
 
 Reading comfort (Type and theme sheet): brightness that goes below the phone's lowest (a dark layer, the phone's own brightness is given back when the book closes), a warm tint (off, always, at night), an Ink display (grey, still, no page-turn motion) and Ink, Night and Black themes; margins widen on a wide screen to keep lines near 70 characters.
 
+Scroll or pages: the Type and theme sheet has a Reading switch. Scroll runs the chapters one into the next like a web page, with no foot line; switching keeps your place.
+
 Reading tools: press and hold a word, drag the handles, then Highlight (four colours), Note or Copy; tap a highlight to change or remove it; the contents sheet has a Highlights tab. The search button looks through the whole book. Tapping a footnote mark shows the note in a card ("Go to the note" follows it). Books read right to left turn the other way; vertical Japanese is set in columns; a page that is one picture fills the screen; fonts the book carries are used for its headings.
 
 Catalogues: Sources, Add a book catalogue, the address of an OPDS feed. Open its shelves, search it, tap Get: the book goes on the shelf.
