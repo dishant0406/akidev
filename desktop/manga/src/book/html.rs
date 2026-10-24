@@ -135,6 +135,7 @@ struct Builder<'a> {
     marker: Option<String>,
     /// The font the body text is set in. The reader's own font replaces it; only a different one is the book's own to keep.
     body_family: Option<String>,
+    vertical: bool,
 }
 
 pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
@@ -150,6 +151,7 @@ pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
         lists: Vec::new(),
         marker: None,
         body_family: None,
+        vertical: false,
     };
     let state = State::root();
     let start = html
@@ -162,6 +164,7 @@ pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
         blocks: builder.blocks,
         anchors: builder.anchors,
         fonts: Vec::new(),
+        vertical: builder.vertical,
     }
 }
 
@@ -184,6 +187,13 @@ impl Builder<'_> {
             style.apply(property, value, parent);
         }
         if name == "body" || name == "html" {
+            let writing = declarations
+                .iter()
+                .rev()
+                .find(|(property, _)| property.ends_with("writing-mode"))
+                .map(|(_, value)| value.to_lowercase());
+            self.vertical |=
+                writing.is_some_and(|mode| mode.starts_with("vertical") || mode.starts_with("tb"));
             // What the body is set in is the text's face, which the reader's own choice stands in for.
             if let Some(family) = style.state.look.family.take() {
                 self.body_family = Some(family);

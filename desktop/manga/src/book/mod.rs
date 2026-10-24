@@ -44,6 +44,8 @@ pub struct Chapter {
     pub anchors: Vec<Anchor>,
     /// The fonts the book carries that this chapter's styles name.
     pub fonts: Vec<Face>,
+    /// The chapter is written in vertical lines, one column after another from the right (as Japanese books often are).
+    pub vertical: bool,
 }
 
 pub use css::Face;

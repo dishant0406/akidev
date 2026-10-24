@@ -320,3 +320,18 @@ OPDS 1.2 is Atom: a navigation feed lists sub-catalogues, an acquisition feed li
 ### 12.6 Sources
 
 Dimming and flicker: <https://oledtest.org/blog/oled-eye-strain-pwm-flicker-test/>, <https://daylightcomputer.com/blog/screen-flicker-101>; Reddit threads "Extra Dim is a godsend" (r/Android), "DAE wish they could make their screen dimmer than..." (r/DoesAnybodyElse), "Is there any app I can dim my screen brightness for the night?" (r/iphone). Warm light: <https://www.xda-developers.com/how-to-enable-warm-light-amazon-kindle/>. Blue light: <https://www.aao.org/eye-health/tips-prevention/are-computer-glasses-worth-it>, <https://pubmed.ncbi.nlm.nih.gov/37593770/>. Dark vs light: <https://www.nngroup.com/articles/dark-mode/>, <https://www.allaboutvision.com/conditions/computer-vision-syndrome/digital-eye-strain/is-dark-mode-better-for-eyes/>. E-ink on a phone: <https://goodereader.com/blog/spotlight-on-android/moon-reader-unveils-new-e-ink-mode>, r/ereader "My favorite ereader is my phone with AMOLED display in grayscale mode". Line length: <https://baymard.com/research-articles/line-length-readability>. Bionic reading: <https://theconversation.com/can-bionic-reading-make-you-a-speed-reader-not-so-fast-183905>. Core Text vertical: <https://developer.apple.com/documentation/coretext/kctverticalformsattributename>. Font obfuscation: <https://idpf.org/epub/20/spec/FontManglingSpec.html>. OPDS: <https://specs.opds.io/opds-1.2.html>. Fixed layout: <https://kb.daisy.org/publishing/docs/fxl/overview.html>, <https://github.com/w3c/epub-specs/issues/2985>. Footnotes: <https://help.apple.com/itc/booksassetguide/en.lproj/itccf8ecf5c8.html>, <https://www.mobileread.com/forums/showthread.php?t=355359>. Highlight export: <https://www.clippings.io/export-kindle-highlights-to-markdown/>.
+
+
+## 13. Status after round two (2026-10-24)
+
+Built, run in the simulator and tested: brightness below the phone's lowest (a dark layer over the page, the phone's own brightness
+given back on closing), warm tint (off, always, at night by the clock), Ink display (grey, no page-turn motion, an Ink theme), line
+length kept near 70 characters, selection with handles, four highlight colours, notes, a highlights list, Markdown export source
+(`BookModel.markdown()`; the share button appears with a saved file in a later step, see below), search in the whole book, footnote
+cards (the note's text, with "Go to the note"), footnote marks raised on their own baseline, OPDS catalogues (add by address, browse,
+search, get; tried live on Project Gutenberg), right-to-left books (page turning, swipe and tap sides, Arabic text), pictures that fill
+the page (comic-style EPUBs), vertical Japanese text (columns from the right), embedded fonts (unscrambled with the standard's two
+ways, used for headings and special text, not for the body, which stays the reader's font).
+
+Not done, honestly: touching a place in vertical text (no selection, highlights or links there), fixed-layout pages with positioned
+text (shown as reflowable text), basic-auth catalogues, a share button for the Markdown export, per-book settings, text to speech.

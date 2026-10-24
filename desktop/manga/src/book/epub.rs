@@ -545,6 +545,7 @@ fn slice(whole: &Chapter, piece: usize, pieces: usize) -> Chapter {
             })
             .collect(),
         fonts: whole.fonts.clone(),
+        vertical: whole.vertical,
     }
 }
 

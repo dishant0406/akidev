@@ -33,6 +33,8 @@ final class ChapterLayout: @unchecked Sendable {
     let size: CGSize
     /// What each page shows, as ranges of `text`.
     let pages: [NSRange]
+    /// Written in vertical columns from the right: the lines are columns, and touching a place in them is not worked out.
+    let vertical: Bool
     private let framesetter: CTFramesetter
     /// Where each soft hyphen was put: the book's index of the character after it, in order.
     private let hyphens: [Int]
@@ -40,14 +42,15 @@ final class ChapterLayout: @unchecked Sendable {
 
     var count: Int { pages.count }
 
-    init(index: Int, text: NSAttributedString, size: CGSize, breaks: [Int], headings: [NSRange], hyphens: [Int], anchors: [String: Int]) {
+    init(index: Int, text: NSAttributedString, size: CGSize, vertical: Bool, breaks: [Int], headings: [NSRange], hyphens: [Int], anchors: [String: Int]) {
         self.index = index
         self.text = text
         self.size = size
+        self.vertical = vertical
         self.hyphens = hyphens
         self.anchors = anchors
         framesetter = CTFramesetterCreateWithAttributedString(text)
-        pages = ChapterLayout.paginate(text: text, framesetter: framesetter, size: size, breaks: breaks, headings: headings)
+        pages = ChapterLayout.paginate(text: text, framesetter: framesetter, size: size, vertical: vertical, breaks: breaks, headings: headings)
     }
 
     // MARK: Positions
@@ -90,11 +93,12 @@ final class ChapterLayout: @unchecked Sendable {
 
     func frame(page: Int) -> CTFrame {
         let range = pages[page]
-        return CTFramesetterCreateFrame(framesetter, CFRange(location: range.location, length: range.length), CGPath(rect: CGRect(origin: .zero, size: size), transform: nil), nil)
+        return CTFramesetterCreateFrame(framesetter, CFRange(location: range.location, length: range.length), CGPath(rect: CGRect(origin: .zero, size: size), transform: nil), ChapterLayout.frameAttributes(vertical))
     }
 
     /// The boxes a stretch of the book's text takes on a page, one for each line it touches, in the text area with y down.
     func boxes(from start: Int, to end: Int, page: Int, in frame: CTFrame) -> [CGRect] {
+        guard !vertical else { return [] }
         let range = pages[page]
         let from = max(display(of: start), range.location), to = min(display(of: end), NSMaxRange(range))
         guard from < to else { return [] }
@@ -117,6 +121,7 @@ final class ChapterLayout: @unchecked Sendable {
 
     /// Where in the book's text a point (in the text area, y down) is: the nearest letter, on the nearest line.
     func position(at point: CGPoint, page: Int) -> Int? {
+        guard !vertical else { return nil }
         let frame = frame(page: page)
         let lines = CTFrameGetLines(frame) as! [CTLine]
         guard !lines.isEmpty else { return nil }
@@ -166,6 +171,7 @@ final class ChapterLayout: @unchecked Sendable {
 
     /// What a tap at `point` (in the text area, y down) lands on: the link under it, if any.
     func link(at point: CGPoint, page: Int) -> String? {
+        guard !vertical else { return nil }
         let frame = frame(page: page)
         let lines = CTFrameGetLines(frame) as! [CTLine]
         var origins = [CGPoint](repeating: .zero, count: lines.count)
@@ -184,14 +190,19 @@ final class ChapterLayout: @unchecked Sendable {
 
     // MARK: Pagination
 
-    private static func paginate(text: NSAttributedString, framesetter: CTFramesetter, size: CGSize, breaks: [Int], headings: [NSRange]) -> [NSRange] {
+    /// Columns run from the right to the left in a vertical chapter.
+    private static func frameAttributes(_ vertical: Bool) -> CFDictionary? {
+        vertical ? [kCTFrameProgressionAttributeName: NSNumber(value: CTFrameProgression.rightToLeft.rawValue)] as CFDictionary : nil
+    }
+
+    private static func paginate(text: NSAttributedString, framesetter: CTFramesetter, size: CGSize, vertical: Bool, breaks: [Int], headings: [NSRange]) -> [NSRange] {
         let total = text.length
         let path = CGPath(rect: CGRect(origin: .zero, size: size), transform: nil)
         let characters = text.string as NSString
         var pages: [NSRange] = []
         var position = 0
         while position < total {
-            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: position, length: 0), path, nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: position, length: 0), path, frameAttributes(vertical))
             var end = position + max(CTFrameGetVisibleStringRange(frame).length, 1)
             if let forced = breaks.first(where: { $0 > position && $0 < end }) {
                 end = forced
@@ -268,10 +279,11 @@ struct ChapterTypesetter {
             source += 1
             if block.heading > 0 { headings.append(NSRange(location: blockStart, length: out.length - blockStart)) }
         }
+        if chapter.vertical { out.addAttribute(NSAttributedString.Key(kCTVerticalFormsAttributeName as String), value: true, range: NSRange(location: 0, length: out.length)) }
         // Text takes the colour the page is drawn with, so the theme can change without setting the type again.
         out.addAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), value: true, range: NSRange(location: 0, length: out.length))
         let anchors = Dictionary(chapter.anchors.map { ($0.id, Int($0.offset)) }, uniquingKeysWith: { first, _ in first })
-        return ChapterLayout(index: index, text: out, size: size, breaks: breaks, headings: headings, hyphens: hyphens, anchors: anchors)
+        return ChapterLayout(index: index, text: out, size: size, vertical: chapter.vertical, breaks: breaks, headings: headings, hyphens: hyphens, anchors: anchors)
     }
 
     /// A picture's size on the page: half its pixels at most, never wider than the page or most of its height. One that cannot be

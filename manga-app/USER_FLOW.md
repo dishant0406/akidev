@@ -215,7 +215,13 @@ The Books tab (always shown, between Library and Updates) holds EPUB files. Add:
 
 The shelf is covers in a grid with how far through you are (New, a percentage, Finished); a book with no cover gets its title on a plain card. Tap to read. The reader opens where you stopped; tap the middle for the bars (back, contents, type and theme, a slider over the whole book), the edges to turn pages, or swipe. A link inside the book (a footnote) takes you there and shows "Back to where you were". Type and theme: Auto, Paper, Sepia, Night, Black; font, size, line spacing, margins, justify and hyphenation; each shows on the page at once and is remembered.
 
-Built: all of the above, with a table of contents, pictures, hyphenation, very large chapter files read in pieces. Not yet: highlights and notes, search in the book, dictionary and VoiceOver (skipped for now), text to speech, a catalogue source (OPDS), per-book settings, embedded fonts, fixed-layout and vertical text, backup of the books. The plan is `pipeline/BOOKS_PLAN.md`.
+Reading comfort (Type and theme sheet): brightness that goes below the phone's lowest (a dark layer, the phone's own brightness is given back when the book closes), a warm tint (off, always, at night), an Ink display (grey, still, no page-turn motion) and Ink, Night and Black themes; margins widen on a wide screen to keep lines near 70 characters.
+
+Reading tools: press and hold a word, drag the handles, then Highlight (four colours), Note or Copy; tap a highlight to change or remove it; the contents sheet has a Highlights tab. The search button looks through the whole book. Tapping a footnote mark shows the note in a card ("Go to the note" follows it). Books read right to left turn the other way; vertical Japanese is set in columns; a page that is one picture fills the screen; fonts the book carries are used for its headings.
+
+Catalogues: Sources, Add a book catalogue, the address of an OPDS feed. Open its shelves, search it, tap Get: the book goes on the shelf.
+
+Not yet: dictionary and VoiceOver (skipped for now), text to speech, per-book settings, highlights and links in vertical text, backup of the books. The plan is `pipeline/BOOKS_PLAN.md`.
 
 ### 4.11 Later flows, sketched
 

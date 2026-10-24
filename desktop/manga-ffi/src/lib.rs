@@ -1836,6 +1836,7 @@ pub struct BookChapter {
     pub blocks: Vec<BookBlock>,
     pub anchors: Vec<BookAnchor>,
     pub fonts: Vec<BookFace>,
+    pub vertical: bool,
 }
 
 /// A font the book carries: the name its styles use, where its file is (ask for it with `resource`), and its style.
@@ -1990,6 +1991,7 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
     fn from(chapter: akidev_manga::book::Chapter) -> BookChapter {
         use akidev_manga::book as b;
         BookChapter {
+            vertical: chapter.vertical,
             fonts: chapter
                 .fonts
                 .into_iter()

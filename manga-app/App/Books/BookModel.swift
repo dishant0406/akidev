@@ -322,7 +322,8 @@ final class BookModel: BookPaging {
     nonisolated private static let unreadable = BookChapter(
         blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, family: nil, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
         anchors: [],
-        fonts: []
+        fonts: [],
+        vertical: false
     )
 
     /// The type or the page changed: set the chapters again, a moment after the last change, and come back to the same words.

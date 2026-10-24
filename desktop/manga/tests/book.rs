@@ -691,3 +691,23 @@ fn scrambled_fonts_are_unscrambled_and_the_fonts_a_chapter_names_come_with_it() 
     assert_eq!(family(&chapter.blocks[1]), None);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn a_vertical_chapter_says_so() {
+    let page = r#"<html><head><style>body { -epub-writing-mode: vertical-rl; writing-mode: vertical-rl }</style></head><body><p>縦書きの文章です。</p></body></html>"#;
+    let path = write_book(
+        "v.epub",
+        &[
+            ("META-INF/container.xml", CONTAINER),
+            (
+                "OEBPS/content.opf",
+                PACKAGE.replace("text/two.xhtml", "text/one.xhtml").as_str(),
+            ),
+            ("OEBPS/text/one.xhtml", page),
+        ],
+    );
+    let mut book = book::open(&path).unwrap();
+    assert!(book.chapter(0).unwrap().vertical);
+    let mut plain = book::open(&standard("w.epub")).unwrap();
+    assert!(!plain.chapter(0).unwrap().vertical);
+}
