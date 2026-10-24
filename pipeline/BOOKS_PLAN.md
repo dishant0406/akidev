@@ -237,6 +237,15 @@ Each phase ends with: tests, a simulator recording of the real flow, an independ
 | Robustness | 60-book corpus opens; broken ones degrade without crashing; a fuzz pass on the zip and XML readers |
 | Tests | Rust unit and corpus tests; Swift layout tests on recorded styled documents |
 
+## 9.0 Decisions made (2026-10-24)
+
+1. **Rendering: our own Core Text drawing.** Selection, highlights, VoiceOver and dictionary lookup are built by us from `CTLine` geometry. Phase 0 is no longer a choice between engines: it shrinks to a Core Text proof (page layout speed, selection hit-testing, VoiceOver per paragraph) to size phase 2.
+2. **Books tab always shown.** Five tabs; test the bar width on the smallest iPhone.
+3. **Free, no limits.** No subscription, no import limit.
+4. **Backups include the book files.** There is no backup system for books yet; it comes later, and when it does it includes the files (so the schema keeps the file hash and size). Until then the plan's backup section is a design note only.
+5. **Catalogues:** OPDS and local files (default taken, not asked). Wi-Fi upload page stays a later idea.
+6. **Order:** engine first (phase 1), then the Core Text proof alongside layout (phase 2).
+
 ## 9. Risks and open decisions
 
 1. **Core Text or TextKit 2** (section 4.2): decided by the spike.
