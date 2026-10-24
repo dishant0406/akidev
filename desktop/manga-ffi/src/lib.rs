@@ -1835,6 +1835,16 @@ pub struct BookEntry {
 pub struct BookChapter {
     pub blocks: Vec<BookBlock>,
     pub anchors: Vec<BookAnchor>,
+    pub fonts: Vec<BookFace>,
+}
+
+/// A font the book carries: the name its styles use, where its file is (ask for it with `resource`), and its style.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookFace {
+    pub family: String,
+    pub path: String,
+    pub bold: bool,
+    pub italic: bool,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -1881,6 +1891,7 @@ pub struct BookRun {
     pub mono: bool,
     pub shift: i8,
     pub size: f32,
+    pub family: Option<String>,
     pub link: Option<String>,
 }
 
@@ -1979,6 +1990,16 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
     fn from(chapter: akidev_manga::book::Chapter) -> BookChapter {
         use akidev_manga::book as b;
         BookChapter {
+            fonts: chapter
+                .fonts
+                .into_iter()
+                .map(|face| BookFace {
+                    family: face.family,
+                    path: face.path,
+                    bold: face.bold,
+                    italic: face.italic,
+                })
+                .collect(),
             anchors: chapter
                 .anchors
                 .into_iter()
@@ -2006,6 +2027,7 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
                                     mono: run.look.mono,
                                     shift: run.look.shift,
                                     size: run.look.size,
+                                    family: run.look.family,
                                     link: run.look.link,
                                 })
                                 .collect(),

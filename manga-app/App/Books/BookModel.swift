@@ -55,6 +55,7 @@ final class BookModel: BookPaging {
 
     @ObservationIgnored var layouts: [Int: ChapterLayout] = [:]
     @ObservationIgnored private var building: Set<Int> = []
+    @ObservationIgnored private let fontBank = BookFontBank()
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var jumps = 0
     @ObservationIgnored private var wanted: (spot: Spot, forward: Bool, animated: Bool)?
@@ -294,12 +295,15 @@ final class BookModel: BookPaging {
                       let found = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
                       let width = found[kCGImagePropertyPixelWidth] as? CGFloat, let height = found[kCGImagePropertyPixelHeight] as? CGFloat else { return nil }
                 return CGSize(width: width, height: height)
-            }
+            },
+            fonts: style.bookFonts ? fontBank : nil
         )
         let reader = reader
         let made = generation
+        let bank = fontBank
         Task.detached(priority: .userInitiated) {
             let content = (try? reader.chapter(index: UInt32(chapter))) ?? Self.unreadable
+            for face in content.fonts where bank.needs(face) { bank.add(face, data: try? reader.resource(path: face.path)) }
             let layout = typesetter.layout(index: chapter, chapter: content)
             await MainActor.run { self.finished(layout, generation: made) }
         }
@@ -316,8 +320,9 @@ final class BookModel: BookPaging {
 
     /// Takes the place of a chapter that cannot be read, so the book still opens and turns.
     nonisolated private static let unreadable = BookChapter(
-        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
-        anchors: []
+        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, family: nil, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
+        anchors: [],
+        fonts: []
     )
 
     /// The type or the page changed: set the chapters again, a moment after the last change, and come back to the same words.

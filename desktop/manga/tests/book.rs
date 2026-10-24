@@ -506,7 +506,7 @@ fn a_very_large_chapter_file_is_read_as_pieces_cut_between_paragraphs() {
 #[test]
 fn odd_inputs_do_not_break_a_book() {
     // A single-quoted DRM algorithm is still DRM; an oversize number in CSS is ignored; a cover that is a page is no cover.
-    let drm = "<encryption><EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/></encryption>";
+    let drm = "<encryption><EncryptedData><EncryptionMethod Algorithm='http://www.w3.org/2001/04/xmlenc#aes128-cbc'/></EncryptedData></encryption>";
     let path = write_book(
         "p.epub",
         &[
@@ -637,4 +637,57 @@ fn opds_live() {
         );
         std::fs::remove_dir_all(folder).unwrap();
     });
+}
+
+#[test]
+fn scrambled_fonts_are_unscrambled_and_the_fonts_a_chapter_names_come_with_it() {
+    use sha1::{Digest, Sha1};
+    let font: Vec<u8> = (0..3000u32).map(|n| (n % 251) as u8).collect();
+    // The standard's way: the first 1040 bytes XORed with the SHA-1 of the identifier.
+    let key = Sha1::digest(b"urn:uuid:test-book-1");
+    let mut scrambled = font.clone();
+    for (i, byte) in scrambled.iter_mut().take(1040).enumerate() {
+        *byte ^= key[i % 20];
+    }
+    let opf = r#"<package unique-identifier="id"><metadata xmlns:dc="x"><dc:identifier id="id"> urn:uuid:test-book-1 </dc:identifier><dc:title>F</dc:title></metadata>
+        <manifest><item id="c" href="c.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>"#;
+    let encryption = r#"<encryption><EncryptedData><EncryptionMethod Algorithm="http://www.idpf.org/2008/embedded-fonts"/><CipherData><CipherReference URI="fonts/Face.otf"/></CipherData></EncryptedData></encryption>"#;
+    let chapter = r#"<html><head><style>@font-face { font-family: "Face"; src: url(fonts/Face.otf) } body { font-family: Georgia, serif } h1 { font-family: Face }</style></head>
+        <body><h1>Title</h1><p>Text</p></body></html>"#;
+    let container = CONTAINER.replace("OEBPS/content.opf", "b.opf");
+    let dir = std::env::temp_dir().join(format!("aki-font-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("f.epub");
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+    for (name, bytes) in [
+        ("META-INF/container.xml", container.as_bytes()),
+        ("META-INF/encryption.xml", encryption.as_bytes()),
+        ("b.opf", opf.as_bytes()),
+        ("c.xhtml", chapter.as_bytes()),
+        ("fonts/Face.otf", &scrambled[..]),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    zip.finish().unwrap();
+    let mut book = book::open(&path).unwrap();
+    assert_eq!(book.resource("fonts/Face.otf").unwrap(), font);
+    let chapter = book.chapter(0).unwrap();
+    assert_eq!(chapter.fonts.len(), 1);
+    assert_eq!(
+        (
+            chapter.fonts[0].family.as_str(),
+            chapter.fonts[0].path.as_str()
+        ),
+        ("Face", "fonts/Face.otf")
+    );
+    // The heading keeps the book's face; the body text, whose face is the book's text face, does not.
+    let family = |block: &book::Block| match &block.kind {
+        Kind::Text(runs) => runs[0].look.family.clone(),
+        _ => None,
+    };
+    assert_eq!(family(&chapter.blocks[0]).as_deref(), Some("face"));
+    assert_eq!(family(&chapter.blocks[1]), None);
+    std::fs::remove_dir_all(dir).unwrap();
 }

@@ -42,7 +42,11 @@ pub struct Chapter {
     pub blocks: Vec<Block>,
     /// Places that links can point at: an id in the file and where it falls in the text.
     pub anchors: Vec<Anchor>,
+    /// The fonts the book carries that this chapter's styles name.
+    pub fonts: Vec<Face>,
 }
+
+pub use css::Face;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Anchor {
@@ -108,6 +112,8 @@ pub struct Look {
     pub shift: i8,
     /// Size relative to the reader's body size.
     pub size: f32,
+    /// The book's own font for this text, when it names one other than the font its body text uses.
+    pub family: Option<String>,
     /// Where the text links to: a path inside the book with an optional `#id`, or a web address.
     pub link: Option<String>,
 }

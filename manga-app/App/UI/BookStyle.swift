@@ -20,6 +20,8 @@ struct BookStyle: Codable, Equatable {
     var warmthAmount: Double = 0.35
     /// A paper-like display: grey, still, no page-turn motion.
     var ink = false
+    /// Headings and the like are set in the fonts the book carries, when it carries them.
+    var bookFonts = true
 
     init() {}
 
@@ -38,10 +40,11 @@ struct BookStyle: Codable, Equatable {
         warmth = try values.decodeIfPresent(BookWarmth.self, forKey: .warmth) ?? defaults.warmth
         warmthAmount = try values.decodeIfPresent(Double.self, forKey: .warmthAmount) ?? defaults.warmthAmount
         ink = try values.decodeIfPresent(Bool.self, forKey: .ink) ?? defaults.ink
+        bookFonts = try values.decodeIfPresent(Bool.self, forKey: .bookFonts) ?? defaults.bookFonts
     }
 
     /// The choices that change where words fall on a page; the others only change how the page is lit or coloured.
-    var affectsType: [AnyHashable] { [font, size, lineSpacing, margin, justify, hyphenate] }
+    var affectsType: [AnyHashable] { [font, size, lineSpacing, margin, justify, hyphenate, bookFonts] }
 
     static let sizes: ClosedRange<Double> = 14...34
     static let spacings: ClosedRange<Double> = 1.1...1.9

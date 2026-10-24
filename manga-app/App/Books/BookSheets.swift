@@ -27,6 +27,7 @@ struct BookSettingsSheet: View {
                     VStack(spacing: 16) {
                         AkiSwitch(title: "Justify text", isOn: $model.style.justify)
                         AkiSwitch(title: "Hyphenate long words", subtitle: "Fewer gaps in justified lines.", isOn: $model.style.hyphenate)
+                        AkiSwitch(title: "Use the book's fonts", subtitle: "For headings and special text, when the book carries its own.", isOn: $model.style.bookFonts)
                     }
                 }
             }

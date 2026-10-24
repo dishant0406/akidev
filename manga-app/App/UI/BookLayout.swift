@@ -219,6 +219,8 @@ struct ChapterTypesetter {
     let language: String?
     /// How big a picture is in pixels, by its path in the book; nil when it cannot be read.
     let pictureSize: @Sendable (String) -> CGSize?
+    /// The book's own fonts, when the reader wants them used.
+    let fonts: BookFontBank?
 
     func layout(index: Int, chapter: BookChapter) -> ChapterLayout {
         let base = CGFloat(style.size)
@@ -337,7 +339,8 @@ struct ChapterTypesetter {
 
     private func attributes(for run: BookRun, paragraph: NSParagraphStyle, base: CGFloat) -> [NSAttributedString.Key: Any] {
         let size = base * CGFloat(run.size) * (run.shift == 0 ? 1 : 0.85)
-        var font = style.font.font(size: size, bold: run.bold, italic: run.italic, mono: run.mono)
+        var font = run.family.flatMap { fonts?.font(family: $0, size: size, bold: run.bold, italic: run.italic) }
+            ?? style.font.font(size: size, bold: run.bold, italic: run.italic, mono: run.mono)
         var features: [[UIFontDescriptor.FeatureKey: Int]] = []
         if run.smallCaps { features.append([.type: kLowerCaseType, .selector: kLowerCaseSmallCapsSelector]) }
         if !features.isEmpty { font = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: size) }

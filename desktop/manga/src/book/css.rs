@@ -20,20 +20,31 @@ pub struct Sheet {
     by_class: HashMap<String, Vec<usize>>,
     by_id: HashMap<String, Vec<usize>>,
     anything: Vec<usize>,
+    /// The fonts the book carries, as its stylesheets name them.
+    pub faces: Vec<Face>,
+}
+
+/// A font the book carries: the family name its CSS uses for it, where the file is in the book, and which style it is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Face {
+    pub family: String,
+    pub path: String,
+    pub bold: bool,
+    pub italic: bool,
 }
 
 impl Sheet {
-    /// A rule of the book's own.
-    pub fn add(&mut self, css: &str) {
-        self.add_from(css, 1);
+    /// A rule of the book's own, from the stylesheet at `at` in the book (the fonts it names are found from there).
+    pub fn add(&mut self, css: &str, at: &str) {
+        self.add_from(css, 1, at);
     }
 
     /// The reader's defaults for elements, which any rule of the book overrides.
     pub fn add_default(&mut self, css: &str) {
-        self.add_from(css, 0);
+        self.add_from(css, 0, "");
     }
 
-    fn add_from(&mut self, css: &str, origin: u8) {
+    fn add_from(&mut self, css: &str, origin: u8, at: &str) {
         let css = strip_statements(&strip_comments(css));
         let mut rest = css.as_str();
         while let Some(open) = rest.find('{') {
@@ -43,7 +54,10 @@ impl Sheet {
             };
             let body = &rest[open + 1..close];
             if prelude.starts_with('@') {
-                // @media, @font-face and the like are not applied.
+                // @media and the like are not applied; @font-face says which fonts the book carries.
+                if prelude.starts_with("@font-face") {
+                    self.add_face(body, at);
+                }
                 rest = &rest[close + 1..];
                 continue;
             }
@@ -52,6 +66,36 @@ impl Sheet {
                 self.push(selector.trim(), &declarations, origin);
             }
             rest = &rest[close + 1..];
+        }
+    }
+
+    fn add_face(&mut self, body: &str, at: &str) {
+        let declarations = declarations(body);
+        let value = |name: &str| {
+            declarations
+                .iter()
+                .rev()
+                .find(|(n, _, _)| n == name)
+                .map(|(_, v, _)| v.to_lowercase())
+        };
+        let family = declarations
+            .iter()
+            .rev()
+            .find(|(n, _, _)| n == "font-family")
+            .map(|(_, v, _)| first_family(v));
+        let src = declarations
+            .iter()
+            .rev()
+            .find(|(n, _, _)| n == "src")
+            .and_then(|(_, v, _)| first_url(v));
+        if let (Some(Some(family)), Some(src)) = (family, src) {
+            self.faces.push(Face {
+                family,
+                path: super::html::join(at, &src),
+                bold: value("font-weight")
+                    .is_some_and(|w| w == "bold" || w.parse::<u32>().is_ok_and(|n| n >= 600)),
+                italic: value("font-style").is_some_and(|s| s == "italic" || s == "oblique"),
+            });
         }
     }
 
@@ -115,6 +159,40 @@ impl Sheet {
             .flat_map(|rule| rule.declarations.iter().cloned())
             .collect()
     }
+}
+
+/// The name of the first font in a `font-family` value, without quotes; nothing for the generic names, which name no font file.
+pub fn first_family(value: &str) -> Option<String> {
+    let first = value
+        .split(',')
+        .next()?
+        .trim()
+        .trim_matches(['"', '\''])
+        .trim();
+    let generic = [
+        "serif",
+        "sans-serif",
+        "monospace",
+        "cursive",
+        "fantasy",
+        "system-ui",
+        "inherit",
+        "initial",
+        "unset",
+        "ui-serif",
+        "ui-sans-serif",
+        "ui-monospace",
+    ];
+    (!first.is_empty() && !generic.contains(&first.to_lowercase().as_str()))
+        .then(|| first.to_string())
+}
+
+/// The address in the first `url(...)` of an `src` value.
+fn first_url(value: &str) -> Option<String> {
+    let start = value.find("url(")? + 4;
+    let end = start + value[start..].find(')')?;
+    let address = value[start..end].trim().trim_matches(['"', '\'']);
+    (!address.is_empty() && !address.starts_with("data:")).then(|| address.to_string())
 }
 
 /// `color: red; margin: 0 !important` as (name, value, important).
@@ -261,7 +339,7 @@ mod tests {
     #[test]
     fn more_specific_rules_win_and_important_beats_all() {
         let mut sheet = Sheet::default();
-        sheet.add("p { color: red } p.note { color: blue } /* c */ #x { color: green } .note { margin: 0 !important } p { margin: 1em }");
+        sheet.add("p { color: red } p.note { color: blue } /* c */ #x { color: green } .note { margin: 0 !important } p { margin: 1em }", "");
         let html = Html::parse_fragment(r#"<p class="note" id="x">hi</p>"#);
         let found = sheet.declarations(&first(&html, "p"));
         let last = |name: &str| {
@@ -278,7 +356,7 @@ mod tests {
     #[test]
     fn at_rules_and_unmatchable_selectors_are_skipped() {
         let mut sheet = Sheet::default();
-        sheet.add("@import url(a.css); @media print { p { color: red } } @font-face { font-family: X } p::first-letter { color: red } ns|p { color: red } div p { color: blue }");
+        sheet.add("@import url(a.css); @media print { p { color: red } } @font-face { font-family: X; src: url(../fonts/X.otf) } p::first-letter { color: red } ns|p { color: red } div p { color: blue }", "");
         let html = Html::parse_fragment("<div><p>hi</p></div><p id=\"b\">no</p>");
         let in_div = sheet.declarations(&first(&html, "div p"));
         assert_eq!(in_div, [("color".to_string(), "blue".to_string())]);
@@ -286,9 +364,41 @@ mod tests {
     }
 
     #[test]
+    fn fonts_the_book_carries_are_found_from_the_stylesheet_that_names_them() {
+        let mut sheet = Sheet::default();
+        sheet.add(
+            "@font-face { font-family: 'Fancy Face'; font-weight: bold; src: url('../fonts/Fancy%20Bold.otf') format('opentype') } @font-face { font-family: Plain; font-style: italic; src: local(x), url(p.ttf) }",
+            "OEBPS/css/book.css",
+        );
+        assert_eq!(
+            sheet.faces,
+            [
+                Face {
+                    family: "Fancy Face".into(),
+                    path: "OEBPS/fonts/Fancy Bold.otf".into(),
+                    bold: true,
+                    italic: false
+                },
+                Face {
+                    family: "Plain".into(),
+                    path: "OEBPS/css/p.ttf".into(),
+                    bold: false,
+                    italic: true
+                },
+            ]
+        );
+        assert_eq!(
+            first_family("\"Fancy Face\", serif").as_deref(),
+            Some("Fancy Face")
+        );
+        assert_eq!(first_family("Georgia, serif").as_deref(), Some("Georgia"));
+        assert_eq!(first_family("serif"), None);
+    }
+
+    #[test]
     fn a_not_condition_does_not_become_the_lookup_key() {
         let mut sheet = Sheet::default();
-        sheet.add("p:not(.x) { color: red }");
+        sheet.add("p:not(.x) { color: red }", "");
         let html = Html::parse_fragment("<p>hi</p>");
         assert_eq!(sheet.declarations(&first(&html, "p")).len(), 1);
     }

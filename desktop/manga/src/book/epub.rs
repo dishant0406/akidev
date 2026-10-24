@@ -22,12 +22,6 @@ const MAX_SPINE: usize = 5_000;
 /// one enormous file is still set in type a piece at a time.
 const PIECE_BYTES: u64 = 96 * 1024;
 
-/// The two ways the standard scrambles embedded fonts. Anything else in `encryption.xml` is DRM.
-const FONT_SCRAMBLING: [&str; 2] = [
-    "http://www.idpf.org/2008/embedded-fonts",
-    "http://ns.adobe.com/pdf/enc#RC",
-];
-
 pub struct Epub {
     zip: zip::ZipArchive<std::fs::File>,
     /// Real names in the zip by lower-case name, because books are sloppy about case.
@@ -42,6 +36,18 @@ pub struct Epub {
     first: HashMap<String, usize>,
     contents: Vec<Entry>,
     cover: Option<String>,
+    /// How the book's files that are scrambled are scrambled (fonts, by the standard's two ways), by lower-case path.
+    scrambled: HashMap<String, Scrambling>,
+    /// The book's identifier, which the scrambling is keyed with.
+    identifier: String,
+}
+
+#[derive(Clone, Copy)]
+enum Scrambling {
+    /// The first 1040 bytes, with the SHA-1 of the identifier.
+    Idpf,
+    /// The first 1024 bytes, with the identifier read as a UUID.
+    Adobe,
 }
 
 impl Epub {
@@ -68,25 +74,44 @@ impl Epub {
             first: HashMap::new(),
             contents: Vec::new(),
             cover: None,
+            scrambled: HashMap::new(),
+            identifier: String::new(),
         };
         epub.refuse_drm()?;
         epub.read_package()?;
         Ok(epub)
     }
 
+    /// Notes which files are scrambled fonts, and refuses a book whose files are locked in any other way.
     fn refuse_drm(&mut self) -> anyhow::Result<()> {
         let Ok(bytes) = self.read("META-INF/encryption.xml", 1024 * 1024) else {
             return Ok(());
         };
-        let text = String::from_utf8_lossy(&bytes);
-        let locked = text
-            .split("Algorithm=")
-            .skip(1)
-            .filter_map(|rest| {
-                let quote = rest.chars().next().filter(|c| matches!(c, '"' | '\''))?;
-                rest[1..].split(quote).next()
-            })
-            .any(|algorithm| !FONT_SCRAMBLING.contains(&algorithm));
+        let document = parse(&bytes);
+        let mut locked = false;
+        for data in document.select(&selector("encrypteddata")) {
+            let algorithm = data
+                .select(&selector("encryptionmethod"))
+                .next()
+                .and_then(|method| method.value().attr("algorithm"))
+                .unwrap_or("");
+            let scrambling = match algorithm {
+                "http://www.idpf.org/2008/embedded-fonts" => Scrambling::Idpf,
+                "http://ns.adobe.com/pdf/enc#RC" => Scrambling::Adobe,
+                _ => {
+                    locked = true;
+                    continue;
+                }
+            };
+            if let Some(uri) = data
+                .select(&selector("cipherreference"))
+                .next()
+                .and_then(|cipher| cipher.value().attr("uri"))
+            {
+                self.scrambled
+                    .insert(html::join("", uri).to_lowercase(), scrambling);
+            }
+        }
         anyhow::ensure!(
             !locked,
             "this book is protected by DRM, which cannot be opened here"
@@ -142,6 +167,19 @@ impl Epub {
         }
 
         let spine_element = package.select(&selector("spine")).next();
+        // The identifier the package points at as its unique one.
+        let unique = package
+            .select(&selector("package"))
+            .next()
+            .and_then(|package| package.value().attr("unique-identifier"));
+        self.identifier = package
+            .tree
+            .nodes()
+            .filter_map(ElementRef::wrap)
+            .filter(|element| element.value().name().rsplit(':').next() == Some("identifier"))
+            .find(|element| unique.is_none_or(|id| element.value().attr("id") == Some(id)))
+            .map(|element| element.text().collect::<String>())
+            .unwrap_or_default();
         let paths: Vec<String> = package
             .select(&selector("spine itemref"))
             .filter_map(|itemref| manifest.get(itemref.value().attr("idref")?))
@@ -317,7 +355,9 @@ impl Epub {
     fn parse_file(&mut self, path: &str) -> anyhow::Result<Chapter> {
         let document = self.read_markup(path, MAX_CHAPTER_BYTES)?;
         let sheet = self.sheet(&document, path);
-        Ok(html::build(&document, &sheet, path))
+        let mut chapter = html::build(&document, &sheet, path);
+        chapter.fonts = sheet.faces;
+        Ok(chapter)
     }
 
     /// Reads a large file whole, unless it was the last one read.
@@ -336,17 +376,19 @@ impl Epub {
         sheet.add_default(html::DEFAULTS);
         for element in document.select(&selector("link, style")) {
             if element.value().name() == "style" {
-                sheet.add(&element.text().collect::<String>());
+                sheet.add(&element.text().collect::<String>(), path);
                 continue;
             }
             let is_stylesheet = element
                 .value()
                 .attr("rel")
                 .is_some_and(|rel| rel.to_lowercase().contains("stylesheet"));
-            let href = element.value().attr("href").filter(|_| is_stylesheet);
-            if let Some(Ok(bytes)) = href.map(|href| self.read(&join(path, href), 2 * 1024 * 1024))
-            {
-                sheet.add(&String::from_utf8_lossy(&bytes));
+            let Some(href) = element.value().attr("href").filter(|_| is_stylesheet) else {
+                continue;
+            };
+            let stylesheet = join(path, href);
+            if let Ok(bytes) = self.read(&stylesheet, 2 * 1024 * 1024) {
+                sheet.add(&String::from_utf8_lossy(&bytes), &stylesheet);
             }
         }
         sheet
@@ -385,7 +427,11 @@ impl BookFile for Epub {
     }
 
     fn resource(&mut self, path: &str) -> anyhow::Result<Vec<u8>> {
-        self.read(path, MAX_RESOURCE_BYTES)
+        let mut bytes = self.read(path, MAX_RESOURCE_BYTES)?;
+        if let Some(scrambling) = self.scrambled.get(&path.to_lowercase()) {
+            unscramble(&mut bytes, *scrambling, &self.identifier);
+        }
+        Ok(bytes)
     }
 
     fn cover(&self) -> Option<String> {
@@ -418,6 +464,38 @@ impl BookFile for Epub {
             .find(|&p| starts[p] <= offset)
             .unwrap_or(0);
         Some((first + piece, anchor))
+    }
+}
+
+/// Undoes the standard's scrambling of a font file in place: the start of the file is XORed with a key made from the book's
+/// identifier, so a font cannot be lifted out of the book and used on its own.
+fn unscramble(bytes: &mut [u8], how: Scrambling, identifier: &str) {
+    use sha1::{Digest, Sha1};
+    let (key, length): (Vec<u8>, usize) = match how {
+        Scrambling::Idpf => {
+            let clean: String = identifier
+                .chars()
+                .filter(|c| !matches!(c, ' ' | '\t' | '\r' | '\n'))
+                .collect();
+            (Sha1::digest(clean.as_bytes()).to_vec(), 1040)
+        }
+        Scrambling::Adobe => {
+            let hex: String = identifier
+                .trim_start_matches("urn:uuid:")
+                .chars()
+                .filter(|c| *c != '-')
+                .collect();
+            let key: Vec<u8> = (0..hex.len() / 2)
+                .filter_map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok())
+                .collect();
+            (key, 1024)
+        }
+    };
+    if key.is_empty() {
+        return;
+    }
+    for (index, byte) in bytes.iter_mut().take(length).enumerate() {
+        *byte ^= key[index % key.len()];
     }
 }
 
@@ -466,6 +544,7 @@ fn slice(whole: &Chapter, piece: usize, pieces: usize) -> Chapter {
                 offset: anchor.offset - first,
             })
             .collect(),
+        fonts: whole.fonts.clone(),
     }
 }
 

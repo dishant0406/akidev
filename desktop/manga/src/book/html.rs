@@ -133,6 +133,8 @@ struct Builder<'a> {
     /// One counter for each list being read; 0 for a bulleted one.
     lists: Vec<Option<u32>>,
     marker: Option<String>,
+    /// The font the body text is set in. The reader's own font replaces it; only a different one is the book's own to keep.
+    body_family: Option<String>,
 }
 
 pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
@@ -147,6 +149,7 @@ pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
         page_break: false,
         lists: Vec::new(),
         marker: None,
+        body_family: None,
     };
     let state = State::root();
     let start = html
@@ -158,6 +161,7 @@ pub fn build(html: &Html, sheet: &Sheet, path: &str) -> Chapter {
     Chapter {
         blocks: builder.blocks,
         anchors: builder.anchors,
+        fonts: Vec::new(),
     }
 }
 
@@ -178,6 +182,14 @@ impl Builder<'_> {
         let mut style = Style::new(parent);
         for (property, value) in &declarations {
             style.apply(property, value, parent);
+        }
+        if name == "body" || name == "html" {
+            // What the body is set in is the text's face, which the reader's own choice stands in for.
+            if let Some(family) = style.state.look.family.take() {
+                self.body_family = Some(family);
+            }
+        } else if style.state.look.family.is_some() && style.state.look.family == self.body_family {
+            style.state.look.family = None;
         }
         if style.hidden || element.value().attr("hidden").is_some() {
             return;
@@ -418,6 +430,7 @@ impl State {
                 mono: false,
                 shift: 0,
                 size: 1.0,
+                family: None,
                 link: None,
             },
             align: Align::Start,
@@ -620,6 +633,7 @@ impl Style {
                 state.look.small_caps = value.contains("small-caps")
             }
             "font-family" => {
+                state.look.family = css::first_family(&value);
                 state.look.mono = ["mono", "courier", "consolas", "menlo"]
                     .iter()
                     .any(|name| value.contains(name))
