@@ -1,0 +1,295 @@
+//! The part of CSS a book's look comes from: which rules apply to an element, as declarations in the order the
+//! cascade applies them. Selectors are matched by `scraper`; this file only reads the stylesheet text.
+
+use scraper::{ElementRef, Selector};
+use std::collections::HashMap;
+
+struct Rule {
+    selector: Selector,
+    /// Importance, then whose rule it is (the reader's own defaults lose to the book's), then how specific the
+    /// selector is, then position: the cascade order.
+    rank: (bool, u8, u32, u32),
+    declarations: Vec<(String, String)>,
+}
+
+/// Every rule of a chapter's stylesheets, indexed by the part of the selector that is cheapest to look up.
+#[derive(Default)]
+pub struct Sheet {
+    rules: Vec<Rule>,
+    by_tag: HashMap<String, Vec<usize>>,
+    by_class: HashMap<String, Vec<usize>>,
+    by_id: HashMap<String, Vec<usize>>,
+    anything: Vec<usize>,
+}
+
+impl Sheet {
+    /// A rule of the book's own.
+    pub fn add(&mut self, css: &str) {
+        self.add_from(css, 1);
+    }
+
+    /// The reader's defaults for elements, which any rule of the book overrides.
+    pub fn add_default(&mut self, css: &str) {
+        self.add_from(css, 0);
+    }
+
+    fn add_from(&mut self, css: &str, origin: u8) {
+        let css = strip_statements(&strip_comments(css));
+        let mut rest = css.as_str();
+        while let Some(open) = rest.find('{') {
+            let prelude = rest[..open].trim();
+            let Some(close) = matching_brace(rest, open) else {
+                break;
+            };
+            let body = &rest[open + 1..close];
+            if prelude.starts_with('@') {
+                // @media, @font-face and the like are not applied.
+                rest = &rest[close + 1..];
+                continue;
+            }
+            let declarations = declarations(body);
+            for selector in prelude.split(',') {
+                self.push(selector.trim(), &declarations, origin);
+            }
+            rest = &rest[close + 1..];
+        }
+    }
+
+    fn push(&mut self, text: &str, declarations: &[(String, String, bool)], origin: u8) {
+        if text.is_empty() || text.contains("::") {
+            return;
+        }
+        let Ok(selector) = Selector::parse(text) else {
+            return;
+        };
+        let index = self.rules.len();
+        let key = key_of(text);
+        // One rule per importance, so `!important` declarations rank above the rest.
+        for important in [false, true] {
+            let these: Vec<(String, String)> = declarations
+                .iter()
+                .filter(|(_, _, flag)| *flag == important)
+                .map(|(name, value, _)| (name.clone(), value.clone()))
+                .collect();
+            if these.is_empty() {
+                continue;
+            }
+            let id = self.rules.len();
+            self.rules.push(Rule {
+                selector: selector.clone(),
+                rank: (important, origin, specificity(text), index as u32),
+                declarations: these,
+            });
+            match &key {
+                Key::Id(name) => self.by_id.entry(name.clone()).or_default().push(id),
+                Key::Class(name) => self.by_class.entry(name.clone()).or_default().push(id),
+                Key::Tag(name) => self.by_tag.entry(name.clone()).or_default().push(id),
+                Key::Any => self.anything.push(id),
+            }
+        }
+    }
+
+    /// What the stylesheets say about `element`, weakest first.
+    pub fn declarations(&self, element: &ElementRef) -> Vec<(String, String)> {
+        let value = element.value();
+        let mut candidates: Vec<usize> = self.anything.clone();
+        if let Some(rules) = self.by_tag.get(value.name()) {
+            candidates.extend(rules);
+        }
+        for class in value.classes() {
+            if let Some(rules) = self.by_class.get(class) {
+                candidates.extend(rules);
+            }
+        }
+        if let Some(rules) = value.id().and_then(|id| self.by_id.get(id)) {
+            candidates.extend(rules);
+        }
+        let mut matched: Vec<&Rule> = candidates
+            .into_iter()
+            .map(|index| &self.rules[index])
+            .filter(|rule| rule.selector.matches(element))
+            .collect();
+        matched.sort_by_key(|rule| rule.rank);
+        matched
+            .into_iter()
+            .flat_map(|rule| rule.declarations.iter().cloned())
+            .collect()
+    }
+}
+
+/// `color: red; margin: 0 !important` as (name, value, important).
+pub fn declarations(text: &str) -> Vec<(String, String, bool)> {
+    text.split(';')
+        .filter_map(|declaration| {
+            let (name, value) = declaration.split_once(':')?;
+            let value = value.trim();
+            let (value, important) = match value.strip_suffix("!important") {
+                Some(value) => (value.trim(), true),
+                None => (value, false),
+            };
+            Some((name.trim().to_lowercase(), value.to_string(), important))
+        })
+        .collect()
+}
+
+fn strip_comments(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(start) = rest.find("/*") {
+        out.push_str(&rest[..start]);
+        rest = match rest[start..].find("*/") {
+            Some(end) => &rest[start + end + 2..],
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Drops `@import`, `@charset` and `@namespace`, the at-rules that end in `;` instead of a block.
+fn strip_statements(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(start) = rest.find('@') {
+        out.push_str(&rest[..start]);
+        let at = &rest[start..];
+        let statement = ["@import", "@charset", "@namespace"]
+            .iter()
+            .any(|name| at.starts_with(name));
+        rest = if statement {
+            at.find(';').map_or("", |end| &at[end + 1..])
+        } else {
+            out.push('@');
+            &at[1..]
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The index of the `}` that closes the `{` at `open`.
+fn matching_brace(text: &str, open: usize) -> Option<usize> {
+    let mut depth = 0;
+    for (index, c) in text[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+enum Key {
+    Id(String),
+    Class(String),
+    Tag(String),
+    Any,
+}
+
+/// What the last part of the selector (the element itself) names, to look rules up by.
+fn key_of(selector: &str) -> Key {
+    let last = selector
+        .rsplit(|c: char| c.is_whitespace() || c == '>' || c == '+' || c == '~')
+        .next()
+        .unwrap_or("");
+    // Anything after a `:` or `[` is a condition, and could be about something else (`:not(.x)`).
+    let compound = last.split([':', '[']).next().unwrap_or("");
+    let name = |from: char| -> Option<String> {
+        let start = compound.find(from)? + 1;
+        let end = compound[start..]
+            .find(['.', '#'])
+            .map_or(compound.len(), |end| start + end);
+        Some(compound[start..end].to_string())
+    };
+    if let Some(id) = name('#') {
+        return Key::Id(id);
+    }
+    if let Some(class) = name('.') {
+        return Key::Class(class);
+    }
+    let tag: String = compound
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '-')
+        .collect();
+    if tag.is_empty() {
+        Key::Any
+    } else {
+        // Element names reach the matcher lower case.
+        Key::Tag(tag.to_lowercase())
+    }
+}
+
+fn specificity(selector: &str) -> u32 {
+    let mut ids = 0;
+    let mut classes = 0;
+    let mut tags = 0;
+    let mut at_start = true;
+    for c in selector.chars() {
+        match c {
+            '#' => ids += 1,
+            '.' | '[' => classes += 1,
+            ':' => classes += 1,
+            c if c.is_whitespace() || c == '>' || c == '+' || c == '~' => {
+                at_start = true;
+                continue;
+            }
+            c if at_start && (c.is_alphabetic()) => tags += 1,
+            _ => {}
+        }
+        at_start = false;
+    }
+    ids * 10_000 + classes * 100 + tags
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scraper::Html;
+
+    fn first<'a>(html: &'a Html, selector: &str) -> ElementRef<'a> {
+        html.select(&Selector::parse(selector).unwrap())
+            .next()
+            .unwrap()
+    }
+
+    #[test]
+    fn more_specific_rules_win_and_important_beats_all() {
+        let mut sheet = Sheet::default();
+        sheet.add("p { color: red } p.note { color: blue } /* c */ #x { color: green } .note { margin: 0 !important } p { margin: 1em }");
+        let html = Html::parse_fragment(r#"<p class="note" id="x">hi</p>"#);
+        let found = sheet.declarations(&first(&html, "p"));
+        let last = |name: &str| {
+            found
+                .iter()
+                .rev()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(last("color"), Some("green"));
+        assert_eq!(last("margin"), Some("0"));
+    }
+
+    #[test]
+    fn at_rules_and_unmatchable_selectors_are_skipped() {
+        let mut sheet = Sheet::default();
+        sheet.add("@import url(a.css); @media print { p { color: red } } @font-face { font-family: X } p::first-letter { color: red } ns|p { color: red } div p { color: blue }");
+        let html = Html::parse_fragment("<div><p>hi</p></div><p id=\"b\">no</p>");
+        let in_div = sheet.declarations(&first(&html, "div p"));
+        assert_eq!(in_div, [("color".to_string(), "blue".to_string())]);
+        assert!(sheet.declarations(&first(&html, "#b")).is_empty());
+    }
+
+    #[test]
+    fn a_not_condition_does_not_become_the_lookup_key() {
+        let mut sheet = Sheet::default();
+        sheet.add("p:not(.x) { color: red }");
+        let html = Html::parse_fragment("<p>hi</p>");
+        assert_eq!(sheet.declarations(&first(&html, "p")).len(), 1);
+    }
+}
