@@ -215,3 +215,111 @@ says so: yes (plan); (e) per-book voice in phase 3 or later.
 - iOS speech: the word callback of `AVSpeechSynthesizer` and Personal Voice: <https://useyourloaf.com/blog/synthesized-speech-from-text/>, <https://bendodson.com/weblog/2024/04/03/using-your-personal-voice-in-an-ios-app/>
 - What readers say (Reddit): r/TextToSpeech "Still nothing like Voice Aloud Reader for iOS?", "A free assisted reading/readaloud app that runs Kokoro", r/ereader "Does anyone here regularly use text-to-speech", r/roastmystartup "on-device TTS so you can read…"
 - Measured here: the `ptts` crate built for `aarch64-apple-ios` (release, size-optimised) is a 12.3 MB static library that links to a 2.6 MB binary after dead-stripping.
+
+## 10. Adding models later without a release (not Phonon-specific)
+
+Asked for: when a new small model comes out, the owner (or a person) can add it to the app **without shipping a new app version**, the way a manga
+source is added from a repository. Researched on 2026-10-24; this section changes sections 5.2 and 6 as noted at its end.
+
+### 10.1 What can and cannot be added without a release
+
+A model is two things: **weights and files** (data) and **the code that knows how to run that kind of model** (the runtime). Only the first
+can arrive after release. App Store rule 2.5.2 forbids an app to "download, install, or execute code which introduces or changes features or
+functionality"; weights, voice files, tokenizers and a declarative description are data, and are what every on-device AI app (speech,
+vision, language) downloads after install. So the design is the same one the manga sources already use (declarative JSON, checked, no
+code), with one rule: **a new model in a runtime family the app already has needs no release; a new family of architecture needs one.**
+No downloaded scripts, no downloaded plug-in code, no WebAssembly plug-ins (the last would be code under rule 2.5.2).
+
+### 10.2 The small-TTS landscape (what the "families" would be)
+
+| Family | Examples | Runs on | Licence of weights | Needs a G2P/phonemizer? | Fit |
+| --- | --- | --- | --- | --- | --- |
+| **ptts family** (flow-matching on Mimi codec) | Phonon 31m/40m (Gradium); Pocket TTS 100M and the new 18.2M, 6.9M, 1.9M models (Kyutai, released 2026-10-20, MIT code); community Pocket-TTS checkpoints | the Rust `ptts` crate (CPU), Core ML ports exist | Apache (31m), CC BY-NC (40m), Kyutai's own terms; ports credit CC BY 4.0 | No: a SentencePiece/HF tokenizer plus per-language text rules | **First family.** One runtime already covers Gradium's and Kyutai's lines, so the likeliest next releases fit |
+| **Single-pass Core ML** | Kokoro-82M (Apache 2.0; about 80 MB INT8; 54 voices; the highest-rated small model in the comparisons), Core ML ports by FluidAudio, soniqo | Core ML (Neural Engine), **no binary added to the app** (the OS provides it) | Apache 2.0 | Kokoro needs one: its Apache G2P ("misaki") has Swift ports; the other route, espeak-ng, is **GPL-3.0** | **Second family, only if wanted.** Cheapest runtime (zero size), best battery; needs a G2P we may ship |
+| **ONNX graphs** | Kitten TTS (15M to 80M, Apache 2.0), Piper/VITS voices (900+), Supertonic (66M to 99M, ONNX, OpenRAIL-M), Matcha, ZipVoice | ONNX Runtime: full build about 7.5 MB (smaller with a reduced build; the stock iOS framework is far bigger), or `sherpa-onnx` which wraps many of these | Mixed: Apache, MIT, OpenRAIL-M; Piper is MIT or GPL by source | Piper, Kitten and sherpa's builds use **espeak-ng (GPL-3.0)**; Supertonic does not say | **Not a first-wave family.** Big runtime, GPL phonemizer risk, per-model glue |
+| **MLX** | `mlx-audio-swift` models (Kokoro, Qwen3-TTS and others) | Metal GPU via MLX Swift | per model | per model | Fast on new phones, larger models; later |
+
+The GPL point matters: espeak-ng is GPL-3.0 and the Apache App Store terms and GPL do not combine; a model that **requires** it cannot
+be run by the app unless a permissive phonemizer replaces it. So the rule for what a "recipe" may use: tokenizers (data), lexicons (data) and
+G2P rules that are permissively licensed. This quietly selects the right families: ptts (no phonemizer) and Kokoro (misaki).
+
+### 10.3 The design: voice repositories and model definitions
+
+Reuse what exists. The manga side already has **repositories**: a folder on the web with a signed `index.json` that lists files with their version
+and SHA-256, a trust screen on first add, a pinned key afterwards, and "min app version" per entry (`desktop/manga/src/repo.rs`). A voice
+repository is the same thing with a new kind of entry:
+
+```
+index.json            { "schema": 1, "name": "...", "key": "<ed25519>", "voices": [ {id, name, version, path, sha256, family, languages, min_app, bytes, licence} ] }
+voices/<id>.json      the model definition (below)
+```
+
+A **model definition** is data only:
+
+```json
+{
+  "schema": 1, "id": "phonon-31m-en", "name": "Phonon 31m", "version": 3, "min_app": "1.4",
+  "family": "ptts",                         // which runtime built into the app runs it
+  "languages": ["en"], "sample_rate": 24000,
+  "licence": { "name": "Apache-2.0", "url": "https://...", "commercial": true, "gated": false },
+  "files": [ { "path": "model.q8.gguf", "url": "hf://gradium/phonon-31m-en@<commit>/model.q8.gguf", "sha256": "...", "bytes": 67633152 },
+             { "path": "tokenizer.json", "url": "...", "sha256": "..." }, { "path": "config.json", "url": "...", "sha256": "..." } ],
+  "voices": { "catalog": "hf://gradium/phonon-voices@<commit>/voices.jsonl", "file": "voices/{id}.safetensors", "default": "default-voice.safetensors" },
+  "options": { "lang": "en", "quant": "q8" }
+}
+```
+
+- **`family`** is a closed list the app knows (`ptts` first). An unknown family, or a `min_app` above this app's version, is shown in the list as
+  "needs a newer version of Akidev" (the same wording the manga sources use), never failed silently.
+- **`url`** may be any https address or `hf://owner/name@commit/path` (Hugging Face, pinned to a commit so files cannot change under the
+  definition; gated ones use the person's token). Every file is checked by SHA-256 and size before use.
+- **Three ways to add a model**, from least to most open:
+  1. **A repository** (paste an address, or open an `akimanga://add-voices?url=` link): the list of models in it, install one by one.
+     The owner (or Gradium, or anyone) can publish a new model by adding a file to the repository: **no app release**.
+  2. **A Hugging Face id** (`owner/name@revision`): the app lists the files, and if they look like a known family (for `ptts`: config.json,
+     tokenizer, weights, a voice) it **writes the definition itself** and shows it for confirmation. This is how a model nobody has put in a
+     repository yet gets in.
+  3. **A definition file** from Files (a `.json`), for a model the person tested.
+- **A check before it is accepted:** after download the app loads the model and speaks one fixed sentence in the background. If it cannot, it is
+  removed with the reason (wrong family, wrong tokenizer, file damaged). A model is never "ready" without that pass.
+- **What the person sees** is the same list in 5.2: the repository's entries appear under "Available" with size, languages, licence and "Get";
+  a model's licence line is shown from its definition, with the non-commercial and gated warnings built from `licence.commercial` and
+  `licence.gated`, so a new restrictive model warns by itself.
+- **Trust:** a repository is trusted by the person who adds it, the app says "A voice model is files that run on your phone's processor
+  to make speech. Only add repositories you trust" (the wording the manga repositories already use), signed repositories cannot change
+  hands unnoticed. Model files are data parsed by the runtime: size caps, parsing on a worker, and only the families the app knows. A
+  hostile model can at worst crash that worker or sound wrong, not run code.
+- **Owner's own repository.** The owner publishes `dishant0406/voice-models` (or adds `voices/` to the existing sources repository) with Phonon 31m, the 40m entries marked
+  non-commercial and gated, and anything new later. Adding a model there is a commit and the app's "Check for updates" picks it up.
+
+### 10.4 What a new *family* costs (so the answer to "what needs a release" is concrete)
+
+| New thing | Release needed? | Work |
+| --- | --- | --- |
+| A new Phonon or Pocket TTS checkpoint, any size, any language, new voices | **No** | A definition file |
+| A new voice for an installed model | **No** | A line in the catalogue |
+| A **Core ML single-pass** model with the Kokoro-like recipe (token ids and a style vector in, waveform out) | **No, once the family exists** | The family is built once (about a week: the Core ML loader, the recipe, the G2P); each model after is a definition naming its inputs and outputs |
+| A model with a **new architecture** (different loop, different codec) | **Yes** | A new family in the engine |
+| An ONNX model | **Yes, once** (a runtime) | Adding an ONNX runtime is a decision about size (several MB) and the phonemizer licence, not about glue |
+
+### 10.5 Changes to the rest of this plan
+
+- **Section 5.2 (Voices screen):** the "Phonon" group becomes **Available** (from the repositories the person added, with the owner's repository added by
+  default but removable, like nothing is built in for manga) and **Installed**; "Add a voice model" has the three ways above. Phonon is simply the first entries.
+- **Section 6 (architecture):** `voice_model` gains `family`, `definition` (the JSON) and `repository`; the Rust `voice` module has one trait
+  `Family { open(folder, definition) -> Speaker }` with `ptts` the only implementation; the registry reads definitions, not names.
+  The downloader is shared with the manga repositories' fetch-and-verify code.
+- **Phases (section 7):** phase 1 adds the definition schema, repository kind and the HF-id writer; phase 4 ("Add a model") becomes "repositories and HF ids";
+  a phase 6 (optional) is the Core ML single-pass family.
+- **New decisions for the owner:** (f) a separate voices repository, or `voices/` inside the existing sources repository; (g) whether
+  the app ships with the owner's repository added (the manga side ships with none, by design, for review reasons; the same stance is the safe default here:
+  the first Voices screen offers Phone voices and one button "Add the Akidev voice list"); (h) whether to support the Core ML single-pass family (Kokoro) in the first release or later.
+
+### 10.6 Sources for this section
+
+App Store Review Guidelines 2.5.1, 2.5.2, 4.2.3(ii), 4.7: <https://developer.apple.com/app-store/review/guidelines/>. espeak-ng licence (GPL-3.0): <https://github.com/espeak-ng/espeak-ng/blob/master/COPYING>;
+the same issue for Kokoro: <https://github.com/hexgrad/kokoro/issues/247>. sherpa-onnx families (VITS/Piper, Matcha, Kokoro, Kitten, Pocket, Supertonic, ZipVoice): <https://k2-fsa.github.io/sherpa/onnx/tts/index.html>;
+its iOS runtime size question: <https://github.com/k2-fsa/sherpa-onnx/issues/2643>. ONNX Runtime size: <https://onnxruntime.ai/docs/build/custom.html>, <https://github.com/microsoft/onnxruntime/discussions/6551>.
+Supertonic (ONNX, OpenRAIL-M): <https://huggingface.co/Supertone/supertonic-3>. Pocket TTS: <https://github.com/kyutai-labs/pocket-tts>, <https://kyutai.org/blog/2026-10-20-pocket-tts-small/>, Core ML and ONNX bundles: <https://soniqo.audio/guides/pocket-tts>.
+Kokoro Core ML: <https://huggingface.co/mattmireles/kokoro-coreml>, FluidAudio: <https://swiftpackageindex.com/FluidInference/FluidAudio>. MLX Audio: <https://github.com/Blaizzy/mlx-audio>.
+The repository format reused: `desktop/manga/src/repo.rs`.
