@@ -107,8 +107,8 @@ enum BookMargin: String, Codable, CaseIterable {
     var title: String { rawValue.capitalized }
     var points: CGFloat {
         switch self {
-        case .narrow: 16
-        case .normal: 28
+        case .narrow: 20
+        case .normal: 32
         case .wide: 44
         }
     }

@@ -361,6 +361,9 @@ struct ChapterTypesetter {
         paragraph.paragraphSpacingBefore = CGFloat(block.spaceBefore) * base
         paragraph.lineHeightMultiple = block.heading > 0 ? min(CGFloat(style.lineSpacing), 1.25) : CGFloat(style.lineSpacing)
         paragraph.lineBreakMode = .byWordWrapping
+        // The hyphen at the end of a broken word is drawn after the line: room is left for it, so it stays inside the column and the
+        // right edge is as straight as the left.
+        if style.hyphenate { paragraph.tailIndent = -base * 0.3 }
         paragraph.tabStops = [NSTextTab(textAlignment: .left, location: left)]
         paragraph.defaultTabInterval = base * 2
         switch block.align {
@@ -410,12 +413,12 @@ struct ChapterTypesetter {
     private func hyphenPoints(in text: String, locale: CFLocale) -> [Int] {
         let characters = text as CFString
         let length = CFStringGetLength(characters)
-        guard length >= 7 else { return [] }
+        guard length >= 8 else { return [] }
         let tokenizer = CFStringTokenizerCreate(nil, characters, CFRange(location: 0, length: length), kCFStringTokenizerUnitWord, locale)
         var points: [Int] = []
         while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
             let word = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            guard word.length >= 7 else { continue }
+            guard word.length >= 8 else { continue }
             var found: [Int] = []
             var index = word.location + word.length
             while index > word.location + 1 {
