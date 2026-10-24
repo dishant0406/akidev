@@ -70,6 +70,20 @@ final class BookPageView: UIView {
         theme.paper.setFill()
         context.fill(rect)
         guard let layout else { return }
+        if let cover = layout.coverPicture {
+            // A cover or a picture page: the whole screen, the picture as large as it can be without being cut.
+            if let picture = paging?.picture(path: cover, width: max(bounds.width, bounds.height), ready: { [weak self] in self?.setNeedsDisplay() }) {
+                let scale = min(bounds.width / CGFloat(picture.width), bounds.height / CGFloat(picture.height))
+                let size = CGSize(width: CGFloat(picture.width) * scale, height: CGFloat(picture.height) * scale)
+                let area = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
+                context.saveGState()
+                context.translateBy(x: 0, y: bounds.height)
+                context.scaleBy(x: 1, y: -1)
+                context.draw(picture, in: CGRect(x: area.minX, y: bounds.height - area.maxY, width: area.width, height: area.height))
+                context.restoreGState()
+            }
+            return
+        }
         context.saveGState()
         // Core Text draws from the bottom left with y up: the text area is put there.
         context.translateBy(x: insets.left, y: insets.top + layout.size.height)

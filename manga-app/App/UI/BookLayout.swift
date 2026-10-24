@@ -36,6 +36,8 @@ final class ChapterLayout: @unchecked Sendable {
     let pages: [NSRange]
     /// Written in vertical columns from the right: the lines are columns, and touching a place in them is not worked out.
     let vertical: Bool
+    /// A chapter that is one picture and nothing else (a cover): its path in the book. The page shows it over the whole screen.
+    let coverPicture: String?
     private let framesetter: CTFramesetter
     /// Where each soft hyphen was put: the book's index of the character after it, in order.
     private let hyphens: [Int]
@@ -43,11 +45,12 @@ final class ChapterLayout: @unchecked Sendable {
 
     var count: Int { pages.count }
 
-    init(index: Int, text: NSAttributedString, size: CGSize, vertical: Bool, breaks: [Int], headings: [NSRange], hyphens: [Int], anchors: [String: Int]) {
+    init(index: Int, text: NSAttributedString, size: CGSize, vertical: Bool, coverPicture: String?, breaks: [Int], headings: [NSRange], hyphens: [Int], anchors: [String: Int]) {
         self.index = index
         self.text = text
         self.size = size
         self.vertical = vertical
+        self.coverPicture = coverPicture
         self.hyphens = hyphens
         self.anchors = anchors
         framesetter = CTFramesetterCreateWithAttributedString(text)
@@ -95,6 +98,7 @@ final class ChapterLayout: @unchecked Sendable {
     /// How tall a page's text really is: the pages are cut at the foot of the text area, a scrolled book stacks them, and what
     /// is empty under the last line is not kept.
     func extent(of page: Int) -> CGFloat {
+        if coverPicture != nil { return Aki.screenSize.height }
         let frame = frame(page: page)
         let lines = CTFrameGetLines(frame) as! [CTLine]
         guard let last = lines.last else { return 0 }
@@ -272,7 +276,11 @@ struct ChapterTypesetter {
 
         // A page that is one picture and nothing else (a comic's page, a cover) fills the page.
         var pictureOnly = false
-        if chapter.blocks.count == 1, case .image = chapter.blocks[0].kind { pictureOnly = true }
+        var cover: String?
+        if chapter.blocks.count == 1, case .image(let path, _) = chapter.blocks[0].kind {
+            pictureOnly = true
+            cover = path
+        }
         for block in chapter.blocks {
             let blockStart = out.length
             if block.pageBreakBefore, blockStart > 0 { breaks.append(blockStart) }
@@ -310,7 +318,7 @@ struct ChapterTypesetter {
         // Text takes the colour the page is drawn with, so the theme can change without setting the type again.
         out.addAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), value: true, range: NSRange(location: 0, length: out.length))
         let anchors = Dictionary(chapter.anchors.map { ($0.id, Int($0.offset)) }, uniquingKeysWith: { first, _ in first })
-        return ChapterLayout(index: index, text: out, size: size, vertical: chapter.vertical, breaks: breaks, headings: headings, hyphens: hyphens, anchors: anchors)
+        return ChapterLayout(index: index, text: out, size: size, vertical: chapter.vertical, coverPicture: cover, breaks: breaks, headings: headings, hyphens: hyphens, anchors: anchors)
     }
 
     /// A picture's size on the page: half its pixels at most, never wider than the page or most of its height. One that cannot be
