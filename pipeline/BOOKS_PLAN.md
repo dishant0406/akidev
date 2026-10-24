@@ -18,8 +18,46 @@ Principles, carried over from the manga side:
 
 ## 2. What readers want (research)
 
-Honest note first: the search tool could not reach Reddit or X, and most comparison pages are written by app makers. What follows is
-what several independent sources agree on; treat rankings as weak evidence.
+Two passes. The first (web search) was mostly vendor listicles. The second, added 2026-10-24, read the real Reddit threads
+(through the TinyFish search and fetch APIs; the in-app browser blocks reddit): r/ebooks, r/ereader, r/apple, r/macapps, r/koreader,
+r/readest, r/readwise, about 25 threads from 2022 to 2026. X gave almost nothing useful (company accounts and promotion), so it is not
+used. Reddit is self-selected: loud complainers and power users are over-represented, and several threads are developers advertising
+their own app. Counts below are "threads where it came up", not statistics.
+
+### 2.1 What people actually say (Reddit)
+
+| Theme | What they wrote (paraphrased) | Threads | What it means for us |
+| --- | --- | --- | --- |
+| **Books vanish** | Apple Books offloads books to iCloud, "even the book you are reading", even on a plane or with poor signal; no "download all" button | 5+ (r/apple, r/ebooks, r/macapps, r/zlibrary) | **Our biggest promise: a book you added stays on the device until you remove it.** No offloading, ever. Say so in the app |
+| **Subscription for local features** | Hiding basic local functionality behind a subscription; limits like 10 files per import; people say they would pay once | 4 | No subscription, no import limit. Anything we charge for is one-time, if at all (decision for you) |
+| **Getting a big library in** | Dozens of GB of books in folders on a Mac; iOS apps make this hard; Eboox crashes with several GB; PC upload over Wi-Fi in MapleRead is praised; Google Drive "Open in" works | 3 | Import whole folders from Files, many files at once, a Wi-Fi upload page later; library must stay fast at thousands of books (test at 2,000) |
+| **Slow open, laggy, stale screen** | Readwise Reader took ~2 s even for a 200 KB book and fixed it only after a user measured; Readest on iOS shows a frozen frame after returning to the app (reported for 137+ days); Apple Books "hiccups", pages do not render until force quit | 4 | Open time and resume-from-background are features. Measure both; a cached chapter must show at once; redraw on becoming active |
+| **True black** | Many read in dark rooms; OLED users want black, not grey (a 2017 thread says iBooks' darkest was grey); some cannot use light mode at all (floaters, light sensitivity) | 5 | Keep **True black** and auto switch; also accessibility: high contrast, no pure white flash when opening |
+| **Typography they miss** | No custom fonts or text colour; cannot tap the page to turn it in Apple Books; cannot adjust margins; layout and custom-layout settings not remembered | 4 | Margins, tap zones, per-book memory of settings are cheap wins. Custom fonts (import a font file) rises from "later" to phase 5 |
+| **Paging vs scrolling** | Both are wanted: "choose your own touch zones, no animations, a quick non-descript transition"; some do not like turning pages at all | 3 | Both modes, **configurable tap zones**, short transition, option for none |
+| **Sync that is trusted** | KOReader and Readest progress sync is celebrated; Google Play Books notes "glitchy"; a Moon+ user lost highlights on hundreds of books after a restore; "I just want to sort by percent read" | 6 | Progress sync is the most requested extra and also where trust is lost: never overwrite, merge by time, and **a plain-file export/import of highlights** as the safety net |
+| **Highlights and notes that come out** | Export as Markdown or plain text; "notes section inside each book"; Readwise-style review | 4 | Highlights export to Markdown in phase 5, not "later" |
+| **Text to speech** | Voice Dream, Speechify and ElevenReader time limits and paywalls pushed people to look for free ones; word-level highlight while reading aloud is the praised feature; offline narration | 3 | System speech (AVSpeechSynthesizer) with sentence highlight is free to offer and valued; stays in phase 6 |
+| **Broken EPUBs and footnotes** | Footnote pop-up empty or in the wrong font; formatting "completely messed up" when the font size changes; embedded fonts ignored in most apps (KOReader honours them) | 5 | Footnote popover and **embedded fonts honoured** are differentiators; test corpus must include odd books |
+| **Looks** | An independent app was called "basic", its icon "looks like AI" and not Apple-like; people want "Apple Books feel, Readest/KOReader openness" | 2 | Our glass design is a real asset; avoid generic look |
+| **Privacy** | Separate threads asking for a reader with no tracking and no account | 4 | State it plainly: no account, nothing leaves the device |
+| **Library features** | Sort by percent read, shelves/collections, Calibre or OPDS access, comics in the same app | 4 | Sort by progress, collections (reuse categories), OPDS in phase 4 |
+| **Annotations alongside PDFs** | One request is for PDF annotation and a knowledge organiser, not only EPUB | 2 | Out of scope, said honestly |
+
+Which apps people name, so we know the bar: Apple Books (default, "smooth", but offloads and hiccups), Readest (modern, KOReader sync, iOS lag),
+KOReader (loved, hard to set up, no iOS store app), Yomu (one-time purchase, accepts everything), ReadEra (free, many features), MapleRead,
+KyBook 3 and Marvin (old, no longer updated), BookFusion and Readwise Reader (subscriptions), Moon+ (Android).
+
+### 2.2 What changes in the plan because of this
+
+1. **Promise on the first screen of the Books tab:** books stay on this device. No cloud offloading. (Replaces the generic "no accounts" line as headline.)
+2. **Phase order moves:** resume-from-background correctness and open time become phase 3 gates, not phase 6 polish.
+3. **Pulled forward:** configurable tap zones and margins (phase 3), highlights export as Markdown and custom font import (phase 5).
+4. **Sync:** still not in version 1, but the highlight export/import file and a merge-never-overwrite rule go into the schema from phase 1 so sync can be added without losing anyone's notes. KOReader-compatible progress is the first sync to build.
+5. **Library scale test:** 2,000 books, folder import, many files at once.
+6. **Pricing stance** (decision for you, section 9): free with no limits, or one-time.
+
+
 
 **What they value**
 
@@ -34,7 +72,7 @@ what several independent sources agree on; treat rankings as weak evidence.
 **What they complain about**
 
 - Apple Books: syncing that fails or lags, sideloaded EPUBs treated as second class, customisation spread over many taps, themes that
-  do not sync, a library that slows as it grows (Apple Community threads, a TidBITS comment; anecdotes, dated 2017 to 2022).
+  do not sync, a library that slows as it grows (Apple Community threads, a TidBITS comment; anecdotes, dated 2017 to 2022; confirmed and extended by the Reddit pass in 2.1).
 - Readest reviewers: a book that is slow to open and sticks on a spinner; no true black for OLED screens; no web search next to the dictionary.
 - Reading systems differ on CSS support, footnotes, fixed layout, right-to-left and vertical text, and **broken EPUBs** (W3C digital
   publishing notes, Project Gutenberg's CSS wiki, forum threads). "Anything but Books on iOS is a crapshoot" for fixed layout.
@@ -209,10 +247,11 @@ Each phase ends with: tests, a simulator recording of the real flow, an independ
 6. **Tab bar room.** Five tabs on the floating bar: test the width; the Books tab is optional (Settings) so manga-only users see four.
 7. **Scope creep.** Dictionary, translation, TTS, annotations export are each their own phase and can slip without breaking the core.
 
-Decisions for you: (a) Core Text own selection vs system text view (risk 2), (b) is the Books tab shown from the start or only after the first book, (c) files in backups: never, always, or asked, (d) is OPDS the only catalogue kind, or also Calibre content server and Komga (Aidoku already does Komga, Kavita, Suwayomi).
+Decisions for you: (e) price: free with no limits, or a one-time purchase (Reddit is hostile to subscriptions and to limits on local features), (a) Core Text own selection vs system text view (risk 2), (b) is the Books tab shown from the start or only after the first book, (c) files in backups: never, always, or asked, (d) is OPDS the only catalogue kind, or also Calibre content server and Komga (Aidoku already does Komga, Kavita, Suwayomi).
 
 ## 10. Sources
 
+- Reddit threads (read in full via TinyFish fetch): r/ebooks 1he8hgh, 1qvjlfg, 1ourirb, 1nqmeqv, 1tx8vi8, 1k4i29a; r/apple 14cjw4s; r/macapps 1qstqtv; r/ereader 1mg799q, 1qdgef1; r/readwise 1oueem7; r/readest 1tb3kaf; plus search results for dark mode, TTS, footnotes, privacy, KOReader sync (all under reddit.com, thread ids above)
 - W3C EPUB 3.3 (container, package document, spine, navigation): <https://www.w3.org/TR/epub-33/Overview.html>; CFI: <https://w3c.github.io/epub-specs/epub33/epubcfi/>
 - Native TextKit 2 EPUB viewer (pagination, CSS cascade, text map, limits): <https://github.com/vocaro/EPUBLib/pull/4>
 - Core Text EPUB engine in an iOS reader: <https://github.com/kmworks/kmreader/pull/1279>
