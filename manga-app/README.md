@@ -41,6 +41,15 @@ Other debug-only launch arguments for scripted runs: `-autoSeries "local|solo-le
 a series, `-autoContinue YES` then opens the reader where it left off, and `-mode.<source>.<series> strip|paged|rtl`
 picks the reading mode. `DEMO_LOG=1 python3 scripts/demo-server.py` prints every request.
 
+## Books
+
+The Books tab reads EPUB files from the device. The engine (`desktop/manga/src/book`) opens the zip, reads the package, contents
+and chapters, and turns a chapter's XHTML and CSS into blocks of styled text with positions; the app (`App/UI/BookLayout.swift`,
+`BookPage.swift`) sets those in type with Core Text, paginates on a background queue and draws the pages itself: no web view and no
+reading library. A format is a `BookFile` in the engine, so another format is one more implementation. Debug-only launch arguments:
+`-importBooks /folder` adds every EPUB in it, `-openBook 2` opens the third book on the shelf. Tests: `cargo test -p akidev-manga --test book`;
+with `AKI_BOOK_CORPUS=/folder cargo test -p akidev-manga --test book corpus -- --ignored --nocapture` every EPUB in a folder is read and timed.
+
 ## What the app ships with
 
 Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address

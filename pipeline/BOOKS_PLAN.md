@@ -270,3 +270,13 @@ Decisions for you: (e) price: free with no limits, or a one-time purchase (Reddi
 - Apple Books sync and import complaints: <https://discussions.apple.com/thread/8137580>, <https://discussions.apple.com/thread/254517709>, <https://talk.tidbits.com/t/how-apple-s-books-app-has-changed-in-ios-16/20125>
 - EPUB compatibility pain (CSS, footnotes, fixed layout): <https://www.pgdp.net/wiki/CSS_features_not_in_EPUB>, <https://lists.w3.org/Archives/Public/public-digipub-ig/2014Jan/0005.html>
 - OPDS catalogues: <https://opds-spec.org/2010/08/29/opds-catalogs-v1/>; Standard Ebooks feed <https://standardebooks.org/feeds/opds>; Gutenberg <https://m.gutenberg.org/ebooks.opds/>; Internet Archive <https://bookserver.archive.org/catalog/>
+
+## 11. Status (2026-10-24)
+
+Built and run in the simulator on six real books (Pride and Prejudice, Moby Dick, Frankenstein, War and Peace, Hamlet, Alice) and a
+generated 8 MB single-file book: engine (EPUB, DRM refusal, contents nav and ncx, CSS subset, pictures, links, anchors, large files
+read in pieces), schema 7 and facade, Books tab, shelf, import of several files at once, reader (Core Text pages, hyphenation,
+themes, type settings, contents, scrubber, link trail), resume where you stopped. Decisions made: own Core Text drawing, Books tab
+always shown, free, backups will include files (not built). Skipped for now by the owner: VoiceOver and dictionary lookup.
+Not built: highlights and notes, search, footnote popovers, custom fonts and embedded fonts, OPDS catalogue, per-book settings,
+text to speech, vertical and right-to-left layout, fixed layout.

@@ -206,7 +206,13 @@ impl Builder<'_> {
         }
 
         match name {
-            "img" => return self.image(attribute(&element, "src"), element.value().attr("alt")),
+            "img" => {
+                let ink = element
+                    .value()
+                    .classes()
+                    .any(|class| class.ends_with("black-on-transparent"));
+                return self.image(attribute(&element, "src"), element.value().attr("alt"), ink);
+            }
             "svg" => return self.svg(element),
             "br" => return self.text("\u{2028}", &state, true),
             "hr" => {
@@ -381,7 +387,7 @@ impl Builder<'_> {
         self.offset += length + 1;
     }
 
-    fn image(&mut self, src: Option<&str>, alt: Option<&str>) {
+    fn image(&mut self, src: Option<&str>, alt: Option<&str>, ink: bool) {
         let Some(src) = src.filter(|src| !src.starts_with("data:")) else {
             return;
         };
@@ -389,6 +395,7 @@ impl Builder<'_> {
         let kind = Kind::Image {
             src: join(self.path, src),
             alt: alt.unwrap_or("").to_string(),
+            ink,
         };
         self.push(kind, centered());
     }
@@ -397,7 +404,7 @@ impl Builder<'_> {
     fn svg(&mut self, svg: ElementRef) {
         for node in svg.descendants() {
             if let Some(element) = ElementRef::wrap(node).filter(|e| e.value().name() == "image") {
-                self.image(attribute(&element, "href"), None);
+                self.image(attribute(&element, "href"), None, false);
             }
         }
     }

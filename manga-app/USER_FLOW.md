@@ -209,11 +209,19 @@ Long-press a series for a menu (Open, Mark read, Move to category, Remove). **Ca
 
 Settings, Backup: create one file (library, progress, categories, history, repositories, installed source list and their settings, app settings; **not** downloads), shown in the share sheet to save to Files or iCloud Drive. Restore: open the file; the app lists what it will restore, re-adds the repositories and reinstalls the sources from them (hash-checked), then puts the library and progress back. Sources that can no longer be installed are listed, not dropped. *Missing.*
 
-### 4.10 Later flows, sketched
+### 4.10 Books
+
+The Books tab (always shown, between Library and Updates) holds EPUB files. Add: the round yellow button on the Books tab, or Sources, Add an EPUB book; the Files picker takes several files at once, each is copied in, checked and added in turn (the header counts "Adding 2 of 5…"). A file that cannot be read says why (damaged, DRM, not an EPUB) and the rest go on. The same file added twice is one book. Books stay on the phone until removed (long-press, Remove): nothing is offloaded.
+
+The shelf is covers in a grid with how far through you are (New, a percentage, Finished); a book with no cover gets its title on a plain card. Tap to read. The reader opens where you stopped; tap the middle for the bars (back, contents, type and theme, a slider over the whole book), the edges to turn pages, or swipe. A link inside the book (a footnote) takes you there and shows "Back to where you were". Type and theme: Auto, Paper, Sepia, Night, Black; font, size, line spacing, margins, justify and hyphenation; each shows on the page at once and is remembered.
+
+Built: all of the above, with a table of contents, pictures, hyphenation, very large chapter files read in pieces. Not yet: highlights and notes, search in the book, dictionary and VoiceOver (skipped for now), text to speech, a catalogue source (OPDS), per-book settings, embedded fonts, fixed-layout and vertical text, backup of the books. The plan is `pipeline/BOOKS_PLAN.md`.
+
+### 4.11 Later flows, sketched
 
 - **Migrate:** Series, More, Migrate. Choose a source, the app searches it for the same title and shows matches; confirm and read progress carries over (by chapter number).
 - **Downloads:** a download arrow on the chapter card and in the series menu, a queue in Library, Wi-Fi only, auto-delete after reading, never expiring.
-- **Local files:** Files picker or Open in. CBZ, folders and PDF become a source called "On this device".
+- **Local files:** Files picker or Open in. CBZ, folders and PDF become a source called "On this device". (EPUB is done: see Books.)
 - **Trackers:** Settings, log in to AniList; a button on the series page; progress syncs as you read.
 - **Self-hosted servers:** a source whose address and login are settings, for Komga, Kavita and Suwayomi.
 

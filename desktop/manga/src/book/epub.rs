@@ -5,7 +5,7 @@
 
 use super::css::Sheet;
 use super::html::{self, join};
-use super::{BookFile, Chapter, Entry, Meta};
+use super::{Anchor, Block, BookFile, Chapter, Entry, Meta};
 use anyhow::Context;
 use regex::{Captures, Regex};
 use scraper::{ElementRef, Html, Selector};
@@ -18,6 +18,9 @@ const MAX_ENTRIES: usize = 20_000;
 const MAX_CHAPTER_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_RESOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SPINE: usize = 5_000;
+/// A chapter file larger than this is read as several chapters of about this size, cut between paragraphs, so a book that is
+/// one enormous file is still set in type a piece at a time.
+const PIECE_BYTES: u64 = 96 * 1024;
 
 /// The two ways the standard scrambles embedded fonts. Anything else in `encryption.xml` is DRM.
 const FONT_SCRAMBLING: [&str; 2] = [
@@ -31,7 +34,9 @@ pub struct Epub {
     names: HashMap<String, String>,
     meta: Meta,
     /// The chapters' paths, in reading order.
-    spine: Vec<String>,
+    spine: Vec<Part>,
+    /// The last large file read, whole, while its pieces are being asked for one after another.
+    whole: Option<(String, Chapter)>,
     sizes: Vec<u64>,
     contents: Vec<Entry>,
     cover: Option<String>,
@@ -56,6 +61,7 @@ impl Epub {
             names,
             meta: Meta::default(),
             spine: Vec::new(),
+            whole: None,
             sizes: Vec::new(),
             contents: Vec::new(),
             cover: None,
@@ -130,25 +136,30 @@ impl Epub {
         }
 
         let spine_element = package.select(&selector("spine")).next();
-        self.spine = package
+        let paths: Vec<String> = package
             .select(&selector("spine itemref"))
             .filter_map(|itemref| manifest.get(itemref.value().attr("idref")?))
             .filter(|item| item.kind.contains("html"))
             .map(|item| item.path.clone())
             .take(MAX_SPINE)
             .collect();
-        anyhow::ensure!(!self.spine.is_empty(), "the book has no chapters");
-        self.sizes = self
-            .spine
-            .iter()
-            .map(|path| {
-                self.names
-                    .get(&path.to_lowercase())
-                    .and_then(|name| self.zip.by_name(name).ok())
-                    .map_or(0, |file| file.size())
-            })
-            .collect();
-
+        anyhow::ensure!(!paths.is_empty(), "the book has no chapters");
+        for path in paths {
+            let size = self
+                .names
+                .get(&path.to_lowercase())
+                .and_then(|name| self.zip.by_name(name).ok())
+                .map_or(0, |file| file.size());
+            let pieces = size.div_ceil(PIECE_BYTES).max(1) as usize;
+            for piece in 0..pieces {
+                self.spine.push(Part {
+                    path: path.clone(),
+                    piece,
+                    pieces,
+                });
+                self.sizes.push(size / pieces as u64);
+            }
+        }
         // The details are `dc:title` and the like; a selector cannot name a prefix, so they are found by the
         // name after it.
         let details = |name: &str| -> Vec<String> {
@@ -233,7 +244,7 @@ impl Epub {
     }
 
     /// Where a link in a contents file goes: the chapter and the id in it.
-    fn entry(&self, from: &str, href: &str, title: String, depth: u32) -> Option<Entry> {
+    fn entry(&mut self, from: &str, href: &str, title: String, depth: u32) -> Option<Entry> {
         let (chapter, anchor) = self.target(&html::link_to(from, href))?;
         Some(Entry {
             title,
@@ -243,7 +254,7 @@ impl Epub {
         })
     }
 
-    fn nav_entries(&self, document: &Html, path: &str) -> Vec<Entry> {
+    fn nav_entries(&mut self, document: &Html, path: &str) -> Vec<Entry> {
         let navs: Vec<ElementRef> = document.select(&selector("nav")).collect();
         let Some(nav) = navs
             .iter()
@@ -270,7 +281,7 @@ impl Epub {
             .collect()
     }
 
-    fn ncx_entries(&self, document: &Html, path: &str) -> Vec<Entry> {
+    fn ncx_entries(&mut self, document: &Html, path: &str) -> Vec<Entry> {
         document
             .select(&selector("navpoint"))
             .filter_map(|point| {
@@ -285,6 +296,22 @@ impl Epub {
                 self.entry(path, content.value().attr("src")?, words(&label), depth)
             })
             .collect()
+    }
+
+    fn parse_file(&mut self, path: &str) -> anyhow::Result<Chapter> {
+        let document = self.read_markup(path, MAX_CHAPTER_BYTES)?;
+        let sheet = self.sheet(&document, path);
+        Ok(html::build(&document, &sheet, path))
+    }
+
+    /// Reads a large file whole, unless it was the last one read.
+    fn load_whole(&mut self, path: &str) -> anyhow::Result<()> {
+        if self.whole.as_ref().is_none_or(|(kept, _)| kept != path) {
+            self.whole = None;
+            let chapter = self.parse_file(path)?;
+            self.whole = Some((path.to_string(), chapter));
+        }
+        Ok(())
     }
 
     /// The stylesheets a chapter names, with the reader's own defaults underneath.
@@ -328,14 +355,17 @@ impl BookFile for Epub {
     }
 
     fn chapter(&mut self, index: usize) -> anyhow::Result<Chapter> {
-        let path = self
+        let part = self
             .spine
             .get(index)
             .context("there is no such chapter")?
             .clone();
-        let document = self.read_markup(&path, MAX_CHAPTER_BYTES)?;
-        let sheet = self.sheet(&document, &path);
-        Ok(html::build(&document, &sheet, &path))
+        if part.pieces == 1 {
+            return self.parse_file(&part.path);
+        }
+        self.load_whole(&part.path)?;
+        let whole = &self.whole.as_ref().expect("just loaded").1;
+        Ok(slice(whole, part.piece, part.pieces))
     }
 
     fn resource(&mut self, path: &str) -> anyhow::Result<Vec<u8>> {
@@ -346,17 +376,83 @@ impl BookFile for Epub {
         self.cover.clone()
     }
 
-    fn target(&self, link: &str) -> Option<(usize, Option<String>)> {
+    fn target(&mut self, link: &str) -> Option<(usize, Option<String>)> {
         let (path, anchor) = match link.split_once('#') {
             Some((path, anchor)) => (path, Some(anchor.to_string()).filter(|a| !a.is_empty())),
             None => (link, None),
         };
         let wanted = path.to_lowercase();
-        let chapter = self
+        let first = self
             .spine
             .iter()
-            .position(|spine| spine.to_lowercase() == wanted)?;
-        Some((chapter, anchor))
+            .position(|part| part.path.to_lowercase() == wanted)?;
+        let pieces = self.spine[first].pieces;
+        let Some(id) = anchor.as_ref().filter(|_| pieces > 1) else {
+            return Some((first, anchor));
+        };
+        // The id is in one of the pieces of a large file: the one it falls in.
+        let path = self.spine[first].path.clone();
+        self.load_whole(&path).ok()?;
+        let whole = &self.whole.as_ref()?.1;
+        let offset = whole
+            .anchors
+            .iter()
+            .find(|a| &a.id == id)
+            .map_or(0, |a| a.offset);
+        let starts = piece_starts(whole, pieces);
+        let piece = (0..pieces)
+            .rev()
+            .find(|&p| starts[p] <= offset)
+            .unwrap_or(0);
+        Some((first + piece, anchor))
+    }
+}
+
+/// One chapter of the reading order: a whole file, or one piece of a large one.
+#[derive(Clone)]
+struct Part {
+    path: String,
+    piece: usize,
+    pieces: usize,
+}
+
+/// Where each piece of a chapter begins, as an offset into its text: the first paragraph at or after an even share of it.
+fn piece_starts(whole: &Chapter, pieces: usize) -> Vec<u32> {
+    let total = whole.blocks.last().map_or(0, |block| block.start + 1);
+    (0..pieces)
+        .map(|piece| {
+            let wanted = (u64::from(total) * piece as u64 / pieces as u64) as u32;
+            let at = whole.blocks.partition_point(|block| block.start < wanted);
+            whole.blocks.get(at).map_or(total, |block| block.start)
+        })
+        .collect()
+}
+
+/// One piece of a large chapter, its positions counted from its own start.
+fn slice(whole: &Chapter, piece: usize, pieces: usize) -> Chapter {
+    let starts = piece_starts(whole, pieces);
+    let from = if piece == 0 { 0 } else { starts[piece] };
+    let to = starts.get(piece + 1).copied().unwrap_or(u32::MAX);
+    let first = if piece == 0 { 0 } else { from };
+    Chapter {
+        blocks: whole
+            .blocks
+            .iter()
+            .filter(|block| block.start >= from && block.start < to)
+            .map(|block| Block {
+                start: block.start - first,
+                ..block.clone()
+            })
+            .collect(),
+        anchors: whole
+            .anchors
+            .iter()
+            .filter(|anchor| anchor.offset >= from && anchor.offset < to)
+            .map(|anchor| Anchor {
+                id: anchor.id.clone(),
+                offset: anchor.offset - first,
+            })
+            .collect(),
     }
 }
 

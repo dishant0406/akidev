@@ -46,10 +46,10 @@ struct BooksView: View {
         #if DEBUG
         // `-openBook 2` opens the third book on the shelf, to drive the reader from a script.
         .task {
-            guard let index = UserDefaults.standard.object(forKey: "openBook") as? Int else { return }
-            try? await Task.sleep(for: .milliseconds(600))
+            guard UserDefaults.standard.object(forKey: "openBook") != nil else { return }
+            let index = UserDefaults.standard.integer(forKey: "openBook")
             load()
-            try? await Task.sleep(for: .milliseconds(300))
+            for _ in 0..<20 where !books.indices.contains(index) { try? await Task.sleep(for: .milliseconds(200)) }
             if books.indices.contains(index) { reading = books[index] }
         }
         #endif

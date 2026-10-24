@@ -72,10 +72,12 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     Text(Vec<Run>),
-    /// A picture: its path inside the book and what it shows in words.
+    /// A picture: its path inside the book, what it shows in words, and whether it is dark ink on a clear background
+    /// (a title page, an ornament), which must be drawn in the text's colour to be seen on a dark page.
     Image {
         src: String,
         alt: String,
+        ink: bool,
     },
     /// A horizontal rule.
     Rule,
@@ -129,7 +131,7 @@ pub trait BookFile: Send {
     /// The path of the cover picture inside the book.
     fn cover(&self) -> Option<String>;
     /// Which chapter a link written in the book points into, and where in it.
-    fn target(&self, link: &str) -> Option<(usize, Option<String>)>;
+    fn target(&mut self, link: &str) -> Option<(usize, Option<String>)>;
     /// Where in a chapter an anchor falls: the start, when it is not there.
     fn offset_of(&mut self, index: usize, anchor: &str) -> anyhow::Result<u32> {
         let chapter = self.chapter(index)?;

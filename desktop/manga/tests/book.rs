@@ -193,7 +193,7 @@ fn a_chapter_keeps_its_text_styles_and_order() {
     assert!(quiet.look.italic && (quiet.look.size - 0.8).abs() < 0.01);
     // The picture's path is whole and decoded.
     assert!(
-        matches!(&chapter.blocks[8].kind, Kind::Image { src, alt } if src == "OEBPS/images/Pic 1.png" && alt == "A picture")
+        matches!(&chapter.blocks[8].kind, Kind::Image { src, alt, ink: false } if src == "OEBPS/images/Pic 1.png" && alt == "A picture")
     );
 }
 
@@ -432,4 +432,78 @@ fn corpus() {
             book.cover().is_some()
         );
     }
+}
+
+#[test]
+fn a_very_large_chapter_file_is_read_as_pieces_cut_between_paragraphs() {
+    let paragraphs: Vec<String> = (0..4000)
+        .map(|n| format!("Paragraph number {n} says something quite ordinary."))
+        .collect();
+    let body: String = paragraphs
+        .iter()
+        .enumerate()
+        .map(|(n, text)| {
+            if n == 2500 {
+                format!("<p id=\"mid\">{text}</p>")
+            } else {
+                format!("<p>{text}</p>")
+            }
+        })
+        .collect();
+    let page = format!("<html><body>{body}</body></html>");
+    let opf = PACKAGE
+        .replace(
+            r#"<item id="c2" href="text/two.xhtml" media-type="application/xhtml+xml"/>"#,
+            "",
+        )
+        .replace(r#"<itemref idref="c2"/>"#, "");
+    let path = write_book(
+        "o.epub",
+        &[
+            ("META-INF/container.xml", CONTAINER),
+            ("OEBPS/content.opf", &opf),
+            ("OEBPS/text/one.xhtml", &page),
+        ],
+    );
+    let mut book = book::open(&path).unwrap();
+    let pieces = book.chapters();
+    assert!(pieces >= 2, "{pieces}");
+    assert_eq!(
+        book.sizes().iter().sum::<u64>() / 100,
+        page.len() as u64 / 100
+    );
+
+    // Every paragraph is in exactly one piece, in order, and each piece counts positions from its own start.
+    let mut heard = Vec::new();
+    let mut anchor_in = None;
+    for index in 0..pieces {
+        let chapter = book.chapter(index).unwrap();
+        let mut at = 0;
+        for block in &chapter.blocks {
+            assert_eq!(block.start, at);
+            at += text_of(block).encode_utf16().count() as u32 + 1;
+            heard.push(text_of(block));
+        }
+        if let Some(found) = chapter.anchors.iter().find(|a| a.id == "mid") {
+            anchor_in = Some((
+                index,
+                found.offset,
+                chapter.blocks.iter().position(|b| b.start == found.offset),
+            ));
+        }
+    }
+    assert_eq!(heard, paragraphs);
+    // A link to the id lands in the piece that holds it, and the id is at that paragraph's start.
+    let (piece, offset, block) = anchor_in.unwrap();
+    assert!(piece > 0);
+    assert!(
+        block.is_some(),
+        "the id is at a paragraph's start: {offset}"
+    );
+    assert_eq!(
+        book.target("OEBPS/text/one.xhtml#mid"),
+        Some((piece, Some("mid".to_string())))
+    );
+    assert_eq!(book.target("OEBPS/text/one.xhtml"), Some((0, None)));
+    assert_eq!(book.offset_of(piece, "mid").unwrap(), offset);
 }

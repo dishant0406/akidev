@@ -12,7 +12,7 @@ extension NSAttributedString.Key {
 
 /// A picture or rule in the text: the page leaves room for it and draws it there.
 final class BookAttachment {
-    enum Kind { case image(path: String), rule }
+    enum Kind { case image(path: String, ink: Bool), rule }
     let kind: Kind
     let size: CGSize
 
@@ -180,9 +180,8 @@ struct ChapterTypesetter {
                     out.append(NSAttributedString(string: String(run.text[from...]), attributes: attributes))
                     source += run.text.utf16.count
                 }
-            case .image(let path, _):
-                let picture = pictureSize(path)
-                let attachment = BookAttachment(kind: .image(path: path), size: fit(picture))
+            case .image(let path, _, let ink):
+                let attachment = BookAttachment(kind: .image(path: path, ink: ink), size: fit(pictureSize(path)))
                 out.append(placeholder(attachment, paragraph: paragraph, base: base))
                 source += 1
             case .rule:
@@ -216,9 +215,12 @@ struct ChapterTypesetter {
             getWidth: { Unmanaged<BookAttachment>.fromOpaque($0).takeUnretainedValue().size.width }
         )
         let delegate = CTRunDelegateCreate(&callbacks, Unmanaged.passRetained(attachment).toOpaque())!
+        // A picture is as tall as it is: the line spacing for text would add space above it.
+        let tight = paragraph.mutableCopy() as! NSMutableParagraphStyle
+        tight.lineHeightMultiple = 1
         return NSAttributedString(string: "\u{FFFC}", attributes: [
             .font: style.font.font(size: base, bold: false, italic: false, mono: false),
-            .paragraphStyle: paragraph,
+            .paragraphStyle: tight,
             .bookAttachment: attachment,
             NSAttributedString.Key(kCTRunDelegateAttributeName as String): delegate,
         ])
@@ -238,10 +240,15 @@ struct ChapterTypesetter {
         case .center: paragraph.alignment = .center
         case .end: paragraph.alignment = .right
         case .justify, .start:
-            // Justified when the reader asked for it, except headings, which the book sets as it likes.
-            paragraph.alignment = style.justify && block.heading == 0 && !isRagged(block) ? .justified : .natural
+            paragraph.alignment = justifies(block) ? .justified : .natural
         }
         return paragraph
+    }
+
+    /// Justified when the reader asked for it, except headings, tiny blocks, and columns so narrow for the type that justifying
+    /// would spread single words across the line letter by letter.
+    private func justifies(_ block: BookBlock) -> Bool {
+        style.justify && block.heading == 0 && !isRagged(block) && size.width / CGFloat(style.size) >= 14
     }
 
     /// A block the book set to the left on purpose and short enough that justifying it would only spread it.

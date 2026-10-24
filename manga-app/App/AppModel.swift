@@ -49,6 +49,7 @@ final class AppModel {
                 _ = try? engine.importBook(path: "\(folder)/\(file)")
             }
         }
+        if UserDefaults.standard.object(forKey: "openBook") != nil { tab = .books }
         // `-simulateBackground YES` runs once what iOS runs when it wakes the app in the background, a while after start.
         if UserDefaults.standard.bool(forKey: "simulateBackground") {
             Task { _ = await UpdateAlerts.requestPermission(); try? await Task.sleep(for: .seconds(6)); await refreshLibrary(force: true, background: true) }

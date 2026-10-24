@@ -80,8 +80,17 @@ final class BookPageView: UIView {
                 if let attachment = attributes[NSAttributedString.Key.bookAttachment] as? BookAttachment {
                     let area = CGRect(x: origin.x + position.x, y: origin.y + position.y, width: attachment.size.width, height: attachment.size.height)
                     switch attachment.kind {
-                    case .image(let path):
-                        if let picture = paging?.picture(path: path, width: area.width, ready: { [weak self] in self?.setNeedsDisplay() }) {
+                    case .image(let path, let ink):
+                        guard let picture = paging?.picture(path: path, width: area.width, ready: { [weak self] in self?.setNeedsDisplay() }) else { break }
+                        if ink {
+                            // Dark ink on clear: drawn in the colour of the text, so it shows on a dark page too.
+                            context.beginTransparencyLayer(in: area, auxiliaryInfo: nil)
+                            context.draw(picture, in: area)
+                            context.setBlendMode(.sourceIn)
+                            context.setFillColor(theme.ink.cgColor)
+                            context.fill(area)
+                            context.endTransparencyLayer()
+                        } else {
                             context.draw(picture, in: area)
                         }
                     case .rule:

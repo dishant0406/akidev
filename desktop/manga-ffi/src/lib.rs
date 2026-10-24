@@ -1859,7 +1859,7 @@ pub struct BookBlock {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum BookKind {
     Text { runs: Vec<BookRun> },
-    Image { src: String, alt: String },
+    Image { src: String, alt: String, ink: bool },
     Rule,
 }
 
@@ -1929,7 +1929,7 @@ impl From<akidev_manga::book::Chapter> for BookChapter {
                                 })
                                 .collect(),
                         },
-                        b::Kind::Image { src, alt } => BookKind::Image { src, alt },
+                        b::Kind::Image { src, alt, ink } => BookKind::Image { src, alt, ink },
                         b::Kind::Rule => BookKind::Rule,
                     },
                     heading: block.heading,
