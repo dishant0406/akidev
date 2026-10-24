@@ -166,7 +166,7 @@ States: loading, empty ("No results"), source unreachable (Try again), source ne
 3. Strip: the next chapter joins on below an end-of-chapter row. Paged: the last page is an end card with **Next**, and swiping on past it opens the next chapter. Both prefetch the next chapter, and both say when the source skips a chapter ("Chapter 179 is missing from this source").
 4. Position is saved as chapter, page and how far down the page. Reopening goes to the same spot.
 5. Leave with the back button; the series page shows the new read state and "Continue" moves on.
-6. The list button in the reader's bottom bar (or a tap on the title) opens the series' chapters: the one being read is yellow, read ones are dimmed, downloaded ones are marked, and tapping one opens it at the page you were on, without going back to the series.
+6. The list button in the reader's bottom bar (or a tap on the title) opens the series' chapters: a round icon says where you are with each (playing now, read, begun, not yet opened), the one being read is yellow, downloaded ones are marked, and tapping one opens it at the page you were on, without going back to the series.
 7. In the strip, the play button in the top bar scrolls by itself at the speed chosen in the reader sheet; a finger on the strip pauses it and it carries on a second after the finger lifts. The bookmark button beside the page count marks the page on screen (and how far down it, in the strip); the series page's **Bookmarks** tab lists them, and tapping one opens the reader there.
 
 *Built:* all of it. *Missing:* tap zone presets in the reader sheet, a chapter jump list, a brightness hint, incognito.

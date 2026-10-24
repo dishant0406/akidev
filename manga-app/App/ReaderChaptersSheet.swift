@@ -38,19 +38,15 @@ struct ReaderChaptersSheet: View {
         let reading = chapter.id == model.current
         return AkiTap(action: { open(chapter) }) {
             HStack(spacing: 14) {
-                AkiText(number(chapter), .heading, tone: reading ? .onPrimary : chapter.finished ? .muted : .text, lines: 1)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.6)
-                    .frame(width: 52, height: 52)
-                    .background(reading ? Aki.onPrimary.opacity(0.10) : Aki.secondary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                status(chapter, reading: reading)
                 VStack(alignment: .leading, spacing: 3) {
                     AkiText(chapterName(number: chapter.number, title: chapter.title), .bodyStrong, tone: reading ? .onPrimary : chapter.finished ? .muted : .text, lines: 1)
-                    if let line = detail(chapter, reading: reading) {
-                        AkiText(line, .caption, tone: reading ? .onPrimary : .muted, lines: 1).opacity(reading ? 0.7 : 1)
+                    if let date = shortDate(chapter.dateMs) {
+                        AkiText(date, .caption, tone: reading ? .onPrimary : .muted, lines: 1).opacity(reading ? 0.7 : 1)
                     }
                 }
                 Spacer(minLength: 8)
-                trailing(chapter, reading: reading)
+                if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted) }
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             .background(reading ? Aki.primary : Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -58,28 +54,23 @@ struct ReaderChaptersSheet: View {
         }
     }
 
-    @ViewBuilder private func trailing(_ chapter: ChapterEntry, reading: Bool) -> some View {
-        if reading {
-            AkiText("Reading", .captionStrong, tone: .onPrimary)
-        } else if chapter.finished {
-            AkiIcon("check-solid", size: 18, tone: .muted)
-        } else if kept.contains(chapter.id) {
-            AkiIcon("download", size: 18, tone: .muted)
+    /// Where the person stands with a chapter, as one round icon: playing now, read, begun, or not yet opened. A fixed size,
+    /// so a long number or title can never push it about.
+    private func status(_ chapter: ChapterEntry, reading: Bool) -> some View {
+        ZStack {
+            Circle().fill(reading ? Aki.onPrimary : Aki.secondary)
+            if reading {
+                AkiIcon("play-solid", size: 16, tone: .onMedia)
+            } else if chapter.finished {
+                AkiIcon("check-solid", size: 18, tone: .muted)
+            } else if chapter.page != nil {
+                AkiIcon("play", size: 16, tone: .text)
+            } else {
+                Circle().fill(Aki.text.opacity(0.85)).frame(width: 8, height: 8)
+            }
         }
-    }
-
-    /// The date and where the person is in it, as one quiet line.
-    private func detail(_ chapter: ChapterEntry, reading: Bool) -> String? {
-        var parts: [String] = []
-        if reading { parts.append("Page \(model.page + 1)") } else if let page = chapter.page { parts.append("Page \(page + 1)") }
-        if let date = shortDate(chapter.dateMs) { parts.append(date) }
-        if kept.contains(chapter.id), chapter.finished { parts.append("Downloaded") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// "46", "12.5": the chapter's number, or a dash when the source gave none.
-    private func number(_ chapter: ChapterEntry) -> String {
-        chapter.number.map { $0.formatted(.number.precision(.fractionLength(0...1))) } ?? "–"
+        .frame(width: 44, height: 44)
+        .accessibilityLabel(reading ? "Reading now" : chapter.finished ? "Read" : chapter.page != nil ? "Started" : "Not read")
     }
 
     private func load() {
