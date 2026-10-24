@@ -84,17 +84,17 @@ struct BookContentsSheet: View {
     @State private var showFront = false
     @State private var showBack = false
 
-    private enum Tab: Hashable { case contents, marks }
+    private enum Tab: Hashable { case contents, marks, about }
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        AkiText(tab == .contents ? "Contents" : "Highlights", .title)
+                        AkiText(tab == .contents ? "Contents" : tab == .marks ? "Highlights" : "About", .title)
                         AkiText(model.info.title, .caption, tone: .muted, lines: 1)
                     }
-                    AkiTabs(items: [(Tab.contents, "Contents"), (Tab.marks, "Highlights \(model.marks.count)")], selection: $tab)
+                    AkiTabs(items: [(Tab.contents, "Contents"), (Tab.marks, "Marks \(model.marks.count)"), (Tab.about, "About")], selection: $tab)
                     switch tab {
                     case .contents:
                         LazyVStack(spacing: 10) {
@@ -111,6 +111,7 @@ struct BookContentsSheet: View {
                             }
                         }
                     case .marks: marks
+                    case .about: BookAboutView(model: model, close: close)
                     }
                 }
                 .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 32)
@@ -303,5 +304,82 @@ struct BookFootnoteSheet: View {
             }
             .padding(24)
         }
+    }
+}
+
+
+/// What the book says about itself and the pages around it: who wrote it, how big it is, and the copyright page, dedication,
+/// acknowledgements, notes and colophon, each a card to read here or to open in the book.
+struct BookAboutView: View {
+    let model: BookModel
+    let close: () -> Void
+    /// The text of each page, read when the card is opened.
+    @State private var texts: [Int: String] = [:]
+    @State private var opened: Set<Int> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                AkiImage(url: model.info.cover, placeholder: 1.5, fill: true)
+                    .frame(width: 84)
+                    .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
+                VStack(alignment: .leading, spacing: 6) {
+                    AkiText(model.info.title, .heading, lines: 4)
+                    if !model.info.authors.isEmpty { AkiText(model.info.authors.joined(separator: ", "), .caption, tone: .muted, lines: 3) }
+                    AkiText(facts, .caption, tone: .muted, lines: 3)
+                }
+                Spacer(minLength: 0)
+            }
+            if model.aboutPages.isEmpty {
+                AkiText("This book has no pages besides the book itself.", .caption, tone: .muted)
+            }
+            LazyVStack(spacing: 10) {
+                // A page that is only a picture (a title page) has nothing to read here.
+                ForEach(model.aboutPages.filter { texts[$0]?.isEmpty != true }, id: \.self) { chapter in card(chapter) }
+            }
+        }
+        // Each page is read once for its title and text: they are short, and a long one (notes) is only shown in part.
+        .task {
+            for chapter in model.aboutPages where texts[chapter] == nil { texts[chapter] = await model.plainText(ofChapter: chapter) }
+        }
+    }
+
+    private var facts: String {
+        var parts: [String] = []
+        if let language = model.info.language { parts.append(language.uppercased()) }
+        parts.append(ByteCountFormatter.string(fromByteCount: Int64(model.info.bytes), countStyle: .file))
+        parts.append("\(model.chapterCount) parts")
+        return parts.joined(separator: " · ")
+    }
+
+    private func card(_ chapter: Int) -> some View {
+        let text = texts[chapter]
+        let open = opened.contains(chapter)
+        return VStack(alignment: .leading, spacing: 10) {
+            AkiTap(action: { toggle(chapter) }) {
+                HStack {
+                    AkiText(text.map { model.pageTitle(chapter, text: $0) } ?? model.contents.first { Int($0.chapter) == chapter }?.title ?? "Page \(chapter + 1)", .bodyStrong, lines: 2)
+                    Spacer(minLength: 8)
+                    AkiIcon(open ? "down" : "forward", size: 12, tone: .muted)
+                }
+                .contentShape(Rectangle())
+            }
+            if open {
+                if let text {
+                    // A long page (notes) shows its start: the rest is in the book.
+                    AkiText(String(text.prefix(1800)) + (text.count > 1800 ? "…" : ""), .body, tone: .muted)
+                    AkiButton("Open in the book", icon: "forward", size: .small) { model.open(BookEntry(title: "", depth: 0, chapter: UInt32(chapter), anchor: nil)); close() }
+                } else {
+                    AkiSpinner().frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(.horizontal, 18).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func toggle(_ chapter: Int) {
+        if opened.remove(chapter) == nil { opened.insert(chapter) }
     }
 }

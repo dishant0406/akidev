@@ -86,6 +86,28 @@ extension BookModel {
         go(to: Spot(chapter: Int(hit.chapter), offset: Int(hit.offset), highlight: Int(hit.length)))
     }
 
+    /// The pages around the book itself (copyright, dedication, notes, colophon), in reading order, with a title each: the contents' own
+    /// title for the page when it has one, the first line of the page when not.
+    var aboutPages: [Int] {
+        sections.indices.filter { [.front, .back].contains(sections[$0]) }
+    }
+
+    /// A chapter's text as plain paragraphs, for a page that is only to be read (a copyright page, notes).
+    func plainText(ofChapter chapter: Int) async -> String {
+        let reader = reader
+        let content = await Task.detached(priority: .userInitiated) { try? reader.chapter(index: UInt32(chapter)) }.value
+        return (content?.blocks ?? []).compactMap { block in
+            guard case .text(let runs) = block.kind else { return nil }
+            let text = runs.map(\.text).joined().replacingOccurrences(of: "\u{2028}", with: "\n").replacingOccurrences(of: "\t", with: " ")
+            return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
+        }.joined(separator: "\n\n")
+    }
+
+    /// The title of a page: its entry in the contents, or the first line of its text.
+    func pageTitle(_ chapter: Int, text: String) -> String {
+        contents.first { Int($0.chapter) == chapter }?.title ?? String(text.split(separator: "\n").first?.prefix(60) ?? "Page \(chapter + 1)")
+    }
+
     /// The title of the part of the book a chapter falls in.
     func title(ofChapter chapter: Int) -> String {
         (contents.last { Int($0.chapter) <= chapter }?.title) ?? info.title
