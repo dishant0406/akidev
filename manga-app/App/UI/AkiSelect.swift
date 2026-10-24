@@ -15,11 +15,8 @@ struct AkiSelect<Value: Hashable>: View {
                     ForEach(options, id: \.value) { option in Text(option.label).tag(option.value) }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .text, lines: 1)
-                    AkiIcon("down", size: 12, tone: .muted)
-                }
-                // A chip, so it reads as something to tap and the arrow belongs to it.
+                AkiText(options.first { $0.value == selection }?.label ?? "", .bodyStrong, tone: .text, lines: 1)
+                // A chip, so it reads as something to tap.
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(Aki.secondary, in: Capsule())
             }
