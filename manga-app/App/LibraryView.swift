@@ -115,7 +115,7 @@ struct LibraryView: View {
             AkiEmptyState(title: "Nothing saved yet", message: "Save a series with the bookmark on its page and it stays here, with how far you have read.").frame(minHeight: 340)
         } else {
             if !categories.isEmpty {
-                AkiChips(items: [(Int64(-1), "All")] + categories.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), "No category")], selection: $category)
+                AkiChips(items: [(Int64(-1), "All")] + categories.filter { $0.count > 0 || $0.books == 0 }.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), "No category")], selection: $category)
             }
             if shown.isEmpty {
                 AkiEmptyState(title: "Nothing here", message: onlyUnread ? "Everything in this shelf is read." : "No series on this shelf yet. Long-press a series to put it on one.").frame(minHeight: 260)

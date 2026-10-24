@@ -330,6 +330,10 @@ struct BookAboutView: View {
                 }
                 Spacer(minLength: 0)
             }
+            HStack(spacing: 10) {
+                AkiButton("Use this page as cover", icon: "image", size: .small) { Task { await model.useCurrentPageAsCover() } }
+                if model.info.customCover { AkiButton("Original", size: .small) { model.useOwnCover() } }
+            }
             if model.aboutPages.isEmpty {
                 AkiText("This book has no pages besides the book itself.", .caption, tone: .muted)
             }

@@ -8,6 +8,12 @@ enum Appearance: String, CaseIterable {
     var scheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
 }
 
+/// What the person mostly reads. Everything is always there; this only decides what comes first.
+enum ReaderKind: String, CaseIterable {
+    case manga, books
+    var title: String { self == .manga ? "Manga and comics" : "Books" }
+}
+
 enum ReaderBackground: String, CaseIterable {
     case pitch = "black", slate = "grey"
     var title: String { self == .pitch ? "Black" : "Dark grey" }
@@ -30,6 +36,8 @@ enum LibrarySort: String, CaseIterable {
 final class Preferences {
     private let defaults = UserDefaults.standard
 
+    /// Nil until the person has said (a fresh install asks).
+    var readerKind: ReaderKind? { didSet { defaults.set(readerKind?.rawValue, forKey: "readerKind") } }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     /// Sources marked 18+ are hidden until this is on.
     var showAdult: Bool { didSet { defaults.set(showAdult, forKey: "showAdult") } }
@@ -65,6 +73,7 @@ final class Preferences {
 
     init() {
         let defaults = UserDefaults.standard
+        readerKind = defaults.string(forKey: "readerKind").flatMap(ReaderKind.init(rawValue:))
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         showAdult = defaults.bool(forKey: "showAdult")
         languages = defaults.stringArray(forKey: "languages") ?? []

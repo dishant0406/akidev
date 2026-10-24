@@ -19,6 +19,8 @@ final class AppModel {
     private var loadingLibrary = false
     private var libraryChanged = false
     var tab: AppTab = .home
+    /// The tabs, with what the person mostly reads first.
+    var tabs: [AppTab] { AppTab.order(for: prefs.readerKind) }
     /// Set to open the file picker on the Books tab (from the Sources screen).
     var addingBook = false
     /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
@@ -35,6 +37,11 @@ final class AppModel {
         let prefs = prefs
         downloader = AutoDownloader(engine: engine, wifiOnly: { prefs.downloadOnWifiOnly })
         readAloud = ReadAloudModel(engine: engine, prefs: prefs)
+        // Someone who already has sources or books is not asked what they read: they keep the app as it was.
+        if prefs.readerKind == nil, !engine.sources().isEmpty || !((try? engine.repos()) ?? []).isEmpty || !((try? engine.books()) ?? []).isEmpty {
+            prefs.readerKind = .manga
+        }
+        tab = AppTab.order(for: prefs.readerKind).first ?? .home
         refresh()
         AppDelegate.refresh = { [weak self] in await self?.refreshLibrary(force: true, background: true) }
         AppDelegate.drain = { [weak self] in await self?.resumeDownloads() }

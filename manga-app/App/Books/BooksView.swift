@@ -17,6 +17,14 @@ struct BooksView: View {
     @State private var problem: (title: String, message: String)?
     @State private var reading: BookInfo?
     @State private var removing: BookInfo?
+    @State private var categories: [CategoryInfo] = []
+    /// -1 is every category, -2 the books on none.
+    @State private var category: Int64 = -1
+    @State private var managing = false
+    /// The book whose categories are being changed, and the one a cover picture is being chosen for.
+    @State private var sorting: BookInfo?
+    @State private var coverFor: BookInfo?
+    @State private var choosingCover = false
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
 
     var body: some View {
@@ -24,17 +32,28 @@ struct BooksView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Books", subtitle: subtitle) {
-                        AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { importing = true }
+                        AkiGlassGroup(spacing: 10) {
+                            HStack(spacing: 10) {
+                                AkiIconButton(symbol: "folder", label: "Categories") { managing = true }
+                                AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { importing = true }
+                            }
+                        }
+                    }
+                    if !categories.isEmpty && !books.isEmpty {
+                        AkiChips(items: [(Int64(-1), "All")] + categories.map { ($0.id, "\($0.name) \($0.books)") } + [(Int64(-2), "No category")], selection: $category)
                     }
                     if books.isEmpty {
                         AkiEmptyState(title: "No books yet", message: "Add EPUB files from your device. They stay on this phone until you remove them.", action: ("Add books", { importing = true })).frame(minHeight: 380)
                     } else {
+                        if shown.isEmpty {
+                            AkiEmptyState(title: "Nothing here", message: category == -2 ? "Every book is on a category." : "No books on this shelf yet. Long-press a book to put it on one.").frame(minHeight: 260)
+                        }
                         LazyVGrid(columns: columns, spacing: 22) {
-                            ForEach(books, id: \.id) { book in
+                            ForEach(shown, id: \.id) { book in
                                 AkiTap(action: { reading = book }) {
                                     AkiBookCard(title: book.title, author: book.authors.first, cover: book.cover, subtitle: progressLine(book))
                                 }
-                                .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { removing = book }])
+                                .akiContextMenu(menu(for: book))
                             }
                         }
                     }
@@ -61,6 +80,12 @@ struct BooksView: View {
         #endif
         .onChange(of: model.addingBook, initial: true) { _, now in if now { model.addingBook = false; importing = true } }
         .akiFilesImporter(isPresented: $importing, types: [.epub], onPick: add)
+        .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear(perform: load) })
+        .akiSheet(item: $sorting, content: { book in CategoryPicker(series: [], books: [book]).onDisappear(perform: load) })
+        .akiPhotoPicker(isPresented: $choosingCover, width: 300) { jpeg in
+            if let book = coverFor { try? model.engine.setBookCustomCover(id: book.id, jpeg: jpeg) }
+            load()
+        }
         .akiFullScreen(item: $reading, onDismiss: load) { book in BookReaderScreen(book: book) }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiConfirm("Remove “\(removing?.title ?? "")”?", message: "Its file is deleted from this phone. Your place in it is forgotten.", confirm: "Remove", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
@@ -74,6 +99,25 @@ struct BooksView: View {
         return books.count == 1 ? "1 book" : "\(books.count) books"
     }
 
+    /// The books on the category chosen.
+    private var shown: [BookInfo] {
+        switch category {
+        case -1: books
+        case -2: books.filter { $0.categories.isEmpty }
+        default: books.filter { $0.categories.contains(category) }
+        }
+    }
+
+    private func menu(for book: BookInfo) -> [AkiMenuItem] {
+        var items = [AkiMenuItem(title: "Categories", icon: "folder") { sorting = book },
+                     AkiMenuItem(title: "Choose a cover picture", icon: "image") { coverFor = book; choosingCover = true }]
+        if book.customCover {
+            items.append(AkiMenuItem(title: "Use the book's own cover", icon: "restore") { try? model.engine.clearBookCustomCover(id: book.id); load() })
+        }
+        items.append(AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { removing = book })
+        return items
+    }
+
     private func progressLine(_ book: BookInfo) -> String {
         if book.finished { return "Finished" }
         if book.openedMs == nil { return "New" }
@@ -85,6 +129,8 @@ struct BooksView: View {
         Task {
             let found = await Task.detached { (try? engine.books()) ?? [] }.value
             if found != books { books = found }
+            categories = (try? engine.categories()) ?? []
+            if category >= 0 && !categories.contains(where: { $0.id == category }) || category == -2 && categories.isEmpty { category = -1 }
         }
     }
 

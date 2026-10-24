@@ -64,6 +64,14 @@ as it is a kind the app runs (`family`, only `ptts` now): see `pipeline/TTS_PLAN
 `-voicesRepo http://127.0.0.1:8771/` to read another repository; `AKI_VOICE_MODEL=/folder cargo test -p akidev-manga --release --test voice -- --ignored`
 runs the test that needs a real model.
 
+## Manga first or books first
+
+A fresh install asks "What do you read?" (`App/OnboardingView.swift`): Manga and comics, or Books. Both are always in the app and have the
+same features; the answer only decides which comes first: the order of the tabs (`AppTab.order(for:)`) and the tab the app opens on.
+It is changed in Settings, Reader, "I mostly read". A phone that already has sources, repositories or books when this update arrives is
+not asked and keeps manga first. Books share the categories series use (`book_category`, schema 10), and a book can have a cover of its own
+(`book.custom_cover`, kept beside the book's own).
+
 ## What the app ships with
 
 Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address

@@ -87,3 +87,58 @@ fn a_book_goes_on_the_shelf_is_read_remembered_and_removed() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_book_takes_a_chosen_cover_and_the_categories_series_use() {
+    let dir = std::env::temp_dir().join(format!("aki-shelf-cover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("short.epub");
+    epub(&file);
+    let engine = Engine::new(dir.join("data").to_string_lossy().into()).unwrap();
+    let id = engine
+        .import_book(file.to_string_lossy().into())
+        .unwrap()
+        .id;
+
+    // Not a picture: refused, and nothing is kept.
+    assert!(
+        engine
+            .set_book_custom_cover(id.clone(), b"text".to_vec())
+            .is_err()
+    );
+    assert!(!engine.book_info(id.clone()).unwrap().custom_cover);
+
+    let jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+    engine
+        .set_book_custom_cover(id.clone(), jpeg.clone())
+        .unwrap();
+    let info = engine.book_info(id.clone()).unwrap();
+    assert!(info.custom_cover);
+    let shown = std::path::PathBuf::from(info.cover.unwrap().trim_start_matches("file://"));
+    assert_eq!(std::fs::read(&shown).unwrap(), jpeg);
+    // A second choice replaces the first, and its file goes.
+    engine
+        .set_book_custom_cover(id.clone(), vec![0xFF, 0xD8, 0xFF, 9])
+        .unwrap();
+    assert!(!shown.exists());
+    engine.clear_book_custom_cover(id.clone()).unwrap();
+    let info = engine.book_info(id.clone()).unwrap();
+    assert!(!info.custom_cover);
+    assert_eq!(
+        std::fs::read_dir(dir.join("data/covers"))
+            .map(|d| d.count())
+            .unwrap_or(0),
+        0
+    );
+
+    let reading = engine.add_category("Reading".into()).unwrap();
+    engine.set_book_category(id.clone(), reading, true).unwrap();
+    assert_eq!(engine.book_info(id.clone()).unwrap().categories, [reading]);
+    assert_eq!(engine.categories().unwrap()[0].books, 1);
+    engine
+        .set_book_category(id.clone(), reading, false)
+        .unwrap();
+    assert!(engine.book_info(id).unwrap().categories.is_empty());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

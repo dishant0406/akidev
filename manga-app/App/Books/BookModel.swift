@@ -9,7 +9,7 @@ import SwiftUI
 /// kept: a long book costs what a few chapters cost.
 @MainActor @Observable
 final class BookModel: BookPaging {
-    let info: BookInfo
+    var info: BookInfo
     let contents: [BookEntry]
     /// What each chapter is (cover, front matter, the book, what follows it), and where the book itself starts.
     let sections: [BookSection]

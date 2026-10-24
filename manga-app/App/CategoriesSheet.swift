@@ -17,11 +17,11 @@ struct CategoriesSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 AkiText("Categories", .title)
                 if categories.isEmpty {
-                    AkiEmptyState(title: "No categories yet", message: "A category is a shelf in your library. Make one, then put series on it from the library or when you save them.")
+                    AkiEmptyState(title: "No categories yet", message: "A category is a shelf, for series in your library and for books. Make one, then put series or books on it.")
                         .frame(minHeight: 220)
                 }
                 ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                    AkiRow(title: category.name, subtitle: category.count == 1 ? "1 series" : "\(category.count) series") {
+                    AkiRow(title: category.name, subtitle: contents(of: category)) {
                         AkiMenu(symbol: "more", label: "Options for \(category.name)", items: menu(for: category, at: index))
                     }
                 }
@@ -30,8 +30,8 @@ struct CategoriesSheet: View {
             .padding(24)
         }
         .onAppear(perform: load)
-        .akiPrompt(renaming == nil ? "New category" : "Rename category", message: "A name for a shelf in your library.", placeholder: "Reading", confirm: renaming == nil ? "Add" : "Rename", text: $name, isPresented: $naming, onConfirm: save)
-        .akiConfirm("Delete “\(deleting?.name ?? "")”?", message: "The series on it stay in your library.", confirm: "Delete", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+        .akiPrompt(renaming == nil ? "New category" : "Rename category", message: "A name for a shelf, for series and for books.", placeholder: "Reading", confirm: renaming == nil ? "Add" : "Rename", text: $name, isPresented: $naming, onConfirm: save)
+        .akiConfirm("Delete “\(deleting?.name ?? "")”?", message: "The series and books on it stay where they are.", confirm: "Delete", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             if let deleting {
                 try? model.engine.deleteCategory(id: deleting.id)
                 if model.prefs.saveCategory == deleting.id { model.prefs.saveCategory = 0 }
@@ -47,6 +47,12 @@ struct CategoriesSheet: View {
         if index < categories.count - 1 { items.append(AkiMenuItem(title: "Move down", icon: "down") { move(index, by: 1) }) }
         items.append(AkiMenuItem(title: "Delete", icon: "trash", destructive: true) { deleting = category })
         return items
+    }
+
+    private func contents(of category: CategoryInfo) -> String {
+        let parts = [category.count > 0 ? (category.count == 1 ? "1 series" : "\(category.count) series") : nil,
+                     category.books > 0 ? (category.books == 1 ? "1 book" : "\(category.books) books") : nil].compactMap { $0 }
+        return parts.isEmpty ? "Empty" : parts.joined(separator: " · ")
     }
 
     private func load() { categories = (try? model.engine.categories()) ?? [] }
@@ -80,6 +86,8 @@ struct CategoryPicker: View {
     }
 
     let series: [Series]
+    /// Books to put on categories, instead of series.
+    var books: [BookInfo] = []
     @Environment(AppModel.self) private var model
     @State private var categories: [CategoryInfo] = []
     @State private var on: Set<Int64> = []
@@ -89,7 +97,7 @@ struct CategoryPicker: View {
             VStack(alignment: .leading, spacing: 16) {
                 AkiText("Categories", .title)
                 if categories.isEmpty {
-                    AkiEmptyState(title: "No categories yet", message: "Make one from the library's menu, under Categories.").frame(minHeight: 220)
+                    AkiEmptyState(title: "No categories yet", message: "Make one from the menu on the Library or Books screen, under Categories.").frame(minHeight: 220)
                 } else {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
@@ -105,13 +113,16 @@ struct CategoryPicker: View {
         .onAppear {
             categories = (try? model.engine.categories()) ?? []
             let entries = model.library.filter { series.contains(Series(source: $0.source, id: $0.id)) }
-            on = Set(categories.map(\.id).filter { id in !entries.isEmpty && entries.allSatisfy { $0.categories.contains(id) } })
+            on = Set(categories.map(\.id).filter { id in
+                !entries.isEmpty && entries.allSatisfy { $0.categories.contains(id) } || !books.isEmpty && books.allSatisfy { $0.categories.contains(id) }
+            })
         }
     }
 
     private func set(_ category: CategoryInfo, _ member: Bool) {
         for item in series { try? model.engine.setCategory(source: item.source, series: item.id, category: category.id, member: member) }
+        for book in books { try? model.engine.setBookCategory(id: book.id, category: category.id, member: member) }
         if member { on.insert(category.id) } else { on.remove(category.id) }
-        model.refresh()
+        if !series.isEmpty { model.refresh() }
     }
 }

@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 9;
+const SCHEMA_VERSION: i32 = 10;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -48,7 +48,10 @@ pub struct UpdateItem {
 pub struct Category {
     pub id: i64,
     pub name: String,
+    /// How many saved series are on it.
     pub count: u32,
+    /// How many books are on it.
+    pub books: u32,
 }
 
 /// A chapter kept on the device.
@@ -124,6 +127,10 @@ pub struct BookRow {
     pub offset: u32,
     pub progress: f64,
     pub finished: bool,
+    /// The cover the person chose, in place of the book's own (a name for the engine's `covers` folder).
+    pub custom_cover: Option<String>,
+    /// The categories the book is on.
+    pub categories: Vec<i64>,
 }
 
 /// A highlight in a book, with the words highlighted and the reader's note if there is one.
@@ -141,7 +148,7 @@ pub struct BookMarkRow {
     pub created_at: i64,
 }
 
-const BOOK_COLUMNS: &str = "id, title, authors, language, rtl, file, bytes, cover, added_at, opened_at, chapter, offset, progress, finished";
+const BOOK_COLUMNS: &str = "id, title, authors, language, rtl, file, bytes, cover, added_at, opened_at, chapter, offset, progress, finished, custom_cover";
 
 fn book_row(row: &rusqlite::Row) -> rusqlite::Result<BookRow> {
     Ok(BookRow {
@@ -159,6 +166,8 @@ fn book_row(row: &rusqlite::Row) -> rusqlite::Result<BookRow> {
         offset: row.get(11)?,
         progress: row.get(12)?,
         finished: row.get(13)?,
+        custom_cover: row.get(14)?,
+        categories: Vec::new(),
     })
 }
 
@@ -364,6 +373,19 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
             "BEGIN;
              CREATE TABLE catalogue (url TEXT PRIMARY KEY, name TEXT NOT NULL, added_at INTEGER NOT NULL);
              PRAGMA user_version = 9;
+             COMMIT;",
+        )?;
+    }
+    if version < 10 {
+        // A book can have a cover the person chose, and be on the same categories (shelves) as series.
+        db.execute_batch(
+            "BEGIN;
+             ALTER TABLE book ADD COLUMN custom_cover TEXT;
+             CREATE TABLE book_category (
+                book TEXT NOT NULL REFERENCES book(id) ON DELETE CASCADE,
+                category INTEGER NOT NULL REFERENCES category(id) ON DELETE CASCADE,
+                PRIMARY KEY (book, category));
+             PRAGMA user_version = 10;
              COMMIT;",
         )?;
     }
@@ -926,7 +948,8 @@ impl Store {
         let db = self.db();
         let mut statement = db.prepare(
             "SELECT c.id, c.name, (SELECT count(*) FROM series_category m JOIN series s ON s.source = m.source AND s.id = m.series
-                                    WHERE m.category = c.id AND s.saved_at IS NOT NULL)
+                                    WHERE m.category = c.id AND s.saved_at IS NOT NULL),
+                    (SELECT count(*) FROM book_category b WHERE b.category = c.id)
              FROM category c ORDER BY c.position, c.id",
         )?;
         let rows = statement.query_map([], |row| {
@@ -934,9 +957,32 @@ impl Store {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 count: row.get(2)?,
+                books: row.get(3)?,
             })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Puts a book on a category, or takes it off.
+    pub fn put_book_in_category(
+        &self,
+        book: &str,
+        category: i64,
+        member: bool,
+    ) -> anyhow::Result<()> {
+        let db = self.db();
+        if member {
+            db.execute(
+                "INSERT OR IGNORE INTO book_category (book, category) VALUES (?1, ?2)",
+                params![book, category],
+            )?;
+        } else {
+            db.execute(
+                "DELETE FROM book_category WHERE book = ?1 AND category = ?2",
+                params![book, category],
+            )?;
+        }
+        Ok(())
     }
 
     pub fn put_in_category(
@@ -1199,19 +1245,65 @@ impl Store {
         let mut statement = db.prepare(&format!(
             "SELECT {BOOK_COLUMNS} FROM book ORDER BY COALESCE(opened_at, added_at) DESC, title"
         ))?;
-        let rows = statement.query_map([], book_row)?;
-        Ok(rows.collect::<Result<_, _>>()?)
+        let mut books: Vec<BookRow> = statement
+            .query_map([], book_row)?
+            .collect::<Result<_, _>>()?;
+        let mut member =
+            db.prepare("SELECT book, category FROM book_category ORDER BY category")?;
+        for pair in member.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })? {
+            let (book, category) = pair?;
+            if let Some(found) = books.iter_mut().find(|found| found.id == book) {
+                found.categories.push(category);
+            }
+        }
+        Ok(books)
     }
 
     pub fn book(&self, id: &str) -> anyhow::Result<Option<BookRow>> {
-        Ok(self
-            .db()
+        let db = self.db();
+        let Some(mut book) = db
             .query_row(
                 &format!("SELECT {BOOK_COLUMNS} FROM book WHERE id = ?1"),
                 params![id],
                 book_row,
             )
-            .optional()?)
+            .optional()?
+        else {
+            return Ok(None);
+        };
+        let mut member =
+            db.prepare("SELECT category FROM book_category WHERE book = ?1 ORDER BY category")?;
+        book.categories = member
+            .query_map(params![id], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(Some(book))
+    }
+
+    /// Sets (or, with none, takes away) the cover the person chose for a book, and gives back the name it replaces, so the
+    /// caller can delete that file. The book must exist.
+    pub fn set_book_custom_cover(
+        &self,
+        id: &str,
+        name: Option<&str>,
+    ) -> anyhow::Result<Option<String>> {
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        let old: Option<String> = tx
+            .query_row(
+                "SELECT custom_cover FROM book WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| anyhow::anyhow!("that book is not on the shelf"))?;
+        tx.execute(
+            "UPDATE book SET custom_cover = ?2 WHERE id = ?1",
+            params![id, name],
+        )?;
+        tx.commit()?;
+        Ok(old)
     }
 
     /// Remembers where the person is in a book, and that they read it just now.
@@ -1865,9 +1957,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 to 9 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 10 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE catalogue; DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE book_category; DROP TABLE catalogue; DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();
@@ -1891,6 +1983,71 @@ mod tests {
     }
 
     #[test]
+    fn a_book_can_have_a_cover_of_its_own_and_sit_on_the_categories_series_use() {
+        let store = Store::in_memory().unwrap();
+        store
+            .add_book(&BookRow {
+                id: "a".into(),
+                title: "A".into(),
+                authors: String::new(),
+                language: None,
+                rtl: false,
+                file: "a.epub".into(),
+                bytes: 1,
+                cover: Some("a.jpg".into()),
+                added_at: 1,
+                opened_at: None,
+                chapter: 0,
+                offset: 0,
+                progress: 0.0,
+                finished: false,
+                custom_cover: None,
+                categories: Vec::new(),
+            })
+            .unwrap();
+        // The cover the person chose is kept apart from the book's own, and gives back what it replaces.
+        assert_eq!(
+            store
+                .set_book_custom_cover("a", Some("custom/1.jpg"))
+                .unwrap(),
+            None
+        );
+        let book = store.book("a").unwrap().unwrap();
+        assert_eq!(
+            (book.cover.as_deref(), book.custom_cover.as_deref()),
+            (Some("a.jpg"), Some("custom/1.jpg"))
+        );
+        assert_eq!(
+            store.set_book_custom_cover("a", None).unwrap().as_deref(),
+            Some("custom/1.jpg")
+        );
+        assert_eq!(store.book("a").unwrap().unwrap().custom_cover, None);
+        assert!(store.set_book_custom_cover("missing", None).is_err());
+
+        let reading = store.add_category("Reading").unwrap();
+        let later = store.add_category("Later").unwrap();
+        store.put_book_in_category("a", reading, true).unwrap();
+        store.put_book_in_category("a", reading, true).unwrap();
+        store.put_book_in_category("a", later, true).unwrap();
+        store.put_book_in_category("a", later, false).unwrap();
+        assert_eq!(store.book("a").unwrap().unwrap().categories, [reading]);
+        assert_eq!(store.books().unwrap()[0].categories, [reading]);
+        let counts: Vec<(u32, u32)> = store
+            .categories()
+            .unwrap()
+            .iter()
+            .map(|c| (c.count, c.books))
+            .collect();
+        assert_eq!(counts, [(0, 1), (0, 0)]);
+        // Deleting a category, or the book, leaves nothing behind.
+        store.delete_category(reading).unwrap();
+        assert!(store.book("a").unwrap().unwrap().categories.is_empty());
+        store.put_book_in_category("a", later, true).unwrap();
+        store.remove_book("a").unwrap();
+        assert_eq!(store.categories().unwrap()[0].books, 0);
+    }
+
+    #[test]
     fn books_are_added_once_read_last_first_and_remembered_where_they_were_left() {
         let store = Store::in_memory().unwrap();
         let book = |id: &str, added_at: i64| BookRow {
@@ -1908,6 +2065,8 @@ mod tests {
             offset: 0,
             progress: 0.0,
             finished: false,
+            custom_cover: None,
+            categories: Vec::new(),
         };
         store.add_book(&book("a", 1)).unwrap();
         store.add_book(&book("b", 2)).unwrap();
@@ -1956,6 +2115,8 @@ mod tests {
             offset: 0,
             progress: 0.0,
             finished: false,
+            custom_cover: None,
+            categories: Vec::new(),
         };
         store.add_book(&book).unwrap();
         let mark = |chapter, start| BookMarkRow {

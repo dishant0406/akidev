@@ -40,6 +40,11 @@ struct SettingsView: View {
                 AkiSection(title: "Appearance") {
                     AkiCard(padding: 16) { AkiSelect(title: "Theme", selection: $prefs.appearance, options: Appearance.allCases.map { ($0, $0.title) }) }
                 }
+                AkiSection(title: "Reader", footer: "Manga and books are both always here. This decides which comes first: the order of the tabs, and the one the app opens on.") {
+                    AkiCard(padding: 16) {
+                        AkiSelect(title: "I mostly read", selection: Binding(get: { prefs.readerKind ?? .manga }, set: { model.prefs.readerKind = $0 }), options: ReaderKind.allCases.map { ($0, $0.title) })
+                    }
+                }
                 AkiSection(title: "Content", footer: "Sources marked 18+ stay out of Discover and Sources until you turn this on.") {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {

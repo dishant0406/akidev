@@ -120,13 +120,15 @@ struct RootView: View {
                 Tab(value: AppTab.sources) { SourcesView().toolbarVisibility(.hidden, for: .tabBar) }
             }
             if !model.tabBarHidden {
-                AkiTabBar(selection: $model.tab, badge: [.updates: model.unreadTotal])
+                AkiTabBar(tabs: model.tabs, selection: $model.tab, badge: [.updates: model.unreadTotal])
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .akiAnimation(value: model.tabBarHidden)
         .background(Aki.background)
+        .overlay { if model.prefs.readerKind == nil { OnboardingView().accessibilityAddTraits(.isModal).transition(.opacity) } }
+        .akiAnimation(value: model.prefs.readerKind == nil)
         // The bar stays at the bottom of the screen and the keyboard covers it, rather than lifting it over the page.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }

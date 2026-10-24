@@ -278,7 +278,9 @@ pub struct Bookmark {
 pub struct CategoryInfo {
     pub id: i64,
     pub name: String,
+    /// How many saved series are on it, and how many books.
     pub count: u32,
+    pub books: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -1269,18 +1271,7 @@ impl Engine {
 
     /// Makes a picture (a small JPEG) the series' cover, in place of the one the source gives, until it is cleared.
     pub fn set_custom_cover(&self, source: String, series: String, jpeg: Vec<u8>) -> Result<()> {
-        if jpeg.len() > MAX_COVER || !jpeg.starts_with(&[0xFF, 0xD8, 0xFF]) {
-            return Err(failed("that is not a picture the app can use as a cover"));
-        }
-        std::fs::create_dir_all(self.dir.join("covers"))
-            .map_err(|error| failed(error.to_string()))?;
-        // The time in milliseconds, or the next number free: two covers set in one millisecond must not share a file.
-        let mut number = now_ms();
-        while self.cover_file(&format!("{CUSTOM}{number}.jpg")).exists() {
-            number += 1;
-        }
-        let name = format!("{CUSTOM}{number}.jpg");
-        std::fs::write(self.cover_file(&name), &jpeg).map_err(|error| failed(error.to_string()))?;
+        let name = self.keep_cover(&jpeg)?;
         match self.store.set_custom_cover(&source, &series, Some(&name)) {
             Ok(old) => {
                 if let Some(old) = old.filter(|old| *old != name) {
@@ -1381,6 +1372,7 @@ impl Engine {
                 id: category.id,
                 name: category.name,
                 count: category.count,
+                books: category.books,
             })
             .collect())
     }
@@ -1658,6 +1650,23 @@ impl Engine {
 }
 
 impl Engine {
+    /// Writes a chosen picture (a small JPEG) to the covers folder under a name of its own and gives the name.
+    fn keep_cover(&self, jpeg: &[u8]) -> Result<String> {
+        if jpeg.len() > MAX_COVER || !jpeg.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            return Err(failed("that is not a picture the app can use as a cover"));
+        }
+        std::fs::create_dir_all(self.dir.join("covers"))
+            .map_err(|error| failed(error.to_string()))?;
+        // The time in milliseconds, or the next number free: two covers set in one millisecond must not share a file.
+        let mut number = now_ms();
+        while self.cover_file(&format!("{CUSTOM}{number}.jpg")).exists() {
+            number += 1;
+        }
+        let name = format!("{CUSTOM}{number}.jpg");
+        std::fs::write(self.cover_file(&name), jpeg).map_err(|error| failed(error.to_string()))?;
+        Ok(name)
+    }
+
     fn cover_file(&self, name: &str) -> PathBuf {
         self.dir
             .join("covers")
@@ -1817,7 +1826,12 @@ pub struct BookInfo {
     pub language: Option<String>,
     pub rtl: bool,
     pub bytes: u64,
+    /// The cover shown: the one the person chose, or the book's own.
     pub cover: Option<String>,
+    /// The cover is one the person chose.
+    pub custom_cover: bool,
+    /// The categories the book is on.
+    pub categories: Vec<i64>,
     pub added_ms: i64,
     pub opened_ms: Option<i64>,
     /// Where the person is: the chapter, the place in it (see `BookBlock.start`), and how far through the book.
@@ -2228,6 +2242,8 @@ impl Engine {
             offset: 0,
             progress: 0.0,
             finished: false,
+            custom_cover: None,
+            categories: Vec::new(),
         })?;
         self.book_info(imported.id)
     }
@@ -2346,17 +2362,58 @@ impl Engine {
             if let Some(cover) = row.cover {
                 let _ = std::fs::remove_file(self.dir.join("covers").join(cover));
             }
+            if let Some(cover) = row.custom_cover {
+                let _ = std::fs::remove_file(self.cover_file(&cover));
+            }
         }
         Ok(())
+    }
+
+    /// Makes a picture (a small JPEG) the book's cover, in place of its own, until it is cleared.
+    pub fn set_book_custom_cover(&self, id: String, jpeg: Vec<u8>) -> Result<()> {
+        let name = self.keep_cover(&jpeg)?;
+        match self.store.set_book_custom_cover(&id, Some(&name)) {
+            Ok(old) => {
+                if let Some(old) = old.filter(|old| *old != name) {
+                    let _ = std::fs::remove_file(self.cover_file(&old));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                let _ = std::fs::remove_file(self.cover_file(&name));
+                Err(error.into())
+            }
+        }
+    }
+
+    /// Goes back to the book's own cover.
+    pub fn clear_book_custom_cover(&self, id: String) -> Result<()> {
+        if let Some(old) = self.store.set_book_custom_cover(&id, None)? {
+            let _ = std::fs::remove_file(self.cover_file(&old));
+        }
+        Ok(())
+    }
+
+    /// Puts a book on a category (the same ones series are put on), or takes it off.
+    pub fn set_book_category(&self, id: String, category: i64, member: bool) -> Result<()> {
+        Ok(self.store.put_book_in_category(&id, category, member)?)
     }
 }
 
 impl Engine {
     fn shown_book(&self, row: BookRow) -> BookInfo {
-        let cover = row
-            .cover
-            .map(|name| self.dir.join("covers").join(name))
-            .filter(|file| file.exists())
+        let custom = row
+            .custom_cover
+            .as_deref()
+            .map(|name| self.cover_file(name))
+            .filter(|file| file.exists());
+        let cover = custom
+            .clone()
+            .or_else(|| {
+                row.cover
+                    .map(|name| self.dir.join("covers").join(name))
+                    .filter(|file| file.exists())
+            })
             .map(|file| file_url(&file));
         BookInfo {
             id: row.id,
@@ -2371,6 +2428,8 @@ impl Engine {
             rtl: row.rtl,
             bytes: row.bytes as u64,
             cover,
+            custom_cover: custom.is_some(),
+            categories: row.categories,
             added_ms: row.added_at,
             opened_ms: row.opened_at,
             chapter: row.chapter,

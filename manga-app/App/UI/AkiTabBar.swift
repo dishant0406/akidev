@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The floating tab bar: a glass capsule, with the current tab as a yellow glass circle that flows to the next.
 struct AkiTabBar: View {
+    var tabs: [AppTab] = AppTab.allCases
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]
     @Namespace private var space
@@ -13,7 +14,7 @@ struct AkiTabBar: View {
     var body: some View {
         AkiGlassGroup(spacing: 8) {
             HStack(spacing: 6) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
+                ForEach(tabs, id: \.self) { tab in
                     let on = tab == selection
                     Button {
                         withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab }
