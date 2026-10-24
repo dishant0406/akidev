@@ -1896,6 +1896,16 @@ pub struct BookRun {
     pub link: Option<String>,
 }
 
+/// What a chapter is, so the reader can open a book at its start and fold the rest away.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum BookSection {
+    Cover,
+    Contents,
+    Front,
+    Body,
+    Back,
+}
+
 /// A place a search found.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BookHit {
@@ -2063,6 +2073,29 @@ pub struct BookReader {
 impl BookReader {
     pub fn chapter_count(&self) -> u32 {
         self.book.lock().unwrap().chapters() as u32
+    }
+
+    /// What each chapter is.
+    pub fn sections(&self) -> Vec<BookSection> {
+        use akidev_manga::book::Section;
+        self.book
+            .lock()
+            .unwrap()
+            .sections()
+            .iter()
+            .map(|section| match section {
+                Section::Cover => BookSection::Cover,
+                Section::Contents => BookSection::Contents,
+                Section::Front => BookSection::Front,
+                Section::Body => BookSection::Body,
+                Section::Back => BookSection::Back,
+            })
+            .collect()
+    }
+
+    /// The chapter the book itself starts at.
+    pub fn start_chapter(&self) -> u32 {
+        self.book.lock().unwrap().start() as u32
     }
 
     /// The size of each chapter's file: how much of the book each is, for "how far through".

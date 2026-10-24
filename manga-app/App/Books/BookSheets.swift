@@ -80,6 +80,9 @@ struct BookContentsSheet: View {
     let close: () -> Void
     @State private var tab = Tab.contents
     @State private var exported: URL?
+    /// The front and back matter are folded away until asked for.
+    @State private var showFront = false
+    @State private var showBack = false
 
     private enum Tab: Hashable { case contents, marks }
 
@@ -95,8 +98,16 @@ struct BookContentsSheet: View {
                     switch tab {
                     case .contents:
                         LazyVStack(spacing: 10) {
-                            ForEach(Array(model.contents.enumerated()), id: \.offset) { index, entry in
-                                row(entry, current: index == currentIndex).id(index)
+                            if hasFront {
+                                fold("Before the book", count: frontCount, open: $showFront)
+                                if showFront { ForEach(indices(of: .front), id: \.self) { index in row(model.contents[index], current: index == currentIndex).id(index) } }
+                            }
+                            ForEach(indices(of: .body), id: \.self) { index in
+                                row(model.contents[index], current: index == currentIndex).id(index)
+                            }
+                            if hasBack {
+                                fold("After the book", count: backCount, open: $showBack)
+                                if showBack { ForEach(indices(of: .back), id: \.self) { index in row(model.contents[index], current: index == currentIndex).id(index) } }
                             }
                         }
                     case .marks: marks
@@ -104,9 +115,50 @@ struct BookContentsSheet: View {
                 }
                 .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 32)
             }
-            .onAppear { DispatchQueue.main.async { proxy.scrollTo(currentIndex, anchor: .center) } }
+            .onAppear {
+                // Reading the front or back matter: its fold is open, so the place shows.
+                if let current = model.contents.indices.contains(currentIndex) ? group(model.contents[currentIndex]) : nil {
+                    showFront = current == .front
+                    showBack = current == .back
+                }
+                DispatchQueue.main.async { proxy.scrollTo(currentIndex, anchor: .center) }
+            }
             .onChange(of: tab) { _, now in if now == .marks { exported = model.exportMarkdown() } }
             .onChange(of: model.marks.count) { exported = tab == .marks ? model.exportMarkdown() : nil }
+        }
+    }
+
+    private enum Group { case front, body, back }
+
+    /// Which part of the book an entry is in: the part of the chapter it opens. The contents page itself and the cover are not listed.
+    private func group(_ entry: BookEntry) -> Group? {
+        switch model.sections.indices.contains(Int(entry.chapter)) ? model.sections[Int(entry.chapter)] : .body {
+        case .cover, .contents: nil
+        case .front: Int(entry.chapter) < model.start ? .front : .back
+        case .body: .body
+        case .back: .back
+        }
+    }
+
+    private func indices(of wanted: Group) -> [Int] {
+        model.contents.indices.filter { group(model.contents[$0]) == wanted }
+    }
+
+    private var frontCount: Int { indices(of: .front).count }
+    private var backCount: Int { indices(of: .back).count }
+    private var hasFront: Bool { frontCount > 0 }
+    private var hasBack: Bool { backCount > 0 }
+
+    /// A quiet line that opens or folds the front or back matter.
+    private func fold(_ title: String, count: Int, open: Binding<Bool>) -> some View {
+        AkiTap(action: { open.wrappedValue.toggle() }) {
+            HStack {
+                AkiText("\(title) · \(count)", .captionStrong, tone: .muted)
+                Spacer(minLength: 8)
+                AkiIcon(open.wrappedValue ? "down" : "forward", size: 12, tone: .muted)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
     }
 

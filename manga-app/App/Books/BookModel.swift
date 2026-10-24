@@ -11,6 +11,9 @@ import SwiftUI
 final class BookModel: BookPaging {
     let info: BookInfo
     let contents: [BookEntry]
+    /// What each chapter is (cover, front matter, the book, what follows it), and where the book itself starts.
+    let sections: [BookSection]
+    let start: Int
     let chapterCount: Int
     let reader: BookReader
     let engine: Engine
@@ -82,20 +85,22 @@ final class BookModel: BookPaging {
 
     /// Opens the book, off the main thread: reading its contents can take a moment for a large one.
     static func open(_ info: BookInfo, engine: Engine, style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) async throws -> BookModel {
-        let (reader, contents, sizes, marks) = try await Task.detached(priority: .userInitiated) {
+        let (reader, contents, sizes, marks, sections, start) = try await Task.detached(priority: .userInitiated) {
             let reader = try engine.openBook(id: info.id)
-            return (reader, reader.contents(), reader.chapterSizes(), (try? engine.bookMarks(book: info.id)) ?? [])
+            return (reader, reader.contents(), reader.chapterSizes(), (try? engine.bookMarks(book: info.id)) ?? [], reader.sections(), Int(reader.startChapter()))
         }.value
-        return BookModel(info: info, engine: engine, reader: reader, contents: contents, sizes: sizes, marks: marks, style: style, invertTaps: invertTaps, saveStyle: saveStyle)
+        return BookModel(info: info, engine: engine, reader: reader, contents: contents, sizes: sizes, marks: marks, sections: sections, start: start, style: style, invertTaps: invertTaps, saveStyle: saveStyle)
     }
 
-    private init(info: BookInfo, engine: Engine, reader: BookReader, contents: [BookEntry], sizes: [UInt64], marks: [BookHighlight], style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) {
+    private init(info: BookInfo, engine: Engine, reader: BookReader, contents: [BookEntry], sizes: [UInt64], marks: [BookHighlight], sections: [BookSection], start: Int, style: BookStyle, invertTaps: Bool, saveStyle: @escaping (BookStyle) -> Void) {
         self.info = info
         self.marks = marks
         self.engine = engine
         self.reader = reader
         self.contents = contents
         self.sizes = sizes
+        self.sections = sections
+        self.start = start
         chapterCount = sizes.count
         self.style = style
         self.saveStyle = saveStyle
@@ -188,7 +193,9 @@ final class BookModel: BookPaging {
         screen = size
         self.safe = safe
         if first {
-            go(to: Spot(chapter: min(Int(info.chapter), max(chapterCount - 1, 0)), offset: Int(info.offset)), forward: true, animated: false)
+            // A book never read is opened where the book itself starts, past the cover, the copyright page and the dedication.
+            let fresh = info.openedMs == nil && info.chapter == 0 && info.offset == 0
+            go(to: Spot(chapter: fresh ? start : min(Int(info.chapter), max(chapterCount - 1, 0)), offset: fresh ? 0 : Int(info.offset)), forward: true, animated: false)
         } else {
             typeChanged()
         }

@@ -54,6 +54,7 @@ fn a_book_goes_on_the_shelf_is_read_remembered_and_removed() {
 
     let reader = engine.open_book(info.id.clone()).unwrap();
     assert_eq!(reader.chapter_count(), 1);
+    assert_eq!((reader.start_chapter(), reader.sections().len()), (0, 1));
     let chapter = reader.chapter(0).unwrap();
     let BookKind::Text { runs } = &chapter.blocks[1].kind else {
         panic!()

@@ -5,6 +5,7 @@
 
 use super::css::Sheet;
 use super::html::{self, join};
+use super::sections::{self, Section};
 use super::{Anchor, Block, BookFile, Chapter, Entry, Meta};
 use anyhow::Context;
 use regex::{Captures, Regex};
@@ -32,6 +33,8 @@ pub struct Epub {
     /// The last large file read, whole, while its pieces are being asked for one after another.
     whole: Option<(String, Chapter)>,
     sizes: Vec<u64>,
+    sections: Vec<Section>,
+    start: usize,
     /// Where each file's first chapter is, by lower-case path.
     first: HashMap<String, usize>,
     contents: Vec<Entry>,
@@ -71,6 +74,8 @@ impl Epub {
             spine: Vec::new(),
             whole: None,
             sizes: Vec::new(),
+            sections: Vec::new(),
+            start: 0,
             first: HashMap::new(),
             contents: Vec::new(),
             cover: None,
@@ -288,6 +293,7 @@ impl Epub {
                 })
                 .collect();
         }
+        self.name_the_parts(&package, &package_path);
         if self.meta.title.is_empty() {
             self.meta.title = Path::new(&package_path)
                 .file_stem()
@@ -295,6 +301,127 @@ impl Epub {
                 .unwrap_or_default();
         }
         Ok(())
+    }
+
+    /// Works out what each chapter is, from the words the book uses (see `sections`). Only the first and last few files are opened to
+    /// look: the middle of a book is the book, and a long one is not read through to say so.
+    fn name_the_parts(&mut self, package: &Html, package_path: &str) {
+        let mut said: HashMap<String, Vec<String>> = HashMap::new();
+        // A link into the middle of a file (`#id`) says nothing about the whole file: a contents list that is a part of the
+        // first chapter's file does not make the file a contents page.
+        let mut note = |path: String, href: &str, words: Vec<String>| {
+            if !href.contains('#') {
+                said.entry(path.to_lowercase()).or_default().extend(words);
+            }
+        };
+        // The landmarks of the navigation document.
+        let navs: Vec<String> = package
+            .select(&selector("manifest item"))
+            .filter(|item| {
+                item.value()
+                    .attr("properties")
+                    .is_some_and(|p| p.split_whitespace().any(|p| p == "nav"))
+            })
+            .filter_map(|item| Some(join(package_path, item.value().attr("href")?)))
+            .collect();
+        for path in navs {
+            let Ok(document) = self.read_markup(&path, 4 * 1024 * 1024) else {
+                continue;
+            };
+            for nav in document.select(&selector("nav")).filter(|nav| {
+                nav.value()
+                    .attrs()
+                    .any(|(key, value)| key.ends_with("type") && value.contains("landmarks"))
+            }) {
+                for link in nav.select(&selector("a")) {
+                    let words = link
+                        .value()
+                        .attrs()
+                        .filter(|(key, _)| key.ends_with("type"))
+                        .flat_map(|(_, value)| value.split_whitespace())
+                        .map(str::to_lowercase)
+                        .collect();
+                    if let Some(href) = link.value().attr("href") {
+                        note(join(&path, href), href, words);
+                    }
+                }
+            }
+        }
+        // The guide of an older book.
+        for reference in package.select(&selector("guide reference")) {
+            let kind = reference.value().attr("type").unwrap_or("").to_lowercase();
+            let word = match kind.as_str() {
+                "text" => "bodymatter".to_string(),
+                "title-page" => "titlepage".to_string(),
+                "acknowledgements" => "acknowledgments".to_string(),
+                other => other.to_string(),
+            };
+            if let Some(href) = reference.value().attr("href") {
+                note(join(package_path, href), href, vec![word]);
+            }
+        }
+        // The files in reading order, once each; and the first and last few opened for their own words.
+        let mut files: Vec<String> = Vec::new();
+        for part in &self.spine {
+            if files.last() != Some(&part.path) {
+                files.push(part.path.clone());
+            }
+        }
+        let ends = 6;
+        let own: Vec<(usize, Vec<String>)> = (0..files.len())
+            .filter(|&index| index < ends || index + ends >= files.len())
+            .filter_map(|index| {
+                let document = self.read_markup(&files[index], MAX_CHAPTER_BYTES).ok()?;
+                let words = document
+                    .select(&selector(
+                        "body, body > section, body > article, body > div",
+                    ))
+                    .flat_map(|element| {
+                        element
+                            .value()
+                            .attrs()
+                            .filter(|(key, _)| key.ends_with("type") || *key == "role")
+                            .collect::<Vec<_>>()
+                    })
+                    .flat_map(|(_, value)| {
+                        value
+                            .split_whitespace()
+                            .map(|word| word.trim_start_matches("doc-").to_lowercase())
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                Some((index, words))
+            })
+            .collect();
+        let mut all: Vec<Vec<String>> = files
+            .iter()
+            .map(|path| said.get(&path.to_lowercase()).cloned().unwrap_or_default())
+            .collect();
+        for (index, words) in own {
+            all[index].extend(words);
+        }
+        // The file's name speaks last: only for a file that has nothing said about it.
+        for (index, words) in all.iter_mut().enumerate() {
+            if words.is_empty() {
+                *words = sections::words_of_name(&files[index]);
+            }
+        }
+        let (by_file, start) = sections::classify(&all);
+        let place: HashMap<&String, usize> = files
+            .iter()
+            .enumerate()
+            .map(|(index, path)| (path, index))
+            .collect();
+        self.sections = self
+            .spine
+            .iter()
+            .map(|part| by_file[place[&part.path]])
+            .collect();
+        self.start = self
+            .first
+            .get(&files[start].to_lowercase())
+            .copied()
+            .unwrap_or(0);
     }
 
     /// Where a link in a contents file goes: the chapter and the id in it.
@@ -410,6 +537,14 @@ impl BookFile for Epub {
 
     fn sizes(&self) -> &[u64] {
         &self.sizes
+    }
+
+    fn sections(&self) -> &[Section] {
+        &self.sections
+    }
+
+    fn start(&self) -> usize {
+        self.start
     }
 
     fn chapter(&mut self, index: usize) -> anyhow::Result<Chapter> {

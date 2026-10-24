@@ -1,6 +1,6 @@
 //! Reads books made in the test, the way the reader reads a file from the device.
 
-use akidev_manga::book::{self, Align, Kind, search};
+use akidev_manga::book::{self, Align, Kind, Section, search};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -416,6 +416,23 @@ fn corpus() {
             blocks += chapter.blocks.len();
             characters += at;
         }
+        let sections = book.sections();
+        let count = |wanted| {
+            sections
+                .iter()
+                .filter(|&&section| section == wanted)
+                .count()
+        };
+        println!(
+            "   starts at chapter {} of {}: {} cover, {} contents, {} front, {} body, {} back",
+            book.start(),
+            book.chapters(),
+            count(Section::Cover),
+            count(Section::Contents),
+            count(Section::Front),
+            count(Section::Body),
+            count(Section::Back)
+        );
         let searched = std::time::Instant::now();
         let exact = search(&path, "the", 300).unwrap().len();
         let near = search(&path, "Natashha", 300).unwrap();
@@ -722,4 +739,38 @@ fn a_vertical_chapter_says_so() {
     assert!(book.chapter(0).unwrap().vertical);
     let mut plain = book::open(&standard("w.epub")).unwrap();
     assert!(!plain.chapter(0).unwrap().vertical);
+}
+
+#[test]
+fn the_parts_of_a_book_are_told_by_its_own_markup_its_landmarks_and_its_file_names() {
+    let opf = r#"<package><metadata xmlns:dc="x"><dc:title>P</dc:title></metadata><manifest>
+        <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+        <item id="a" href="a.xhtml" media-type="application/xhtml+xml"/><item id="b" href="b.xhtml" media-type="application/xhtml+xml"/>
+        <item id="c" href="c.xhtml" media-type="application/xhtml+xml"/><item id="d" href="notes.xhtml" media-type="application/xhtml+xml"/>
+        <item id="e" href="e.xhtml" media-type="application/xhtml+xml"/></manifest>
+        <spine><itemref idref="a"/><itemref idref="b"/><itemref idref="c"/><itemref idref="d"/><itemref idref="e"/></spine></package>"#;
+    let nav = r#"<html><body><nav epub:type="landmarks"><ol><li><a epub:type="cover" href="a.xhtml">Cover</a></li>
+        <li><a epub:type="bodymatter" href="c.xhtml">Start</a></li></ol></nav></body></html>"#;
+    let page = |kind: &str| format!(r#"<html><body epub:type="{kind}"><p>text</p></body></html>"#);
+    let path = write_book(
+        "t.epub",
+        &[
+            (
+                "META-INF/container.xml",
+                &CONTAINER.replace("OEBPS/content.opf", "b.opf"),
+            ),
+            ("b.opf", opf),
+            ("nav.xhtml", nav),
+            ("a.xhtml", "<html><body><p>cover</p></body></html>"),
+            ("b.xhtml", &page("dedication")),
+            ("c.xhtml", "<html><body><p>the book</p></body></html>"),
+            ("notes.xhtml", "<html><body><p>a note</p></body></html>"),
+            ("e.xhtml", &page("colophon")),
+        ],
+    );
+    let book = book::open(&path).unwrap();
+    use Section::*;
+    // The cover from the landmarks, the dedication from its own markup, the notes from the file's name, the colophon from its markup.
+    assert_eq!(book.sections(), [Cover, Front, Body, Back, Back]);
+    assert_eq!(book.start(), 2);
 }

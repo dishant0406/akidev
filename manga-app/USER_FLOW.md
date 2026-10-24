@@ -217,6 +217,8 @@ The shelf is covers in a grid with how far through you are (New, a percentage, F
 
 Reading comfort (Type and theme sheet): brightness that goes below the phone's lowest (a dark layer, the phone's own brightness is given back when the book closes), a warm tint (off, always, at night), an Ink display (grey, still, no page-turn motion) and Ink, Night and Black themes; margins widen on a wide screen to keep lines near 70 characters.
 
+The parts of a book: EPUBs mark their cover, contents page, front matter (copyright, dedication, foreword), the book itself and what follows (notes, index, colophon) with `epub:type`, a landmarks list or an old-style guide; when a book says nothing, the file names are read. A book never read opens at the start of the book itself, and the contents sheet folds "Before the book" and "After the book" away, with their number, until asked for. The pages themselves are all still there to read.
+
 Scroll or pages: the Type and theme sheet has a Reading switch. Scroll runs the chapters one into the next like a web page, with no foot line; switching keeps your place.
 
 Reading tools: press and hold a word, drag the handles, then Highlight (four colours), Note or Copy; tap a highlight to change or remove it; the contents sheet has a Highlights tab. The search button looks through the whole book. Tapping a footnote mark shows the note in a card ("Go to the note" follows it). Books read right to left turn the other way; vertical Japanese is set in columns; a page that is one picture fills the screen; fonts the book carries are used for its headings.

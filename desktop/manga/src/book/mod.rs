@@ -12,7 +12,9 @@ mod epub;
 mod html;
 pub mod opds;
 mod search;
+mod sections;
 pub use search::{Hit, search};
+pub use sections::Section;
 
 use std::path::Path;
 
@@ -131,6 +133,10 @@ pub trait BookFile: Send {
     /// How big each chapter is, in bytes of its file: the weights for "how far through the book", read without
     /// reading the chapters.
     fn sizes(&self) -> &[u64];
+    /// What each chapter is: cover, front matter, the book itself, or what follows it.
+    fn sections(&self) -> &[Section];
+    /// The chapter the book itself starts at, which a book never opened is opened on.
+    fn start(&self) -> usize;
     fn chapter(&mut self, index: usize) -> anyhow::Result<Chapter>;
     /// The bytes of a picture or other file inside the book.
     fn resource(&mut self, path: &str) -> anyhow::Result<Vec<u8>>;
