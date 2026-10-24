@@ -36,6 +36,7 @@ ed25519-dalek = "2"
 getrandom = "0.3"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 rusqlite = "0.32"
+neo_frizbee = "0.13.3"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "test-util"] }

@@ -175,10 +175,12 @@ struct BookSearchSheet: View {
                     AkiSpinner().frame(maxWidth: .infinity, minHeight: 80)
                 } else if !asked.isEmpty && hits.isEmpty {
                     AkiText("Nothing for “\(asked)”.", .body, tone: .muted)
+                } else if hits.first?.similar == true {
+                    AkiText("Nothing is written exactly like that. These are the nearest words.", .caption, tone: .muted)
                 }
                 LazyVStack(spacing: 10) {
                     ForEach(Array(hits.enumerated()), id: \.offset) { _, hit in
-                        AkiTap(action: { model.open(hit, length: asked.utf16.count); close() }) {
+                        AkiTap(action: { model.open(hit); close() }) {
                             VStack(alignment: .leading, spacing: 4) {
                                 AkiText(hit.snippet, .body, lines: 3)
                                 AkiText(model.title(ofChapter: Int(hit.chapter)), .caption, tone: .muted, lines: 1)
@@ -190,7 +192,6 @@ struct BookSearchSheet: View {
                         }
                     }
                 }
-                if searching && !hits.isEmpty { AkiSpinner().frame(maxWidth: .infinity) }
             }
             .padding(24)
         }
@@ -205,8 +206,10 @@ struct BookSearchSheet: View {
         guard !words.isEmpty else { return }
         searching = true
         task = Task {
-            await model.search(words) { found in hits += found }
-            if !Task.isCancelled { searching = false }
+            let found = await model.search(words)
+            guard !Task.isCancelled else { return }
+            hits = found
+            searching = false
         }
     }
 }

@@ -1,6 +1,6 @@
 //! Reads books made in the test, the way the reader reads a file from the device.
 
-use akidev_manga::book::{self, Align, Kind};
+use akidev_manga::book::{self, Align, Kind, search};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -416,6 +416,14 @@ fn corpus() {
             blocks += chapter.blocks.len();
             characters += at;
         }
+        let searched = std::time::Instant::now();
+        let exact = search(&path, "the", 300).unwrap().len();
+        let near = search(&path, "Natashha", 300).unwrap();
+        println!(
+            "   search: 'the' {exact} finds, 'Natashha' {} similar, both in {:.1?}",
+            near.len(),
+            searched.elapsed()
+        );
         println!(
             "{:<18} open {:>6.1?}  {:>3} chapters  {:>6} blocks  {:>8} chars  slowest chapter {:>7.1?}  contents {}  cover {}",
             path.file_name().unwrap().to_string_lossy(),
@@ -550,19 +558,23 @@ fn odd_inputs_do_not_break_a_book() {
 #[test]
 fn search_finds_every_place_with_its_position_and_notes_come_out_as_text() {
     let mut book = book::open(&standard("r.epub")).unwrap();
-    let hits = book.search(0, "DARK and").unwrap();
-    assert_eq!(hits.len(), 1);
     let chapter = book.chapter(0).unwrap();
+    let hits = search(&standard("s.epub"), "DARK and", 50).unwrap();
+    assert_eq!(hits.len(), 1);
     // The position is where the words are in the chapter: the paragraph's start plus the words before.
     assert_eq!(
         hits[0].offset,
         chapter.blocks[1].start + "It was a ".encode_utf16().count() as u32
     );
+    assert_eq!(hits[0].length, 8);
     assert!(hits[0].snippet.contains("a dark and stormy"));
-    assert_eq!(book.search(0, "the").unwrap().len(), 1);
-    assert!(book.search(0, "  ").unwrap().is_empty());
-    assert!(book.search(0, "zzzz").unwrap().is_empty());
-    assert!(book.search(9, "a").is_err());
+    assert_eq!(search(&standard("s.epub"), "the", 50).unwrap().len(), 1);
+    assert!(search(&standard("s.epub"), "  ", 50).unwrap().is_empty());
+    assert!(search(&standard("s.epub"), "zzzz", 50).unwrap().is_empty());
+    // Nothing is written like that, so the nearest words are given, marked as such.
+    let near = search(&standard("s.epub"), "stormi", 50).unwrap();
+    assert_eq!((near.len(), near[0].similar), (1, true));
+    assert_eq!(near[0].length, 6);
 
     // The mark in the first chapter links to a short passage in the second: that passage is the note, which runs to the
     // next id or the end of the file.

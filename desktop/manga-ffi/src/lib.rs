@@ -1901,7 +1901,10 @@ pub struct BookRun {
 pub struct BookHit {
     pub chapter: u32,
     pub offset: u32,
+    pub length: u32,
     pub snippet: String,
+    /// The words are near the ones asked for, not the same.
+    pub similar: bool,
 }
 
 /// A highlight, with the reader's note if there is one.
@@ -2092,22 +2095,6 @@ impl BookReader {
         Ok(self.book.lock().unwrap().resource(&path)?)
     }
 
-    /// Every place in one chapter where the words are written. Call it chapter by chapter, off the main thread.
-    pub fn search(&self, chapter: u32, query: String) -> Result<Vec<BookHit>> {
-        Ok(self
-            .book
-            .lock()
-            .unwrap()
-            .search(chapter as usize, &query)?
-            .into_iter()
-            .map(|hit| BookHit {
-                chapter: hit.chapter,
-                offset: hit.offset,
-                snippet: hit.snippet,
-            })
-            .collect())
-    }
-
     /// The text of the footnote a link points at, when it points at one.
     pub fn note(&self, link: String) -> Option<String> {
         self.book.lock().unwrap().note(&link)
@@ -2250,6 +2237,27 @@ impl Engine {
         Ok(self
             .store
             .set_book_progress(&id, chapter, offset, progress, finished, now_ms())?)
+    }
+
+    /// Every place in a book where the words are written (or, if nowhere, words near them), in reading order. It reads the book
+    /// on its own, so it never holds up the page being read; call it off the main thread.
+    pub fn search_book(&self, id: String, query: String) -> Result<Vec<BookHit>> {
+        let row = self
+            .store
+            .book(&id)?
+            .ok_or_else(|| failed("that book is not on the shelf"))?;
+        let hits =
+            akidev_manga::book::search(&self.dir.join("books").join(&row.file), &query, 300)?;
+        Ok(hits
+            .into_iter()
+            .map(|hit| BookHit {
+                chapter: hit.chapter,
+                offset: hit.offset,
+                length: hit.length,
+                snippet: hit.snippet,
+                similar: hit.similar,
+            })
+            .collect())
     }
 
     /// Keeps a highlight: the chapter, where it starts and ends, a colour (0 to 3) and the words themselves.

@@ -335,3 +335,14 @@ ways, used for headings and special text, not for the body, which stays the read
 
 Not done, honestly: touching a place in vertical text (no selection, highlights or links there), fixed-layout pages with positioned
 text (shown as reflowable text), basic-auth catalogues, a share button for the Markdown export, per-book settings, text to speech.
+
+## 14. Search (2026-10-24)
+
+Asked for: "fff search". What it is: `fff-search` is the Fast File Finder crate, a search over a folder of files on disk (it indexes a tree,
+watches it, reads git status, keeps a database with LMDB, 30+ dependencies; its docs list only x86_64 Linux). A book is one zip and its text
+is already in memory a chapter at a time, so the crate itself is the wrong tool and would add size and risk to the phone app. What
+it is built on is `neo_frizbee` (SIMD, typo-resistant fuzzy matching, MIT, no dependencies by default), which does fit and builds for iOS: that is
+what the app uses. Search now (`desktop/manga/src/book/search.rs`): the exact words first, read chapter by chapter on several threads,
+each with its own copy of the book open (so a search never holds up the page being read); if the words are written nowhere, the nearest
+words (a typo or two, a similar length, words in the same count), marked "similar". A 3 million character book answers in about 0.25 s
+on a laptop for the first search with all chapters read.

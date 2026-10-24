@@ -74,22 +74,16 @@ extension BookModel {
         go(to: Spot(chapter: Int(mark.chapter), offset: Int(mark.start), highlight: Int(mark.end - mark.start)))
     }
 
-    /// Looks for words in the whole book a chapter at a time, handing each chapter's finds over as they come, until `limit` or the end.
-    func search(_ query: String, limit: Int = 300, found: @escaping ([BookHit]) -> Void) async {
-        let reader = reader
-        var total = 0
-        for chapter in 0..<chapterCount {
-            if Task.isCancelled || total >= limit { return }
-            let hits = await Task.detached(priority: .userInitiated) { (try? reader.search(chapter: UInt32(chapter), query: query)) ?? [] }.value
-            total += hits.count
-            if !hits.isEmpty { found(hits) }
-        }
+    /// Looks for words in the whole book: the finds in reading order, or if the words are nowhere, the nearest words.
+    func search(_ query: String) async -> [BookHit] {
+        let engine = engine, id = info.id
+        return await Task.detached(priority: .userInitiated) { (try? engine.searchBook(id: id, query: query)) ?? [] }.value
     }
 
     /// Goes to a place a search found.
-    func open(_ hit: BookHit, length: Int) {
+    func open(_ hit: BookHit) {
         trail = []
-        go(to: Spot(chapter: Int(hit.chapter), offset: Int(hit.offset), highlight: length))
+        go(to: Spot(chapter: Int(hit.chapter), offset: Int(hit.offset), highlight: Int(hit.length)))
     }
 
     /// The title of the part of the book a chapter falls in.
