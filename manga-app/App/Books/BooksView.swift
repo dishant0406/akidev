@@ -6,6 +6,9 @@ extension BookInfo: @retroactive Identifiable {}
 
 /// The books on this device: add one from Files, pick one up where you left it.
 struct BooksView: View {
+    #if DEBUG
+    nonisolated(unsafe) private static var openedByArgument = false
+    #endif
     @Environment(AppModel.self) private var model
     @State private var books: [BookInfo] = []
     @State private var importing = false
@@ -47,7 +50,9 @@ struct BooksView: View {
         // `-openBook 2` opens the third book on the shelf, `-openBook Pride` the first whose title has that word, to drive the reader
         // from a script.
         .task {
-            guard let which = UserDefaults.standard.string(forKey: "openBook") else { return }
+            // Once: the tab appears again each time it is come back to, and the book must not open again with it.
+            guard let which = UserDefaults.standard.string(forKey: "openBook"), !Self.openedByArgument else { return }
+            Self.openedByArgument = true
             load()
             func pick() -> BookInfo? { Int(which).flatMap { books.indices.contains($0) ? books[$0] : nil } ?? books.first { $0.title.localizedCaseInsensitiveContains(which) } }
             for _ in 0..<20 where pick() == nil { try? await Task.sleep(for: .milliseconds(200)) }
