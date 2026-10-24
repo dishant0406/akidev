@@ -177,11 +177,17 @@ final class ReaderModel {
 
     // MARK: cover
 
-    /// Makes the page on screen the series' cover. False when the picture could not be read.
+    /// Makes what is on screen the series' cover: the part of the page under the middle of the screen, in a cover's shape (in the
+    /// strip, a page can be many screens tall, so the top of it is not what the person is looking at). False when the picture
+    /// could not be read.
     func useCurrentPageAsCover() async -> Bool {
         guard let segment = currentSegment, segment.pages.images.indices.contains(page), let link = URL(string: segment.pages.images[page]),
-              let image = await ImageLoader.shared.image(link, headers: segment.headers, widthPx: 600),
-              let jpeg = coverJPEG(image, width: 600) else { return false }
+              let image = await ImageLoader.shared.image(link, headers: segment.headers, widthPx: 600), image.size.height > 0 else { return false }
+        // How far down the page the top of the screen is (strip only), and then half a screen further to the middle of it.
+        let scrolled = mode == .strip && latest?.chapter == current && latest?.page == page ? CGFloat(latest?.offset ?? 0) : 0
+        let halfScreen = Aki.screenSize.height / Aki.screenSize.width * image.size.width / 2
+        let centre = mode == .strip ? (scrolled * image.size.height + halfScreen) / image.size.height : 0
+        guard let jpeg = coverJPEG(image, width: 600, centre: centre) else { return false }
         return (try? engine.setCustomCover(source: ref.source, series: ref.id, jpeg: jpeg)) != nil
     }
 

@@ -30,7 +30,7 @@ struct ReaderSettingsSheet: View {
                         AkiSwitch(title: "Keep the screen on", isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 || model.autoScrolling }))
                     }
                 }
-                AkiButton(coverSet == true ? "Cover changed" : coverSet == false ? "Could not use this page" : "Use this page as the cover", icon: "image", fullWidth: true) {
+                AkiButton(coverSet == true ? "Cover changed" : coverSet == false ? "Could not use this page" : "Use what is on screen as the cover", icon: "image", fullWidth: true) {
                     Task { coverSet = await model.useCurrentPageAsCover(); app.refresh() }
                 }
             }

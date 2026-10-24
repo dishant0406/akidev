@@ -72,16 +72,18 @@ private struct ImagePicker: UIViewControllerRepresentable {
     }
 }
 
-/// A picture as a JPEG for a cover: at most `width` pixels wide (never enlarged) and no taller than a book cover is, the
-/// top of a tall picture (a webtoon strip) kept. Encoded once.
-func coverJPEG(_ image: UIImage, width: CGFloat) -> Data? {
+/// A picture as a JPEG for a cover: at most `width` pixels wide (never enlarged) and no taller than a book cover is. A tall
+/// picture (a webtoon strip) is cut to that height around `centre`, how far down it the wanted part's middle is (0 to 1; 0 keeps
+/// the top). Encoded once.
+func coverJPEG(_ image: UIImage, width: CGFloat, centre: CGFloat = 0) -> Data? {
     guard image.size.width > 0, image.size.height > 0 else { return nil }
     let scale = min(1, width / image.size.width)
     let drawn = CGSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
     let size = CGSize(width: drawn.width, height: min(drawn.height, (drawn.width * 1.6).rounded()))
+    let top = min(max(centre * drawn.height - size.height / 2, 0), drawn.height - size.height)
     let format = UIGraphicsImageRendererFormat.default()
     format.scale = 1
-    return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in image.draw(in: CGRect(origin: .zero, size: drawn)) }
+    return UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in image.draw(in: CGRect(x: 0, y: -top, width: drawn.width, height: drawn.height)) }
 }
 
 /// Hands a file to the share sheet (save to Files, AirDrop, Messages).
