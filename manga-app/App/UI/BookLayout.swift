@@ -329,14 +329,19 @@ struct ChapterTypesetter {
     }
 
     private func attributes(for run: BookRun, paragraph: NSParagraphStyle, base: CGFloat) -> [NSAttributedString.Key: Any] {
-        let size = base * CGFloat(run.size)
+        let size = base * CGFloat(run.size) * (run.shift == 0 ? 1 : 0.85)
         var font = style.font.font(size: size, bold: run.bold, italic: run.italic, mono: run.mono)
-        if run.smallCaps {
-            let features: [[UIFontDescriptor.FeatureKey: Int]] = [[.type: kLowerCaseType, .selector: kLowerCaseSmallCapsSelector]]
-            font = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: size)
-        }
+        var features: [[UIFontDescriptor.FeatureKey: Int]] = []
+        if run.smallCaps { features.append([.type: kLowerCaseType, .selector: kLowerCaseSmallCapsSelector]) }
+        if !features.isEmpty { font = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: size) }
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .paragraphStyle: paragraph]
-        if run.shift != 0 { attributes[NSAttributedString.Key(kCTSuperscriptAttributeName as String)] = NSNumber(value: run.shift) }
+        if run.shift != 0 {
+            // A raised or lowered mark (a footnote number): its own baseline, moved up or down from the line's.
+            let offset = -CGFloat(run.shift) * (run.shift > 0 ? 0.38 : 0.2) * base
+            attributes[NSAttributedString.Key(kCTBaselineClassAttributeName as String)] = kCTBaselineClassRoman
+            attributes[NSAttributedString.Key(kCTBaselineInfoAttributeName as String)] = [kCTBaselineClassRoman: offset]
+            attributes[NSAttributedString.Key(kCTBaselineReferenceInfoAttributeName as String)] = [kCTBaselineClassRoman: 0]
+        }
         if run.underline { attributes[NSAttributedString.Key(kCTUnderlineStyleAttributeName as String)] = NSNumber(value: CTUnderlineStyle.single.rawValue) }
         if run.strike { attributes[.bookStrike] = true }
         if let link = run.link { attributes[.bookLink] = link }
