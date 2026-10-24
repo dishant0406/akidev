@@ -37,8 +37,7 @@ struct ReaderChaptersSheet: View {
     private func row(_ chapter: ChapterEntry) -> some View {
         let reading = chapter.id == model.current
         return AkiTap(action: { open(chapter) }) {
-            HStack(spacing: 14) {
-                status(chapter, reading: reading)
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     AkiText(chapterName(number: chapter.number, title: chapter.title), .bodyStrong, tone: reading ? .onPrimary : chapter.finished ? .muted : .text, lines: 1)
                     if let date = shortDate(chapter.dateMs) {
@@ -46,31 +45,29 @@ struct ReaderChaptersSheet: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted) }
+                marks(chapter, reading: reading)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+            .padding(.horizontal, 18).padding(.vertical, 14)
             .background(reading ? Aki.primary : Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
     }
 
-    /// Where the person stands with a chapter, as one round icon: playing now, read, begun, or not yet opened. A fixed size,
-    /// so a long number or title can never push it about.
-    private func status(_ chapter: ChapterEntry, reading: Bool) -> some View {
-        ZStack {
-            Circle().fill(reading ? Aki.onPrimary : Aki.secondary)
+    /// What is special about a chapter, as icons on the right; a chapter not yet opened has none. Fixed sizes, so nothing moves.
+    @ViewBuilder private func marks(_ chapter: ChapterEntry, reading: Bool) -> some View {
+        HStack(spacing: 10) {
+            if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted) }
             if reading {
-                AkiIcon("play-solid", size: 16, tone: .onMedia)
+                AkiIcon("play-solid", size: 14, tone: .onMedia)
+                    .frame(width: 36, height: 36)
+                    .background(Aki.onPrimary, in: Circle())
+                    .accessibilityLabel("Reading now")
             } else if chapter.finished {
-                AkiIcon("check-solid", size: 18, tone: .muted)
+                AkiIcon("check-solid", size: 20, tone: .muted).accessibilityLabel("Read")
             } else if chapter.page != nil {
-                AkiIcon("play", size: 16, tone: .text)
-            } else {
-                Circle().fill(Aki.text.opacity(0.85)).frame(width: 8, height: 8)
+                AkiIcon("play", size: 18, tone: .text).accessibilityLabel("Started")
             }
         }
-        .frame(width: 44, height: 44)
-        .accessibilityLabel(reading ? "Reading now" : chapter.finished ? "Read" : chapter.page != nil ? "Started" : "Not read")
     }
 
     private func load() {
