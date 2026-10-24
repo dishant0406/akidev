@@ -58,12 +58,9 @@ struct ReaderView: View {
             HStack(spacing: 12) {
                 AkiIconButton(symbol: "back", label: "Back", onMedia: true, scrim: Aki.scrimStrong) { dismiss() }
                 AkiTap(action: { chapters = true }) {
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
-                            if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .onMedia, lines: 1).opacity(0.78) }
-                        }
-                        AkiIcon("down", size: 11, tone: .onMedia).opacity(0.7)
+                    VStack(alignment: .leading, spacing: 0) {
+                        AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
+                        if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .onMedia, lines: 1).opacity(0.78) }
                     }
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
