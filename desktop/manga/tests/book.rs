@@ -353,3 +353,41 @@ fn files_that_are_not_books_are_refused_with_a_reason() {
             .contains("no chapters")
     );
 }
+
+#[test]
+fn adding_a_book_copies_it_once_and_a_bad_file_leaves_nothing() {
+    let source = standard("n.epub");
+    let out = std::env::temp_dir().join(format!("aki-book-out-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    let (books, covers) = (out.join("books"), out.join("covers"));
+    let first = book::import(&source, &books, &covers).unwrap();
+    assert_eq!(first.meta.title, "The Test Book");
+    assert_eq!(first.file, format!("{}.epub", first.id));
+    assert_eq!(first.id.len(), 32);
+    assert_eq!(first.cover, Some(format!("book-{}.jpg", first.id)));
+    assert_eq!(
+        std::fs::read(covers.join(first.cover.as_ref().unwrap())).unwrap(),
+        b"cover bytes"
+    );
+    assert_eq!(first.bytes, std::fs::metadata(&source).unwrap().len());
+    assert!(book::open(&books.join(&first.file)).is_ok());
+    // The same file under another name is the same book.
+    let copy = source.with_file_name("renamed.epub");
+    std::fs::copy(&source, &copy).unwrap();
+    assert_eq!(book::import(&copy, &books, &covers).unwrap().id, first.id);
+    assert_eq!(std::fs::read_dir(&books).unwrap().count(), 1);
+
+    let bad = source.with_file_name("bad.epub");
+    std::fs::write(&bad, "not a zip").unwrap();
+    assert!(book::import(&bad, &books, &covers).is_err());
+    assert_eq!(std::fs::read_dir(&books).unwrap().count(), 1);
+    let text = source.with_file_name("notes.txt");
+    std::fs::write(&text, "hello").unwrap();
+    assert!(
+        book::import(&text, &books, &covers)
+            .unwrap_err()
+            .to_string()
+            .contains("only EPUB")
+    );
+    std::fs::remove_dir_all(&out).unwrap();
+}

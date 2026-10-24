@@ -6,7 +6,7 @@ use akidev_manga::fetch::{Challenge, Unreachable};
 use akidev_manga::model as m;
 use akidev_manga::repo;
 use akidev_manga::source::{Info, Source};
-use akidev_manga::store::{Export, Progress, Store};
+use akidev_manga::store::{BookRow, Export, Progress, Store};
 use akidev_manga::theme::Themes;
 use akidev_manga::{downloads, local};
 use anyhow::Context;
@@ -1797,5 +1797,325 @@ mod tests {
         assert_eq!(cache.lists.len(), PageCache::MOST);
         assert!(cache.get("a", start).is_none());
         assert!(cache.get("k0", start).is_some());
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Books
+// ---------------------------------------------------------------------------------------------
+
+/// A book on the shelf.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookInfo {
+    pub id: String,
+    pub title: String,
+    pub authors: Vec<String>,
+    pub language: Option<String>,
+    pub rtl: bool,
+    pub bytes: u64,
+    pub cover: Option<String>,
+    pub added_ms: i64,
+    pub opened_ms: Option<i64>,
+    /// Where the person is: the chapter, the place in it (see `BookBlock.start`), and how far through the book.
+    pub chapter: u32,
+    pub offset: u32,
+    pub progress: f64,
+    pub finished: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookEntry {
+    pub title: String,
+    pub depth: u32,
+    pub chapter: u32,
+    pub anchor: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookChapter {
+    pub blocks: Vec<BookBlock>,
+    pub anchors: Vec<BookAnchor>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookAnchor {
+    pub id: String,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookBlock {
+    pub start: u32,
+    pub kind: BookKind,
+    pub heading: u8,
+    pub align: BookAlign,
+    pub left: f32,
+    pub first_line: f32,
+    pub space_before: f32,
+    pub line_height: Option<f32>,
+    pub page_break_before: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum BookKind {
+    Text { runs: Vec<BookRun> },
+    Image { src: String, alt: String },
+    Rule,
+}
+
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
+pub enum BookAlign {
+    Start,
+    Center,
+    End,
+    Justify,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookRun {
+    pub text: String,
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub strike: bool,
+    pub small_caps: bool,
+    pub mono: bool,
+    pub shift: i8,
+    pub size: f32,
+    pub color: Option<u32>,
+    pub link: Option<String>,
+}
+
+/// Where a link inside a book goes.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookTarget {
+    pub chapter: u32,
+    pub anchor: Option<String>,
+}
+
+impl From<akidev_manga::book::Chapter> for BookChapter {
+    fn from(chapter: akidev_manga::book::Chapter) -> BookChapter {
+        use akidev_manga::book as b;
+        BookChapter {
+            anchors: chapter
+                .anchors
+                .into_iter()
+                .map(|anchor| BookAnchor {
+                    id: anchor.id,
+                    offset: anchor.offset,
+                })
+                .collect(),
+            blocks: chapter
+                .blocks
+                .into_iter()
+                .map(|block| BookBlock {
+                    start: block.start,
+                    kind: match block.kind {
+                        b::Kind::Text(runs) => BookKind::Text {
+                            runs: runs
+                                .into_iter()
+                                .map(|run| BookRun {
+                                    text: run.text,
+                                    bold: run.look.bold,
+                                    italic: run.look.italic,
+                                    underline: run.look.underline,
+                                    strike: run.look.strike,
+                                    small_caps: run.look.small_caps,
+                                    mono: run.look.mono,
+                                    shift: run.look.shift,
+                                    size: run.look.size,
+                                    color: run.look.color,
+                                    link: run.look.link,
+                                })
+                                .collect(),
+                        },
+                        b::Kind::Image { src, alt } => BookKind::Image { src, alt },
+                        b::Kind::Rule => BookKind::Rule,
+                    },
+                    heading: block.heading,
+                    align: match block.align {
+                        b::Align::Start => BookAlign::Start,
+                        b::Align::Center => BookAlign::Center,
+                        b::Align::End => BookAlign::End,
+                        b::Align::Justify => BookAlign::Justify,
+                    },
+                    left: block.left,
+                    first_line: block.first_line,
+                    space_before: block.space_before,
+                    line_height: block.line_height,
+                    page_break_before: block.page_break_before,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// An open book: its chapters are read one at a time, when asked for.
+#[derive(uniffi::Object)]
+pub struct BookReader {
+    book: std::sync::Mutex<Box<dyn akidev_manga::book::BookFile>>,
+}
+
+#[uniffi::export]
+impl BookReader {
+    pub fn chapter_count(&self) -> u32 {
+        self.book.lock().unwrap().chapters() as u32
+    }
+
+    pub fn contents(&self) -> Vec<BookEntry> {
+        self.book
+            .lock()
+            .unwrap()
+            .contents()
+            .iter()
+            .map(|entry| BookEntry {
+                title: entry.title.clone(),
+                depth: entry.depth,
+                chapter: entry.chapter,
+                anchor: entry.anchor.clone(),
+            })
+            .collect()
+    }
+
+    /// One chapter as blocks. Reading and styling it takes a moment: call it off the main thread.
+    pub fn chapter(&self, index: u32) -> Result<BookChapter> {
+        Ok(self.book.lock().unwrap().chapter(index as usize)?.into())
+    }
+
+    /// The bytes of a picture inside the book, by the path a block gives.
+    pub fn resource(&self, path: String) -> Result<Vec<u8>> {
+        Ok(self.book.lock().unwrap().resource(&path)?)
+    }
+
+    /// Which chapter a link in the text goes to, when it goes into the book.
+    pub fn target(&self, link: String) -> Option<BookTarget> {
+        let (chapter, anchor) = self.book.lock().unwrap().target(&link)?;
+        Some(BookTarget {
+            chapter: chapter as u32,
+            anchor,
+        })
+    }
+
+    /// Where an id falls in a chapter's text.
+    pub fn offset_of(&self, chapter: u32, anchor: String) -> Result<u32> {
+        Ok(self
+            .book
+            .lock()
+            .unwrap()
+            .offset_of(chapter as usize, &anchor)?)
+    }
+}
+
+#[uniffi::export]
+impl Engine {
+    /// Adds a book from the device to the shelf. A book already on the shelf is found, not added twice.
+    pub fn import_book(&self, path: String) -> Result<BookInfo> {
+        let imported = akidev_manga::book::import(
+            std::path::Path::new(&path),
+            &self.dir.join("books"),
+            &self.dir.join("covers"),
+        )?;
+        self.store.add_book(&BookRow {
+            id: imported.id.clone(),
+            title: imported.meta.title,
+            authors: imported.meta.authors.join("\n"),
+            language: imported.meta.language,
+            rtl: imported.meta.rtl,
+            file: imported.file,
+            bytes: imported.bytes as i64,
+            cover: imported.cover,
+            added_at: now_ms(),
+            opened_at: None,
+            chapter: 0,
+            offset: 0,
+            progress: 0.0,
+            finished: false,
+        })?;
+        self.book_info(imported.id)
+    }
+
+    /// The shelf, the book read last first.
+    pub fn books(&self) -> Result<Vec<BookInfo>> {
+        Ok(self
+            .store
+            .books()?
+            .into_iter()
+            .map(|row| self.shown_book(row))
+            .collect())
+    }
+
+    pub fn book_info(&self, id: String) -> Result<BookInfo> {
+        let row = self
+            .store
+            .book(&id)?
+            .ok_or_else(|| failed("that book is not on the shelf"))?;
+        Ok(self.shown_book(row))
+    }
+
+    /// Opens a book to read. Reads its contents list and nothing else.
+    pub fn open_book(&self, id: String) -> Result<Arc<BookReader>> {
+        let row = self
+            .store
+            .book(&id)?
+            .ok_or_else(|| failed("that book is not on the shelf"))?;
+        let book = akidev_manga::book::open(&self.dir.join("books").join(&row.file))?;
+        Ok(Arc::new(BookReader {
+            book: std::sync::Mutex::new(book),
+        }))
+    }
+
+    /// Remembers where the person is in a book.
+    pub fn save_book_position(
+        &self,
+        id: String,
+        chapter: u32,
+        offset: u32,
+        progress: f64,
+        finished: bool,
+    ) -> Result<()> {
+        Ok(self
+            .store
+            .set_book_progress(&id, chapter, offset, progress, finished, now_ms())?)
+    }
+
+    /// Takes a book off the shelf and deletes its file.
+    pub fn remove_book(&self, id: String) -> Result<()> {
+        if let Some(row) = self.store.remove_book(&id)? {
+            let _ = std::fs::remove_file(self.dir.join("books").join(&row.file));
+            if let Some(cover) = row.cover {
+                let _ = std::fs::remove_file(self.dir.join("covers").join(cover));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Engine {
+    fn shown_book(&self, row: BookRow) -> BookInfo {
+        let cover = row
+            .cover
+            .map(|name| self.dir.join("covers").join(name))
+            .filter(|file| file.exists())
+            .map(|file| file_url(&file));
+        BookInfo {
+            id: row.id,
+            title: row.title,
+            authors: row
+                .authors
+                .lines()
+                .map(str::to_string)
+                .filter(|name| !name.is_empty())
+                .collect(),
+            language: row.language,
+            rtl: row.rtl,
+            bytes: row.bytes as u64,
+            cover,
+            added_ms: row.added_at,
+            opened_ms: row.opened_at,
+            chapter: row.chapter,
+            offset: row.offset,
+            progress: row.progress,
+            finished: row.finished,
+        }
     }
 }

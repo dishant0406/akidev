@@ -146,3 +146,99 @@ pub fn open(path: &Path) -> anyhow::Result<Box<dyn BookFile>> {
         _ => anyhow::bail!("this kind of file cannot be read as a book yet"),
     }
 }
+
+/// A book added to the device.
+#[derive(Debug, PartialEq)]
+pub struct Imported {
+    /// A hash of the file, so the same file added twice is one book.
+    pub id: String,
+    /// The copy's name in the books folder.
+    pub file: String,
+    /// The cover's name in the covers folder.
+    pub cover: Option<String>,
+    pub meta: Meta,
+    pub bytes: u64,
+}
+
+/// Copies the book at `path` into `books_dir`, checks it can be read and puts its cover in `covers_dir`. A file
+/// that cannot be read as a book leaves nothing behind.
+pub fn import(path: &Path, books_dir: &Path, covers_dir: &Path) -> anyhow::Result<Imported> {
+    use anyhow::Context;
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    anyhow::ensure!(extension == "epub", "only EPUB books can be added for now");
+    let mut source =
+        std::fs::File::open(path).with_context(|| format!("cannot open {}", path.display()))?;
+    let mut hash = Sha256::new();
+    let mut buffer = vec![0u8; 256 * 1024];
+    let mut bytes = 0u64;
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hash.update(&buffer[..read]);
+        bytes += read as u64;
+    }
+    let id: String = hash
+        .finalize()
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let file = format!("{id}.{extension}");
+    std::fs::create_dir_all(books_dir)?;
+    let copy = books_dir.join(&file);
+    let is_new = !copy.exists();
+    if is_new {
+        std::fs::copy(path, &copy)?;
+    }
+    let read = (|| {
+        let mut book = open(&copy)?;
+        let meta = book.meta().clone();
+        let cover = match book.cover().map(|path| (book.resource(&path), path)) {
+            Some((Ok(picture), path)) => {
+                let ext = Path::new(&path)
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("jpg")
+                    .to_lowercase();
+                let name = format!("book-{id}.{ext}");
+                std::fs::create_dir_all(covers_dir)?;
+                std::fs::write(covers_dir.join(&name), picture)?;
+                Some(name)
+            }
+            _ => None,
+        };
+        anyhow::Ok((meta, cover))
+    })();
+    match read {
+        Ok((mut meta, cover)) => {
+            if meta.title.is_empty() {
+                meta.title = path
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+            }
+            Ok(Imported {
+                id,
+                file,
+                cover,
+                meta,
+                bytes,
+            })
+        }
+        Err(error) => {
+            if is_new {
+                let _ = std::fs::remove_file(&copy);
+            }
+            Err(error)
+        }
+    }
+}

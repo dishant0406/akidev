@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -101,6 +101,50 @@ pub struct HistoryItem {
     pub chapter_title: Option<String>,
     pub at_ms: i64,
     pub finished: bool,
+}
+
+/// A book on the shelf, as saved.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BookRow {
+    pub id: String,
+    pub title: String,
+    /// The authors, one to a line.
+    pub authors: String,
+    pub language: Option<String>,
+    pub rtl: bool,
+    /// The book's file name in the app's books folder.
+    pub file: String,
+    pub bytes: i64,
+    /// The cover's file name in the covers folder.
+    pub cover: Option<String>,
+    pub added_at: i64,
+    pub opened_at: Option<i64>,
+    /// Where the person is: the chapter, the place in it, and how far through the book, 0 to 1.
+    pub chapter: u32,
+    pub offset: u32,
+    pub progress: f64,
+    pub finished: bool,
+}
+
+const BOOK_COLUMNS: &str = "id, title, authors, language, rtl, file, bytes, cover, added_at, opened_at, chapter, offset, progress, finished";
+
+fn book_row(row: &rusqlite::Row) -> rusqlite::Result<BookRow> {
+    Ok(BookRow {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        authors: row.get(2)?,
+        language: row.get(3)?,
+        rtl: row.get(4)?,
+        file: row.get(5)?,
+        bytes: row.get(6)?,
+        cover: row.get(7)?,
+        added_at: row.get(8)?,
+        opened_at: row.get(9)?,
+        chapter: row.get(10)?,
+        offset: row.get(11)?,
+        progress: row.get(12)?,
+        finished: row.get(13)?,
+    })
 }
 
 /// A page the person marked, with the chapter's number and title for showing it.
@@ -267,6 +311,21 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
                 source TEXT NOT NULL, series TEXT NOT NULL, body TEXT NOT NULL, at INTEGER NOT NULL,
                 PRIMARY KEY (source, series));
              PRAGMA user_version = 6;
+             COMMIT;",
+        )?;
+    }
+    if version < 7 {
+        // A book's id is a hash of its file, so adding the same file twice finds the first. `bytes` is the size of
+        // the file, for the day backups carry the files too.
+        db.execute_batch(
+            "BEGIN;
+             CREATE TABLE book (
+                id TEXT PRIMARY KEY, title TEXT NOT NULL, authors TEXT NOT NULL, language TEXT,
+                rtl INTEGER NOT NULL DEFAULT 0, file TEXT NOT NULL, bytes INTEGER NOT NULL, cover TEXT,
+                added_at INTEGER NOT NULL, opened_at INTEGER,
+                chapter INTEGER NOT NULL DEFAULT 0, offset INTEGER NOT NULL DEFAULT 0,
+                progress REAL NOT NULL DEFAULT 0, finished INTEGER NOT NULL DEFAULT 0);
+             PRAGMA user_version = 7;
              COMMIT;",
         )?;
     }
@@ -1074,6 +1133,74 @@ impl Store {
             .flatten())
     }
 
+    // --- books ---------------------------------------------------------------------------------
+
+    /// Adds a book to the shelf; a book already there (the same file) is left as it is.
+    pub fn add_book(&self, book: &BookRow) -> anyhow::Result<()> {
+        self.db().execute(
+            "INSERT OR IGNORE INTO book (id, title, authors, language, rtl, file, bytes, cover, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                book.id,
+                book.title,
+                book.authors,
+                book.language,
+                book.rtl,
+                book.file,
+                book.bytes,
+                book.cover,
+                book.added_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// The shelf, the book read last first.
+    pub fn books(&self) -> anyhow::Result<Vec<BookRow>> {
+        let db = self.db();
+        let mut statement = db.prepare(&format!(
+            "SELECT {BOOK_COLUMNS} FROM book ORDER BY COALESCE(opened_at, added_at) DESC, title"
+        ))?;
+        let rows = statement.query_map([], book_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn book(&self, id: &str) -> anyhow::Result<Option<BookRow>> {
+        Ok(self
+            .db()
+            .query_row(
+                &format!("SELECT {BOOK_COLUMNS} FROM book WHERE id = ?1"),
+                params![id],
+                book_row,
+            )
+            .optional()?)
+    }
+
+    /// Remembers where the person is in a book, and that they read it just now.
+    pub fn set_book_progress(
+        &self,
+        id: &str,
+        chapter: u32,
+        offset: u32,
+        progress: f64,
+        finished: bool,
+        now_ms: i64,
+    ) -> anyhow::Result<()> {
+        self.db().execute(
+            "UPDATE book SET chapter = ?2, offset = ?3, progress = ?4, finished = ?5, opened_at = ?6 WHERE id = ?1",
+            params![id, chapter, offset, progress.clamp(0.0, 1.0), finished, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Takes a book off the shelf and returns it, so its files can be deleted.
+    pub fn remove_book(&self, id: &str) -> anyhow::Result<Option<BookRow>> {
+        let book = self.book(id)?;
+        self.db()
+            .execute("DELETE FROM book WHERE id = ?1", params![id])?;
+        Ok(book)
+    }
+
     // --- bookmarks -----------------------------------------------------------------------------
 
     /// Marks a page. Marking it again moves the mark inside the page and keeps when it was first made. A position outside
@@ -1633,9 +1760,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 to 6 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 7 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();
@@ -1656,6 +1783,54 @@ mod tests {
             .unwrap();
         // Opening it again changes nothing.
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn books_are_added_once_read_last_first_and_remembered_where_they_were_left() {
+        let store = Store::in_memory().unwrap();
+        let book = |id: &str, added_at: i64| BookRow {
+            id: id.into(),
+            title: format!("Title {id}"),
+            authors: "A\nB".into(),
+            language: Some("en".into()),
+            rtl: false,
+            file: format!("{id}.epub"),
+            bytes: 10,
+            cover: None,
+            added_at,
+            opened_at: None,
+            chapter: 0,
+            offset: 0,
+            progress: 0.0,
+            finished: false,
+        };
+        store.add_book(&book("a", 1)).unwrap();
+        store.add_book(&book("b", 2)).unwrap();
+        // The same file again changes nothing, not even the time it was added.
+        store.add_book(&book("a", 99)).unwrap();
+        let ids = |store: &Store| -> Vec<String> {
+            store
+                .books()
+                .unwrap()
+                .into_iter()
+                .map(|book| book.id)
+                .collect()
+        };
+        assert_eq!(ids(&store), ["b", "a"]);
+        assert_eq!(store.book("a").unwrap().unwrap().added_at, 1);
+        store
+            .set_book_progress("a", 3, 120, 1.5, false, 50)
+            .unwrap();
+        assert_eq!(ids(&store), ["a", "b"]);
+        let read = store.book("a").unwrap().unwrap();
+        assert_eq!(
+            (read.chapter, read.offset, read.progress, read.opened_at),
+            (3, 120, 1.0, Some(50))
+        );
+        let removed = store.remove_book("a").unwrap().unwrap();
+        assert_eq!(removed.file, "a.epub");
+        assert_eq!(ids(&store), ["b"]);
+        assert!(store.remove_book("a").unwrap().is_none());
     }
 
     #[test]
