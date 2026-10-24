@@ -9,6 +9,7 @@ struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var app
     @State private var settings = false
+    @State private var chapters = false
 
     init(model: ReaderModel) {
         _model = State(initialValue: model)
@@ -40,6 +41,13 @@ struct ReaderView: View {
         .akiAnimation(quick: true, value: model.chrome)
         .task { await model.open(model.current, page: model.page, offset: model.restore?.offset ?? 0) }
         .akiSheet(isPresented: $settings) { ReaderSettingsSheet(model: model) }
+        .akiSheet(isPresented: $chapters, full: true) {
+            ReaderChaptersSheet(model: model) { chapter in
+                chapters = false
+                // Opens where the person was in it, or at its start.
+                Task { await model.open(chapter.id, page: Int(chapter.page ?? 0), offset: 0) }
+            }
+        }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; AppDelegate.lock(app.prefs.orientation.mask) }
         .onChange(of: app.prefs.orientation) { _, new in AppDelegate.lock(new.mask) }
         .onDisappear { model.flush(); UIApplication.shared.isIdleTimerDisabled = false; AppDelegate.lock(.portrait); AppDelegate.lock(OrientationLock.auto.mask) }
@@ -49,12 +57,18 @@ struct ReaderView: View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 AkiIconButton(symbol: "back", label: "Back", onMedia: true, scrim: Aki.scrimStrong) { dismiss() }
-                VStack(alignment: .leading, spacing: 0) {
-                    AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
-                    if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .onMedia, lines: 1).opacity(0.78) }
+                AkiTap(action: { chapters = true }) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
+                            if let chapter = model.chapter(model.current) { AkiText(model.label(chapter), .caption, tone: .onMedia, lines: 1).opacity(0.78) }
+                        }
+                        AkiIcon("down", size: 11, tone: .onMedia).opacity(0.7)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 8)
-                .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
+                .accessibilityLabel("Chapters")
                 Spacer(minLength: 0)
                 if model.mode == .strip {
                     AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? "Stop auto-scroll" : "Auto-scroll", onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
@@ -71,6 +85,7 @@ struct ReaderView: View {
                 if let older = model.older(than: model.current) {
                     AkiIconButton(symbol: "previous", label: "Previous chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
+                AkiIconButton(symbol: "list", label: "Chapters", onMedia: true, scrim: Aki.scrimStrong) { chapters = true }
                 let count = model.currentSegment?.pages.images.count ?? 0
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia)
                     .monospacedDigit()

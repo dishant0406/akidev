@@ -24,9 +24,9 @@ extension View {
     }
 
     /// A sheet that rises over the screen, on the page colour so the cards inside it show.
-    func akiSheet<Sheet: View>(isPresented: Binding<Bool>, @ViewBuilder content: @escaping () -> Sheet) -> some View {
+    func akiSheet<Sheet: View>(isPresented: Binding<Bool>, full: Bool = false, @ViewBuilder content: @escaping () -> Sheet) -> some View {
         sheet(isPresented: isPresented) {
-            content().presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Aki.background)
+            content().presentationDetents(full ? [.large] : [.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Aki.background)
         }
     }
 

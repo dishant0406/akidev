@@ -268,7 +268,9 @@ final class ReaderModel {
 
     /// The end of a chapter has been reached.
     func finish(_ chapterID: String) {
-        guard finished.insert(chapterID).inserted else { return }
+        // Only a chapter still laid out can have been reached: opening another chapter tears the strip down, and its rows then
+        // report positions that are not the person reading to the end.
+        guard !restoring, segments.contains(where: { $0.chapterID == chapterID }), finished.insert(chapterID).inserted else { return }
         try? engine.setProgress(source: ref.source, series: ref.id, chapter: chapterID, page: 0, offset: 0, finished: true)
     }
 
