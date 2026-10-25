@@ -38,7 +38,8 @@ struct LibraryView: View {
                             + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
                                AkiMenuItem(title: "Only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
                                AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
-                               AkiMenuItem(title: "Categories", icon: "folder") { managing = true }])
+                               AkiMenuItem(title: "Categories", icon: "folder") { managing = true }]
+                            + shelfItems)
                     }
                     MangaPartPills()
                     if part == nil { AkiTabs(items: [(LibraryTab.saved, "Saved"), (LibraryTab.history, "History")], selection: $tab) }
@@ -68,6 +69,14 @@ struct LibraryView: View {
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear { loadCategories(); model.refresh() } })
         .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: assignees).onDisappear { loadCategories(); picked = []; selecting = false } })
         .akiConfirm("Remove \(pickedShown.count) from your library?", message: "Their read state stays; you can save them again.", confirm: "Remove", isPresented: $removing) { removePicked() }
+    }
+
+    /// Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
+    private var shelfItems: [AkiMenuItem] {
+        guard part != nil, !categories.isEmpty else { return [] }
+        return ([(Int64(-1), "All categories")] + categories.map { ($0.id, $0.name) } + [(Int64(-2), "No category")]).map { id, name in
+            AkiMenuItem(title: name, icon: "folder", isSelected: id == category) { category = id }
+        }
     }
 
     private var shown: [LibraryEntry] {
@@ -118,7 +127,7 @@ struct LibraryView: View {
         if model.library.isEmpty {
             AkiEmptyState(title: "Nothing saved yet", message: "Save a series with the bookmark on its page and it stays here, with how far you have read.").frame(minHeight: 340)
         } else {
-            if !categories.isEmpty {
+            if !categories.isEmpty && part == nil {
                 AkiChips(items: [(Int64(-1), "All")] + categories.filter { $0.count > 0 || $0.books == 0 }.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), "No category")], selection: $category)
             }
             if shown.isEmpty {
