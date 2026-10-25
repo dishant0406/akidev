@@ -133,7 +133,7 @@ struct RootView: View {
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
         #if DEBUG
         // `-orientation landscape` turns the screen at start, to look at a landscape layout from a script.
-        .onAppear { if UserDefaults.standard.string(forKey: "orientation") != nil { AppDelegate.lock(model.prefs.orientation.mask) } }
+        .task { if UserDefaults.standard.string(forKey: "orientation") != nil { try? await Task.sleep(for: .seconds(1)); AppDelegate.lock(model.prefs.orientation.mask) } }
         #endif
     }
 }

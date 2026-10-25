@@ -74,6 +74,13 @@ final class Preferences {
     /// How fast a book is read aloud, as a multiple of the voice's own pace.
     var speechRate: Double { didSet { defaults.set(speechRate, forKey: "speechRate") } }
 
+    /// How books look before the person has changed anything: a tablet's page is bigger and read from further, so its text starts larger.
+    private static var firstBookStyle: BookStyle {
+        var style = BookStyle()
+        if UIDevice.current.userInterfaceIdiom == .pad { style.size = 24 }
+        return style
+    }
+
     init() {
         let defaults = UserDefaults.standard
         readerKind = defaults.string(forKey: "readerKind").flatMap(ReaderKind.init(rawValue:))
@@ -84,7 +91,7 @@ final class Preferences {
         invertTaps = defaults.bool(forKey: "invertTaps")
         readerBackground = ReaderBackground(rawValue: defaults.string(forKey: "readerBackground") ?? "") ?? .pitch
         orientation = OrientationLock(rawValue: defaults.string(forKey: "orientation") ?? "") ?? .auto
-        bookStyle = defaults.data(forKey: "bookStyle").flatMap { try? JSONDecoder().decode(BookStyle.self, from: $0) } ?? BookStyle()
+        bookStyle = defaults.data(forKey: "bookStyle").flatMap { try? JSONDecoder().decode(BookStyle.self, from: $0) } ?? Self.firstBookStyle
         keepAwake = defaults.bool(forKey: "keepAwake")
         saveCategory = Int64(defaults.integer(forKey: "saveCategory"))
         librarySort = LibrarySort(rawValue: defaults.string(forKey: "librarySort") ?? "") ?? .recent
