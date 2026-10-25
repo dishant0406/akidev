@@ -35,7 +35,7 @@ struct BooksView: View {
     @State private var detailMarks: [BookHighlight] = []
     @State private var removingPicked: [BookInfo] = []
     /// Two columns on a phone; as many as fit on a wider screen.
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14, alignment: .top)]
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 175), spacing: 14, alignment: .top)]
 
     var body: some View {
         NavigationStack {

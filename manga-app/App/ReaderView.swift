@@ -74,6 +74,7 @@ struct ReaderView: View {
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
+        .akiBar()
     }
 
     private var bottomBar: some View {
@@ -95,6 +96,7 @@ struct ReaderView: View {
             }
         }
         .padding(.bottom, 24)
+        .akiBar()
     }
 }
 

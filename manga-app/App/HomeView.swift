@@ -72,7 +72,7 @@ struct HomeView: View {
 
     private var info: SourceInfo? { model.sources.first { $0.id == source } }
     /// Two columns on a phone; as many as fit on a wider screen.
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14, alignment: .top)]
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 175), spacing: 14, alignment: .top)]
 
     var body: some View {
         MangaStack {

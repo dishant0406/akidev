@@ -36,7 +36,7 @@ struct OnboardingView: View {
                 Spacer(minLength: 20)
             }
             .padding(.horizontal, 20)
-            .frame(maxWidth: 620)
+            .frame(maxWidth: 560)
         }
         .onAppear { shown = true }
         .akiHaptic(.success, trigger: chosen)

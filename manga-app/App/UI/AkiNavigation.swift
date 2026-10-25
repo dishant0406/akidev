@@ -37,8 +37,14 @@ extension View {
     /// lines running the whole width. Lists of cards take a narrower column than a grid of covers.
     func akiPage(narrow: Bool = false) -> some View {
         padding(.horizontal, 20).padding(.top, 8)
-            .frame(maxWidth: narrow ? 680 : 860)
+            .frame(maxWidth: narrow ? 640 : 720)
             .frame(maxWidth: .infinity)
+    }
+
+    /// The floating bars of a reader (back and settings at the top, the controls at the bottom): the width of a phone, in the middle,
+    /// so on an iPad they are not pushed to its far corners.
+    func akiBar() -> some View {
+        frame(maxWidth: 640).frame(maxWidth: .infinity)
     }
 
     /// A custom header replaces the navigation bar.

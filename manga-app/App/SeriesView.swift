@@ -122,7 +122,7 @@ struct SeriesView: View {
                     }
                 }
                 .padding(.horizontal, 20).padding(.bottom, 46)
-                .frame(maxWidth: 820, alignment: .leading)
+                .frame(maxWidth: 720, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
             .frame(width: geo.size.width, height: heroHeight + stretch, alignment: .bottom)
@@ -174,7 +174,7 @@ struct SeriesView: View {
             }
         }
         .padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 120)
-        .frame(maxWidth: 820)
+        .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
         .background(Aki.background, in: UnevenRoundedRectangle(topLeadingRadius: Aki.sheetRadius, topTrailingRadius: Aki.sheetRadius, style: .continuous))
         .offset(y: -30)

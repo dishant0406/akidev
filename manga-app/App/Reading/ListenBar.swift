@@ -21,5 +21,6 @@ struct ListenBar: View {
             }
         }
         .padding(.horizontal, 16)
+        .akiBar()
     }
 }

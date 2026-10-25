@@ -86,6 +86,7 @@ struct BookReaderView: View {
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
+        .akiBar()
     }
 
     private var bottomBar: some View {
@@ -103,6 +104,7 @@ struct BookReaderView: View {
             }
         }
         .padding(.horizontal, 16)
+        .akiBar()
     }
 
     private var backToPage: some View {
