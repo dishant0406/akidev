@@ -12,6 +12,15 @@ const SCHEMA_VERSION: i32 = 10;
 
 pub struct Store {
     db: Mutex<Connection>,
+    /// The last answers of the two reads the screens ask for again and again, with how many rows the connection had changed
+    /// when they were made: while nothing has been written since, the answer is the same and is not worked out again.
+    shown: Mutex<Shown>,
+}
+
+#[derive(Default)]
+struct Shown {
+    library: Option<(u64, Vec<LibraryItem>)>,
+    updates: Option<(u64, Vec<UpdateItem>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -406,7 +415,10 @@ impl Store {
     fn from(db: Connection) -> anyhow::Result<Store> {
         db.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
         migrate(&db)?;
-        Ok(Store { db: Mutex::new(db) })
+        Ok(Store {
+            db: Mutex::new(db),
+            shown: Mutex::default(),
+        })
     }
 
     fn db(&self) -> std::sync::MutexGuard<'_, Connection> {
@@ -645,6 +657,20 @@ impl Store {
                    WHERE p.finished = 1 GROUP BY p.source, p.series) d ON d.source = s.source AND d.series = s.id";
 
     pub fn library(&self) -> anyhow::Result<Vec<LibraryItem>> {
+        // Held through the work: a second screen asking at the same moment waits for this answer and takes it.
+        let mut shown = self.shown.lock().unwrap();
+        let changes = self.db().total_changes();
+        if let Some((at, kept)) = &shown.library
+            && *at == changes
+        {
+            return Ok(kept.clone());
+        }
+        let found = self.read_library()?;
+        shown.library = Some((changes, found.clone()));
+        Ok(found)
+    }
+
+    fn read_library(&self) -> anyhow::Result<Vec<LibraryItem>> {
         let db = self.db();
         let mut statement = db.prepare(&format!(
             "SELECT s.source, s.id, s.title, coalesce(s.custom_cover, s.cover), coalesce(c.total, 0), coalesce(c.total, 0) - coalesce(d.done, 0),
@@ -697,6 +723,19 @@ impl Store {
 
     /// Every saved series with its newest chapter, newest chapter first: the Updates screen, in one query.
     pub fn updates(&self) -> anyhow::Result<Vec<UpdateItem>> {
+        let mut shown = self.shown.lock().unwrap();
+        let changes = self.db().total_changes();
+        if let Some((at, kept)) = &shown.updates
+            && *at == changes
+        {
+            return Ok(kept.clone());
+        }
+        let found = self.read_updates()?;
+        shown.updates = Some((changes, found.clone()));
+        Ok(found)
+    }
+
+    fn read_updates(&self) -> anyhow::Result<Vec<UpdateItem>> {
         let db = self.db();
         let mut statement = db.prepare(&format!(
             "SELECT s.source, s.id, s.title, coalesce(s.custom_cover, s.cover), coalesce(c.total, 0) - coalesce(d.done, 0), l.number, l.title, l.date_ms
@@ -1681,6 +1720,56 @@ mod tests {
             .unwrap();
         store.add_to_library("s", "a", 100).unwrap();
         store
+    }
+
+    #[test]
+    fn the_library_and_updates_are_not_worked_out_again_until_something_is_written() {
+        let store = store_with_series();
+        store
+            .sync_chapters("s", "a", &[chapter("c2", 2.0), chapter("c1", 1.0)])
+            .unwrap();
+        let unread = |store: &Store| {
+            (
+                store.library().unwrap()[0].unread,
+                store.updates().unwrap()[0].unread,
+            )
+        };
+        assert_eq!(unread(&store), (2, 2));
+        // Asked again with nothing written: the same answer, and it really is the kept one.
+        assert_eq!(store.library().unwrap(), store.library().unwrap());
+        assert!(store.shown.lock().unwrap().library.is_some());
+        // Reading a chapter, adding a chapter, a title change, a category and leaving the library each show at once.
+        store
+            .set_progress(
+                "s",
+                "a",
+                "c1",
+                Progress {
+                    page: 1,
+                    offset: 0.0,
+                    finished: true,
+                },
+                200,
+            )
+            .unwrap();
+        assert_eq!(unread(&store), (1, 1));
+        store
+            .sync_chapters(
+                "s",
+                "a",
+                &[chapter("c3", 3.0), chapter("c2", 2.0), chapter("c1", 1.0)],
+            )
+            .unwrap();
+        assert_eq!(unread(&store), (2, 2));
+        store
+            .upsert_series("s", "a", "Alpha two", Some("c.jpg"), None, Status::Ongoing)
+            .unwrap();
+        assert_eq!(store.library().unwrap()[0].title, "Alpha two");
+        let shelf = store.add_category("Shelf").unwrap();
+        store.put_in_category("s", "a", shelf, true).unwrap();
+        assert_eq!(store.library().unwrap()[0].categories, [shelf]);
+        store.remove_from_library("s", "a").unwrap();
+        assert!(store.library().unwrap().is_empty() && store.updates().unwrap().is_empty());
     }
 
     #[test]

@@ -75,6 +75,22 @@ It is changed in Settings, Reader, "I mostly read". A phone that already has sou
 not asked and keeps manga first. Books share the categories series use (`book_category`, schema 10), and a book can have a cover of its own
 (`book.custom_cover`, kept beside the book's own).
 
+## Speed: what was measured (2026-10-25)
+
+Measured on the simulator (a Mac's processor, so the numbers are for comparing, not for a phone), Release builds, median of 5 to 9 cold launches,
+with a log line for each step. Launch is about 230 to 270 ms to the app's first line and 300 to 340 ms to the first screen; a blank SwiftUI app
+built the same way reaches its first screen at 280 ms, so the app's own part of launch is small. What was found and changed:
+
+| What | Before | After |
+| --- | --- | --- |
+| Launch cost of the lock screen's framework (MediaPlayer was linked, loaded by every launch) | +20 to 26 ms at launch | 0: it is loaded when a book is first read aloud |
+| First page of a 3.7 MB, 30-chapter book (time from opening to the first page) | median 88 ms (the next two chapters were set in type at the same time) | 63 ms (they wait for the first page) |
+| `library()` and `updates()` asked again with nothing written (a 400-series library; the app asks 3 times in a launch and on every tab) | 6.9 ms and 6.2 ms each time | 0.03 ms (answer kept until a write) |
+| Everything else timed (opening the engine 1 ms, a series' chapters 0.04 ms, a tab's first frame, scrolling a 300-series library at 60 frames a second with no frame over 16.7 ms, 53 ms of queries in a launch) | already fast | unchanged |
+
+`desktop/manga-ffi/tests/perf_bench.rs` times the engine's reads (`cargo test -p akidev-manga-ffi --profile ios --test perf_bench -- --nocapture --ignored`).
+The rest of a launch is the system: the 5 ms engine start, the first SwiftUI layout, and the first request for the Discover lists.
+
 ## What the app ships with
 
 Nothing. Akidev is a renderer: every source is a plugin, installed from a repository the person adds by address

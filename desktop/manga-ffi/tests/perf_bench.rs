@@ -73,8 +73,15 @@ fn engine_reads_on_a_big_library() {
         Engine::new(dir.to_string_lossy().to_string()).unwrap()
     });
     let engine = Engine::new(dir.to_string_lossy().to_string()).unwrap();
-    time("library()", 15, || engine.library().unwrap());
-    time("updates()", 15, || engine.updates().unwrap());
+    time("library() (asked again)", 15, || engine.library().unwrap());
+    time("updates() (asked again)", 15, || engine.updates().unwrap());
+    // What a screen waits for when something was written since the last read.
+    let mut written = 0;
+    time("library() after a write", 15, || {
+        written += 1;
+        engine.add_category(format!("shelf {written}")).unwrap();
+        engine.library().unwrap()
+    });
     time("history(24)", 15, || engine.history(24).unwrap());
     time("categories()", 15, || engine.categories().unwrap());
     time("cached_chapters (one series)", 15, || {

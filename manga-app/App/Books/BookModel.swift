@@ -136,6 +136,9 @@ final class BookModel: BookPaging {
 
     func layout(chapter: Int) -> ChapterLayout? {
         if let layout = layouts[chapter] { return layout }
+        // While the page being opened is still being set in type, the chapters beside it wait: they would take the processors and
+        // the first page would come later. They are made as soon as it is shown, and when a page asks for one then.
+        if let wanted, wanted.spot.chapter != chapter { return nil }
         build(chapter)
         return nil
     }

@@ -1,6 +1,5 @@
 import AVFAudio
 import AkiManga
-import MediaPlayer
 import Observation
 
 /// Reads a book aloud, one sentence at a time, from the page the person is on.
@@ -46,7 +45,7 @@ final class BookListener {
     private var producing: Task<Void, Never>?
     private var sentences: [Int: [BookSpeech]] = [:]
     private var observers: [NSObjectProtocol] = []
-    private var commands: [(command: MPRemoteCommand, target: Any)] = []
+    private let lockScreen = LockScreen()
     private var idle: Task<Void, Never>?
     /// How many sentences the queue holds, counting the one being heard.
     private let queueLimit = 3
@@ -142,9 +141,8 @@ final class BookListener {
         state = .stopped
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers = []
-        for (command, target) in commands { command.removeTarget(target) }
-        commands = []
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        lockScreen.stopListening()
+        lockScreen.clear()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         ended(failure)
     }
@@ -176,18 +174,10 @@ final class BookListener {
             }
         })
         // The lock screen and the headphones' buttons.
-        let remote = MPRemoteCommandCenter.shared()
-        let handlers: [(MPRemoteCommand, @MainActor (BookListener) -> Void)] = [
-            (remote.playCommand, { $0.resume() }), (remote.pauseCommand, { $0.pause() }), (remote.togglePlayPauseCommand, { $0.toggle() }),
-            (remote.nextTrackCommand, { $0.skip(forward: true) }), (remote.previousTrackCommand, { $0.skip(forward: false) }),
-        ]
-        for (command, handler) in handlers {
-            command.isEnabled = true
-            commands.append((command, command.addTarget { [weak self] _ in
-                Task { @MainActor in if let self { handler(self) } }
-                return .success
-            }))
-        }
+        lockScreen.listen(
+            play: { [weak self] in self?.resume() }, pause: { [weak self] in self?.pause() }, toggle: { [weak self] in self?.toggle() },
+            next: { [weak self] in self?.skip(forward: true) }, previous: { [weak self] in self?.skip(forward: false) }
+        )
     }
 
     private func startAudio() throws {
@@ -282,9 +272,7 @@ final class BookListener {
     }
 
     private func publishNowPlaying() {
-        var info: [String: Any] = [MPMediaItemPropertyTitle: title, MPNowPlayingInfoPropertyPlaybackRate: state == .playing ? 1.0 : 0.0]
-        if let author { info[MPMediaItemPropertyArtist] = author }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        lockScreen.show(title: title, author: author, playing: state == .playing)
     }
 
     private func heard(_ span: BookSpan) {
