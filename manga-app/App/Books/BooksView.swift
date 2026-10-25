@@ -25,19 +25,31 @@ struct BooksView: View {
     @State private var sorting: BookInfo?
     @State private var coverFor: BookInfo?
     @State private var choosingCover = false
+    @State private var filter = BookFilter.all
+    @State private var searching = false
+    @State private var words = ""
+    @State private var selecting = false
+    @State private var picked: Set<String> = []
+    @State private var assigning: [BookInfo] = []
+    @State private var details: BookInfo?
+    @State private var detailMarks: [BookHighlight] = []
+    @State private var removingPicked: [BookInfo] = []
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Books", subtitle: subtitle) {
+                    AkiHeader(title: model.prefs.readerKind == .books ? "Library" : "Books", subtitle: subtitle) {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
-                                AkiIconButton(symbol: "folder", label: "Categories") { managing = true }
+                                AkiMenu(symbol: "filter", label: "Sort and filter", items: sortItems)
                                 AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { importing = true }
                             }
                         }
+                    }
+                    if searching {
+                        AkiInput(placeholder: "Search your books", text: $words, icon: "search", onClear: { words = "" })
                     }
                     if !categories.isEmpty && !books.isEmpty {
                         AkiChips(items: [(Int64(-1), "All")] + categories.map { ($0.id, "\($0.name) \($0.books)") } + [(Int64(-2), "No category")], selection: $category)
@@ -50,10 +62,11 @@ struct BooksView: View {
                         }
                         LazyVGrid(columns: columns, spacing: 22) {
                             ForEach(shown, id: \.id) { book in
-                                AkiTap(action: { reading = book }) {
+                                AkiTap(action: { if selecting { toggle(book) } else { reading = book } }) {
                                     AkiBookCard(title: book.title, author: book.authors.first, cover: book.cover, subtitle: progressLine(book))
+                                        .overlay(alignment: .topLeading) { if selecting { tick(picked.contains(book.id)) } }
                                 }
-                                .akiContextMenu(menu(for: book))
+                                .akiContextMenu(selecting ? [] : menu(for: book))
                             }
                         }
                     }
@@ -61,6 +74,7 @@ struct BooksView: View {
                 .padding(.horizontal, 20).padding(.top, 8)
             }
             .underTabBar()
+            .overlay(alignment: .bottom) { if selecting && !picked.isEmpty { selectionBar } }
             .background(AkiBackdrop())
             .akiNoNavigationBar()
         }
@@ -82,12 +96,19 @@ struct BooksView: View {
         .akiFilesImporter(isPresented: $importing, types: [.epub], onPick: add)
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear(perform: load) })
         .akiSheet(item: $sorting, content: { book in CategoryPicker(series: [], books: [book]).onDisappear(perform: load) })
+        .akiSheet(isPresented: Binding(get: { !assigning.isEmpty }, set: { if !$0 { assigning = [] } }), content: { CategoryPicker(series: [], books: assigning).onDisappear { load(); picked = []; selecting = false } })
+        .akiSheet(item: $details, content: { book in detailSheet(book) })
         .akiPhotoPicker(isPresented: $choosingCover, width: 300) { jpeg in
             if let book = coverFor { try? model.engine.setBookCustomCover(id: book.id, jpeg: jpeg) }
             load()
         }
         .akiFullScreen(item: $reading, onDismiss: load) { book in BookReaderScreen(book: book) }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiConfirm("Remove \(removingPicked.count) books?", message: "Their files are deleted from this phone. Your place in them is forgotten.", confirm: "Remove", isPresented: Binding(get: { !removingPicked.isEmpty }, set: { if !$0 { removingPicked = [] } })) {
+            for book in removingPicked { try? model.engine.removeBook(id: book.id) }
+            removingPicked = []; picked = []; selecting = false
+            load()
+        }
         .akiConfirm("Remove “\(removing?.title ?? "")”?", message: "Its file is deleted from this phone. Your place in it is forgotten.", confirm: "Remove", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             if let removing { try? model.engine.removeBook(id: removing.id) }
             load()
@@ -99,17 +120,60 @@ struct BooksView: View {
         return books.count == 1 ? "1 book" : "\(books.count) books"
     }
 
-    /// The books on the category chosen.
     private var shown: [BookInfo] {
-        switch category {
-        case -1: books
-        case -2: books.filter { $0.categories.isEmpty }
-        default: books.filter { $0.categories.contains(category) }
+        shelf(books, sort: model.prefs.bookSort, reversed: model.prefs.bookReversed, filter: filter, category: category, words: words)
+    }
+
+    private var sortItems: [AkiMenuItem] {
+        BookSort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.bookSort) { model.prefs.bookSort = option } }
+            + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.bookReversed) { model.prefs.bookReversed.toggle() }]
+            + BookFilter.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "filter", isSelected: option == filter) { filter = option } }
+            + [AkiMenuItem(title: searching ? "Hide search" : "Search", icon: "search") { searching.toggle(); if !searching { words = "" } },
+               AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
+               AkiMenuItem(title: "Categories", icon: "folder") { managing = true }]
+    }
+
+    private func toggle(_ book: BookInfo) {
+        if !picked.insert(book.id).inserted { picked.remove(book.id) }
+    }
+
+    private func tick(_ on: Bool) -> some View {
+        AkiIcon(on ? "check-solid" : "check", size: 22, tone: on ? .onPrimary : .onMedia)
+            .padding(6)
+            .background(on ? Aki.primary : Aki.scrim, in: Circle())
+            .padding(8)
+    }
+
+    /// What can be done to the books picked: put them on categories, mark them finished or not started, remove them.
+    private var selectionBar: some View {
+        let chosen = books.filter { picked.contains($0.id) }
+        return AkiGlassGroup(spacing: 12) {
+            HStack(spacing: 12) {
+                AkiIconButton(symbol: "folder", label: "Categories") { assigning = chosen }
+                AkiIconButton(symbol: "check", label: "Mark as finished") { for book in chosen { try? model.engine.finishBook(id: book.id) }; picked = []; selecting = false; load() }
+                AkiIconButton(symbol: "restore", label: "Mark as not started") { for book in chosen { try? model.engine.resetBook(id: book.id) }; picked = []; selecting = false; load() }
+                AkiIconButton(symbol: "trash", label: "Remove", tint: Aki.destructive) { removingPicked = chosen }
+            }
         }
+        .padding(.bottom, 112)
+    }
+
+    private func detailSheet(_ book: BookInfo) -> some View {
+        BookDetailSheet(
+            book: book, marks: detailMarks,
+            read: { details = nil; reading = book },
+            finish: { try? model.engine.finishBook(id: book.id); details = nil; load() },
+            reset: { try? model.engine.resetBook(id: book.id); details = nil; load() },
+            categories: { details = nil; sorting = book },
+            chooseCover: { details = nil; coverFor = book; choosingCover = true },
+            ownCover: { try? model.engine.clearBookCustomCover(id: book.id); details = nil; load() },
+            remove: { details = nil; removing = book }
+        )
     }
 
     private func menu(for book: BookInfo) -> [AkiMenuItem] {
-        var items = [AkiMenuItem(title: "Categories", icon: "folder") { sorting = book },
+        var items = [AkiMenuItem(title: "Details", icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; details = book },
+                     AkiMenuItem(title: "Categories", icon: "folder") { sorting = book },
                      AkiMenuItem(title: "Choose a cover picture", icon: "image") { coverFor = book; choosingCover = true }]
         if book.customCover {
             items.append(AkiMenuItem(title: "Use the book's own cover", icon: "restore") { try? model.engine.clearBookCustomCover(id: book.id); load() })

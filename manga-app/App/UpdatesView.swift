@@ -13,7 +13,7 @@ struct UpdatesView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        MangaStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Updates", subtitle: model.unreadTotal > 0 ? "\(model.unreadTotal) unread chapters" : "All caught up") {
@@ -21,6 +21,7 @@ struct UpdatesView: View {
                             AkiIconButton(symbol: "refresh", label: "Check for new chapters") { Task { await refresh() } }
                         }
                     }
+                    MangaPartPills()
                     AkiTabs(items: [(UpdatesTab.unread, "Unread"), (UpdatesTab.recent, "Recent")], selection: $tab)
                     if !model.updateFailures.isEmpty { failures }
                     let list = rows

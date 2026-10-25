@@ -1947,6 +1947,14 @@ pub struct BookHighlight {
     pub quote: String,
 }
 
+/// A highlight and the book it is in.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookHighlightIn {
+    pub book: String,
+    pub title: String,
+    pub highlight: BookHighlight,
+}
+
 impl From<BookMarkRow> for BookHighlight {
     fn from(row: BookMarkRow) -> BookHighlight {
         BookHighlight {
@@ -2290,6 +2298,29 @@ impl Engine {
         Ok(self
             .store
             .set_book_progress(&id, chapter, offset, progress, finished, now_ms())?)
+    }
+
+    /// Marks a book read to the end, or puts it back to never opened.
+    pub fn finish_book(&self, id: String) -> Result<()> {
+        Ok(self.store.finish_book(&id, now_ms())?)
+    }
+
+    pub fn reset_book(&self, id: String) -> Result<()> {
+        Ok(self.store.reset_book(&id)?)
+    }
+
+    /// The newest highlights across all books, each with the title of its book.
+    pub fn recent_highlights(&self, limit: u32) -> Result<Vec<BookHighlightIn>> {
+        Ok(self
+            .store
+            .recent_book_marks(limit)?
+            .into_iter()
+            .map(|(row, title)| BookHighlightIn {
+                book: row.book.clone(),
+                title,
+                highlight: row.into(),
+            })
+            .collect())
     }
 
     /// Every place in a book where the words are written (or, if nowhere, words near them), in reading order. It reads the book

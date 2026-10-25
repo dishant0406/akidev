@@ -113,16 +113,13 @@ struct RootView: View {
         @Bindable var model = model
         return ZStack(alignment: .bottom) {
             TabView(selection: $model.tab) {
-                Tab(value: AppTab.home) {
-                    Group { if model.prefs.readerKind == .books { BooksHomeView() } else { HomeView() } }.toolbarVisibility(.hidden, for: .tabBar)
+                // Only the five tabs of the person's kind of reading: more than five and the system folds the rest into "More".
+                ForEach(model.tabs, id: \.self) { tab in
+                    Tab(value: tab) { screen(of: tab).toolbarVisibility(.hidden, for: .tabBar) }
                 }
-                Tab(value: AppTab.library) { LibraryView().toolbarVisibility(.hidden, for: .tabBar) }
-                Tab(value: AppTab.books) { BooksView().toolbarVisibility(.hidden, for: .tabBar) }
-                Tab(value: AppTab.updates) { UpdatesView().toolbarVisibility(.hidden, for: .tabBar) }
-                Tab(value: AppTab.sources) { SourcesView().toolbarVisibility(.hidden, for: .tabBar) }
             }
             if !model.tabBarHidden {
-                AkiTabBar(tabs: model.tabs, kind: model.prefs.readerKind, selection: $model.tab, badge: [.updates: model.unreadTotal])
+                AkiTabBar(tabs: model.tabs, kind: model.prefs.readerKind, selection: $model.tab, badge: [.updates: model.unreadTotal, .manga: model.unreadTotal])
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -134,6 +131,20 @@ struct RootView: View {
         // The bar stays at the bottom of the screen and the keyboard covers it, rather than lifting it over the page.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
+    }
+}
+
+extension RootView {
+    @ViewBuilder fileprivate func screen(of tab: AppTab) -> some View {
+        switch tab {
+        case .home: if model.prefs.readerKind == .books { BooksHomeView() } else { HomeView() }
+        case .library: LibraryView()
+        case .books: BooksView()
+        case .updates: UpdatesView()
+        case .browse: BooksBrowseView()
+        case .manga: MangaHubView()
+        case .sources: SourcesView()
+        }
     }
 }
 

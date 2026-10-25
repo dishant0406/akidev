@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The floating tab bar: a glass capsule, with the current tab as a yellow glass circle that flows to the next.
 struct AkiTabBar: View {
-    var tabs: [AppTab] = AppTab.allCases
+    let tabs: [AppTab]
     var kind: ReaderKind?
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]

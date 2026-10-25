@@ -33,95 +33,29 @@ struct SettingsView: View {
     private var languages: [String] { Array(Set(model.sources.flatMap(\.languages))).sorted() }
 
     var body: some View {
-        @Bindable var prefs = model.prefs
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 AkiBackHeader(title: "Settings", back: { dismiss() })
-                AkiSection(title: "Appearance") {
-                    AkiCard(padding: 16) { AkiSelect(title: "Theme", selection: $prefs.appearance, options: Appearance.allCases.map { ($0, $0.title) }) }
-                }
-                AkiSection(title: "Reader", footer: "Manga and books are both always here. This decides which comes first: the order of the tabs, and the one the app opens on.") {
-                    AkiCard(padding: 16) {
-                        AkiSelect(title: "I mostly read", selection: Binding(get: { prefs.readerKind ?? .manga }, set: { model.prefs.readerKind = $0 }), options: ReaderKind.allCases.map { ($0, $0.title) })
-                    }
-                }
-                AkiSection(title: "Content", footer: "Sources marked 18+ stay out of Discover and Sources until you turn this on.") {
-                    AkiCard(padding: 16) {
-                        VStack(spacing: 16) {
-                            AkiSwitch(title: "Show 18+ sources", isOn: $prefs.showAdult)
-                            if !languages.isEmpty {
-                                AkiSelect(title: "Language", selection: Binding(get: { prefs.languages.first ?? "" }, set: { prefs.languages = $0.isEmpty ? [] : [$0] }),
-                                          options: [("", "All")] + languages.map { ($0, $0.uppercased()) })
-                            }
-                        }
-                    }
-                }
-                AkiSection(title: "Library", footer: "What saving a series does about categories. Make categories from the library's menu.") {
-                    AkiCard(padding: 16) {
-                        AkiSelect(title: "When saving", selection: Binding(get: { categories.contains { $0.id == prefs.saveCategory } || prefs.saveCategory == -1 ? prefs.saveCategory : 0 }, set: { prefs.saveCategory = $0 }), options: [(Int64(0), "Nothing"), (Int64(-1), "Ask which")] + categories.map { ($0.id, "Put on \($0.name)") })
-                    }
-                }
-                AkiSection(title: "Reading", footer: "A series keeps its own mode once you change it in the reader.") {
-                    AkiCard(padding: 16) {
-                        VStack(spacing: 16) {
-                            AkiSelect(title: "Default mode", selection: $prefs.defaultMode, options: ReadingMode.allCases.map { ($0, $0.title) })
-                            AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading the left edge goes forward.", isOn: $prefs.invertTaps)
-                            AkiSwitch(title: "Keep the screen on", isOn: $prefs.keepAwake)
-                        }
-                    }
-                }
-                if model.readAloud.reachable {
-                    AkiSection(title: "Reading aloud", footer: "Books are read in a voice that runs on this phone. Get a model once; reading then needs no network.") {
-                        AkiLink(value: VoicesRoute()) {
-                            AkiRow(title: "Voice model", subtitle: model.readAloud.current?.name ?? "None yet: choose one to get", icon: "headphones", showsChevron: true)
-                        }
-                    }
-                }
-                AkiSection(title: "Updates", footer: "Akidev checks your saved series in the background when iOS allows it, usually a few times a day and less if you rarely open the app. Nothing is sent anywhere: the check and the alert happen on this device.") {
-                    AkiCard(padding: 16) {
-                        VStack(spacing: 16) {
-                            AkiSwitch(title: "New chapter alerts", subtitle: "A notification when a saved series gets a chapter.", isOn: alerts)
-                            AkiSwitch(title: "Download new chapters", subtitle: "Keeps them on this device to read offline.", isOn: $prefs.autoDownload)
-                            if prefs.autoDownload {
-                                AkiSwitch(title: "Only on Wi-Fi", isOn: $prefs.downloadOnWifiOnly)
-                            }
-                        }
-                    }
-                }
-                AkiSection(title: "Downloads") {
-                    AkiCard(padding: 16) {
-                        VStack(spacing: 16) {
-                            HStack {
-                                AkiText("Kept on this device", .bodyStrong)
-                                Spacer()
-                                AkiText(ByteCountFormatter.string(fromByteCount: Int64(downloaded), countStyle: .file), .body, tone: .muted)
-                            }
-                            AkiButton("Clear image cache", icon: "trash", fullWidth: true) { Task { await ImageLoader.shared.clear() } }
-                        }
-                    }
-                }
-                AkiSection(title: "Your data", footer: "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories.") {
-                    VStack(spacing: 12) {
-                        if let backupFile {
-                            AkiShare(title: "Share the backup", icon: "share", file: backupFile)
-                        } else {
-                            AkiButton("Create a backup", icon: "server", fullWidth: true) { makeBackup() }
-                        }
-                        AkiButton("Restore from a backup", icon: "restore", fullWidth: true) { restoring = true }
-                        AkiButton("Open a comic file (CBZ)", icon: "zip", fullWidth: true) { importing = true }
-                    }
-                }
-                AkiSection(title: "About") {
-                    AkiCard(padding: 16) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 12) {
-                                AkiLogo(size: 44)
-                                AkiText("Akidev \(model.engine.version())", .bodyStrong)
-                            }
-                            AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .muted)
-                            AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Akidev.", .caption, tone: .muted)
-                        }
-                    }
+                if model.prefs.readerKind == .books {
+                    readerSection
+                    booksSection
+                    readAloudSection
+                    appearanceSection
+                    dataSection
+                    mangaGroup
+                    aboutSection
+                } else {
+                    appearanceSection
+                    readerSection
+                    contentSection
+                    librarySection
+                    mangaReadingSection
+                    booksSection
+                    readAloudSection
+                    updatesSection
+                    downloadsSection
+                    dataSection
+                    aboutSection
                 }
             }
             .padding(.horizontal, 20).padding(.top, 8)
@@ -140,6 +74,157 @@ struct SettingsView: View {
             downloaded = ((try? model.engine.downloads()) ?? []).reduce(0) { $0 + $1.bytes }
             categories = (try? model.engine.categories()) ?? []
         }
+    }
+
+    @ViewBuilder private var appearanceSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Appearance") {
+                    AkiCard(padding: 16) { AkiSelect(title: "Theme", selection: $prefs.appearance, options: Appearance.allCases.map { ($0, $0.title) }) }
+                }
+    }
+
+    @ViewBuilder private var readerSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Reader", footer: "Manga and books are both always here. This decides which comes first: the order of the tabs, and the one the app opens on.") {
+                    AkiCard(padding: 16) {
+                        AkiSelect(title: "I mostly read", selection: Binding(get: { prefs.readerKind ?? .manga }, set: { model.prefs.readerKind = $0 }), options: ReaderKind.allCases.map { ($0, $0.title) })
+                    }
+                }
+    }
+
+    @ViewBuilder private var contentSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Content", footer: "Sources marked 18+ stay out of Discover and Sources until you turn this on.") {
+                    AkiCard(padding: 16) {
+                        VStack(spacing: 16) {
+                            AkiSwitch(title: "Show 18+ sources", isOn: $prefs.showAdult)
+                            if !languages.isEmpty {
+                                AkiSelect(title: "Language", selection: Binding(get: { prefs.languages.first ?? "" }, set: { prefs.languages = $0.isEmpty ? [] : [$0] }),
+                                          options: [("", "All")] + languages.map { ($0, $0.uppercased()) })
+                            }
+                        }
+                    }
+                }
+    }
+
+    @ViewBuilder private var librarySection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Library", footer: "What saving a series does about categories. Make categories from the library's menu.") {
+                    AkiCard(padding: 16) {
+                        AkiSelect(title: "When saving", selection: Binding(get: { categories.contains { $0.id == prefs.saveCategory } || prefs.saveCategory == -1 ? prefs.saveCategory : 0 }, set: { prefs.saveCategory = $0 }), options: [(Int64(0), "Nothing"), (Int64(-1), "Ask which")] + categories.map { ($0.id, "Put on \($0.name)") })
+                    }
+                }
+    }
+
+    @ViewBuilder private var mangaReadingSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Reading", footer: "A series keeps its own mode once you change it in the reader.") {
+                    AkiCard(padding: 16) {
+                        VStack(spacing: 16) {
+                            AkiSelect(title: "Default mode", selection: $prefs.defaultMode, options: ReadingMode.allCases.map { ($0, $0.title) })
+                            AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading the left edge goes forward.", isOn: $prefs.invertTaps)
+                            AkiSwitch(title: "Keep the screen on", isOn: $prefs.keepAwake)
+                        }
+                    }
+                }
+    }
+
+    @ViewBuilder private var readAloudSection: some View {
+        @Bindable var prefs = model.prefs
+                if model.readAloud.reachable {
+                    AkiSection(title: "Reading aloud", footer: "Books are read in a voice that runs on this phone. Get a model once; reading then needs no network.") {
+                        AkiLink(value: VoicesRoute()) {
+                            AkiRow(title: "Voice model", subtitle: model.readAloud.current?.name ?? "None yet: choose one to get", icon: "headphones", showsChevron: true)
+                        }
+                    }
+                }
+    }
+
+    @ViewBuilder private var updatesSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Updates", footer: "Akidev checks your saved series in the background when iOS allows it, usually a few times a day and less if you rarely open the app. Nothing is sent anywhere: the check and the alert happen on this device.") {
+                    AkiCard(padding: 16) {
+                        VStack(spacing: 16) {
+                            AkiSwitch(title: "New chapter alerts", subtitle: "A notification when a saved series gets a chapter.", isOn: alerts)
+                            AkiSwitch(title: "Download new chapters", subtitle: "Keeps them on this device to read offline.", isOn: $prefs.autoDownload)
+                            if prefs.autoDownload {
+                                AkiSwitch(title: "Only on Wi-Fi", isOn: $prefs.downloadOnWifiOnly)
+                            }
+                        }
+                    }
+                }
+    }
+
+    @ViewBuilder private var downloadsSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Downloads") {
+                    AkiCard(padding: 16) {
+                        VStack(spacing: 16) {
+                            HStack {
+                                AkiText("Kept on this device", .bodyStrong)
+                                Spacer()
+                                AkiText(ByteCountFormatter.string(fromByteCount: Int64(downloaded), countStyle: .file), .body, tone: .muted)
+                            }
+                            AkiButton("Clear image cache", icon: "trash", fullWidth: true) { Task { await ImageLoader.shared.clear() } }
+                        }
+                    }
+                }
+    }
+
+    @ViewBuilder private var dataSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "Your data", footer: "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories.") {
+                    VStack(spacing: 12) {
+                        if let backupFile {
+                            AkiShare(title: "Share the backup", icon: "share", file: backupFile)
+                        } else {
+                            AkiButton("Create a backup", icon: "server", fullWidth: true) { makeBackup() }
+                        }
+                        AkiButton("Restore from a backup", icon: "restore", fullWidth: true) { restoring = true }
+                        AkiButton("Open a comic file (CBZ)", icon: "zip", fullWidth: true) { importing = true }
+                    }
+                }
+    }
+
+    @ViewBuilder private var aboutSection: some View {
+        @Bindable var prefs = model.prefs
+                AkiSection(title: "About") {
+                    AkiCard(padding: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 12) {
+                                AkiLogo(size: 44)
+                                AkiText("Akidev \(model.engine.version())", .bodyStrong)
+                            }
+                            AkiText("Icons: Solar by 480 Design, CC BY 4.0.", .caption, tone: .muted)
+                            AkiText("A reader with no content of its own. Sources are plugins from repositories you add; the people who make them, and the sites they read, are not affiliated with Akidev.", .caption, tone: .muted)
+                        }
+                    }
+                }
+    }
+
+    /// How books look and read before one is opened; the reader's own sheet changes the same things for the book in hand.
+    @ViewBuilder private var booksSection: some View {
+        @Bindable var prefs = model.prefs
+        AkiSection(title: "Books", footer: "How a book opens. Once you are in a book, its Type and theme sheet changes these for you as you read.") {
+            AkiCard(padding: 16) {
+                VStack(spacing: 16) {
+                    AkiSelect(title: "Reading", selection: $prefs.bookStyle.scroll, options: [(false, "Pages"), (true, "Scroll")])
+                    AkiSelect(title: "Theme", selection: $prefs.bookStyle.theme, options: BookTheme.allCases.map { ($0, $0.title) })
+                    AkiSelect(title: "Font", selection: $prefs.bookStyle.font, options: BookFont.allCases.map { ($0, $0.title) })
+                    AkiSwitch(title: "Keep the screen on", isOn: $prefs.keepAwake)
+                }
+            }
+        }
+    }
+
+    /// Everything that is about manga, for someone who reads books first: still all here, after what is about books.
+    @ViewBuilder private var mangaGroup: some View {
+        AkiText("Manga", .title).padding(.top, 8)
+        contentSection
+        librarySection
+        mangaReadingSection
+        updatesSection
+        downloadsSection
     }
 
     private func makeBackup() {

@@ -74,10 +74,11 @@ struct HomeView: View {
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
 
     var body: some View {
-        NavigationStack {
+        MangaStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Discover")
+                    MangaPartPills()
                     if model.sources.isEmpty && model.repos.isEmpty {
                         WelcomeView()
                     } else if model.visibleSources.isEmpty {

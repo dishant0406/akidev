@@ -28,7 +28,7 @@ struct LibraryView: View {
     private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
 
     var body: some View {
-        NavigationStack {
+        MangaStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: "Library", subtitle: selecting ? "\(pickedShown.count) selected" : "\(model.library.count) saved") {
@@ -39,6 +39,7 @@ struct LibraryView: View {
                                AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
                                AkiMenuItem(title: "Categories", icon: "folder") { managing = true }])
                     }
+                    MangaPartPills()
                     AkiTabs(items: [(LibraryTab.saved, "Saved"), (LibraryTab.history, "History")], selection: $tab)
                     switch tab {
                     case .saved: saved

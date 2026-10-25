@@ -64,6 +64,9 @@ final class Preferences {
     var autoDownload: Bool { didSet { defaults.set(autoDownload, forKey: "autoDownload") } }
     /// Auto downloads wait for Wi-Fi: on unless the person says otherwise.
     var downloadOnWifiOnly: Bool { didSet { defaults.set(downloadOnWifiOnly, forKey: "downloadOnWifiOnly") } }
+    /// How the shelf of books is ordered.
+    var bookSort: BookSort { didSet { defaults.set(bookSort.rawValue, forKey: "bookSort") } }
+    var bookReversed: Bool { didSet { defaults.set(bookReversed, forKey: "bookReversed") } }
     /// The voice model that reads books aloud (its id); empty until one is chosen.
     var voiceModel: String { didSet { defaults.set(voiceModel, forKey: "voiceModel") } }
     /// The voice of that model that reads (its id); empty is the model's own.
@@ -90,6 +93,8 @@ final class Preferences {
         notifyUpdates = defaults.bool(forKey: "notifyUpdates")
         autoDownload = defaults.bool(forKey: "autoDownload")
         downloadOnWifiOnly = defaults.object(forKey: "downloadOnWifiOnly") as? Bool ?? true
+        bookSort = BookSort(rawValue: defaults.string(forKey: "bookSort") ?? "") ?? .recent
+        bookReversed = defaults.bool(forKey: "bookReversed")
         voiceModel = defaults.string(forKey: "voiceModel") ?? ""
         voiceName = defaults.string(forKey: "voiceName") ?? ""
         speechRate = defaults.object(forKey: "speechRate") as? Double ?? 1

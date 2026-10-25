@@ -142,3 +142,36 @@ fn a_book_takes_a_chosen_cover_and_the_categories_series_use() {
     assert!(engine.book_info(id).unwrap().categories.is_empty());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_book_is_finished_reset_and_its_highlights_are_listed_with_it() {
+    let dir = std::env::temp_dir().join(format!("aki-shelf-state-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("short.epub");
+    epub(&file);
+    let engine = Engine::new(dir.join("data").to_string_lossy().into()).unwrap();
+    let id = engine
+        .import_book(file.to_string_lossy().into())
+        .unwrap()
+        .id;
+    assert!(engine.book_info(id.clone()).unwrap().opened_ms.is_none());
+
+    engine.finish_book(id.clone()).unwrap();
+    let info = engine.book_info(id.clone()).unwrap();
+    assert!(info.finished && info.opened_ms.is_some() && info.progress == 1.0);
+    engine.reset_book(id.clone()).unwrap();
+    let info = engine.book_info(id.clone()).unwrap();
+    assert!(!info.finished && info.opened_ms.is_none() && info.progress == 0.0);
+
+    engine
+        .add_book_mark(id.clone(), 0, 0, 5, 1, "Hello".into())
+        .unwrap();
+    let marks = engine.recent_highlights(5).unwrap();
+    assert_eq!(
+        (marks[0].title.as_str(), marks[0].highlight.quote.as_str()),
+        ("Short", "Hello")
+    );
+    assert_eq!(marks[0].book, id);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

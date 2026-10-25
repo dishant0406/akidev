@@ -20,8 +20,6 @@ struct CatalogueView: View {
     @State private var searched: String?
     @State private var failure: (title: String, message: String)?
     @State private var loadingMore = false
-    @State private var getting: Set<String> = []
-    @State private var got: Set<String> = []
     @State private var problem: (title: String, message: String)?
 
     private var search: String? { feed?.search ?? ref.search }
@@ -41,7 +39,7 @@ struct CatalogueView: View {
                     AkiEmptyState(title: "Nothing here", message: "This page of the catalogue has no books.").frame(minHeight: 240)
                 }
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in row(item) }
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in CatalogueItemRow(item: item, search: search) }
                 }
                 if let next {
                     if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton("More", fullWidth: true) { Task { await more(next) } } }
@@ -55,24 +53,6 @@ struct CatalogueView: View {
         .hidesTabBar()
         .task { if feed == nil { await load(ref.url) } }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
-    }
-
-    @ViewBuilder private func row(_ item: CatalogueItem) -> some View {
-        if let get = item.get {
-            AkiListCard(thumbnail: item.cover, label: item.author ?? "", title: item.title) {
-                if got.contains(get) {
-                    AkiBadge("On your shelf", icon: "tick")
-                } else if getting.contains(get) {
-                    AkiSpinner()
-                } else {
-                    AkiButton("Get", variant: .primary, size: .small) { Task { await fetch(get) } }
-                }
-            }
-        } else if let open = item.open {
-            AkiLink(value: CatalogueRef(url: open, name: item.title, search: search)) {
-                AkiListCard(thumbnail: item.cover, label: item.author ?? "Open", title: item.title) { AkiIcon("forward", size: 13, tone: .muted) }
-            }
-        }
     }
 
     private func load(_ url: String?) async {
@@ -113,13 +93,44 @@ struct CatalogueView: View {
             next = found.next
         } catch { problem = describe(error) }
     }
+}
+
+/// One line of a catalogue: a book with a Get button, or a shelf that opens. Getting a book puts it on the shelf in the Books tab.
+struct CatalogueItemRow: View {
+    let item: CatalogueItem
+    let search: String?
+    @Environment(AppModel.self) private var model
+    @State private var getting = false
+    @State private var got = false
+    @State private var problem: (title: String, message: String)?
+
+    var body: some View {
+        Group {
+            if let get = item.get {
+                AkiListCard(thumbnail: item.cover, label: item.author ?? "", title: item.title) {
+                    if got {
+                        AkiBadge("On your shelf", icon: "tick")
+                    } else if getting {
+                        AkiSpinner()
+                    } else {
+                        AkiButton("Get", variant: .primary, size: .small) { Task { await fetch(get) } }
+                    }
+                }
+            } else if let open = item.open {
+                AkiLink(value: CatalogueRef(url: open, name: item.title, search: search)) {
+                    AkiListCard(thumbnail: item.cover, label: item.author ?? "Open", title: item.title) { AkiIcon("forward", size: 13, tone: .muted) }
+                }
+            }
+        }
+        .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+    }
 
     private func fetch(_ url: String) async {
-        getting.insert(url)
-        defer { getting.remove(url) }
+        getting = true
+        defer { getting = false }
         do {
             _ = try await model.engine.getBook(url: url)
-            got.insert(url)
+            got = true
         } catch { problem = describe(error) }
     }
 }

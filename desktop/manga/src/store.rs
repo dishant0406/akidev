@@ -1323,6 +1323,24 @@ impl Store {
         Ok(())
     }
 
+    /// Marks a book finished (read to the end), keeping the place and when it was last opened.
+    pub fn finish_book(&self, id: &str, now_ms: i64) -> anyhow::Result<()> {
+        self.db().execute(
+            "UPDATE book SET progress = 1, finished = 1, opened_at = coalesce(opened_at, ?2) WHERE id = ?1",
+            params![id, now_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Puts a book back to never opened: the start, no progress, not finished.
+    pub fn reset_book(&self, id: &str) -> anyhow::Result<()> {
+        self.db().execute(
+            "UPDATE book SET chapter = 0, offset = 0, progress = 0, finished = 0, opened_at = NULL WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
     pub fn add_catalogue(&self, url: &str, name: &str, now_ms: i64) -> anyhow::Result<()> {
         self.db().execute(
             "INSERT INTO catalogue (url, name, added_at) VALUES (?1, ?2, ?3) ON CONFLICT (url) DO UPDATE SET name = ?2",
@@ -1372,6 +1390,32 @@ impl Store {
                 quote: row.get(7)?,
                 created_at: row.get(8)?,
             })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The newest marks across all books, with the title of the book each is in.
+    pub fn recent_book_marks(&self, limit: u32) -> anyhow::Result<Vec<(BookMarkRow, String)>> {
+        let db = self.db();
+        let mut statement = db.prepare(
+            "SELECT m.id, m.book, m.chapter, m.start, m.end, m.colour, m.note, m.quote, m.created_at, b.title
+             FROM book_mark m JOIN book b ON b.id = m.book ORDER BY m.created_at DESC, m.id DESC LIMIT ?1",
+        )?;
+        let rows = statement.query_map(params![limit], |row| {
+            Ok((
+                BookMarkRow {
+                    id: row.get(0)?,
+                    book: row.get(1)?,
+                    chapter: row.get(2)?,
+                    start: row.get(3)?,
+                    end: row.get(4)?,
+                    colour: row.get(5)?,
+                    note: row.get(6)?,
+                    quote: row.get(7)?,
+                    created_at: row.get(8)?,
+                },
+                row.get(9)?,
+            ))
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
@@ -1980,6 +2024,80 @@ mod tests {
             .unwrap();
         // Opening it again changes nothing.
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn a_book_can_be_finished_or_put_back_to_unread_and_marks_are_listed_newest_first_with_their_book()
+     {
+        let store = Store::in_memory().unwrap();
+        for id in ["a", "b"] {
+            store
+                .add_book(&BookRow {
+                    id: id.into(),
+                    title: format!("Book {id}"),
+                    authors: String::new(),
+                    language: None,
+                    rtl: false,
+                    file: format!("{id}.epub"),
+                    bytes: 1,
+                    cover: None,
+                    added_at: 1,
+                    opened_at: None,
+                    chapter: 0,
+                    offset: 0,
+                    progress: 0.0,
+                    finished: false,
+                    custom_cover: None,
+                    categories: Vec::new(),
+                })
+                .unwrap();
+        }
+        store
+            .set_book_progress("a", 3, 40, 0.4, false, 100)
+            .unwrap();
+        store.finish_book("a", 200).unwrap();
+        let a = store.book("a").unwrap().unwrap();
+        assert_eq!(
+            (a.finished, a.progress, a.chapter, a.offset, a.opened_at),
+            (true, 1.0, 3, 40, Some(100))
+        );
+        // A book never opened that is finished still counts as opened.
+        store.finish_book("b", 300).unwrap();
+        assert_eq!(store.book("b").unwrap().unwrap().opened_at, Some(300));
+        store.reset_book("a").unwrap();
+        let a = store.book("a").unwrap().unwrap();
+        assert_eq!(
+            (a.finished, a.progress, a.chapter, a.offset, a.opened_at),
+            (false, 0.0, 0, 0, None)
+        );
+
+        let mark = |book: &str, at: i64| BookMarkRow {
+            id: 0,
+            book: book.into(),
+            chapter: 0,
+            start: 0,
+            end: 5,
+            colour: 0,
+            note: None,
+            quote: format!("quote {at}"),
+            created_at: at,
+        };
+        store.add_book_mark(&mark("a", 1)).unwrap();
+        store.add_book_mark(&mark("b", 3)).unwrap();
+        store.add_book_mark(&mark("a", 2)).unwrap();
+        let found: Vec<(String, String)> = store
+            .recent_book_marks(2)
+            .unwrap()
+            .into_iter()
+            .map(|(mark, title)| (mark.quote, title))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("quote 3".into(), "Book b".into()),
+                ("quote 2".into(), "Book a".into())
+            ]
+        );
     }
 
     #[test]
