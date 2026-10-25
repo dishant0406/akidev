@@ -21,8 +21,11 @@ struct ReaderSettingsSheet: View {
                 choice("Background") {
                     AkiTabs(items: ReaderBackground.allCases.map { ($0, $0.title) }, selection: $prefs.readerBackground)
                 }
-                choice("Orientation") {
-                    AkiTabs(items: OrientationLock.allCases.map { ($0, $0.title) }, selection: $prefs.orientation)
+                // An iPad turns with the person, and with Split View no app may turn it: only a phone has this choice.
+                if UIDevice.current.userInterfaceIdiom == .phone {
+                    choice("Orientation") {
+                        AkiTabs(items: OrientationLock.allCases.map { ($0, $0.title) }, selection: $prefs.orientation)
+                    }
                 }
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {

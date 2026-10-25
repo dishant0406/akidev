@@ -58,7 +58,7 @@ struct SettingsView: View {
                     aboutSection
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()

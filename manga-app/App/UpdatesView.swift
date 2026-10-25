@@ -43,7 +43,7 @@ struct UpdatesView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage()
             }
             .akiRefreshable { await refresh() }
             .underTabBar()

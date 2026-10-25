@@ -27,8 +27,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: live.akidev.manga
-        # iPhone only: an iPad build must support every orientation and needs its own screenshots.
-        TARGETED_DEVICE_FAMILY: "1"
+        # iPhone and iPad: the same app. An iPad must support every orientation (and so also Split View and Slide Over).
+        TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Sources are served over plain http only from a developer's machine (the demo server).
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
@@ -46,6 +46,8 @@ targets:
         # Lets a display link (the strip's auto-scroll) run above 60 Hz on iPhones with a ProMotion screen.
         CADisableMinimumFrameDurationOnPhone: true
         BGTaskSchedulerPermittedIdentifiers: [live.akidev.manga.refresh, live.akidev.manga.download]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         CFBundleURLTypes:
           - CFBundleURLName: live.akidev.manga
             CFBundleURLSchemes: [akimanga]

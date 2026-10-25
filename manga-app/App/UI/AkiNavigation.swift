@@ -33,6 +33,14 @@ extension View {
             .scrollEdgeEffectStyle(.soft, for: .bottom)
     }
 
+    /// A screen's content: the side margins and top room every screen has, and on a wide screen (an iPad) a column in the middle instead of
+    /// lines running the whole width. Lists of cards take a narrower column than a grid of covers.
+    func akiPage(narrow: Bool = false) -> some View {
+        padding(.horizontal, 20).padding(.top, 8)
+            .frame(maxWidth: narrow ? 680 : 1100)
+            .frame(maxWidth: .infinity)
+    }
+
     /// A custom header replaces the navigation bar.
     func akiNoNavigationBar() -> some View { toolbar(.hidden, for: .navigationBar) }
 }

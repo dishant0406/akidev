@@ -35,7 +35,7 @@ struct SourcesView: View {
                     repositoriesSection
                     if let note = model.note { AkiText(note, .caption, tone: .muted) }
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage(narrow: true)
             }
             .akiRefreshable {
                 await model.updateSources()
@@ -139,7 +139,7 @@ struct RepoScreen: View {
                     AkiText(signed ? "This repository signs its index, so the app notices if it ever changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .muted)
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .akiRefreshable { await load() }
         .background(AkiBackdrop())
@@ -209,7 +209,7 @@ struct SourceSettingsView: View {
                 }
                 AkiButton("Remove this source", icon: "trash", variant: .destructive, fullWidth: true) { removing = true }.padding(.top, 8)
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()

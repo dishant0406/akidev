@@ -26,7 +26,8 @@ struct LibraryView: View {
     /// The series the category picker is for, fixed when it opens (the picked ones are cleared as it closes).
     @State private var assignees: [CategoryPicker.Series] = []
     @State private var removing = false
-    private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
+    /// Two columns on a phone; as many as fit on a wider screen.
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 14, alignment: .top)]
 
     var body: some View {
         MangaStack {
@@ -48,7 +49,7 @@ struct LibraryView: View {
                     case .history: historyList
                     }
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage()
             }
             .akiRefreshable {
                 await model.refreshLibrary(force: true)

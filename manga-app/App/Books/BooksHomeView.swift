@@ -50,7 +50,7 @@ struct BooksHomeView: View {
                     }
                     catalogueSection
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage()
             }
             .underTabBar()
             .background(AkiBackdrop())

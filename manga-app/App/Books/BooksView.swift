@@ -34,7 +34,8 @@ struct BooksView: View {
     @State private var details: BookInfo?
     @State private var detailMarks: [BookHighlight] = []
     @State private var removingPicked: [BookInfo] = []
-    private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
+    /// Two columns on a phone; as many as fit on a wider screen.
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 14, alignment: .top)]
 
     var body: some View {
         NavigationStack {
@@ -71,7 +72,7 @@ struct BooksView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage()
             }
             .underTabBar()
             .overlay(alignment: .bottom) { if selecting && !picked.isEmpty { selectionBar } }

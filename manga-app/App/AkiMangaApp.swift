@@ -131,6 +131,10 @@ struct RootView: View {
         // The bar stays at the bottom of the screen and the keyboard covers it, rather than lifting it over the page.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
+        #if DEBUG
+        // `-orientation landscape` turns the screen at start, to look at a landscape layout from a script.
+        .onAppear { if UserDefaults.standard.string(forKey: "orientation") != nil { AppDelegate.lock(model.prefs.orientation.mask) } }
+        #endif
     }
 }
 

@@ -75,6 +75,14 @@ It is changed in Settings, Reader, "I mostly read". A phone that already has sou
 not asked and keeps manga first. Books share the categories series use (`book_category`, schema 10), and a book can have a cover of its own
 (`book.custom_cover`, kept beside the book's own).
 
+## iPad
+
+The same app runs on iPad (`TARGETED_DEVICE_FAMILY` 1,2, all four orientations, so also Split View and Slide Over). Covers lay out in as many columns
+as fit (`GridItem(.adaptive(...))`, two on a phone); lists of cards and the series page keep a column in the middle on a wide screen (`akiPage`, 680 pt for
+lists, 1100 pt for grids; the series page 820 pt); the first screen's two cards stay in a 620 pt column; the orientation choice in the manga reader's settings
+is a phone's only (an iPad turns with the person). The book reader's margins already widen to keep lines near 70 characters. Debug builds take
+`-startTab <tab>` (and `-readerKind`, `-openBook`, `-autoSeries`) to open straight on a screen: with `xcrun simctl io <iPad> screenshot` every screen can be looked at without touching it.
+
 ## Speed: what was measured (2026-10-25)
 
 Measured on the simulator (a Mac's processor, so the numbers are for comparing, not for a phone), Release builds, median of 5 to 9 cold launches,

@@ -29,7 +29,7 @@ struct VoicesView: View {
                 }
                 AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", .caption, tone: .muted)
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()

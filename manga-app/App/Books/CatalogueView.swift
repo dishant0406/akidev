@@ -45,7 +45,7 @@ struct CatalogueView: View {
                     if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton("More", fullWidth: true) { Task { await more(next) } } }
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .underTabBar()
         .background(AkiBackdrop())

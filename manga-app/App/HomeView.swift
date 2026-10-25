@@ -71,7 +71,8 @@ struct HomeView: View {
     private var isGlobal: Bool { source == Self.everySource }
 
     private var info: SourceInfo? { model.sources.first { $0.id == source } }
-    private let columns = [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)]
+    /// Two columns on a phone; as many as fit on a wider screen.
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 14, alignment: .top)]
 
     var body: some View {
         MangaStack {
@@ -100,7 +101,7 @@ struct HomeView: View {
                         if isGlobal { globalResults } else { results }
                     }
                 }
-                .padding(.horizontal, 20).padding(.top, 8)
+                .akiPage()
             }
             .scrollDismissesKeyboard(.immediately)
             .akiRefreshable { await reload() }

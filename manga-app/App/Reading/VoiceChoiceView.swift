@@ -24,7 +24,7 @@ struct VoiceChoiceView: View {
                 }
                 AkiText("These voices differ in pace and in how much they lift and drop. Hear a few before choosing: the model reads the words, the voice sets the character.", .caption, tone: .muted)
             }
-            .padding(.horizontal, 20).padding(.top, 8)
+            .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()

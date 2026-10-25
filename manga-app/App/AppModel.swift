@@ -59,6 +59,8 @@ final class AppModel {
             }
         }
         if UserDefaults.standard.object(forKey: "openBook") != nil { tab = .books }
+        // `-startTab manga` (home, library, books, updates, sources, browse, manga) opens on that tab, to look at each screen from a script.
+        if let name = UserDefaults.standard.string(forKey: "startTab"), let found = AppTab.allCases.first(where: { "\($0)" == name }) { tab = found }
         // `-simulateBackground YES` runs once what iOS runs when it wakes the app in the background, a while after start.
         if UserDefaults.standard.bool(forKey: "simulateBackground") {
             Task { _ = await UpdateAlerts.requestPermission(); try? await Task.sleep(for: .seconds(6)); await refreshLibrary(force: true, background: true) }
