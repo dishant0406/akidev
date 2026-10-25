@@ -11,6 +11,7 @@ extension LibraryEntry {
 struct LibraryView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = LibraryTab.saved
+    @Environment(\.mangaPart) private var part
     @State private var history: [HistoryEntry] = []
     @State private var categories: [CategoryInfo] = []
     /// -1 is every category.
@@ -40,7 +41,7 @@ struct LibraryView: View {
                                AkiMenuItem(title: "Categories", icon: "folder") { managing = true }])
                     }
                     MangaPartPills()
-                    AkiTabs(items: [(LibraryTab.saved, "Saved"), (LibraryTab.history, "History")], selection: $tab)
+                    if part == nil { AkiTabs(items: [(LibraryTab.saved, "Saved"), (LibraryTab.history, "History")], selection: $tab) }
                     switch tab {
                     case .saved: saved
                     case .history: historyList
@@ -59,6 +60,8 @@ struct LibraryView: View {
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
         }
+        // Inside the Manga tab the two lists are chosen in its row of choices.
+        .onChange(of: part?.wrappedValue, initial: true) { _, now in if now == .history { tab = .history } else if now == .saved { tab = .saved } }
         .onAppear { model.refresh(); history = (try? model.engine.history(limit: 60)) ?? []; loadCategories() }
         // The counts on the shelves are read from the same place as the library: they change when it does, wherever the change came from.
         .onChange(of: model.library) { loadCategories() }

@@ -1,6 +1,7 @@
 import SwiftUI
 
-enum MangaPart: Hashable { case library, updates, discover }
+/// The manga screens in the Manga tab, one row of choices: the library's two lists, the updates' two lists, and Discover.
+enum MangaPart: Hashable { case saved, history, unread, recent, discover }
 
 private struct MangaPartKey: EnvironmentKey { static let defaultValue: Binding<MangaPart>? = nil }
 
@@ -14,13 +15,13 @@ extension EnvironmentValues {
 
 /// Manga for someone who mostly reads books: one tab with the manga library, new chapters and Discover inside it.
 struct MangaHubView: View {
-    @State private var part = MangaPart.library
+    @State private var part = MangaPart.saved
 
     var body: some View {
         NavigationStack {
             switch part {
-            case .library: LibraryView()
-            case .updates: UpdatesView()
+            case .saved, .history: LibraryView()
+            case .unread, .recent: UpdatesView()
             case .discover: HomeView()
             }
         }
@@ -45,7 +46,7 @@ struct MangaPartPills: View {
 
     var body: some View {
         if let part {
-            AkiTabs(items: [(MangaPart.library, "Library"), (MangaPart.updates, "Updates"), (MangaPart.discover, "Discover")], selection: part)
+            AkiChips(items: [(MangaPart.saved, "Saved"), (MangaPart.history, "History"), (MangaPart.unread, "Unread"), (MangaPart.recent, "Recent"), (MangaPart.discover, "Discover")], selection: part)
         }
     }
 }

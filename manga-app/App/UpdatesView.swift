@@ -7,6 +7,7 @@ enum UpdatesTab: Hashable { case unread, recent }
 struct UpdatesView: View {
     @Environment(AppModel.self) private var model
     @State private var tab = UpdatesTab.unread
+    @Environment(\.mangaPart) private var part
 
     private var rows: [UpdateEntry] {
         tab == .unread ? model.updates.filter { $0.unread > 0 } : model.updates
@@ -22,7 +23,7 @@ struct UpdatesView: View {
                         }
                     }
                     MangaPartPills()
-                    AkiTabs(items: [(UpdatesTab.unread, "Unread"), (UpdatesTab.recent, "Recent")], selection: $tab)
+                    if part == nil { AkiTabs(items: [(UpdatesTab.unread, "Unread"), (UpdatesTab.recent, "Recent")], selection: $tab) }
                     if !model.updateFailures.isEmpty { failures }
                     let list = rows
                     if list.isEmpty {
@@ -50,6 +51,7 @@ struct UpdatesView: View {
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
         }
+        .onChange(of: part?.wrappedValue, initial: true) { _, now in if now == .recent { tab = .recent } else if now == .unread { tab = .unread } }
         .onAppear { model.refresh() }
     }
 
