@@ -37,7 +37,7 @@ extension View {
     /// lines running the whole width. Lists of cards take a narrower column than a grid of covers.
     func akiPage(narrow: Bool = false) -> some View {
         padding(.horizontal, 20).padding(.top, 8)
-            .frame(maxWidth: narrow ? 680 : 1100)
+            .frame(maxWidth: narrow ? 680 : 860)
             .frame(maxWidth: .infinity)
     }
 

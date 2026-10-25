@@ -27,7 +27,7 @@ struct LibraryView: View {
     @State private var assignees: [CategoryPicker.Series] = []
     @State private var removing = false
     /// Two columns on a phone; as many as fit on a wider screen.
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 230), spacing: 14, alignment: .top)]
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 14, alignment: .top)]
 
     var body: some View {
         MangaStack {
