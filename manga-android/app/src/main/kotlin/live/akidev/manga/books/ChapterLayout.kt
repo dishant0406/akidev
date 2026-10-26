@@ -120,7 +120,8 @@ class ChapterLayout(
                 val high = minOf(to, block.start + layout.getLineEnd(line))
                 if (low >= high) continue
                 val one = layout.getPrimaryHorizontal(low - block.start)
-                val other = layout.getPrimaryHorizontal(high - block.start)
+                // The end of a line that wraps is the start of the next one, so asking where it is would answer with the left margin: the line's own right edge is used.
+                val other = if (high - block.start >= layout.getLineEnd(line) && line < layout.lineCount - 1) layout.getLineRight(line) else layout.getPrimaryHorizontal(high - block.start)
                 found += RectF(minOf(one, other), piece.top + layout.getLineTop(line) - top, maxOf(one, other).coerceAtLeast(minOf(one, other) + 2f), piece.top + layout.getLineBottom(line) - top)
             }
         }

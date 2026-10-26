@@ -27,22 +27,22 @@ class BookTypesetterTest {
         align = BookAlign.JUSTIFY, left = 0f, firstLine = 0f, spaceBefore = 0f, pageBreakBefore = false,
     )
 
-    private fun chapterOf(paragraphs: Int): Pair<BookChapter, Int> {
+    private fun chapterOf(paragraphs: Int, sentences: Int = 4): Pair<BookChapter, Int> {
         val blocks = ArrayList<BookBlock>()
         var at = 0
         repeat(paragraphs) {
-            val text = sentence.repeat(4).trim()
+            val text = sentence.repeat(sentences).trim()
             blocks += paragraph(at, text)
             at += text.length + 1
         }
         return BookChapter(blocks, listOf(BookAnchor("middle", blocks[paragraphs / 2].start)), emptyList(), false) to at
     }
 
-    private fun layout(paragraphs: Int): ChapterLayout {
+    private fun layout(paragraphs: Int, sentences: Int = 4): ChapterLayout {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val density = context.resources.displayMetrics.density
         val typesetter = BookTypesetter(context, BookStyle(), 360 * density.toInt(), 600 * density.toInt(), density, "en", false, pictureSize = { null }, fonts = null)
-        return typesetter.layout(0, chapterOf(paragraphs).first)
+        return typesetter.layout(0, chapterOf(paragraphs, sentences).first)
     }
 
     @Test
@@ -84,5 +84,15 @@ class BookTypesetterTest {
     }
 
     @Test
-    fun aShortChapterIsOnePage() = assertEquals(1, layout(1).count)
+    fun aStretchOfSeveralLinesIsMarkedAcrossEachLine() {
+        val chapter = layout(5)
+        // The first paragraph is four sentences long: more than three lines at this width.
+        val boxes = chapter.boxes(0, 200, 0)
+        assertTrue(boxes.size >= 3)
+        // Every line but the last runs to the right edge of the text; none is a sliver.
+        for (box in boxes.dropLast(1)) assertTrue("a line's box was only ${box.width()} wide", box.width() > chapter.width * 0.5f)
+    }
+
+    @Test
+    fun aShortChapterIsOnePage() = assertEquals(1, layout(1, sentences = 1).count)
 }
