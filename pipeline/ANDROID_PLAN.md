@@ -216,3 +216,17 @@ fresh-eyes review of the diff before commit, no debug code left. Nothing is push
 - UniFFI Kotlin and JNA: <https://mozilla.github.io/uniffi-rs/latest/kotlin/gradle.html>, <https://sal.dev/android/intro-rust-android-uniffi/>
 - Version shares: <https://capgo.app/android-distribution-chart/> (December 2025), <https://gs.statcounter.com/android-version-market-share> (September 2026)
 - Media3 background playback: <https://developer.android.com/media/media3/session/background-playback>
+
+## 11. What was decided and built (2026-10-26)
+
+The owner answered section 9: **minSdk 29**, **a bundled rounded face (Nunito)** plus the book fonts (Lora, Atkinson), **manga first, then books**
+(both are built), **package `live.akidev.manga`**, **Kotlin-only book renderer**, **Haze** for glass, simple readable code with micro components.
+Where the build differs from the plan above:
+
+- **Three Gradle modules, not six:** `:app`, `:design`, `:engine`. Reader, books and listening are packages in `:app`; splitting them added
+  build files and no clarity.
+- **Two glass looks, not three tiers:** Haze glass on Android 12+, and a solid surface on Android 10-11 or with "Reduce glass". Lens refraction was not built.
+- **arm64 only**, debug and release (the emulator on this Mac is arm64 too); no x86_64.
+- **Tests:** JVM tests for the pure logic, an instrumented test for typesetting, lint at zero warnings. No Macrobenchmark yet.
+- **Not built:** vertical Japanese text; measuring on the owner's cheap phone (glass cost, reading-aloud speed) is still to do.
+
