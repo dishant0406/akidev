@@ -84,7 +84,8 @@ fun ReaderScreen(route: ReaderRoute) {
 
     AkiTheme(dark = true) {
         Box(Modifier.fillMaxSize().background(if (app.prefs.readerBackground == ReaderBackground.Black) Aki.colors.stage else Aki.colors.stageAlt)) {
-            Box(Modifier.fillMaxSize().akiGlassSource()) {
+            // The page starts under the status bar while it shows, as on iOS; hiding the bars gives the room back.
+            Box(Modifier.fillMaxSize().statusBarsPadding().akiGlassSource()) {
                 val error = reader.error
                 if (reader.segments.isNotEmpty()) {
                     reader.screenWidthPx = view.width
@@ -101,14 +102,16 @@ fun ReaderScreen(route: ReaderRoute) {
             AnimatedVisibility(reader.chrome, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(reader, onChapters = { chapters = true }, onSettings = { settings = true }) }
             AnimatedVisibility(reader.chrome && reader.currentSegment != null, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) { BottomBar(reader, onChapters = { chapters = true }) }
         }
-        if (settings) ReaderSettingsSheet(reader) { settings = false }
-        if (chapters) {
-            ReaderChaptersSheet(reader, onOpen = { chapter ->
-                chapters = false
-                // Opens where the person was in it, or at its start.
-                scope.launch { reader.open(chapter.id, (chapter.page ?: 0u).toInt(), 0.0) }
-            }) { chapters = false }
-        }
+    }
+
+    // Sheets follow the app's own look, not the reader's black.
+    if (settings) ReaderSettingsSheet(reader) { settings = false }
+    if (chapters) {
+        ReaderChaptersSheet(reader, onOpen = { chapter ->
+            chapters = false
+            // Opens where the person was in it, or at its start.
+            scope.launch { reader.open(chapter.id, (chapter.page ?: 0u).toInt(), 0.0) }
+        }) { chapters = false }
     }
 }
 
@@ -116,20 +119,9 @@ fun ReaderScreen(route: ReaderRoute) {
 private fun TopBar(reader: ReaderModel, onChapters: () -> Unit, onSettings: () -> Unit) {
     val router = LocalRouter.current
     val scrim = Aki.colors.scrimStrong
-    Row(
-        Modifier.fillMaxWidth().widthIn(max = 640.dp).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
+    AkiReaderTopBar {
         AkiIconButton("back", "Back", onMedia = true, scrim = scrim) { router.back() }
-        // The title takes the room that is left and is as wide as its words.
-        Box(Modifier.weight(1f)) {
-            Box(Modifier.akiGlass(AkiShapes.pill(48.dp), tint = scrim).akiPress(label = "Chapters", onClick = onChapters).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Column {
-                    AkiText(reader.ref.title, AkiTextStyle.CaptionStrong, tone = AkiTone.OnMedia, lines = 1)
-                    reader.chapter(reader.current)?.let { AkiText(reader.label(it), AkiTextStyle.Caption, tone = AkiTone.OnMedia, lines = 1) }
-                }
-            }
-        }
+        AkiBarTitle(reader.ref.title, reader.chapter(reader.current)?.let { reader.label(it) }, "Chapters", onChapters, scrim)
         if (reader.mode == ReadingMode.Strip) {
             AkiIconButton(if (reader.autoScrolling) "pause" else "play", if (reader.autoScrolling) "Stop auto-scroll" else "Auto-scroll", onMedia = true, scrim = scrim) { reader.autoScrolling = !reader.autoScrolling }
         }

@@ -31,13 +31,15 @@ Checks:
 ./gradlew :app:connectedDebugAndroidTest  # on a device: typesetting and pagination of a chapter
 ./gradlew lintDebug                       # lint, kept at zero warnings
 ./gradlew :app:assembleRelease            # R8 and baseline profile, about 17 MB
+./scripts/startup.sh                      # cold start time on the phone or emulator (about 750 ms for a debug build on the emulator)
 ```
 
 ## Things worth knowing
 
 - **Minimum Android 10 (API 29), phones with a 64-bit ARM processor.** Blur needs Android 12; before that, and with "Reduce glass" in
   Settings, every control is a solid surface with the same shape and border.
-- **Glass rules (Haze):** a glass control cannot sit inside the layer it samples. The backdrop is layer -1, scrolling content layer 0.
+- **Menus and dialogs** draw in a layer at the root of the app (`AkiMenuLayer`, `AkiDialogLayer`) so their glass can blur the screen behind them. A sheet has a window of its own, so menus and dialogs opened from inside one use a popup or window of their own and a plain look.
+- **Glass rules (Haze):** a glass control cannot sit inside the layer it samples. The backdrop is layer -1, scrolling content layer 0. A picture that glass sits on (a cover, a hero) is its own source at -0.5, so the glass shows the picture.
   Corners of glass shapes are fixed dp, not percent.
 - **Fonts:** Nunito (rounded, for the interface) and Lora and Atkinson Hyperlegible (books) are bundled; licence in `FONTS-OFL.txt`.
 - **Books** are laid out with `StaticLayout`, one per block, then cut into pages by `ChapterLayout`. Positions are the engine's UTF-16

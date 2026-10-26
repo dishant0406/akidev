@@ -139,19 +139,9 @@ private fun Modifier.grey() = graphicsLayer { colorFilter = ColorFilter.colorMat
 private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
     val router = LocalRouter.current
     val app = LocalApp.current
-    Row(
-        Modifier.fillMaxWidth().widthIn(max = 640.dp).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
+    AkiReaderTopBar {
         AkiIconButton("back", "Back") { router.back() }
-        Box(Modifier.weight(1f)) {
-            Box(Modifier.akiGlass(AkiShapes.pill(48.dp)).akiPress(label = "Contents", onClick = onContents).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Column {
-                    AkiText(model.info.title, AkiTextStyle.CaptionStrong, lines = 1)
-                    model.info.authors.firstOrNull()?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1) }
-                }
-            }
-        }
+        AkiBarTitle(model.info.title, model.info.authors.firstOrNull(), "Contents", onContents)
         if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen() }
         AkiIconButton("search", "Search in this book", onClick = onSearch)
         AkiIconButton("sliders", "Type and theme", onClick = onSettings)

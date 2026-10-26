@@ -26,7 +26,7 @@ class AkiOption<V>(val value: V, val label: String)
 fun <V> AkiMenuPill(selection: V, onSelect: (V) -> Unit, options: List<AkiOption<V>>, modifier: Modifier = Modifier, icon: String? = null, placeholder: String? = null) {
     var open by remember { mutableStateOf(false) }
     val current = if (placeholder != null && selection == options.firstOrNull()?.value) placeholder else options.firstOrNull { it.value == selection }?.label ?: ""
-    val items = options.map { option -> AkiMenuItem(option.label, "tick", isSelected = option.value == selection) { onSelect(option.value) } }
+    val items = options.map { option -> AkiMenuItem(option.label, "", isSelected = option.value == selection) { onSelect(option.value) } }
     AkiMenuPopup(open, { open = false }, items) {
         Row(
             modifier.height(44.dp).akiGlass(AkiShapes.pill(44.dp)).akiPress(label = current) { open = true }.padding(horizontal = 16.dp),
@@ -44,7 +44,7 @@ fun <V> AkiMenuPill(selection: V, onSelect: (V) -> Unit, options: List<AkiOption
 @Composable
 fun <V> AkiSelect(title: String, selection: V, onSelect: (V) -> Unit, options: List<AkiOption<V>>, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
-    val items = options.map { option -> AkiMenuItem(option.label, "tick", isSelected = option.value == selection) { onSelect(option.value) } }
+    val items = options.map { option -> AkiMenuItem(option.label, "", isSelected = option.value == selection) { onSelect(option.value) } }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         AkiText(title, AkiTextStyle.BodyStrong, Modifier.weight(1f))
         AkiMenuPopup(open, { open = false }, items) {

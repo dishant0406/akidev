@@ -55,8 +55,11 @@ fun AkiPoster(title: String, cover: String?, modifier: Modifier = Modifier, capt
 @Composable
 fun AkiBillboard(title: String, cover: String?, tag: String, modifier: Modifier = Modifier, action: String = "Read now") {
     Box(modifier.fillMaxWidth().height(440.dp).clip(RoundedCornerShape(Aki.cardRadius))) {
-        AkiImage(cover, Modifier.fillMaxWidth().height(440.dp), placeholder = 1.3f, free = true)
-        Box(Modifier.fillMaxWidth().height(440.dp).background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Aki.colors.scrimBottom)))
+        // The picture is a glass source of its own (between the backdrop and the page), so the badge on it shows the picture, not the page behind.
+        Box(Modifier.fillMaxWidth().height(440.dp).akiGlassSource(layer = -0.5f)) {
+            AkiImage(cover, Modifier.fillMaxWidth().height(440.dp), placeholder = 1.3f, free = true)
+            Box(Modifier.fillMaxWidth().height(440.dp).background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Aki.colors.scrimBottom)))
+        }
         Column(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AkiBadge(tag, icon = "sparkles", style = AkiBadgeStyle.Glass)
             AkiText(title, AkiTextStyle.Display, tone = AkiTone.OnMedia, lines = 2)

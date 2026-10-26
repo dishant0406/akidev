@@ -26,6 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import live.akidev.manga.design.AkiBackdrop
 import live.akidev.manga.design.AkiGlassScope
+import live.akidev.manga.design.AkiDialogLayer
+import live.akidev.manga.design.AkiDialogs
+import live.akidev.manga.design.AkiMenuLayer
+import live.akidev.manga.design.AkiMenus
+import live.akidev.manga.design.LocalAkiDialogs
+import live.akidev.manga.design.LocalAkiMenus
 import live.akidev.manga.design.AkiTabBar
 import live.akidev.manga.design.AkiTheme
 import live.akidev.manga.books.BookReaderScreen
@@ -52,12 +58,14 @@ import live.akidev.manga.sources.SourcesScreen
 @Composable
 fun AkiApp(model: AppModel) {
     val router = remember { Router() }
+    val menus = remember { AkiMenus() }
+    val dialogs = remember { AkiDialogs() }
     val dark = when (model.prefs.appearance) {
         Appearance.System -> isSystemInDarkTheme()
         Appearance.Light -> false
         Appearance.Dark -> true
     }
-    CompositionLocalProvider(LocalApp provides model, LocalRouter provides router) {
+    CompositionLocalProvider(LocalApp provides model, LocalRouter provides router, LocalAkiMenus provides menus, LocalAkiDialogs provides dialogs) {
         AkiTheme(dark) {
             AkiGlassScope(reduce = model.prefs.reduceGlass) {
                 Box(Modifier.fillMaxSize()) {
@@ -65,6 +73,8 @@ fun AkiApp(model: AppModel) {
                     Shell(model, router)
                     model.pendingRepo?.let { pending -> RepoAddSheet(pending) { model.pendingRepo = null } }
                     AnimatedVisibility(model.prefs.readerKind == null, enter = fadeIn(), exit = fadeOut()) { OnboardingScreen() }
+                    AkiMenuLayer(menus)
+                    AkiDialogLayer(dialogs)
                 }
             }
         }

@@ -20,4 +20,5 @@ dependencies {
     api(libs.haze)
     api(libs.haze.glass)
     implementation(libs.core.ktx)
+    implementation(libs.activity.compose)
 }

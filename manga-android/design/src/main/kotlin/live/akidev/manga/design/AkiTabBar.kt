@@ -35,7 +35,7 @@ fun <ID> AkiTabBar(tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> 
     val selected = tabs.indexOfFirst { it.id == selection }.coerceAtLeast(0)
     val slide by animateDpAsState((CellWidth + Gap) * selected, AkiMotion.settle(), label = "tab")
     val inner = AkiShapes.rounded(Aki.cardRadius - Padding)
-    Box(modifier.shadow(20.dp, AkiShapes.card, ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.card).padding(Padding)) {
+    Box(modifier.akiShadow(AkiShapes.card, 20.dp, 8.dp).akiGlass(AkiShapes.card).padding(Padding)) {
         Box(Modifier.offset { IntOffset(slide.roundToPx(), 0) }.size(CellWidth, CellHeight).akiGlass(inner, tint = Aki.colors.primary))
         Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
             for (tab in tabs) {

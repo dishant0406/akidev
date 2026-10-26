@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,9 +38,12 @@ fun AkiInput(
     isUrl: Boolean = false,
     onSubmit: () -> Unit = {},
     onClear: () -> Unit = {},
+    /** Takes the keyboard as soon as it appears, as the field in an iOS alert does. */
+    autoFocus: Boolean = false,
 ) {
     val focus = LocalFocusManager.current
     val requester = remember { FocusRequester() }
+    if (autoFocus) LaunchedEffect(Unit) { requester.requestFocus() }
     var focused by remember { mutableStateOf(false) }
     Row(
         modifier.fillMaxWidth().height(52.dp).akiGlass(AkiShapes.pill(52.dp)).akiPress { requester.requestFocus() }.padding(horizontal = 18.dp),

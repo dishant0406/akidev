@@ -101,3 +101,17 @@ private fun SystemBarIcons(dark: Boolean) {
         }
     }
 }
+
+/** While `on`, the clock and battery are white: for a page that starts with a dark picture under the status bar. */
+@Composable
+fun AkiLightStatusBar(on: Boolean) {
+    val view = LocalView.current
+    // What the bar goes back to is what the page's own look asks for, not whatever it was when this started.
+    val ownLook = !Aki.colors.dark
+    if (view.isInEditMode) return
+    DisposableEffect(on, ownLook) {
+        val controller = WindowCompat.getInsetsController((view.context as Activity).window, view)
+        if (on) controller.isAppearanceLightStatusBars = false
+        onDispose { if (on) controller.isAppearanceLightStatusBars = ownLook }
+    }
+}

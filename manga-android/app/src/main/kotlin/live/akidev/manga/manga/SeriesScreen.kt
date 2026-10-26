@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,9 +72,14 @@ fun SeriesScreen(ref: SeriesRef) {
     // Back from the reader the page finds where the person got to.
     LaunchedEffect(router.top) { if ((router.top as? SeriesRoute)?.ref === ref) series.refreshProgress() }
 
+    val list = rememberLazyListState()
+    // The picture is under the status bar until the page has scrolled past it.
+    val onPicture by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 200 } }
+    AkiLightStatusBar(on = (router.top as? SeriesRoute)?.ref === ref && onPicture)
+
     Box(Modifier.fillMaxSize()) {
         AkiRefreshable({ series.load(force = true) }, Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize().akiGlassSource(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 0.dp)) {
+            LazyColumn(Modifier.fillMaxSize().akiGlassSource(), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 0.dp)) {
                 item { Hero(series) }
                 sheet(series, tab, { tab = it }, open, scope)
             }
@@ -113,8 +120,11 @@ private fun Hero(series: SeriesModel) {
     val app = LocalApp.current
     val colors = Aki.colors
     Box(Modifier.fillMaxWidth().height(HeroHeight)) {
-        AkiImage(series.cover, Modifier.fillMaxSize(), placeholder = 1.4f, free = true)
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.scrimTop, Color.Transparent, colors.scrimBottom))))
+        // The picture is a glass source of its own, so the badges on it show the picture (see AkiBillboard).
+        Box(Modifier.fillMaxSize().akiGlassSource(layer = -0.5f)) {
+            AkiImage(series.cover, Modifier.fillMaxSize(), placeholder = 1.4f, free = true)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.scrimTop, Color.Transparent, colors.scrimBottom))))
+        }
         Column(Modifier.align(Alignment.BottomStart).widthIn(max = 720.dp).padding(start = 20.dp, end = 20.dp, bottom = 46.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (series.chapters.isNotEmpty()) AkiBadge("${series.chapters.size} chapters", icon = "list", style = AkiBadgeStyle.Glass)
@@ -169,7 +179,9 @@ private fun Controls(
 /** The sheet's rows are items of the page, each on the page colour; the first has the rounded top that rises over the picture. */
 private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (SeriesTab) -> Unit, open: (ReaderTarget) -> Unit, scope: kotlinx.coroutines.CoroutineScope) {
     item {
-        Box(Modifier.fillMaxWidth().offset(y = (-30).dp).background(Aki.colors.background, RoundedCornerShape(topStart = Aki.sheetRadius, topEnd = Aki.sheetRadius)), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.fillMaxWidth().offset(y = (-30).dp), contentAlignment = Alignment.TopCenter) {
+            // The page colour is a glass source between the picture and the page, so the tabs show it and not the picture behind the sheet.
+            Box(Modifier.matchParentSize().akiGlassSource(layer = -0.25f).background(Aki.colors.background, RoundedCornerShape(topStart = Aki.sheetRadius, topEnd = Aki.sheetRadius)))
             AkiTabs(
                 listOf(AkiChoice(SeriesTab.Chapters, "Chapters"), AkiChoice(SeriesTab.Bookmarks, "Bookmarks"), AkiChoice(SeriesTab.Details, "Details")), tab, onTab,
                 Modifier.widthIn(max = 720.dp).padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 18.dp),

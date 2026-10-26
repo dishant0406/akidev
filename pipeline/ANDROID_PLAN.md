@@ -229,4 +229,6 @@ Where the build differs from the plan above:
 - **arm64 only**, debug and release (the emulator on this Mac is arm64 too); no x86_64.
 - **Tests:** JVM tests for the pure logic, an instrumented test for typesetting, lint at zero warnings. No Macrobenchmark yet.
 - **Not built:** vertical Japanese text; measuring on the owner's cheap phone (glass cost, reading-aloud speed) is still to do.
+- **Compared with iOS side by side (2026-10-26):** the screens, menus, dialogs, sheets and controls were put next to the iOS screens in light and dark; the page is the artifact "Akidev iOS and Android". Menus and dialogs now draw in the app's own window so their glass shows the screen; sheets float with a half-height start; soft shadows replace outlines; glass over pictures shows the picture.
+- **Not done:** vertical Japanese text (the engine flags it; Android lays it out horizontally), a Macrobenchmark module (`scripts/startup.sh` times a cold start instead), and moving the small database writes (book position, highlights) off the main thread.
 
