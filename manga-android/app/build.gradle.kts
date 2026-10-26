@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -18,8 +20,20 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // The upload key lives outside the repository (~/.akidev-keys); without it the release build is only unsigned.
+    val keys = Properties().apply { File(System.getProperty("user.home"), ".akidev-keys/keystore.properties").takeIf { it.exists() }?.inputStream()?.use(::load) }
+    signingConfigs {
+        if (keys.isNotEmpty()) create("upload") {
+            storeFile = file(keys.getProperty("storeFile"))
+            storePassword = keys.getProperty("storePassword")
+            keyAlias = keys.getProperty("keyAlias")
+            keyPassword = keys.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfigs.findByName("upload")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
