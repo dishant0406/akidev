@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
@@ -100,12 +101,12 @@ fun Modifier.akiGlassSource(layer: Float = 0f): Modifier {
     return if (source.look == AkiGlassLook.Glass) hazeSource(source.state, zIndex = layer) else this
 }
 
-/** Glass on a control or a bar. A solid tint (the yellow) marks the current choice or the main action and shows at 90%; a see-through tint (a scrim) shows as strong as it is (half as strong on a dark page, where glass is darker already). */
+/** Glass on a control or a bar. A solid tint (the yellow) marks the current choice or the main action and shows at 90%; a see-through tint (a scrim) shows as strong as it is (a black scrim is half as strong on a dark page, where glass is darker already). */
 @OptIn(ExperimentalHazeApi::class)
 @Composable
 fun Modifier.akiGlass(shape: RoundedCornerShape, tint: Color? = null): Modifier {
     val source = LocalGlassSource.current
-    if (LocalAkiFlat.current) return background(tint ?: Aki.colors.secondary.copy(alpha = 0.75f), shape)
+    if (LocalAkiFlat.current) return background(tint ?: Aki.colors.text.copy(alpha = 0.08f), shape)
     if (source == null || source.look == AkiGlassLook.Solid) return akiSolid(shape, tint)
     if (LocalAkiCheapGlass.current && (tint == null || tint.alpha >= 1f)) {
         val fill = tint?.copy(alpha = 0.9f) ?: if (Aki.colors.dark) Aki.colors.secondary else Aki.colors.background.copy(alpha = 0.85f)
@@ -119,7 +120,7 @@ fun Modifier.akiGlass(shape: RoundedCornerShape, tint: Color? = null): Modifier 
             // On the light page iOS glass has no visible edge line, only its soft shadow; the dark page keeps a little edge light.
             if (!dark) { specularIntensity(0.25f); edgeShadow(Color.Transparent) }
             // On a dark page the glass is the dark grey of a quiet fill, so what is written on it can be read.
-            if (tint != null) tint(if (tint.alpha >= 1f) tint.copy(alpha = 0.9f) else if (dark) tint.copy(alpha = tint.alpha * 0.5f) else tint) else if (dark) tint(base.copy(alpha = 0.85f))
+            if (tint != null) tint(if (tint.alpha >= 1f) tint.copy(alpha = 0.9f) else if (dark && tint.luminance() < 0.05f) tint.copy(alpha = tint.alpha * 0.5f) else tint) else if (dark) tint(base.copy(alpha = 0.85f))
         }
     }
     return akiShadow(shape).hazeGlass(input = HazeInput.Sources(source.state), style = style)

@@ -81,7 +81,7 @@ private fun DialogCard(title: String, message: String?, content: @Composable () 
     Column(
         Modifier.padding(horizontal = 24.dp).widthIn(max = 340.dp).fillMaxWidth()
             .akiShadow(CardShape, 30.dp, 12.dp)
-            .akiGlass(CardShape, tint = colors.secondary.copy(alpha = if (colors.dark) 0.6f else 0.55f))
+            .akiGlass(CardShape, tint = colors.secondary.copy(alpha = if (colors.dark) 0.92f else 0.85f))
             .padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

@@ -69,7 +69,7 @@ fun AkiMenuList(items: List<AkiMenuItem>, onClose: () -> Unit, modifier: Modifie
     Column(
         modifier.widthIn(min = 220.dp, max = 260.dp)
             .akiShadow(MenuShape, 20.dp, 8.dp)
-            .let { if (glass) it.akiGlass(MenuShape, tint = colors.background.copy(alpha = if (colors.dark) 0.45f else 0.3f)) else it.akiSolid(MenuShape, colors.background) }
+            .let { if (glass) it.akiGlass(MenuShape, tint = colors.background.copy(alpha = if (colors.dark) 0.75f else 0.3f)) else it.akiSolid(MenuShape, colors.background) }
             .padding(vertical = 8.dp),
     ) { AkiMenuRows(items, onClose) }
 }
