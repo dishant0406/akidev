@@ -65,9 +65,8 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             else -> null
         }
 
-    private fun showChapters(list: List<ChapterEntry>) {
+    private fun showChapters(list: List<ChapterEntry>, resume: uniffi.akimanga.Resume? = readResume(list)) {
         chapters = list
-        val resume = if (list.isEmpty()) null else runCatching { engine.resume(ref.source, ref.id) }.getOrNull()
         val chapter = resume?.let { r -> list.firstOrNull { it.id == r.chapter } }
         if (resume == null || chapter == null) {
             resumable = null
@@ -80,21 +79,44 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         if (started || saved) fetchPagesAhead(resume.chapter)
     }
 
+    private fun readResume(list: List<ChapterEntry>) = if (list.isEmpty()) null else runCatching { engine.resume(ref.source, ref.id) }.getOrNull()
+
+    /** Everything stored about the series, read in one go off the main thread. */
+    private class Stored(
+        val saved: Boolean, val chapters: List<ChapterEntry>, val resume: uniffi.akimanga.Resume?, val detail: Detail?, val checkedMs: Long?,
+        val kept: Set<String>, val bookmarks: List<Bookmark>, val cover: String?,
+    )
+
+    private fun readStored(): Stored {
+        val list = runCatching { engine.cachedChapters(ref.source, ref.id) }.getOrDefault(emptyList())
+        return Stored(
+            saved = runCatching { engine.inLibrary(ref.source, ref.id) }.getOrDefault(false),
+            chapters = list,
+            resume = readResume(list),
+            detail = runCatching { engine.cachedDetails(ref.source, ref.id) }.getOrNull(),
+            checkedMs = runCatching { engine.chaptersCheckedMs(ref.source, ref.id) }.getOrNull(),
+            kept = readKept(),
+            bookmarks = runCatching { engine.bookmarks(ref.source, ref.id) }.getOrDefault(emptyList()),
+            cover = runCatching { engine.customCover(ref.source, ref.id) }.getOrNull(),
+        )
+    }
+
     /**
      * Shows what is stored at once, then asks the site. The chapter list is not asked again within ten minutes of the last time (going
      * back and forth between a series and the reader, say) unless `force` is set.
      */
     suspend fun load(force: Boolean = false) {
         error = null
-        saved = runCatching { engine.inLibrary(ref.source, ref.id) }.getOrDefault(false)
-        showChapters(runCatching { engine.cachedChapters(ref.source, ref.id) }.getOrDefault(emptyList()))
-        if (detail == null) detail = runCatching { engine.cachedDetails(ref.source, ref.id) }.getOrNull()
-        val checked = runCatching { engine.chaptersCheckedMs(ref.source, ref.id) }.getOrNull()
+        val stored = app.io { readStored() }
+        saved = stored.saved
+        showChapters(stored.chapters, stored.resume)
+        if (detail == null) detail = stored.detail
+        val checked = stored.checkedMs
         val fresh = !force && chapters.isNotEmpty() && checked != null && System.currentTimeMillis() - checked < 600_000
         loading = !fresh
-        loadKept()
-        loadBookmarks()
-        chosenCover = runCatching { engine.customCover(ref.source, ref.id) }.getOrNull()
+        kept = stored.kept
+        bookmarks = stored.bookmarks
+        chosenCover = stored.cover
         coroutineScope {
             val fetchedDetail = async { runCatching { engine.details(ref.source, ref.id) } }
             val fetchedChapters = if (fresh) null else async { runCatching { engine.chapters(ref.source, ref.id) } }
@@ -112,8 +134,10 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         app.launch { runCatching { engine.pages(ref.source, ref.id, chapter) } }
     }
 
+    private fun readKept() = runCatching { engine.downloads() }.getOrDefault(emptyList()).filter { it.source == ref.source && it.series == ref.id && it.state == "done" }.map { it.chapter }.toSet()
+
     private fun loadKept() {
-        kept = runCatching { engine.downloads() }.getOrDefault(emptyList()).filter { it.source == ref.source && it.series == ref.id && it.state == "done" }.map { it.chapter }.toSet()
+        kept = readKept()
     }
 
     fun loadBookmarks() {

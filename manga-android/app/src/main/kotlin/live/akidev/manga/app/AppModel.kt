@@ -46,6 +46,7 @@ class AppModel(private val context: Context) {
     val appContext: Context get() = context
     val engine = Engine(File(context.filesDir, "AkiManga").path)
     val prefs = Preferences(context)
+    val glass = GlassGovernor(prefs)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val downloader = AutoDownloader(context, engine) { prefs.downloadOnWifiOnly }
 
@@ -242,4 +243,7 @@ class AppModel(private val context: Context) {
     }
 
     fun launch(block: suspend () -> Unit): Job = scope.launch { block() }
+
+    /** Reads from the engine off the main thread: a list that has grown (every chapter, every download) is not made while a screen slides in. */
+    suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 }

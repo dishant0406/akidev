@@ -62,10 +62,10 @@ class DiscoverModel(private val app: AppModel) {
     suspend fun sourcesChanged() {
         if (!isGlobal && app.visibleSources.none { it.id == source }) choose(app.visibleSources.firstOrNull()?.id ?: "")
         if (source.isEmpty()) return
-        filters = runCatching { app.engine.sourceFilters(source) }.getOrDefault(emptyList())
+        filters = app.io { runCatching { app.engine.sourceFilters(source) }.getOrDefault(emptyList()) }
         // Coming back from a series runs this again: keep the titles, the pages asked for and the scroll place.
         if (loadedKey == app.sourcesKey && (if (isGlobal) feed.shelves.isNotEmpty() else browse.items.isNotEmpty())) {
-            reading = runCatching { app.engine.history(24u) }.getOrDefault(emptyList())
+            reading = app.io { runCatching { app.engine.history(24u) }.getOrDefault(emptyList()) }
             return
         }
         loadedKey = app.sourcesKey
@@ -73,7 +73,7 @@ class DiscoverModel(private val app: AppModel) {
     }
 
     suspend fun reload() {
-        reading = runCatching { app.engine.history(24u) }.getOrDefault(emptyList())
+        reading = app.io { runCatching { app.engine.history(24u) }.getOrDefault(emptyList()) }
         if (isGlobal) {
             if (submitted.isEmpty()) {
                 global.clear()

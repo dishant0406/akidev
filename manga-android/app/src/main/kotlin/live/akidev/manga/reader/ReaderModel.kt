@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.ReadingMode
@@ -301,7 +302,10 @@ class ReaderModel(private val app: AppModel, val ref: SeriesRef, chapters: List<
         saveJob?.cancel()
         saveJob = scope.launch {
             delay(350)
-            flush()
+            // The write waits for the disk: off the main thread, so the strip is not held up when the finger lifts.
+            val (chapter, page, offset) = latest ?: return@launch
+            if (chapter in finished) return@launch
+            withContext(Dispatchers.IO) { runCatching { engine.setProgress(ref.source, ref.id, chapter, page.toUInt(), offset, false) } }
         }
     }
 
