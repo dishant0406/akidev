@@ -4,8 +4,8 @@ import { Page, Section } from "@/components/prose";
 import { REPO_URL } from "@/constants/site";
 
 export const metadata: Metadata = {
-  title: "Privacy policy | Akidev for iPhone",
-  description: "What the Akidev iPhone reader does and does not do with your data: nothing is collected.",
+  title: "Privacy policy | Akidev for iPhone and Android",
+  description: "What the Akidev reader for iPhone and Android does and does not do with your data: nothing is collected.",
 };
 
 const link = "text-ink underline decoration-ink/30 underline-offset-4 transition-colors hover:decoration-ink";
@@ -14,7 +14,7 @@ export default function MangaPrivacyPage() {
   return (
     <Page
       title="Privacy."
-      lead="The Akidev iPhone app collects nothing about you. It has no accounts, no analytics, no advertising and no tracking. This is all of it."
+      lead="The Akidev app for iPhone and Android collects nothing about you. It has no accounts, no analytics, no advertising and no tracking. This is all of it."
     >
       <Section title="What we collect">
         <p>
@@ -27,7 +27,7 @@ export default function MangaPrivacyPage() {
         <p>
           Your library, categories, reading progress, settings, downloaded chapters and the sources you installed are kept on your own
           device, in the app&apos;s storage. A backup is a file you create and keep wherever you choose; the app never uploads it.
-          Deleting the app deletes all of it.
+          Books you add and the voice you download for reading aloud stay there too. Deleting the app deletes all of it.
         </p>
       </Section>
 
@@ -37,13 +37,17 @@ export default function MangaPrivacyPage() {
           get those sources (a GitHub address, for example). Like any website they see your connection&apos;s address and what you
           asked for, under their own privacy policies. We do not operate them and do not see those requests.
         </p>
+        <p>
+          Reading aloud downloads a voice file once from a public repository on GitHub; after that it runs on your phone and nothing you
+          read leaves it. Books come from files you pick or catalogues you add, and the app contacts only those addresses.
+        </p>
         <p>The app adds no repository and no source by itself. Only add ones you trust.</p>
       </Section>
 
       <Section title="Crash reports">
         <p>
-          The app has no crash reporting of its own. If you chose to share analytics or TestFlight feedback with developers in iOS
-          settings, Apple may pass us an anonymous crash report under Apple&apos;s terms.
+          The app has no crash reporting of its own. If you chose to share diagnostics with developers in your phone&apos;s settings
+          (Apple on iPhone, Google on Android), the platform may pass us an anonymous crash report under its own terms.
         </p>
       </Section>
 
