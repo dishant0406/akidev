@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -13,7 +14,7 @@ android {
         applicationId = "live.akidev.manga"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
         // The engine is built for 64-bit ARM phones only (and the emulator on an Apple-silicon Mac); JNA's own library comes for each of these.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -54,6 +55,8 @@ dependencies {
     implementation(libs.work.runtime)
     // Reads src/main/baseline-prof.txt on install, so the first start does not interpret the whole interface.
     implementation(libs.profileinstaller)
+
+    baselineProfile(project(":baselineprofile"))
 
     testImplementation(libs.junit)
     // The phone has org.json built in; a plain JVM test needs the real thing.

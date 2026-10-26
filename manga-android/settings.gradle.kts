@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "akidev-manga-android"
-include(":app", ":design", ":engine")
+include(":app", ":design", ":engine", ":baselineprofile")
