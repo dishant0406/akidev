@@ -9,6 +9,8 @@ android {
     compileSdk = 37
     defaultConfig { minSdk = 29 }
     buildFeatures { compose = true }
+    // AkiText takes its style before its modifier, as the iOS AkiText takes its style first: the call sites read the same on both.
+    lint { disable += "ModifierParameter" }
 }
 
 dependencies {

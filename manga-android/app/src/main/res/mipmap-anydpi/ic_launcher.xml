@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Akidev mark on its own dark ground; the picture is inset so the round masks of some phones do not cut it. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground>
+        <inset android:drawable="@drawable/aki_logo" android:inset="18%" />
+    </foreground>
+</adaptive-icon>

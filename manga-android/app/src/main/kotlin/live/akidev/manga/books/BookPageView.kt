@@ -2,6 +2,7 @@ package live.akidev.manga.books
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.core.graphics.withTranslation
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -93,10 +94,7 @@ fun BookPageView(model: BookModel, chapter: Int, page: Int, modifier: Modifier =
                     }
                     return@drawIntoCanvas
                 }
-                native.save()
-                native.translate(insets.left, top)
-                layout.draw(native, shown, theme.ink.toArgb(), theme.quiet.toArgb(), overlays) { path, width -> model.picture(path, width) }
-                native.restore()
+                native.withTranslation(insets.left, top) { layout.draw(native, shown, theme.ink.toArgb(), theme.quiet.toArgb(), overlays) { path, width -> model.picture(path, width) } }
                 if (!model.style.scroll) {
                     foot.color = theme.quiet.toArgb()
                     val y = size.height - insets.bottom + 6 * density.density + foot.textSize

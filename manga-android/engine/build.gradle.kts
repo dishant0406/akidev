@@ -7,6 +7,8 @@ android {
     namespace = "live.akidev.manga.engine"
     compileSdk = 37
     defaultConfig { minSdk = 29 }
+    // The generated bindings choose their cleaner at run time (the one that needs Android 13 only where it exists): lint cannot see that.
+    lint { disable += "NewApi" }
 }
 
 dependencies {

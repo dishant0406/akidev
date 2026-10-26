@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
+import androidx.core.graphics.withTranslation
 import androidx.compose.ui.graphics.toArgb
 import android.text.Spanned
 import android.text.StaticLayout
@@ -198,6 +199,7 @@ class ChapterLayout(
     /** Draws a page into a canvas whose origin is the top left of the text area. Highlights go under the text. */
     fun draw(canvas: Canvas, page: Int, ink: Int, quiet: Int, overlays: BookOverlays, picture: (String, Float) -> Bitmap?) {
         val paint = Paint()
+        val pageWidth = width
         fun fill(span: BookSpan, colour: Int) {
             if (span.chapter != index) return
             paint.color = colour
@@ -209,24 +211,23 @@ class ChapterLayout(
         overlays.selection?.let { fill(it, HighlightColour.selection.copy(alpha = 0.28f).toArgb()) }
         for (piece in pages[page].pieces) {
             val block = blocks[piece.block]
-            canvas.save()
-            canvas.translate(0f, piece.top)
             val layout = block.layout
             val shown = block.picture
-            when {
-                layout != null -> {
-                    canvas.clipRect(0f, 0f, width, piece.height)
-                    canvas.translate(0f, -layout.getLineTop(piece.firstLine).toFloat())
-                    layout.paint.color = ink
-                    layout.draw(canvas)
-                }
-                shown != null -> drawPicture(canvas, shown, ink, picture)
-                else -> {
-                    paint.color = quiet
-                    canvas.drawRect(0f, piece.height / 2, width, piece.height / 2 + 1f, paint)
+            canvas.withTranslation(0f, piece.top) {
+                when {
+                    layout != null -> {
+                        clipRect(0f, 0f, pageWidth, piece.height)
+                        translate(0f, -layout.getLineTop(piece.firstLine).toFloat())
+                        layout.paint.color = ink
+                        layout.draw(this)
+                    }
+                    shown != null -> drawPicture(this, shown, ink, picture)
+                    else -> {
+                        paint.color = quiet
+                        drawRect(0f, piece.height / 2, pageWidth, piece.height / 2 + 1f, paint)
+                    }
                 }
             }
-            canvas.restore()
         }
     }
 

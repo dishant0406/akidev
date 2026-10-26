@@ -25,6 +25,8 @@ android {
         }
     }
     buildFeatures { compose = true }
+    // Phones with 32-bit ARM or Intel processors are not supported (the engine is arm64 only). The app keeps nothing in cloud backups (allowBackup is off), so it needs no extraction rules. Target 36 is the release the app was tested on; 37 is only the compile level Haze needs.
+    lint { disable += listOf("ChromeOsAbiSupport", "OldTargetApi", "DataExtractionRules") }
 }
 
 dependencies {

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 /** One place the bar can go: its icon (and the filled one for when it is chosen), what it is called, and an unread count. */
@@ -35,7 +36,7 @@ fun <ID> AkiTabBar(tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> 
     val slide by animateDpAsState((CellWidth + Gap) * selected, AkiMotion.settle(), label = "tab")
     val inner = AkiShapes.rounded(Aki.cardRadius - Padding)
     Box(modifier.shadow(20.dp, AkiShapes.card, ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.card).padding(Padding)) {
-        Box(Modifier.offset(x = slide).size(CellWidth, CellHeight).akiGlass(inner, tint = Aki.colors.primary))
+        Box(Modifier.offset { IntOffset(slide.roundToPx(), 0) }.size(CellWidth, CellHeight).akiGlass(inner, tint = Aki.colors.primary))
         Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
             for (tab in tabs) {
                 val on = tab.id == selection

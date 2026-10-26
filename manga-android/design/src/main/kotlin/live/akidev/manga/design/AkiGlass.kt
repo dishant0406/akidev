@@ -1,6 +1,7 @@
 package live.akidev.manga.design
 
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ private class GlassSource(val state: HazeState, val look: AkiGlassLook)
 private val LocalGlassSource = compositionLocalOf<GlassSource?> { null }
 
 /** Blur needs Android 12 (API 31); before that every control is solid. */
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
 fun akiGlassSupported() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /** The root of every screen that has glass: whatever is marked with [akiGlassSource] inside it is what the glass shows. */

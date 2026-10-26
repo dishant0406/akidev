@@ -4,7 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,7 +51,8 @@ fun AkiPage(
 /** How many cards of a grid fit in a page: two on a phone, more on a wider screen, where a card is never wider than about 175dp. */
 @Composable
 fun akiColumns(): Int {
-    val width = minOf(LocalConfiguration.current.screenWidthDp, 720) - 40
+    val density = LocalDensity.current
+    val width = minOf(with(density) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() }, 720) - 40
     return maxOf(2, (width + 14) / (150 + 14))
 }
 

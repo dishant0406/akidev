@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import live.akidev.manga.books.BookSort
 import live.akidev.manga.books.BookStyle
+import androidx.core.content.edit
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -101,7 +102,7 @@ class Preferences(context: Context) {
     fun modeOf(source: String, series: String): ReadingMode? = ReadingMode.entries.firstOrNull { it.name == store.getString("mode.$source.$series", null) }
 
     fun setModeOf(source: String, series: String, mode: ReadingMode) {
-        store.edit().putString("mode.$source.$series", mode.name).apply()
+        store.edit { putString("mode.$source.$series", mode.name) }
     }
 
     // ---- how the settings are kept -----------------------------------------------------------------------------------------
@@ -136,6 +137,6 @@ private class Stored<T>(
 
     override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
         this.value = value
-        store.edit().also { it.write(key, value) }.apply()
+        store.edit { write(key, value) }
     }
 }

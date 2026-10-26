@@ -2,6 +2,7 @@ package live.akidev.manga.updates
 
 import android.content.Context
 import android.net.ConnectivityManager
+import androidx.core.content.edit
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import org.json.JSONArray
@@ -27,7 +28,7 @@ class AutoDownloader(private val context: Context, private val engine: Engine, p
         }
         set(items) {
             val saved = JSONArray(items.map { JSONObject().put("source", it.source).put("series", it.series).put("chapter", it.chapter) })
-            store.edit().putString(KEY, saved.toString()).apply()
+            store.edit { putString(KEY, saved.toString()) }
         }
 
     val hasWork get() = queue.isNotEmpty()

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import live.akidev.manga.app.coverJpeg
@@ -138,7 +139,7 @@ fun BookModel.useOwnCover() {
 /** The page as it is drawn on screen (without the highlights and the foot line). */
 private fun BookModel.renderPage(layout: ChapterLayout, page: Int): android.graphics.Bitmap? {
     if (screenWidth == 0) return null
-    val bitmap = android.graphics.Bitmap.createBitmap(screenWidth, screenHeight, android.graphics.Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(screenWidth, screenHeight)
     val canvas = android.graphics.Canvas(bitmap)
     canvas.drawColor(theme.paper.toArgb())
     val insets = pageInsets

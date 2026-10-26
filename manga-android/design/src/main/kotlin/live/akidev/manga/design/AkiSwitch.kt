@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 /** A setting that is on or off, with a title and a line under it. */
@@ -42,6 +43,6 @@ private fun AkiSwitchKnob(isOn: Boolean) {
     val track by animateColorAsState(if (isOn) colors.primary else colors.secondary, AkiMotion.settle(), label = "track")
     val offset by animateDpAsState(if (isOn) 22.dp else 2.dp, AkiMotion.settle(), label = "knob")
     Box(Modifier.size(width = 51.dp, height = 31.dp).background(track, CircleShape)) {
-        Box(Modifier.offset(x = offset, y = 2.dp).size(27.dp).background(Color.White, CircleShape))
+        Box(Modifier.offset { IntOffset(offset.roundToPx(), 2.dp.roundToPx()) }.size(27.dp).background(Color.White, CircleShape))
     }
 }

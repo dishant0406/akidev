@@ -1,6 +1,7 @@
 package live.akidev.manga.app
 
 import android.content.Context
+import androidx.core.net.toUri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -155,7 +156,7 @@ class AppModel(private val context: Context) {
     /** Opens the add-repository confirmation for an address; a bare address or an `akimanga://add-repo?url=` link. */
     fun propose(repository: String) {
         var address = repository.trim()
-        if (address.startsWith("akimanga:")) address = android.net.Uri.parse(address).getQueryParameter("url") ?: address
+        if (address.startsWith("akimanga:")) address = address.toUri().getQueryParameter("url") ?: address
         if (address.isNotEmpty()) pendingRepo = PendingRepo(address)
     }
 

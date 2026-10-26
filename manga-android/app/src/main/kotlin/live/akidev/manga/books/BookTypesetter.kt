@@ -165,11 +165,11 @@ class BookTypesetter(
                 },
             )
         if (style.hyphenate) {
-            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL).setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
+            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NORMAL).setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
         } else {
-            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+            builder.setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE).setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE)
         }
-        if (justifies(block, text)) builder.setJustificationMode(Layout.JUSTIFICATION_MODE_INTER_WORD)
+        if (justifies(block, text)) builder.setJustificationMode(android.graphics.text.LineBreaker.JUSTIFICATION_MODE_INTER_WORD)
         return builder.build()
     }
 

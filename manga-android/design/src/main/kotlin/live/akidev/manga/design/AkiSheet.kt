@@ -31,7 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -46,7 +47,7 @@ fun AkiSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val scope = rememberCoroutineScope()
         val rise = remember { Animatable(1f) }
-        val screen = LocalConfiguration.current.screenHeightDp.dp
+        val screen = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
         LaunchedEffect(Unit) { rise.animateTo(0f, AkiMotion.settle()) }
         // Down is the distance pulled, as a fraction of the screen; the sheet leaves the same way it was pulled.
         fun close() = scope.launch { rise.animateTo(1f, AkiMotion.settle()); onDismiss() }

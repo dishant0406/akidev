@@ -9,6 +9,8 @@
     <application
         android:name=".AkiApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="Akidev"
         android:theme="@style/Theme.Aki">
         <!-- Hands the backup file to the share sheet. -->

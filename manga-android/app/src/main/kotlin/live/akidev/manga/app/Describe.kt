@@ -1,6 +1,6 @@
 package live.akidev.manga.app
 
-import android.net.Uri
+import androidx.core.net.toUri
 import uniffi.akimanga.MangaException
 
 /** A title and a message for a failed call, in words a person can act on. */
@@ -16,4 +16,4 @@ fun describe(error: Throwable): Problem = when (error) {
     else -> Problem("That did not work", error.message ?: error.toString())
 }
 
-private fun hostOf(url: String) = Uri.parse(url).host ?: url
+private fun hostOf(url: String) = url.toUri().host ?: url

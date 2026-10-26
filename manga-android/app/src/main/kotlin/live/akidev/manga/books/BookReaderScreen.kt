@@ -2,7 +2,7 @@ package live.akidev.manga.books
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -127,7 +127,7 @@ private fun BookReaderView(model: BookModel) {
         model.footnote?.let { note -> BookFootnoteSheet(model, note) { model.footnote = null } }
         model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
         model.externalLink?.let { link ->
-            AkiConfirm("Open this link?", link, "Open", { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
+            AkiConfirm("Open this link?", link, "Open", { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, link.toUri())) }
         }
     }
 }
