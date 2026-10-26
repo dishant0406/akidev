@@ -22,3 +22,16 @@ fun MangaPartPills() {
         control.part, control.choose,
     )
 }
+
+/** Manga for someone who mostly reads books: one tab with the manga library, new chapters and Discover inside it. */
+@Composable
+fun MangaHubScreen() {
+    var part by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(MangaPart.Saved) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalMangaPart provides MangaPartControl(part) { part = it }) {
+        when (part) {
+            MangaPart.Saved, MangaPart.History -> LibraryScreen()
+            MangaPart.Unread, MangaPart.Recent -> UpdatesScreen()
+            MangaPart.Discover -> HomeScreen()
+        }
+    }
+}

@@ -32,4 +32,5 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.runtime)
+    implementation(libs.work.runtime)
 }

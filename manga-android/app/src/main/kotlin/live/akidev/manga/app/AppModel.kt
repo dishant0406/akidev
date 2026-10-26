@@ -15,6 +15,12 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import live.akidev.manga.manga.DiscoverModel
+import live.akidev.manga.manga.LibraryModel
+import live.akidev.manga.manga.UpdatesModel
+import live.akidev.manga.updates.AutoDownloader
+import live.akidev.manga.updates.NewChapters
+import live.akidev.manga.updates.UpdateAlerts
+import live.akidev.manga.updates.UpdateWorker
 import uniffi.akimanga.Engine
 import uniffi.akimanga.LibraryEntry
 import uniffi.akimanga.RepoInfo
@@ -32,9 +38,10 @@ class UpdateFailure(val key: String, val title: String, val source: String, val 
  * What the whole app shares: the engine, the settings, and what is installed and saved. Screens read these fields (they update when
  * the fields change) and ask the model to change them.
  */
-class AppModel(context: Context) {
+class AppModel(private val context: Context) {
     val engine = Engine(File(context.filesDir, "AkiManga").path)
     val prefs = Preferences(context)
+    private val downloader = AutoDownloader(context, engine) { prefs.downloadOnWifiOnly }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /** Everything installed; [visibleSources] is what the person's content settings let through. */
@@ -49,6 +56,8 @@ class AppModel(context: Context) {
     var updates by mutableStateOf(emptyList<UpdateEntry>())
         private set
     val discover = DiscoverModel(this)
+    val libraryScreen = LibraryModel(this)
+    val updatesScreen = UpdatesModel()
     var tab by mutableStateOf(AppTab.order(prefs.readerKind).first())
     var pendingRepo by mutableStateOf<PendingRepo?>(null)
 
@@ -77,6 +86,7 @@ class AppModel(context: Context) {
         }
         tab = tabs.first()
         refresh()
+        scheduleBackgroundWork()
         scope.launch {
             updateSources()
             refreshLibrary()
@@ -149,7 +159,7 @@ class AppModel(context: Context) {
      * four at a time. Skipped when done in the last half hour unless `force` is set (a pull or a tap), which asks about every series
      * not asked in the last minute.
      */
-    suspend fun refreshLibrary(force: Boolean = false) {
+    suspend fun refreshLibrary(force: Boolean = false, background: Boolean = false) {
         val now = System.currentTimeMillis()
         if (refreshing || (!force && now - lastRefreshMs < 30 * 60_000)) return
         refreshing = true
@@ -161,16 +171,20 @@ class AppModel(context: Context) {
                 if (force) age > 60_000 else age > (if (entry.completed) 86_400_000 else 3_600_000)
             }
             val gate = Semaphore(4)
+            val adult = sources.filter { it.nsfw }.map { it.id }.toSet()
             val results = withContext(Dispatchers.IO) {
                 due.map { entry ->
                     async {
                         gate.withPermit {
                             try {
-                                engine.chapters(entry.source, entry.id)
-                                entry to null
+                                val list = engine.chapters(entry.source, entry.id)
+                                val fresh = list.newIds.toSet()
+                                val arrived = list.entries.filter { it.id in fresh }.reversed()
+                                val news = if (arrived.isEmpty()) null else NewChapters(entry.source, entry.id, entry.title, entry.source in adult, arrived)
+                                Triple(entry, null, news)
                             } catch (error: Exception) {
                                 runCatching { engine.noteFailedCheck(entry.source, entry.id) }
-                                entry to error
+                                Triple(entry, error, null)
                             }
                         }
                     }
@@ -179,18 +193,36 @@ class AppModel(context: Context) {
             // What failed before and was not asked this time stays on the list.
             val asked = results.map { "${it.first.source}/${it.first.id}" }.toSet()
             val stillFailing = updateFailures.filter { it.key !in asked }
-            updateFailures = stillFailing + results.mapNotNull { (entry, error) ->
+            updateFailures = stillFailing + results.mapNotNull { (entry, error, _) ->
                 error?.let { UpdateFailure("${entry.source}/${entry.id}", entry.title, name(entry.source), describe(it).message) }
             }
             // A source is "not working" when any of its series failed this time; one that is gone loses its mark.
             for (source in results.map { it.first.source }.toSet()) report(source, null)
-            for ((entry, error) in results) if (error != null) report(entry.source, error)
+            for ((entry, error, _) in results) if (error != null) report(entry.source, error)
             sourceProblems = sourceProblems.filterKeys { problem -> sources.any { it.id == problem } }
             if (results.isEmpty() || results.any { it.second == null }) lastRefreshMs = System.currentTimeMillis()
             refresh()
+            val found = results.mapNotNull { it.third }
+            if (found.isEmpty()) return
+            // New chapters are announced only when Android woke the app: with the app open the Updates tab already shows them.
+            if (background && prefs.notifyUpdates) UpdateAlerts.post(context, found)
+            if (prefs.autoDownload) {
+                downloader.enqueue(found)
+                downloader.run()
+            }
         } finally {
             refreshing = false
         }
+    }
+
+    /** Carries on with downloads that were cut short or waited for Wi-Fi. */
+    suspend fun resumeDownloads() {
+        if (prefs.autoDownload) downloader.run()
+    }
+
+    /** Looks for new chapters in the background only while alerts or downloads want them. */
+    fun scheduleBackgroundWork() {
+        UpdateWorker.schedule(context, prefs.notifyUpdates || prefs.autoDownload)
     }
 
     /** Updates installed sources whose repository has a newer version; quiet if there is nothing or no network. */

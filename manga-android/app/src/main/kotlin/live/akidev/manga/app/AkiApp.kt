@@ -29,8 +29,12 @@ import live.akidev.manga.design.AkiGlassScope
 import live.akidev.manga.design.AkiTabBar
 import live.akidev.manga.design.AkiTheme
 import live.akidev.manga.manga.HomeScreen
+import live.akidev.manga.manga.LibraryScreen
+import live.akidev.manga.manga.MangaHubScreen
+import live.akidev.manga.manga.UpdatesScreen
 import live.akidev.manga.manga.SeriesScreen
 import live.akidev.manga.reader.ReaderScreen
+import live.akidev.manga.settings.SettingsScreen
 import live.akidev.manga.sources.RepoAddSheet
 import live.akidev.manga.sources.RepoScreen
 import live.akidev.manga.sources.SourceSettingsScreen
@@ -66,6 +70,9 @@ private fun Shell(model: AppModel, router: Router) {
         // The tab the person is on. Each tab is its own page; what a tab remembers (its titles, its scroll place) lives in the model.
         when (model.tab) {
             AppTab.Home -> if (model.prefs.readerKind == ReaderKind.Books) Unit else HomeScreen()
+            AppTab.Library -> LibraryScreen()
+            AppTab.Manga -> MangaHubScreen()
+            AppTab.Updates -> UpdatesScreen()
             AppTab.Sources -> SourcesScreen()
             else -> Unit
         }
@@ -105,6 +112,7 @@ private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
             is SourceSettingsRoute -> SourceSettingsScreen(route.source)
             is SeriesRoute -> SeriesScreen(route.ref)
             is ReaderRoute -> ReaderScreen(route)
+            SettingsRoute -> SettingsScreen()
             else -> Unit
         }
     }

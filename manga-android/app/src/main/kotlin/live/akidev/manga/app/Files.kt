@@ -90,3 +90,12 @@ fun coverJpeg(bitmap: Bitmap, width: Int, centre: Float = 0f): ByteArray {
     val cut = Bitmap.createBitmap(scaled, 0, top, drawnWidth, height)
     return ByteArrayOutputStream().also { cut.compress(Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
 }
+
+/** Hands a file to the share sheet (save to Files, Drive, a message). The file is kept in the cache folder until the system clears it. */
+fun shareFile(context: Context, name: String, text: String, mime: String) {
+    val folder = File(context.cacheDir, "share").apply { mkdirs() }
+    val file = File(folder, name).also { it.writeText(text) }
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime).putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(android.content.Intent.createChooser(send, name))
+}
