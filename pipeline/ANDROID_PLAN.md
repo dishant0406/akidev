@@ -232,3 +232,24 @@ Where the build differs from the plan above:
 - **Compared with iOS side by side (2026-10-26):** the screens, menus, dialogs, sheets and controls were put next to the iOS screens in light and dark; the page is the artifact "Akidev iOS and Android". Menus and dialogs now draw in the app's own window so their glass shows the screen; sheets float with a half-height start; soft shadows replace outlines; glass over pictures shows the picture.
 - **Not done:** vertical Japanese text (the engine flags it; Android lays it out horizontally), a Macrobenchmark module (`scripts/startup.sh` times a cold start instead), and moving the small database writes (book position, highlights) off the main thread.
 
+
+## 12. Speed and size, measured on the owner's phone (2026-10-27)
+
+Samsung Galaxy A05 (Android 14, 720x1600), release build compiled the way Play does, demo source. Before is the build of 2026-10-26.
+
+| What | Before | After |
+| --- | --- | --- |
+| Cold start, nothing compiled (graphics cache warm) | 576 ms | 576 ms |
+| Cold start with the baseline profile | 446 ms (hand-written profile) | about 410 ms (recorded profile) |
+| Open a series, share of frames late | 100%, median frame 117 ms | 27%, 32 ms |
+| Scroll a series | 71% late, 53 ms | 28%, 34 ms |
+| Open the reader | 63% late, 89 ms | 13%, 34 ms |
+| Scroll the reader strip | 100% late, 93 ms | 12%, 21 ms |
+| Back out of the reader and the series | 65% late, 105 ms | 14%, 34 ms |
+| Download from Play (arm64, xhdpi) | 7,597,545 bytes | 7,510,132 bytes |
+| Release APK | 17.16 MB | 16.35 MB |
+
+- Cause of the jank: the graphics chip, not the code. With "Reduce glass" the same scenarios were 3-5% late, so the fix keeps glass at rest and drops it while things move (`AkiGlassBudget`, `GlassGovernor`). Haze's performance modes and style options (no chromatic aberration, no refraction) were tried and gave little: the cost is per glass control, not per effect.
+- Tried and left out because it did not measure better: opening the engine on a thread of its own at start (the first screen waits for it anyway), a decode thread pool and decoding pictures straight from their files (reader scroll with a cold picture cache: 13.0% before, 12.0% after, which is noise).
+- Size: the engine library is 12.7 MB of the 17 MB; 2.9 MB of it is unwind tables the panics need, so it stays. Packed relocations and merging identical code took 0.8 MB off it (`scripts/build-engine.sh`). R8 already puts every class in one package; fonts were left whole because books use their Cyrillic and Vietnamese letters.
+- Not measured: a fast phone (the governor never switches there by design), reading aloud after the engine link flags (no voice installed on the phone at the time; the library loads and fetches a repository on an API 29 emulator and the phone).

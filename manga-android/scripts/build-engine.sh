@@ -13,6 +13,9 @@ export ANDROID_HOME ANDROID_NDK_HOME
 profile="${PROFILE:-ios}"
 
 cd "$root/desktop"
+# Link flags that only shrink the library (about 0.8 MB): the relocations are stored packed (the Android linker reads them from API 23), and functions with identical code are merged
+# unless their address is taken. Only for the phone build: the bindings below are built for this Mac.
+RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,--pack-dyn-relocs=android -C link-arg=-Wl,--icf=safe" \
 cargo ndk -t arm64-v8a -P 29 -o "$engine/jniLibs" build --profile "$profile" -p akidev-manga-ffi --lib
 
 # Bindings come from the library's own metadata, so they cannot drift from the Rust code.

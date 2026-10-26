@@ -30,7 +30,10 @@ Checks:
 ./gradlew :app:testDebugUnitTest          # plain JVM tests: shelf order, book style, names
 ./gradlew :app:connectedDebugAndroidTest  # on a device: typesetting and pagination of a chapter
 ./gradlew lintDebug                       # lint, kept at zero warnings
-./gradlew :app:assembleRelease            # R8 and baseline profile, about 17 MB
+./gradlew :app:assembleRelease            # R8 and baseline profile, about 16 MB
+./scripts/size.sh                         # what Google Play would download for a phone, after :app:bundleRelease (about 7.5 MB)
+./gradlew :app:generateReleaseBaselineProfile   # records the baseline profile again on a connected phone (needs the demo source installed, see below)
+./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest   # cold start with no profile, with it, and fully compiled
 ./scripts/startup.sh                      # cold start time on the phone or emulator (about 750 ms for a debug build on the emulator)
 ```
 
@@ -45,5 +48,11 @@ Checks:
 - **Books** are laid out with `StaticLayout`, one per block, then cut into pages by `ChapterLayout`. Positions are the engine's UTF-16
   offsets, so highlights, notes and "where I stopped" mean the same on iOS and Android. Vertical Japanese text is not supported.
 - **Reading aloud** uses the engine's speaker (Phonon) and an `AudioTrack`; a foreground service keeps it going with the screen off.
+- **Speed.** Measured on a Galaxy A05 (cheap graphics chip), release build, 2026-10-27:
+  - *Glass is what costs.* Each glass control on a moving page is blurred again every frame; six small pills over the reader's strip took 60 ms a frame. `AkiGlassBudget` (in `:design`) draws glass as a plain tinted fill while a list scrolls or a screen slides, and a moment after it stops the glass comes back. `GlassGovernor` turns this on by itself, only on a phone that is seen to miss frames while glass moves (half of 90 frames late), and remembers it; a phone that keeps up never changes. Scrolling containers tell the budget with `AkiGlassMotion(state.isScrollInProgress)`.
+  - *The baseline profile is recorded, not written.* `baselineprofile/` walks the app (start, tabs, a series, the reader, settings) on a phone with the demo server's source and the plugin puts the result in `app/src/release/generated/baselineProfiles/`. Cold start with a warm graphics cache: 576 ms with nothing compiled, about 410 ms with the profile (fully compiled: 507 ms).
+  - *The first start after an install or an update is slower* (about 1.4 s here): the phone's graphics driver compiles the shaders the first frame needs (42 of them, 1.2 s) and keeps them in `code_cache`. A benchmark that kills the app before the cache is written measures this every time, so `scripts/startup.sh` and the Macrobenchmark module (which drops the cache on purpose) show the first-start cost; leave the app running 8 seconds before timing a normal start.
+  - Reads that grow with the collection (a series' chapters and downloads) and the reading position write run off the main thread.
+  - The demo source needs `python3 manga-app/scripts/demo-server.py` and `adb reverse tcp:8770 tcp:8770`; release builds refuse plain http for pictures, so a release build for measuring needs the debug network config temporarily.
 - **Release builds** never allow plain http. Debug builds allow it for the demo server on this computer.
 - Nothing is sent to a server of ours. Notifications are posted by the app itself when Android lets it check for updates.
