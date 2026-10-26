@@ -52,6 +52,13 @@ private val LocalGlassSource = compositionLocalOf<GlassSource?> { null }
 /** Inside a glass card (a dialog) controls are flat grey: glass on glass would show whatever is behind the card, scrambled. */
 val LocalAkiFlat = compositionLocalOf { false }
 
+/**
+ * Inside a scrolling page, controls over the plain page are drawn as flat fills with a soft shadow, which looks the same at rest and costs
+ * far less while scrolling than sampling and blurring a moving page for every one of them (measured on a cheap phone). Controls over a
+ * picture keep real glass.
+ */
+val LocalAkiCheapGlass = compositionLocalOf { false }
+
 /** Blur needs Android 12 (API 31); before that every control is solid. */
 @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
 fun akiGlassSupported() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -100,6 +107,10 @@ fun Modifier.akiGlass(shape: RoundedCornerShape, tint: Color? = null): Modifier 
     val source = LocalGlassSource.current
     if (LocalAkiFlat.current) return background(tint ?: Aki.colors.secondary.copy(alpha = 0.75f), shape)
     if (source == null || source.look == AkiGlassLook.Solid) return akiSolid(shape, tint)
+    if (LocalAkiCheapGlass.current && (tint == null || tint.alpha >= 1f)) {
+        val fill = tint?.copy(alpha = 0.9f) ?: if (Aki.colors.dark) Aki.colors.secondary else Aki.colors.background.copy(alpha = 0.85f)
+        return akiShadow(shape).background(fill, shape)
+    }
     val dark = Aki.colors.dark
     val base = Aki.colors.secondary
     val style = remember(shape, tint, dark) {

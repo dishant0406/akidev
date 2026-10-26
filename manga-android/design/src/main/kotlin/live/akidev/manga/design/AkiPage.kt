@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -37,13 +38,15 @@ fun AkiPage(
     content: LazyListScope.() -> Unit,
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            Modifier.fillMaxHeight().widthIn(max = if (narrow) 640.dp else 720.dp).akiGlassSource().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars),
-            state = state,
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = if (underTabBar) 112.dp else 24.dp),
-            verticalArrangement = Arrangement.spacedBy(spacing),
-            content = content,
-        )
+        CompositionLocalProvider(LocalAkiCheapGlass provides true) {
+            LazyColumn(
+                Modifier.fillMaxHeight().widthIn(max = if (narrow) 640.dp else 720.dp).akiGlassSource().windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars),
+                state = state,
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = if (underTabBar) 112.dp else 24.dp),
+                verticalArrangement = Arrangement.spacedBy(spacing),
+                content = content,
+            )
+        }
     }
 }
 
