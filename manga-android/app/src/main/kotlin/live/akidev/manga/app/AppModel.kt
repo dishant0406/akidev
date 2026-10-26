@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import live.akidev.manga.books.BooksModel
 import live.akidev.manga.manga.DiscoverModel
 import live.akidev.manga.manga.LibraryModel
 import live.akidev.manga.manga.UpdatesModel
@@ -39,6 +40,8 @@ class UpdateFailure(val key: String, val title: String, val source: String, val 
  * the fields change) and ask the model to change them.
  */
 class AppModel(private val context: Context) {
+    /** The app's context, for what a screen needs from the system (the clipboard, the cache). */
+    val appContext: Context get() = context
     val engine = Engine(File(context.filesDir, "AkiManga").path)
     val prefs = Preferences(context)
     private val downloader = AutoDownloader(context, engine) { prefs.downloadOnWifiOnly }
@@ -58,8 +61,12 @@ class AppModel(private val context: Context) {
     val discover = DiscoverModel(this)
     val libraryScreen = LibraryModel(this)
     val updatesScreen = UpdatesModel()
+    val booksScreen = BooksModel(this)
     var tab by mutableStateOf(AppTab.order(prefs.readerKind).first())
     var pendingRepo by mutableStateOf<PendingRepo?>(null)
+
+    /** Set to open the file picker on the Books tab (from the Sources screen). */
+    var addingBook by mutableStateOf(false)
 
     /** Bumped when a source's own settings change, so Discover asks it again. */
     var settingsRevision by mutableStateOf(0)

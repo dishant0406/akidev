@@ -28,6 +28,12 @@ import live.akidev.manga.design.AkiBackdrop
 import live.akidev.manga.design.AkiGlassScope
 import live.akidev.manga.design.AkiTabBar
 import live.akidev.manga.design.AkiTheme
+import live.akidev.manga.books.BookReaderScreen
+import live.akidev.manga.books.BooksBrowseScreen
+import live.akidev.manga.books.BooksHomeScreen
+import live.akidev.manga.books.BooksScreen
+import live.akidev.manga.books.CatalogueScreen
+import live.akidev.manga.books.HighlightsScreen
 import live.akidev.manga.manga.HomeScreen
 import live.akidev.manga.manga.LibraryScreen
 import live.akidev.manga.manga.MangaHubScreen
@@ -69,7 +75,9 @@ private fun Shell(model: AppModel, router: Router) {
     Box(Modifier.fillMaxSize()) {
         // The tab the person is on. Each tab is its own page; what a tab remembers (its titles, its scroll place) lives in the model.
         when (model.tab) {
-            AppTab.Home -> if (model.prefs.readerKind == ReaderKind.Books) Unit else HomeScreen()
+            AppTab.Home -> if (model.prefs.readerKind == ReaderKind.Books) BooksHomeScreen() else HomeScreen()
+            AppTab.Books -> BooksScreen()
+            AppTab.Browse -> BooksBrowseScreen()
             AppTab.Library -> LibraryScreen()
             AppTab.Manga -> MangaHubScreen()
             AppTab.Updates -> UpdatesScreen()
@@ -113,6 +121,9 @@ private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
             is SeriesRoute -> SeriesScreen(route.ref)
             is ReaderRoute -> ReaderScreen(route)
             SettingsRoute -> SettingsScreen()
+            is CatalogueRoute -> CatalogueScreen(route.ref)
+            is HighlightsRoute -> HighlightsScreen(route.open)
+            is BookReaderRoute -> BookReaderScreen(route)
             else -> Unit
         }
     }

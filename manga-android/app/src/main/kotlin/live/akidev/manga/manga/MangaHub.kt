@@ -1,6 +1,11 @@
 package live.akidev.manga.manga
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import live.akidev.manga.design.AkiChips
 import live.akidev.manga.design.AkiChoice
@@ -26,8 +31,8 @@ fun MangaPartPills() {
 /** Manga for someone who mostly reads books: one tab with the manga library, new chapters and Discover inside it. */
 @Composable
 fun MangaHubScreen() {
-    var part by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(MangaPart.Saved) }
-    androidx.compose.runtime.CompositionLocalProvider(LocalMangaPart provides MangaPartControl(part) { part = it }) {
+    var part by rememberSaveable { mutableStateOf(MangaPart.Saved) }
+    CompositionLocalProvider(LocalMangaPart provides MangaPartControl(part) { part = it }) {
         when (part) {
             MangaPart.Saved, MangaPart.History -> LibraryScreen()
             MangaPart.Unread, MangaPart.Recent -> UpdatesScreen()

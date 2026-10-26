@@ -19,3 +19,14 @@ class SeriesRef(val source: String, val id: String, val title: String, val cover
 
 /** The settings page. */
 object SettingsRoute : Route
+
+/** A page of a book catalogue to open: its address, its name, and how to search the catalogue it belongs to. */
+class CatalogueRef(val url: String, val name: String, val search: String?)
+
+class CatalogueRoute(val ref: CatalogueRef) : Route
+
+/** Everything highlighted in every book; `open` takes the person to one. */
+class HighlightsRoute(val open: (uniffi.akimanga.BookHighlightIn) -> Unit) : Route
+
+/** A book, being read, over everything. */
+class BookReaderRoute(val book: uniffi.akimanga.BookInfo) : Route

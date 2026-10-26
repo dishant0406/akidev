@@ -25,13 +25,19 @@ import androidx.compose.ui.window.Popup
 /** One row of a menu: its icon (a tick when it is the chosen one) and its title. */
 class AkiMenuItem(val title: String, val icon: String, val destructive: Boolean = false, val isSelected: Boolean = false, val onClick: () -> Unit)
 
-/** The list of rows, drawn on its own so a menu and a long press can both show it. */
+/** The list of rows on a card, drawn on its own so a menu and a long press can both show it. */
 @Composable
 fun AkiMenuList(items: List<AkiMenuItem>, onClose: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         Modifier.widthIn(min = 200.dp, max = 300.dp).shadow(18.dp, shape, ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).background(Aki.colors.background, shape).padding(vertical = 6.dp),
-    ) {
+    ) { AkiMenuRows(items, onClose) }
+}
+
+/** The rows alone, for a card that has more than a menu on it. Choosing one runs it, then `onClose`. */
+@Composable
+fun AkiMenuRows(items: List<AkiMenuItem>, onClose: () -> Unit = {}) {
+    Column {
         for (item in items) {
             val tone = if (item.destructive) AkiTone.Destructive else AkiTone.Text
             Row(

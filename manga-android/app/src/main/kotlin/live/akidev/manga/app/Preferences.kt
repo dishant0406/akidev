@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import live.akidev.manga.books.BookSort
+import live.akidev.manga.books.BookStyle
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -37,6 +39,9 @@ enum class LibrarySort(val title: String) {
  */
 class Preferences(context: Context) {
     private val store = context.getSharedPreferences("aki", Context.MODE_PRIVATE)
+
+    /** A tablet's page is bigger and read from further, so its text starts larger. */
+    private val tablet = context.resources.configuration.smallestScreenWidthDp >= 600
 
     /** Null until the person has said (a fresh install asks). */
     var readerKind: ReaderKind? by nullableEnum("readerKind")
@@ -72,6 +77,13 @@ class Preferences(context: Context) {
 
     /** The source Discover was last on (an id, or `*` for every source). */
     var source by string("source", "")
+
+    /** How books look: the type, the margins and the theme. Saved whole, as JSON. */
+    var bookStyle: BookStyle by Stored(store, "bookStyle", BookStyle.fromJson(store.getString("bookStyle", null), tablet), { k, v -> putString(k, v.toJson()) })
+
+    /** How the shelf of books is ordered. */
+    var bookSort by enum("bookSort", BookSort.Recent)
+    var bookReversed by boolean("bookReversed", false)
 
     /** Turns glass off: every control is a plain tinted shape. */
     var reduceGlass by boolean("reduceGlass", false)
