@@ -8,6 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -60,6 +65,38 @@ val LocalAkiFlat = compositionLocalOf { false }
  */
 val LocalAkiCheapGlass = compositionLocalOf { false }
 
+/**
+ * Glass that samples a page while the page moves costs a cheap phone's graphics chip more than a frame: every glass control on the
+ * screen is blurred again each frame. On such a phone ([slowGpu], found by watching real frames) controls swap to the same tint as a
+ * plain fill for as long as something is scrolling or sliding, and a moment after it stops they are glass again.
+ */
+object AkiGlassBudget {
+    /** Set when the phone is seen to miss frames while glass moves; kept between launches by the app. */
+    var slowGpu by mutableStateOf(false)
+    private var moving by mutableIntStateOf(0)
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** True while glass should be drawn the cheap way. */
+    val saving: Boolean get() = slowGpu && moving > 0
+
+    /** True while anything scrolls or slides, whatever the phone: the governor only judges frames drawn then. */
+    val isMoving: Boolean get() = moving > 0
+
+    fun begin() { moving++ }
+
+    /** Glass comes back a moment after the motion ends, not in the middle of a fling that is slowing down. */
+    fun end() { handler.postDelayed({ moving-- }, 180) }
+}
+
+/** Tells the glass that something is moving under it while `active` (a list being dragged or flung, a screen sliding in). */
+@Composable
+fun AkiGlassMotion(active: Boolean) {
+    DisposableEffect(active) {
+        if (active) AkiGlassBudget.begin()
+        onDispose { if (active) AkiGlassBudget.end() }
+    }
+}
+
 /** Blur needs Android 12 (API 31); before that every control is solid. */
 @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
 fun akiGlassSupported() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -98,7 +135,8 @@ fun AkiGlassWindow(color: Color, content: @Composable () -> Unit) {
 @Composable
 fun Modifier.akiGlassSource(layer: Float = 0f): Modifier {
     val source = LocalGlassSource.current ?: return this
-    return if (source.look == AkiGlassLook.Glass) hazeSource(source.state, zIndex = layer) else this
+    // While glass is drawn the cheap way nothing samples the source, so it is not recorded either.
+    return if (source.look == AkiGlassLook.Glass && !AkiGlassBudget.saving) hazeSource(source.state, zIndex = layer) else this
 }
 
 /** Glass on a control or a bar. A solid tint (the yellow) marks the current choice or the main action and shows at 90%; a see-through tint (a scrim) shows as strong as it is (a black scrim is half as strong on a dark page, where glass is darker already). */
@@ -108,6 +146,10 @@ fun Modifier.akiGlass(shape: RoundedCornerShape, tint: Color? = null): Modifier 
     val source = LocalGlassSource.current
     if (LocalAkiFlat.current) return background(tint ?: Aki.colors.text.copy(alpha = 0.08f), shape)
     if (source == null || source.look == AkiGlassLook.Solid) return akiSolid(shape, tint)
+    if (AkiGlassBudget.saving) {
+        val fill = tint?.let { if (it.alpha >= 1f) it.copy(alpha = 0.9f) else it } ?: if (Aki.colors.dark) Aki.colors.secondary else Aki.colors.background.copy(alpha = 0.85f)
+        return akiShadow(shape).background(fill, shape)
+    }
     if (LocalAkiCheapGlass.current && (tint == null || tint.alpha >= 1f)) {
         val fill = tint?.copy(alpha = 0.9f) ?: if (Aki.colors.dark) Aki.colors.secondary else Aki.colors.background.copy(alpha = 0.85f)
         return akiShadow(shape).background(fill, shape)

@@ -70,6 +70,7 @@ fun StripReader(reader: ReaderModel) {
     val latestRows by rememberUpdatedState(rows)
     val state = rememberLazyListState()
     val dragged by state.interactionSource.collectIsDraggedAsState()
+    AkiGlassMotion(state.isScrollInProgress)
     var live by remember { mutableFloatStateOf(1f) }
     val density = LocalDensity.current
 

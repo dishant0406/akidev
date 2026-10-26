@@ -37,6 +37,7 @@ fun AkiPage(
     state: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
+    AkiGlassMotion(state.isScrollInProgress)
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         CompositionLocalProvider(LocalAkiCheapGlass provides true) {
             LazyColumn(

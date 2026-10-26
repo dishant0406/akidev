@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import live.akidev.manga.design.AkiBackdrop
+import live.akidev.manga.design.AkiGlassMotion
 import live.akidev.manga.design.AkiGlassScope
 import live.akidev.manga.design.AkiDialogLayer
 import live.akidev.manga.design.AkiDialogs
@@ -112,6 +113,7 @@ private fun Shell(model: AppModel, router: Router) {
 @Composable
 private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
     val slide = remember { Animatable(1f) }
+    AkiGlassMotion(slide.isRunning)
     LaunchedEffect(Unit) { slide.animateTo(0f, tween(320, easing = FastOutSlowInEasing)) }
     LaunchedEffect(pushed.leaving) {
         if (pushed.leaving) {

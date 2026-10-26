@@ -73,6 +73,7 @@ fun SeriesScreen(ref: SeriesRef) {
     LaunchedEffect(router.top) { if ((router.top as? SeriesRoute)?.ref === ref) series.refreshProgress() }
 
     val list = rememberLazyListState()
+    AkiGlassMotion(list.isScrollInProgress)
     // The picture is under the status bar until the page has scrolled past it.
     val onPicture by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 200 } }
     AkiLightStatusBar(on = (router.top as? SeriesRoute)?.ref === ref && onPicture)

@@ -73,6 +73,7 @@ fun PagedReader(reader: ReaderModel) {
             if (target in 0 until pager.pageCount) scope.launch { pager.animateScrollToPage(target) }
         }
 
+        AkiGlassMotion(pager.isScrollInProgress)
         CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
             HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !zoomed, beyondViewportPageCount = 1) { index ->
                 when {

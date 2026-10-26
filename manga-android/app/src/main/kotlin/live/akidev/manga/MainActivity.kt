@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val model = (application as AkiApplication).model
+        model.glass.watch(window)
         // Only the first start acts on the address or alert that opened the app; starting again after the system killed it must not replay it.
         if (savedInstanceState == null) {
             intent?.dataString?.let { model.propose(it) }

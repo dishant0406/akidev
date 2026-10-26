@@ -98,6 +98,9 @@ class Preferences(context: Context) {
     /** Turns glass off: every control is a plain tinted shape. */
     var reduceGlass by boolean("reduceGlass", false)
 
+    /** Set by [GlassGovernor] when this phone cannot keep up with glass while a page moves. */
+    var slowGlass by boolean("slowGlass", false)
+
     /** How one series is read: the mode the person chose for it, or null until they have. */
     fun modeOf(source: String, series: String): ReadingMode? = ReadingMode.entries.firstOrNull { it.name == store.getString("mode.$source.$series", null) }
 
