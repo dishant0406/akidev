@@ -94,9 +94,11 @@ private fun BookReaderView(model: BookModel) {
     }
     DisposableEffect(app.prefs.keepAwake) {
         view.keepScreenOn = app.prefs.keepAwake
+        onDispose { view.keepScreenOn = false }
+    }
+    DisposableEffect(Unit) {
         onDispose {
-            model.stopListening()
-            view.keepScreenOn = false
+            model.close()
             WindowCompat.getInsetsController((view.context as Activity).window, view).show(WindowInsetsCompat.Type.systemBars())
         }
     }
@@ -137,7 +139,6 @@ private fun Modifier.grey() = graphicsLayer { colorFilter = ColorFilter.colorMat
 private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
     val router = LocalRouter.current
     val app = LocalApp.current
-    val scope = rememberCoroutineScope()
     Row(
         Modifier.fillMaxWidth().widthIn(max = 640.dp).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
@@ -151,7 +152,7 @@ private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Uni
                 }
             }
         }
-        if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen(scope) }
+        if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen() }
         AkiIconButton("search", "Search in this book", onClick = onSearch)
         AkiIconButton("sliders", "Type and theme", onClick = onSettings)
     }

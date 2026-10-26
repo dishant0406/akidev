@@ -25,6 +25,9 @@ class NewChapters(val source: String, val series: String, val title: String, val
 object UpdateAlerts {
     private const val CHANNEL = "new-chapters"
 
+    /** Its own number, so the reading-aloud card (which opens the app too) does not share this one's intent and its extras. */
+    private const val REQUEST_OPEN = 1
+
     /** Whether the app may post notifications now (Android 13 asks the person; before it they are always allowed unless turned off). */
     fun allowed(context: Context): Boolean =
         (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
@@ -39,7 +42,7 @@ object UpdateAlerts {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "New chapters", NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(
-            context, 0, Intent(context, MainActivity::class.java).putExtra(OPEN_UPDATES, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            context, REQUEST_OPEN, Intent(context, MainActivity::class.java).putExtra(OPEN_UPDATES, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle("New chapters").setContentText(body(found))

@@ -383,9 +383,12 @@ class BookModel private constructor(
         )
         val made = generation
         scope.launch(Dispatchers.Default) {
-            val content = runCatching { reader.chapter(chapter.toUInt()) }.getOrNull() ?: unreadable
-            for (face in content.fonts) if (fontBank.needs(face)) fontBank.add(face, runCatching { reader.resource(face.path) }.getOrNull())
-            val layout = typesetter.layout(chapter, content)
+            // A chapter that cannot be read or set in type shows as the "could not be read" page; it never takes the app down or spins forever.
+            val layout = runCatching {
+                val content = runCatching { reader.chapter(chapter.toUInt()) }.getOrNull() ?: unreadable
+                for (face in content.fonts) if (fontBank.needs(face)) fontBank.add(face, runCatching { reader.resource(face.path) }.getOrNull())
+                typesetter.layout(chapter, content)
+            }.getOrElse { typesetter.layout(chapter, unreadable) }
             withContext(Dispatchers.Main) { finished(layout, made) }
         }
     }
@@ -448,6 +451,12 @@ class BookModel private constructor(
 
     /** What reading aloud runs in: as long as the book is open. */
     val listenScope get() = scope
+
+    /** The book is closed: reading aloud stops and the file is let go. */
+    fun close() {
+        stopListening()
+        reader.close()
+    }
 
     /** A voice model is on the phone, so "Read from here" is offered. */
     val canRead get() = app.readAloud.current != null

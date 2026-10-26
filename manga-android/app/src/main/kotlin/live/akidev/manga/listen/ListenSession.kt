@@ -29,11 +29,11 @@ interface ListenControls {
  */
 object ListenSession {
     private const val CHANNEL = "reading-aloud"
-    private const val NOTIFICATION = 2
+    internal const val NOTIFICATION = 2
+    private const val REQUEST_OPEN = 2
     internal const val ACTION_TOGGLE = "live.akidev.manga.listen.TOGGLE"
     internal const val ACTION_NEXT = "live.akidev.manga.listen.NEXT"
     internal const val ACTION_PREVIOUS = "live.akidev.manga.listen.PREVIOUS"
-    internal const val ACTION_STOP = "live.akidev.manga.listen.STOP"
 
     private var session: MediaSession? = null
     private var controls: ListenControls? = null
@@ -69,6 +69,9 @@ object ListenSession {
         context.getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(context))
     }
 
+    /** Whether a book is being read aloud. */
+    val active get() = session != null
+
     fun stop(context: Context) {
         session?.release()
         session = null
@@ -81,7 +84,7 @@ object ListenSession {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Reading aloud", NotificationManager.IMPORTANCE_LOW))
         fun action(name: String, label: String, icon: Int): Notification.Action =
             Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(context, icon), label, PendingIntent.getService(context, name.hashCode(), Intent(context, ListenService::class.java).setAction(name), PendingIntent.FLAG_IMMUTABLE)).build()
-        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(context, REQUEST_OPEN, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(title).setContentText(author).setContentIntent(open).setOngoing(playing)
             .addAction(action(ACTION_PREVIOUS, "Previous sentence", android.R.drawable.ic_media_previous))
@@ -97,7 +100,6 @@ object ListenSession {
             ACTION_TOGGLE -> if (playing) controls.pause() else controls.play()
             ACTION_NEXT -> controls.next()
             ACTION_PREVIOUS -> controls.previous()
-            ACTION_STOP -> controls.stop()
         }
     }
 }
@@ -108,7 +110,9 @@ class ListenService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action != null) ListenSession.handle(intent.action)
-        startForeground(2, ListenSession.notification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        // Android wants this call after every start, even when reading already ended: then it goes straight away.
+        startForeground(ListenSession.NOTIFICATION, ListenSession.notification(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        if (!ListenSession.active) stopSelf()
         return START_NOT_STICKY
     }
 }

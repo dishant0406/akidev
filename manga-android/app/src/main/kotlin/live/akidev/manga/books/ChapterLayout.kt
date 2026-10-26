@@ -46,7 +46,7 @@ class Piece(val block: Int, val firstLine: Int, val endLine: Int, val top: Float
 class Page(val pieces: List<Piece>, val start: Int, val extent: Float)
 
 /** What is drawn over the text of a page besides the text: highlights, the selection and the place a search found. */
-class BookMarkSpan(val id: Long, val span: BookSpan, val colour: Int, val hasNote: Boolean)
+class BookMarkSpan(val id: Long, val span: BookSpan, val colour: Int)
 
 class BookOverlays(
     val marks: List<BookMarkSpan> = emptyList(),

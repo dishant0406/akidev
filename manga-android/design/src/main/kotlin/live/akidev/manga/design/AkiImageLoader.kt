@@ -55,7 +55,13 @@ object AkiImageLoader {
         val job = synchronized(inflight) {
             inflight.getOrPut(key) {
                 work.async {
-                    val bitmap = runCatching { decode(read(url, headers), widthPx) }.getOrNull()
+                    val file = File(folder, hash(url))
+                    val kept = file.exists()
+                    val bytes = runCatching { if (kept) readKept(file) else connections.withPermit { download(url, headers) } }.getOrNull()
+                    val bitmap = bytes?.let { runCatching { decode(it, widthPx) }.getOrNull() }
+                    // Only a picture that opens is kept, written under another name first so a half-written file is never taken for a whole one.
+                    if (bitmap == null && kept) file.delete()
+                    if (bitmap != null && !kept && !url.startsWith("file:")) keep(file, bytes)
                     if (bitmap != null) memory.put(key, bitmap)
                     synchronized(inflight) { inflight.remove(key) }
                     bitmap
@@ -65,19 +71,16 @@ object AkiImageLoader {
         return job.await()
     }
 
-    /** The bytes of a picture: from the disk if it was fetched before, else from the address, kept for next time. */
-    private suspend fun read(url: String, headers: Map<String, String>): ByteArray {
-        val file = File(folder, hash(url))
-        if (file.exists()) {
-            file.setLastModified(System.currentTimeMillis())
-            return file.readBytes()
-        }
-        val bytes = connections.withPermit { download(url, headers) }
-        if (!url.startsWith("file:")) {
-            file.writeBytes(bytes)
-            trim()
-        }
-        return bytes
+    private fun readKept(file: File): ByteArray {
+        file.setLastModified(System.currentTimeMillis())
+        return file.readBytes()
+    }
+
+    private fun keep(file: File, bytes: ByteArray) {
+        val partial = File(folder, file.name + ".part")
+        partial.writeBytes(bytes)
+        partial.renameTo(file)
+        trim()
     }
 
     private fun download(url: String, headers: Map<String, String>): ByteArray {

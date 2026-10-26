@@ -107,8 +107,9 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
         hearing = voice?.id ?: ""
         val heard = withContext(Dispatchers.Default) {
             runCatching {
-                val speaker = engine.openSpeaker(model.id)
-                speaker.speak("It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice?.id).toFloatArray() to speaker.sampleRate().toInt()
+                engine.openSpeaker(model.id).use { speaker ->
+                    speaker.speak("It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice?.id).toFloatArray() to speaker.sampleRate().toInt()
+                }
             }.getOrNull()
         }
         if (heard == null) failure = Problem("That did not work", "The voice could not be played.") else play(heard.first, heard.second)

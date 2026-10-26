@@ -6,16 +6,20 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,25 +51,28 @@ fun OnboardingScreen() {
 
     Box(Modifier.fillMaxSize()) {
         AkiAurora()
-        Column(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 20.dp).widthIn(max = 560.dp).align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterVertically),
-        ) {
-            Reveal(shown, 0) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    Box(Modifier.shadow(18.dp, AkiShapes.rounded(34.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.rounded(34.dp)).padding(10.dp)) { AkiLogo(size = 76.dp) }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AkiText("What do you read?", AkiTextStyle.Display, align = TextAlign.Center)
-                        AkiText("Akidev reads manga and books, both always here. Pick what comes first.", AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
+        // Centred when it fits; when it does not (a phone on its side) the page scrolls.
+        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            Column(
+                Modifier.heightIn(min = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp).widthIn(max = 560.dp).align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterVertically),
+            ) {
+                Reveal(shown, 0) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Box(Modifier.shadow(18.dp, AkiShapes.rounded(34.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.rounded(34.dp)).padding(10.dp)) { AkiLogo(size = 76.dp) }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AkiText("What do you read?", AkiTextStyle.Display, align = TextAlign.Center)
+                            AkiText("Akidev reads manga and books, both always here. Pick what comes first.", AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
+                        }
                     }
                 }
+                Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, "Follow series from your sources, with new chapter alerts.", chosen) { chosen = it } }
+                    Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, "EPUB books from your files or a catalogue, with your place kept.", chosen) { chosen = it } }
+                }
+                Reveal(shown, 320) { AkiText("You can change this any time in Settings.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
             }
-            Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, "Follow series from your sources, with new chapter alerts.", chosen) { chosen = it } }
-                Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, "EPUB books from your files or a catalogue, with your place kept.", chosen) { chosen = it } }
-            }
-            Reveal(shown, 320) { AkiText("You can change this any time in Settings.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
         }
     }
 }

@@ -46,7 +46,7 @@ fun rememberFilesPicker(types: Array<String> = arrayOf("*/*"), onPick: suspend (
 private fun copyToCache(context: Context, uri: Uri): File? = runCatching {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "file"
     val folder = File(context.cacheDir, "picked-" + UUID.randomUUID()).apply { mkdirs() }
-    File(folder, name).also { copy -> context.contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } } }
+    File(folder, File(name).name).also { copy -> context.contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } } }
 }.getOrNull()
 
 /**
@@ -94,7 +94,7 @@ fun coverJpeg(bitmap: Bitmap, width: Int, centre: Float = 0f): ByteArray {
 /** Hands a file to the share sheet (save to Files, Drive, a message). The file is kept in the cache folder until the system clears it. */
 fun shareFile(context: Context, name: String, text: String, mime: String) {
     val folder = File(context.cacheDir, "share").apply { mkdirs() }
-    val file = File(folder, name).also { it.writeText(text) }
+    val file = File(folder, File(name).name).also { it.writeText(text) }
     val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime).putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
     context.startActivity(android.content.Intent.createChooser(send, name))

@@ -23,7 +23,7 @@ sealed interface BookAction {
 /** What is drawn over the text of the page: the highlights, the selection, the place found, the sentence read aloud. */
 val BookModel.overlays
     get() = BookOverlays(
-        marks.map { BookMarkSpan(it.id, BookSpan(it.chapter.toInt(), it.start.toInt(), it.end.toInt()), it.colour.toInt(), it.note != null) },
+        marks.map { BookMarkSpan(it.id, BookSpan(it.chapter.toInt(), it.start.toInt(), it.end.toInt()), it.colour.toInt()) },
         selection, found, speaking,
     )
 

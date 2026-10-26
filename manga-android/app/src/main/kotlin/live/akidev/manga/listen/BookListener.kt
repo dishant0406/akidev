@@ -82,6 +82,7 @@ class BookListener(
     private var producing: Job? = null
     private var watching: Job? = null
     private var idle: Job? = null
+    private var pausedByFocus = false
     private val sentences = HashMap<Int, List<BookSpeech>>()
     private val audio = context.getSystemService(AudioManager::class.java)
     private var focus: AudioFocusRequest? = null
@@ -124,6 +125,7 @@ class BookListener(
 
     override fun play() {
         if (state != State.Paused) return
+        pausedByFocus = false
         idle?.cancel()
         // A call or a change of headphones can take the audio away: carry on from the sentence that was being heard.
         track?.apply { playbackParams = PlaybackParams().setSpeed(rate.toFloat()).setPitch(1f) }?.play()
@@ -173,6 +175,7 @@ class BookListener(
         watching?.cancel()
         track?.apply { runCatching { pause(); flush() }; release() }
         track = null
+        speaker?.close()
         speaker = null
         queued.clear()
         current = null
@@ -195,12 +198,21 @@ class BookListener(
         track = made
         // Another app's sound takes the voice away (a call, an alarm, other music), and unplugging the headphones pauses it.
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes)
-            .setOnAudioFocusChangeListener { change -> if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) pause() }.build()
+            .setOnAudioFocusChangeListener(::focusChanged).build()
         focus = request
         audio.requestAudioFocus(request)
         context.registerReceiver(noisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
         ListenSession.start(context, title, author, this)
         watching = scope.launch { watch() }
+    }
+
+    /** Another app's sound pauses the voice; when a short interruption (a call, an alarm) is over, it goes on by itself. */
+    private fun focusChanged(change: Int) {
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (state == State.Playing) { pause(); pausedByFocus = true }
+            AudioManager.AUDIOFOCUS_LOSS -> pause()
+            AudioManager.AUDIOFOCUS_GAIN -> if (pausedByFocus) play()
+        }
     }
 
     /** Follows what the track has played, to say which sentence is being heard. */
