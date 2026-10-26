@@ -21,8 +21,9 @@ enum class ReaderBackground(val title: String) { Black("Black"), Grey("Dark grey
 
 enum class OrientationLock(val title: String) { Auto("Auto"), Portrait("Portrait"), Landscape("Landscape") }
 
-enum class AutoScrollSpeed(val title: String, val pointsPerSecond: Float) {
-    Slow("Slow", 40f), Normal("Normal", 80f), Fast("Fast", 160f)
+/** How fast the strip scrolls by itself, in dp a second. */
+enum class AutoScrollSpeed(val title: String, val dpPerSecond: Float) {
+    Slow("Slow", 45f), Normal("Normal", 90f), Fast("Fast", 170f), Rapid("Rapid", 300f)
 }
 
 enum class LibrarySort(val title: String) {
@@ -69,12 +70,24 @@ class Preferences(context: Context) {
     /** Auto downloads wait for Wi-Fi: on unless the person says otherwise. */
     var downloadOnWifiOnly by boolean("downloadOnWifiOnly", true)
 
+    /** The source Discover was last on (an id, or `*` for every source). */
+    var source by string("source", "")
+
     /** Turns glass off: every control is a plain tinted shape. */
     var reduceGlass by boolean("reduceGlass", false)
+
+    /** How one series is read: the mode the person chose for it, or null until they have. */
+    fun modeOf(source: String, series: String): ReadingMode? = ReadingMode.entries.firstOrNull { it.name == store.getString("mode.$source.$series", null) }
+
+    fun setModeOf(source: String, series: String, mode: ReadingMode) {
+        store.edit().putString("mode.$source.$series", mode.name).apply()
+    }
 
     // ---- how the settings are kept -----------------------------------------------------------------------------------------
 
     private fun boolean(key: String, default: Boolean) = Stored(store, key, store.getBoolean(key, default)) { k, v -> putBoolean(k, v) }
+
+    private fun string(key: String, default: String) = Stored(store, key, store.getString(key, default)!!) { k, v -> putString(k, v) }
 
     private fun long(key: String, default: Long) = Stored(store, key, store.getLong(key, default)) { k, v -> putLong(k, v) }
 

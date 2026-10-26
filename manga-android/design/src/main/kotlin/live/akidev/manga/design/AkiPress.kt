@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -40,4 +41,10 @@ fun Modifier.akiPress(
             interactionSource = source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick,
             onLongClick = onLongClick?.let { run -> { haptic.performHapticFeedback(HapticFeedbackType.LongPress); run() } },
         )
+}
+
+/** A tap that does something: wraps any content (a card, a cover) as a button without the default look. */
+@Composable
+fun AkiTap(onClick: () -> Unit, modifier: Modifier = Modifier, squeeze: Float = 0.97f, label: String? = null, content: @Composable () -> Unit) {
+    Box(modifier.akiPress(label = label, squeeze = squeeze, onClick = onClick)) { content() }
 }

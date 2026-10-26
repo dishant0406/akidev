@@ -1,16 +1,14 @@
 package live.akidev.manga.app
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +16,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +28,9 @@ import live.akidev.manga.design.AkiBackdrop
 import live.akidev.manga.design.AkiGlassScope
 import live.akidev.manga.design.AkiTabBar
 import live.akidev.manga.design.AkiTheme
+import live.akidev.manga.manga.HomeScreen
+import live.akidev.manga.manga.SeriesScreen
+import live.akidev.manga.reader.ReaderScreen
 import live.akidev.manga.sources.RepoAddSheet
 import live.akidev.manga.sources.RepoScreen
 import live.akidev.manga.sources.SourceSettingsScreen
@@ -56,10 +61,11 @@ fun AkiApp(model: AppModel) {
 
 @Composable
 private fun Shell(model: AppModel, router: Router) {
-    BackHandler(enabled = router.stack.isNotEmpty()) { router.back() }
+    BackHandler(enabled = router.top != null) { router.back() }
     Box(Modifier.fillMaxSize()) {
-        // The tab the person is on. Changing tab is instant, as on iOS: each tab is its own page.
+        // The tab the person is on. Each tab is its own page; what a tab remembers (its titles, its scroll place) lives in the model.
         when (model.tab) {
+            AppTab.Home -> if (model.prefs.readerKind == ReaderKind.Books) Unit else HomeScreen()
             AppTab.Sources -> SourcesScreen()
             else -> Unit
         }
@@ -71,25 +77,34 @@ private fun Shell(model: AppModel, router: Router) {
                 model.tab, { model.tab = it }, Modifier.navigationBarsPadding().padding(bottom = 6.dp),
             )
         }
-        AnimatedContent(
-            router.top,
-            transitionSpec = {
-                if (targetState != null) (slideInHorizontally(tween(320)) { it / 3 } + fadeIn(tween(220))) togetherWith fadeOut(tween(160))
-                else fadeIn(tween(160)) togetherWith (slideOutHorizontally(tween(260)) { it / 3 } + fadeOut(tween(200)))
-            },
-            label = "pushed",
-        ) { route -> if (route != null) PushedScreen(route) }
+        // Every pushed screen stays on the stack under the one on top, so going back finds each as it was.
+        for (pushed in router.stack) key(pushed) { PushedScreen(pushed, router, isTop = pushed.route === top) }
     }
 }
 
-/** The screen a route opens, over the page behind it. */
+/** A pushed screen: it slides in from the right, over the page behind it, and slides out when it is taken off the stack. */
 @Composable
-private fun PushedScreen(route: Route) {
-    Box(Modifier.fillMaxSize()) {
+private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
+    val slide = remember { Animatable(1f) }
+    LaunchedEffect(Unit) { slide.animateTo(0f, tween(320, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(pushed.leaving) {
+        if (pushed.leaving) {
+            slide.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
+            router.remove(pushed)
+        }
+    }
+    Box(
+        Modifier.fillMaxSize()
+            .graphicsLayer { translationX = slide.value * size.width * 0.35f; alpha = 1f - slide.value }
+            // A screen under the top one is not drawn at all: it only keeps its state.
+            .then(if (isTop || pushed.leaving) Modifier else Modifier.drawWithContent {}),
+    ) {
         AkiBackdrop()
-        when (route) {
+        when (val route = pushed.route) {
             is RepoRoute -> RepoScreen(route.repo)
             is SourceSettingsRoute -> SourceSettingsScreen(route.source)
+            is SeriesRoute -> SeriesScreen(route.ref)
+            is ReaderRoute -> ReaderScreen(route)
             else -> Unit
         }
     }

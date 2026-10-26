@@ -22,14 +22,16 @@ import androidx.compose.ui.window.Dialog
 @Composable
 private fun AkiDialogCard(title: String, message: String?, onDismiss: () -> Unit, content: @Composable () -> Unit = {}, buttons: @Composable () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.widthIn(max = 360.dp).background(Aki.colors.background, RoundedCornerShape(Aki.cardRadius)).padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            AkiText(title, AkiTextStyle.Heading)
-            if (message != null) AkiText(message, AkiTextStyle.Body, tone = AkiTone.Muted)
-            content()
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) { buttons() }
+        AkiGlassWindow(Aki.colors.background) {
+            Column(
+                Modifier.widthIn(max = 360.dp).background(Aki.colors.background, RoundedCornerShape(Aki.cardRadius)).padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                AkiText(title, AkiTextStyle.Heading)
+                if (message != null) AkiText(message, AkiTextStyle.Body, tone = AkiTone.Muted)
+                content()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) { buttons() }
+            }
         }
     }
 }

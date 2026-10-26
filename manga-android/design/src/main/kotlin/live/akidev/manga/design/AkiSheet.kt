@@ -72,8 +72,12 @@ fun AkiSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable 
                     .imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.padding(top = 8.dp, bottom = 4.dp).width(36.dp).height(5.dp).background(Aki.colors.textMuted.copy(alpha = 0.4f), CircleShape))
-                content()
+                AkiGlassWindow(Aki.colors.background) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.padding(top = 8.dp, bottom = 4.dp).width(36.dp).height(5.dp).background(Aki.colors.textMuted.copy(alpha = 0.4f), CircleShape))
+                        content()
+                    }
+                }
             }
         }
     }

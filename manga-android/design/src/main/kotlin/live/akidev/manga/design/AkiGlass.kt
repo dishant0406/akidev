@@ -3,6 +3,7 @@ package live.akidev.manga.design
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -48,6 +49,23 @@ fun AkiGlassScope(reduce: Boolean = false, content: @Composable () -> Unit) {
     val look = if (reduce || !akiGlassSupported()) AkiGlassLook.Solid else AkiGlassLook.Glass
     val source = remember(state, look) { GlassSource(state, look) }
     CompositionLocalProvider(LocalGlassSource provides source, content = content)
+}
+
+/**
+ * A window of its own (a sheet, a dialog) cannot show what is on the screen behind it, so its glass shows the window's own background:
+ * `content` is drawn over a source of `color`, in a glass scope of its own.
+ */
+@Composable
+fun AkiGlassWindow(color: Color, content: @Composable () -> Unit) {
+    val state = rememberHazeState()
+    val look = LocalGlassSource.current?.look ?: AkiGlassLook.Solid
+    val source = remember(state, look) { GlassSource(state, look) }
+    CompositionLocalProvider(LocalGlassSource provides source) {
+        Box {
+            if (look == AkiGlassLook.Glass) Box(Modifier.matchParentSize().hazeSource(state, zIndex = -1f).background(color))
+            content()
+        }
+    }
 }
 
 /**

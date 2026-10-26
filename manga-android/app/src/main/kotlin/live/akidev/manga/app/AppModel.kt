@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import live.akidev.manga.manga.DiscoverModel
 import uniffi.akimanga.Engine
 import uniffi.akimanga.LibraryEntry
 import uniffi.akimanga.RepoInfo
@@ -47,6 +48,7 @@ class AppModel(context: Context) {
     /** The Updates screen's rows, read in one go with the library. */
     var updates by mutableStateOf(emptyList<UpdateEntry>())
         private set
+    val discover = DiscoverModel(this)
     var tab by mutableStateOf(AppTab.order(prefs.readerKind).first())
     var pendingRepo by mutableStateOf<PendingRepo?>(null)
 

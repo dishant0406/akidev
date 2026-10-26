@@ -2,6 +2,9 @@ package live.akidev.manga.design
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,5 +44,24 @@ fun AkiPage(
             verticalArrangement = Arrangement.spacedBy(spacing),
             content = content,
         )
+    }
+}
+
+/** How many cards of a grid fit in a page: two on a phone, more on a wider screen, where a card is never wider than about 175dp. */
+@Composable
+fun akiColumns(): Int {
+    val width = minOf(LocalConfiguration.current.screenWidthDp, 720) - 40
+    return maxOf(2, (width + 14) / (150 + 14))
+}
+
+/** A grid of cards in a page. Its rows are items of the page, so the grid scrolls with it and only the rows on screen are made. */
+fun <T> LazyListScope.akiGrid(cards: List<T>, columns: Int, key: (T) -> Any, cell: @Composable (T) -> Unit) {
+    val rows = cards.chunked(columns)
+    items(rows.size, key = { "row-" + key(rows[it].first()) }) { index ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            for (card in rows[index]) Box(Modifier.weight(1f)) { cell(card) }
+            // The last row keeps the width of a card for each place left empty.
+            repeat(columns - rows[index].size) { Box(Modifier.weight(1f)) }
+        }
     }
 }
