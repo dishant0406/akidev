@@ -36,8 +36,9 @@ pub enum MangaError {
         url: String,
         reason: String,
     },
+    // Not called `message`: that is already a member of Kotlin's exceptions.
     Failed {
-        message: String,
+        reason: String,
     },
 }
 
@@ -46,7 +47,7 @@ impl std::fmt::Display for MangaError {
         match self {
             MangaError::Challenge { url, .. } => write!(f, "{url} wants a check before it answers"),
             MangaError::Offline { url, reason } => write!(f, "cannot reach {url}: {reason}"),
-            MangaError::Failed { message } => f.write_str(message),
+            MangaError::Failed { reason } => f.write_str(reason),
         }
     }
 }
@@ -68,7 +69,7 @@ impl From<anyhow::Error> for MangaError {
             };
         }
         MangaError::Failed {
-            message: format!("{error:#}"),
+            reason: format!("{error:#}"),
         }
     }
 }
@@ -77,7 +78,7 @@ type Result<T> = std::result::Result<T, MangaError>;
 
 fn failed(message: impl Into<String>) -> MangaError {
     MangaError::Failed {
-        message: message.into(),
+        reason: message.into(),
     }
 }
 

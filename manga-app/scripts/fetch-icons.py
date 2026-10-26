@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Downloads the Solar icons the app uses into App/Assets.xcassets.
 
-Solar is by 480 Design, licensed CC BY 4.0 (credit is given in Settings > About). Each name below is what the app
+Solar is by 480 Design, licensed CC BY 4.0 (credit is given in Settings > About). It writes the iOS app's asset catalog and
+the Android app's vector drawables (manga-android/design) from the same download. Each name below is what the app
 calls an icon; `name` is the outline version and `name-solid` the bold one (only for the names in SOLID). Run it again after
 adding a name.
 """
 import json
 import pathlib
+import re
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 
 ICONS = {
     "home": "home-2", "library": "library", "inbox": "inbox", "sources": "widget-2", "settings": "settings",
@@ -54,3 +57,58 @@ for icon, (name, suffix) in wanted.items():
         "properties": {"preserves-vector-representation": True, "template-rendering-intent": "template"},
     }, indent=2))
 print(f"{len(wanted)} icons written")
+
+
+# ---- Android: one vector drawable per icon, and the list that `AkiIcon` looks them up in -----------------------------------
+
+android = root.parent.parent.parent / "manga-android" / "design" / "src" / "main"
+
+
+def circle_path(cx, cy, r):
+    return f"M{cx - r},{cy} a{r},{r} 0 1,0 {2 * r},0 a{r},{r} 0 1,0 {-2 * r},0"
+
+
+def vector_paths(node, inherited):
+    """The drawable `<path>` lines of an SVG node: `g` passes its attributes down, `circle` becomes a path."""
+    attributes = {**inherited, **{key: value for key, value in node.attrib.items() if key not in ("d", "cx", "cy", "r")}}
+    tag = node.tag.split("}")[1]
+    if tag == "g":
+        return [line for child in node for line in vector_paths(child, attributes)]
+    data = node.attrib["d"] if tag == "path" else circle_path(float(node.attrib["cx"]), float(node.attrib["cy"]), float(node.attrib["r"]))
+    lines = [f'    <path android:pathData="{data}"']
+    fill, stroke = attributes.get("fill", "#000000"), attributes.get("stroke")
+    if fill != "none":
+        lines.append('        android:fillColor="#000000"')
+        if attributes.get("fill-rule") == "evenodd":
+            lines.append('        android:fillType="evenOdd"')
+    if stroke:
+        lines.append('        android:strokeColor="#000000"')
+        lines.append(f'        android:strokeWidth="{attributes.get("stroke-width", "1")}"')
+        lines.append(f'        android:strokeLineCap="{attributes.get("stroke-linecap", "butt")}"')
+        lines.append(f'        android:strokeLineJoin="{attributes.get("stroke-linejoin", "miter")}"')
+    lines[-1] += " />"
+    return ["\n".join(lines)]
+
+
+drawables = android / "res" / "drawable"
+drawables.mkdir(parents=True, exist_ok=True)
+for stale in drawables.glob("aki_icon_*.xml"):
+    stale.unlink()
+entries = []
+for icon, (name, suffix) in sorted(wanted.items(), key=lambda item: item[1]):
+    svg = ET.fromstring(f'<svg xmlns="http://www.w3.org/2000/svg">{icons[icon]["body"]}</svg>')
+    paths = [line for child in svg for line in vector_paths(child, {})]
+    resource = "aki_icon_" + (name + suffix).replace("-", "_")
+    (drawables / f"{resource}.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        '    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">\n'
+        + "\n".join(paths) + "\n</vector>\n"
+    )
+    entries.append(f'    "{name}{suffix}" to R.drawable.{resource},')
+(android / "kotlin" / "live" / "akidev" / "manga" / "design" / "AkiIconSet.kt").write_text(
+    "package live.akidev.manga.design\n\n"
+    "// Written by manga-app/scripts/fetch-icons.py: do not edit.\n"
+    "internal val akiIconSet: Map<String, Int> = mapOf(\n" + "\n".join(entries) + "\n)\n"
+)
+print(f"{len(wanted)} Android icons written")

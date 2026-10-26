@@ -1,0 +1,36 @@
+[versions]
+agp = "9.4.1"
+kotlin = "2.4.21"
+composeBom = "2026.09.00"
+activityCompose = "1.13.0"
+lifecycle = "2.11.0"
+haze = "2.0.1"
+coil = "3.6.3"
+media3 = "1.11.1"
+work = "2.12.0"
+jna = "5.19.1"
+coroutines = "1.11.0"
+coreKtx = "1.19.1"
+
+[libraries]
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-graphics = { module = "androidx.compose.ui:ui-graphics" }
+compose-tooling = { module = "androidx.compose.ui:ui-tooling" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-glass = { module = "dev.chrisbanes.haze:haze-glass", version.ref = "haze" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
+work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
