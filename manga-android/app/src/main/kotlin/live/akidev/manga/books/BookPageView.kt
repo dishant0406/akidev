@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -33,7 +33,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import kotlin.math.roundToInt
 import live.akidev.manga.design.*
 
@@ -184,6 +188,15 @@ private fun Handle(atStart: Boolean, anchor: Offset, layout: ChapterLayout, page
     }
 }
 
+/** Puts a popup above a point, in the middle of it and kept on the screen; below the point instead when there is no room above. */
+private fun above(point: Offset, gap: Float) = object : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val x = (point.x - popupContentSize.width / 2).toInt().coerceIn(0, maxOf(windowSize.width - popupContentSize.width, 0))
+        val over = point.y - gap - popupContentSize.height
+        return IntOffset(x, if (over >= 0) over.toInt() else (point.y + gap * 3).toInt())
+    }
+}
+
 /** What can be done with a selection or a highlight: a row of colours, and the actions. */
 @Composable
 private fun ActionMenu(model: BookModel, layout: ChapterLayout, target: MenuTarget, close: () -> Unit) {
@@ -193,8 +206,9 @@ private fun ActionMenu(model: BookModel, layout: ChapterLayout, target: MenuTarg
         model.perform(action, target.span, target.mark, words)
     }
     val shape = RoundedCornerShape(22.dp)
-    Popup(offset = IntOffset(target.point.x.toInt(), target.point.y.toInt()), onDismissRequest = close) {
-        Column(Modifier.widthIn(min = 220.dp).shadow(18.dp, shape).background(Aki.colors.background, shape).padding(vertical = 8.dp)) {
+    val density = LocalDensity.current.density
+    Popup(popupPositionProvider = above(target.point, 12 * density), onDismissRequest = close) {
+        Column(Modifier.width(240.dp).shadow(18.dp, shape).background(Aki.colors.background, shape).padding(vertical = 8.dp)) {
             Row(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 for (index in HighlightColour.names.indices) {
                     Box(Modifier.size(30.dp).background(HighlightColour.colour(index), CircleShape).akiPress(label = HighlightColour.names[index]) { act(BookAction.Highlight(index)) })

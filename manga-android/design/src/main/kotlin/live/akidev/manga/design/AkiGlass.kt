@@ -84,10 +84,13 @@ fun Modifier.akiGlassSource(layer: Float = 0f): Modifier {
 fun Modifier.akiGlass(shape: RoundedCornerShape, tint: Color? = null): Modifier {
     val source = LocalGlassSource.current
     if (source == null || source.look == AkiGlassLook.Solid) return akiSolid(shape, tint)
-    val style = remember(shape, tint) {
+    val dark = Aki.colors.dark
+    val base = Aki.colors.secondary
+    val style = remember(shape, tint, dark) {
         GlassStyle.regular.then {
             shape(shape)
-            if (tint != null) tint(tint.copy(alpha = 0.9f))
+            // On a dark page the glass is the dark grey of a quiet fill, so what is written on it can be read.
+            if (tint != null) tint(tint.copy(alpha = 0.9f)) else if (dark) tint(base.copy(alpha = 0.85f))
         }
     }
     return hazeGlass(input = HazeInput.Sources(source.state), style = style)

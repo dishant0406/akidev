@@ -13,6 +13,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        // The engine is built for 64-bit ARM phones only (and the emulator on an Apple-silicon Mac); JNA's own library comes for each of these.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     buildTypes {
