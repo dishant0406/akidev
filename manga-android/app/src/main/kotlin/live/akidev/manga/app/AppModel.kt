@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import live.akidev.manga.books.BooksModel
+import live.akidev.manga.listen.ReadAloudModel
 import live.akidev.manga.manga.DiscoverModel
 import live.akidev.manga.manga.LibraryModel
 import live.akidev.manga.manga.UpdatesModel
@@ -44,8 +45,8 @@ class AppModel(private val context: Context) {
     val appContext: Context get() = context
     val engine = Engine(File(context.filesDir, "AkiManga").path)
     val prefs = Preferences(context)
-    private val downloader = AutoDownloader(context, engine) { prefs.downloadOnWifiOnly }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val downloader = AutoDownloader(context, engine) { prefs.downloadOnWifiOnly }
 
     /** Everything installed; [visibleSources] is what the person's content settings let through. */
     var sources by mutableStateOf(emptyList<SourceInfo>())
@@ -58,6 +59,7 @@ class AppModel(private val context: Context) {
     /** The Updates screen's rows, read in one go with the library. */
     var updates by mutableStateOf(emptyList<UpdateEntry>())
         private set
+    val readAloud = ReadAloudModel(engine, prefs, scope)
     val discover = DiscoverModel(this)
     val libraryScreen = LibraryModel(this)
     val updatesScreen = UpdatesModel()

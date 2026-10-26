@@ -34,6 +34,8 @@ import live.akidev.manga.books.BooksHomeScreen
 import live.akidev.manga.books.BooksScreen
 import live.akidev.manga.books.CatalogueScreen
 import live.akidev.manga.books.HighlightsScreen
+import live.akidev.manga.listen.VoiceChoiceScreen
+import live.akidev.manga.listen.VoicesScreen
 import live.akidev.manga.manga.HomeScreen
 import live.akidev.manga.manga.LibraryScreen
 import live.akidev.manga.manga.MangaHubScreen
@@ -122,6 +124,8 @@ private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
             is ReaderRoute -> ReaderScreen(route)
             SettingsRoute -> SettingsScreen()
             is CatalogueRoute -> CatalogueScreen(route.ref)
+            VoicesRoute -> VoicesScreen()
+            VoiceChoiceRoute -> VoiceChoiceScreen()
             is HighlightsRoute -> HighlightsScreen(route.open)
             is BookReaderRoute -> BookReaderScreen(route)
             else -> Unit

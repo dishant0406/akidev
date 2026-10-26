@@ -85,6 +85,15 @@ class Preferences(context: Context) {
     var bookSort by enum("bookSort", BookSort.Recent)
     var bookReversed by boolean("bookReversed", false)
 
+    /** The voice model that reads books aloud (its id); empty until one is chosen. */
+    var voiceModel by string("voiceModel", "")
+
+    /** The voice of that model that reads (its id); empty is the model's own. */
+    var voiceName by string("voiceName", "")
+
+    /** How fast a book is read aloud, as a multiple of the voice's own pace. */
+    var speechRate by double("speechRate", 1.0)
+
     /** Turns glass off: every control is a plain tinted shape. */
     var reduceGlass by boolean("reduceGlass", false)
 
@@ -100,6 +109,8 @@ class Preferences(context: Context) {
     private fun boolean(key: String, default: Boolean) = Stored(store, key, store.getBoolean(key, default)) { k, v -> putBoolean(k, v) }
 
     private fun string(key: String, default: String) = Stored(store, key, store.getString(key, default)!!) { k, v -> putString(k, v) }
+
+    private fun double(key: String, default: Double) = Stored(store, key, store.getFloat(key, default.toFloat()).toDouble()) { k, v -> putFloat(k, v.toFloat()) }
 
     private fun long(key: String, default: Long) = Stored(store, key, store.getLong(key, default)) { k, v -> putLong(k, v) }
 

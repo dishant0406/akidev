@@ -30,6 +30,9 @@ import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.ReaderKind
+import live.akidev.manga.app.VoicesRoute
+import live.akidev.manga.books.BookFont
+import live.akidev.manga.books.BookTheme
 import live.akidev.manga.app.ReadingMode
 import live.akidev.manga.app.describe
 import live.akidev.manga.app.rememberFilePicker
@@ -74,6 +77,8 @@ fun SettingsScreen() {
         app.scheduleBackgroundWork()
         if (!granted) message = Problem("Notifications are off", "Turn them on for Akidev in the Android Settings app, then try again.")
     }
+    // Whether the voices repository answers is asked now, when Settings opens, and never at launch.
+    LaunchedEffect(Unit) { app.readAloud.check() }
     LaunchedEffect(Unit) {
         downloaded = runCatching { app.engine.downloads().sumOf { it.bytes.toLong() } }.getOrDefault(0)
         categories = runCatching { app.engine.categories() }.getOrDefault(emptyList())
@@ -83,6 +88,8 @@ fun SettingsScreen() {
         item { AkiBackHeader("Settings", back = router::back) }
         if (app.prefs.readerKind == ReaderKind.Books) {
             readerSection()
+            booksSection()
+            readAloudSection()
             appearanceSection()
             dataSection(onBackup = {
                 runCatching { app.engine.backup() }.fold(
@@ -91,12 +98,22 @@ fun SettingsScreen() {
                 )
             }, onRestore = importer, onComic = comicImporter)
             item { AkiText("Manga", AkiTextStyle.Title, Modifier.padding(top = 8.dp)) }
-            mangaSections(categories, downloaded, scope) { enableAlerts(app, context, askForAlerts) }
+            item { ContentSection() }
+            item { LibrarySection(categories) }
+            item { ReadingSection() }
+            item { UpdatesSection { enableAlerts(app, context, askForAlerts) } }
+            item { DownloadsSection(downloaded, scope) }
             aboutSection()
         } else {
             appearanceSection()
             readerSection()
-            mangaSections(categories, downloaded, scope) { enableAlerts(app, context, askForAlerts) }
+            item { ContentSection() }
+            item { LibrarySection(categories) }
+            item { ReadingSection() }
+            booksSection()
+            readAloudSection()
+            item { UpdatesSection { enableAlerts(app, context, askForAlerts) } }
+            item { DownloadsSection(downloaded, scope) }
             dataSection(onBackup = {
                 runCatching { app.engine.backup() }.fold(
                     { shareFile(context, "AkiManga-${LocalDate.now()}.json", it, "application/json") },
@@ -142,13 +159,35 @@ private fun LazyListScope.readerSection() {
     }
 }
 
-/** Everything that is about manga: content, library, reading, updates and downloads. */
-private fun LazyListScope.mangaSections(categories: List<CategoryInfo>, downloaded: Long, scope: kotlinx.coroutines.CoroutineScope, enableAlerts: () -> Unit) {
-    item { ContentSection() }
-    item { LibrarySection(categories) }
-    item { ReadingSection() }
-    item { UpdatesSection(enableAlerts) }
-    item { DownloadsSection(downloaded, scope) }
+/** How books look and read before one is opened; the reader's own sheet changes the same things for the book in hand. */
+private fun LazyListScope.booksSection() {
+    item {
+        val prefs = LocalApp.current.prefs
+        val style = prefs.bookStyle
+        AkiSection("Books", footer = "How a book opens. Once you are in a book, its Type and theme sheet changes these for you as you read.") {
+            AkiCard(padding = 16.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    AkiSelect("Reading", style.scroll, { prefs.bookStyle = style.copy(scroll = it) }, listOf(AkiOption(false, "Pages"), AkiOption(true, "Scroll")))
+                    AkiSelect("Theme", style.theme, { prefs.bookStyle = style.copy(theme = it) }, BookTheme.entries.map { AkiOption(it, it.title) })
+                    AkiSelect("Font", style.font, { prefs.bookStyle = style.copy(font = it) }, BookFont.entries.map { AkiOption(it, it.title) })
+                    AkiSwitch("Keep the screen on", prefs.keepAwake, { prefs.keepAwake = it })
+                }
+            }
+        }
+    }
+}
+
+/** Reading aloud is offered only when the voices repository answered when this screen opened. */
+private fun LazyListScope.readAloudSection() {
+    item {
+        val app = LocalApp.current
+        val router = LocalRouter.current
+        if (app.readAloud.reachable) {
+            AkiSection("Reading aloud", footer = "Books are read in a voice that runs on this phone. Get a model once; reading then needs no network.") {
+                AkiTap({ router.push(VoicesRoute) }) { AkiRow("Voice model", subtitle = app.readAloud.current?.name ?: "None yet: choose one to get", icon = "headphones", showsChevron = true) }
+            }
+        }
+    }
 }
 
 @Composable

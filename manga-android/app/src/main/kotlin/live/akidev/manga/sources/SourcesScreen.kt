@@ -7,10 +7,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import live.akidev.manga.app.AppTab
+import live.akidev.manga.app.CatalogueRef
+import live.akidev.manga.app.CatalogueRoute
 import live.akidev.manga.app.LocalApp
+import live.akidev.manga.app.Problem
+import live.akidev.manga.app.describe
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.ReaderKind
 import live.akidev.manga.app.RepoRoute
@@ -28,6 +35,10 @@ fun SourcesScreen() {
     val router = LocalRouter.current
     var addingRepo by remember { mutableStateOf(false) }
     var pastingSource by remember { mutableStateOf(false) }
+    var catalogues by remember { mutableStateOf(loadCatalogues(model)) }
+    var addingCatalogue by remember { mutableStateOf(false) }
+    var catalogueProblem by remember { mutableStateOf<Problem?>(null) }
+    val scope = rememberCoroutineScope()
 
     AkiRefreshable({ model.updateSources(); model.refresh() }, Modifier.fillMaxSize()) {
         AkiPage {
@@ -39,7 +50,13 @@ fun SourcesScreen() {
                     }
                 }
             }
-            item { InstalledSection(onAdd = { pastingSource = true }) }
+            if (model.prefs.readerKind == ReaderKind.Books) {
+                item { BooksSection(catalogues, onAddCatalogue = { addingCatalogue = true }, onChanged = { catalogues = loadCatalogues(model) }) }
+                item { InstalledSection(onAdd = { pastingSource = true }) }
+            } else {
+                item { InstalledSection(onAdd = { pastingSource = true }) }
+                item { BooksSection(catalogues, onAddCatalogue = { addingCatalogue = true }, onChanged = { catalogues = loadCatalogues(model) }) }
+            }
             item { RepositoriesSection(onAdd = { addingRepo = true }) }
         }
     }
@@ -50,6 +67,45 @@ fun SourcesScreen() {
         )
     }
     if (pastingSource) SourceAddSheet { pastingSource = false }
+    if (addingCatalogue) {
+        AkiPrompt(
+            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add", { addingCatalogue = false },
+            onConfirm = { address ->
+                addingCatalogue = false
+                scope.launch {
+                    try {
+                        model.engine.addCatalogue(address)
+                        catalogues = loadCatalogues(model)
+                    } catch (failure: Exception) {
+                        catalogueProblem = describe(failure)
+                    }
+                }
+            },
+        )
+    }
+    catalogueProblem?.let { AkiAlert(it.title, it.message) { catalogueProblem = null } }
+}
+
+private fun loadCatalogues(model: live.akidev.manga.app.AppModel) = runCatching { model.engine.catalogues() }.getOrDefault(emptyList())
+
+/** Books come from files on the phone and from catalogues the person adds by address (OPDS feeds). */
+@Composable
+private fun BooksSection(catalogues: List<uniffi.akimanga.CatalogueInfo>, onAddCatalogue: () -> Unit, onChanged: () -> Unit) {
+    val model = LocalApp.current
+    val router = LocalRouter.current
+    AkiSection(
+        "Books",
+        footer = "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.",
+    ) {
+        for (catalogue in catalogues) {
+            val remove = AkiMenuItem("Remove", "trash", destructive = true) { model.engine.removeCatalogue(catalogue.url); onChanged() }
+            AkiTapMenu(listOf(remove), onClick = { router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) {
+                AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true)
+            }
+        }
+        AkiButton("Add an EPUB book", icon = "book", fullWidth = true) { model.tab = AppTab.Books; model.addingBook = true }
+        AkiButton("Add a book catalogue", icon = "add", fullWidth = true, onClick = onAddCatalogue)
+    }
 }
 
 @Composable

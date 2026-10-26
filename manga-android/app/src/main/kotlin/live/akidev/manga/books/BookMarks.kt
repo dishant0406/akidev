@@ -44,9 +44,9 @@ fun BookModel.perform(action: BookAction, span: BookSpan, mark: Long?, words: St
             marks.firstOrNull { it.id == id }?.let { noteDraft = NoteDraft(it.id, it.quote) }
             return
         }
-        BookAction.Read -> return read(span)
+        BookAction.Read -> return readFrom(span)
         BookAction.Copy -> {
-            val clipboard = app.appContext.getSystemService(ClipboardManager::class.java)
+            val clipboard = appContext.getSystemService(ClipboardManager::class.java)
             clipboard.setPrimaryClip(ClipData.newPlainText("Words from the book", words))
             return
         }

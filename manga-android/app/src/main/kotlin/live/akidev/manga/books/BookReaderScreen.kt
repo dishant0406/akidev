@@ -45,6 +45,7 @@ import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
+import live.akidev.manga.listen.ListenBar
 import uniffi.akimanga.BookInfo
 
 /** Opens the book and shows it, or says why it cannot be shown. */
@@ -96,6 +97,7 @@ private fun BookReaderView(model: BookModel) {
     DisposableEffect(app.prefs.keepAwake) {
         view.keepScreenOn = app.prefs.keepAwake
         onDispose {
+            model.stopListening()
             view.keepScreenOn = false
             WindowCompat.getInsetsController((view.context as Activity).window, view).show(WindowInsetsCompat.Type.systemBars())
         }
@@ -114,6 +116,7 @@ private fun BookReaderView(model: BookModel) {
             AnimatedVisibility(model.chromeVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(model, onContents = { contents = true }, onSearch = { searching = true }, onSettings = { settings = true }) }
             Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (model.trail.isNotEmpty()) AkiButton("Back to where you were", icon = "back", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) { model.goBack() }
+                model.listener?.let { ListenBar(it) }
                 AnimatedVisibility(model.chromeVisible, enter = fadeIn(), exit = fadeOut()) { BottomBar(model, onContents = { contents = true }) }
             }
         }
@@ -135,6 +138,8 @@ private fun Modifier.grey() = graphicsLayer { colorFilter = ColorFilter.colorMat
 @Composable
 private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Unit, onSettings: () -> Unit) {
     val router = LocalRouter.current
+    val app = LocalApp.current
+    val scope = rememberCoroutineScope()
     Row(
         Modifier.fillMaxWidth().widthIn(max = 640.dp).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
@@ -148,6 +153,7 @@ private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Uni
                 }
             }
         }
+        if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen(scope) }
         AkiIconButton("search", "Search in this book", onClick = onSearch)
         AkiIconButton("sliders", "Type and theme", onClick = onSettings)
     }

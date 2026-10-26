@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
+import live.akidev.manga.listen.BookListener
 import uniffi.akimanga.BookAlign
 import uniffi.akimanga.BookBlock
 import uniffi.akimanga.BookChapter
@@ -210,6 +211,7 @@ class BookModel private constructor(
     }
 
     fun turned(to: BookPlace) {
+        if (listener != null && to != place && to != speechTurn) userMoved = true
         place = to
         if (selection != null) selection = null
         if (found != null && foundPage != to) found = null
@@ -230,7 +232,7 @@ class BookModel private constructor(
     fun tapped(zone: BookTapZone, link: String?, isNote: Boolean, word: BookSpan?) {
         if (link != null) return follow(link, isNote)
         // While it reads aloud, a tap on a word in the middle of the page reads on from there.
-        if (listening && zone == BookTapZone.Middle && word != null) return read(word)
+        if (listener != null && zone == BookTapZone.Middle && word != null) return readFrom(word)
         val flipped = app.prefs.invertTaps != info.rtl
         when (zone) {
             BookTapZone.Middle -> chromeVisible = !chromeVisible
@@ -439,20 +441,23 @@ class BookModel private constructor(
 
     // ---- reading aloud (see Listening.kt) --------------------------------------------------------------------------------------
 
+    /** Reading aloud, while it goes on. */
+    var listener by mutableStateOf<BookListener?>(null)
+
+    /** The person turned away from the page being read aloud: the page stops following the voice until they come back to it. */
+    var userMoved = false
+
     /** The place the page last moved to because the voice did, so that is not taken for the person turning. */
     var speechTurn: BookPlace? = null
 
-    /** Reading aloud is going on. */
-    var listening = false
-        internal set
-
-    internal var readFrom: (BookSpan) -> Unit = {}
-
-    fun read(from: BookSpan) = readFrom(from)
+    /** What reading aloud runs in: as long as the book is open. */
+    val listenScope get() = scope
 
     /** A voice model is on the phone, so "Read from here" is offered. */
-    var canRead = false
-        internal set
+    val canRead get() = app.readAloud.current != null
+
+    /** The app's context, for the system's services. */
+    val appContext: Context get() = context
 
     /** Reloads the book's own record (a cover changed). */
     fun reloadInfo() {

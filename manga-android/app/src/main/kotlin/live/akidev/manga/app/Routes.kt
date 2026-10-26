@@ -30,3 +30,9 @@ class HighlightsRoute(val open: (uniffi.akimanga.BookHighlightIn) -> Unit) : Rou
 
 /** A book, being read, over everything. */
 class BookReaderRoute(val book: uniffi.akimanga.BookInfo) : Route
+
+/** The voice models for reading aloud. */
+object VoicesRoute : Route
+
+/** The voices of the model that reads. */
+object VoiceChoiceRoute : Route
