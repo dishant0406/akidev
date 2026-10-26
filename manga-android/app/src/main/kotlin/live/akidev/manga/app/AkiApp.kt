@@ -84,7 +84,6 @@ private fun Shell(model: AppModel, router: Router) {
             AppTab.Manga -> MangaHubScreen()
             AppTab.Updates -> UpdatesScreen()
             AppTab.Sources -> SourcesScreen()
-            else -> Unit
         }
         val top = router.top
         AnimatedVisibility(top == null || !top.hidesTabBar, Modifier.align(Alignment.BottomCenter), enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
@@ -128,7 +127,6 @@ private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
             VoiceChoiceRoute -> VoiceChoiceScreen()
             is HighlightsRoute -> HighlightsScreen(route.open)
             is BookReaderRoute -> BookReaderScreen(route)
-            else -> Unit
         }
     }
 }

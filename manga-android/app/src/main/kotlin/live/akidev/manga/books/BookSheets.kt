@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.shareFile
 import live.akidev.manga.design.*
 import uniffi.akimanga.BookEntry

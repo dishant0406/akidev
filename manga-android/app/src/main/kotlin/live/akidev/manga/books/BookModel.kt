@@ -17,7 +17,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
-import live.akidev.manga.app.describe
 import live.akidev.manga.listen.BookListener
 import uniffi.akimanga.BookAlign
 import uniffi.akimanga.BookBlock
@@ -168,9 +167,6 @@ class BookModel private constructor(
     class Insets(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
     // ---- the pages ask -----------------------------------------------------------------------------------------------------
-
-    /** The layout of a chapter if it has been set in type already; asking does not start it. */
-    fun peek(chapter: Int) = layouts[chapter]
 
     /** The chapter's type, or null while it is being set (it then shows in [layouts]). */
     fun layout(chapter: Int): ChapterLayout? {

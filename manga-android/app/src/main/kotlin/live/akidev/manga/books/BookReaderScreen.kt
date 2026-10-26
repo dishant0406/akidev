@@ -42,11 +42,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import live.akidev.manga.app.BookReaderRoute
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
-import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
 import live.akidev.manga.listen.ListenBar
-import uniffi.akimanga.BookInfo
 
 /** Opens the book and shows it, or says why it cannot be shown. */
 @Composable

@@ -1,0 +1,7 @@
+# Compile these ahead of time: they run on every start and on every frame of the screens people spend time on.
+HSPLlive/akidev/manga/app/**;->**(**)**
+HSPLlive/akidev/manga/design/**;->**(**)**
+HSPLlive/akidev/manga/books/**;->**(**)**
+HSPLlive/akidev/manga/manga/**;->**(**)**
+HSPLandroidx/compose/**;->**(**)**
+HSPLdev/chrisbanes/haze/**;->**(**)**

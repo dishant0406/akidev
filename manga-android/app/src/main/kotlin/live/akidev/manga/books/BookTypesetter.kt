@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Typeface
 import android.graphics.fonts.Font
 import android.graphics.fonts.FontFamily
-import android.os.Build
 import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -80,8 +79,10 @@ class BookTypesetter(
     /** The book's own fonts, when the reader wants them used. */
     private val fonts: BookFontBank?,
 ) {
-    private val base = (style.size * density).toFloat()
+    /** Hyphenation follows the book's language, not the phone's. */
     private val locale = language?.let { Locale.forLanguageTag(it) } ?: Locale.getDefault()
+
+    private val base = (style.size * density).toFloat()
 
     fun layout(index: Int, chapter: BookChapter): ChapterLayout {
         val blocks = ArrayList<LaidBlock>()
@@ -153,7 +154,7 @@ class BookTypesetter(
         // Hyphens are drawn by the layout itself: room is left for them in the column.
         text.setSpan(LeadingMarginSpan.Standard(first, left), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         val multiplier = if (block.heading > 0u) minOf(style.lineSpacing, 1.25).toFloat() else style.lineSpacing.toFloat()
-        val builder = StaticLayout.Builder.obtain(text, 0, text.length, TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply { textSize = base }, width)
+        val builder = StaticLayout.Builder.obtain(text, 0, text.length, TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply { textSize = base; textLocale = locale }, width)
             .setLineSpacing(0f, multiplier)
             .setIncludePad(false)
             .setTextDirection(if (rightToLeft) TextDirectionHeuristics.FIRSTSTRONG_RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR)

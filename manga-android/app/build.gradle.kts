@@ -14,6 +14,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         // The engine is built for 64-bit ARM phones only (and the emulator on an Apple-silicon Mac); JNA's own library comes for each of these.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -37,4 +38,12 @@ dependencies {
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.runtime)
     implementation(libs.work.runtime)
+    // Reads src/main/baseline-prof.txt on install, so the first start does not interpret the whole interface.
+    implementation(libs.profileinstaller)
+
+    testImplementation(libs.junit)
+    // The phone has org.json built in; a plain JVM test needs the real thing.
+    testImplementation(libs.json)
+    androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.junit)
 }

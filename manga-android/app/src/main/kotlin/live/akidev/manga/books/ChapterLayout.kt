@@ -2,7 +2,6 @@ package live.akidev.manga.books
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -12,7 +11,6 @@ import androidx.compose.ui.graphics.toArgb
 import android.text.Spanned
 import android.text.StaticLayout
 import android.text.style.CharacterStyle
-import kotlin.math.abs
 
 /** A stretch of a chapter's text, in the book's own positions. */
 data class BookSpan(val chapter: Int, val start: Int, val end: Int)

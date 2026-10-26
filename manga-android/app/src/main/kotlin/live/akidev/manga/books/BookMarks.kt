@@ -2,14 +2,11 @@ package live.akidev.manga.books
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.createBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import live.akidev.manga.app.coverJpeg
-import live.akidev.manga.app.describe
-import uniffi.akimanga.BookEntry
 import uniffi.akimanga.BookHighlight
 import uniffi.akimanga.BookHit
 import uniffi.akimanga.BookSection
