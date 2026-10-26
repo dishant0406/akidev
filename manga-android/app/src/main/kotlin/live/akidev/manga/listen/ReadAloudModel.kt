@@ -44,6 +44,10 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
     var fetching by mutableStateOf(emptySet<String>())
         private set
     var hearing by mutableStateOf<String?>(null)
+
+    /** The voice whose sample is playing now (empty for the model's own). */
+    var playing by mutableStateOf<String?>(null)
+    private var preview: AudioTrack? = null
         private set
 
     /** The model that reads: the one chosen, or the only one there is. */
@@ -112,12 +116,22 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
                 }
             }.getOrNull()
         }
-        if (heard == null) failure = Problem("That did not work", "The voice could not be played.") else play(heard.first, heard.second)
         hearing = null
+        if (heard == null) failure = Problem("That did not work", "The voice could not be played.") else play(heard.first, heard.second, voice?.id ?: "")
+    }
+
+    /** Stops a sample that is playing. Called by the button, and when the screen is left. */
+    fun stopHearing() {
+        val track = preview ?: return
+        preview = null
+        playing = null
+        runCatching { track.stop() }
+        track.release()
     }
 
     /** Plays a few seconds of speech once: what a voice sounds like, before it is chosen. */
-    private suspend fun play(samples: FloatArray, rate: Int) = withContext(Dispatchers.Default) {
+    private suspend fun play(samples: FloatArray, rate: Int, id: String) = withContext(Dispatchers.Default) {
+        stopHearing()
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
@@ -125,9 +139,11 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
         track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
         track.setNotificationMarkerPosition(samples.size)
         track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
-            override fun onMarkerReached(track: AudioTrack) = track.release()
+            override fun onMarkerReached(track: AudioTrack) { if (preview === track) stopHearing() }
             override fun onPeriodicNotification(track: AudioTrack) = Unit
         })
+        preview = track
+        playing = id
         track.play()
     }
 

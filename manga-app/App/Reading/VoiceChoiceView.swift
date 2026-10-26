@@ -28,6 +28,7 @@ struct VoiceChoiceView: View {
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()
+        .onDisappear { model.stopHearing() }
         .hidesTabBar()
         .akiAlert(model.failure?.title ?? "", message: model.failure?.message, isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } }))
     }
@@ -55,7 +56,13 @@ struct VoiceChoiceView: View {
                 }
                 AkiText(description, .caption, tone: .muted, lines: 4)
                 HStack(spacing: 10) {
-                    if busy { AkiSpinner().frame(width: 44, height: 44) } else { AkiIconButton(symbol: "play", label: "Hear \(name)", size: 44) { Task { await model.hear(voice) } } }
+                    if busy {
+                        AkiSpinner().frame(width: 44, height: 44)
+                    } else if model.playing == id {
+                        AkiIconButton(symbol: "pause", label: "Stop \(name)", size: 44) { model.stopHearing() }
+                    } else {
+                        AkiIconButton(symbol: "play", label: "Hear \(name)", size: 44) { Task { await model.hear(voice) } }
+                    }
                     if model.voiceInUse == id {
                         AkiText("In use", .captionStrong, tone: .muted)
                     } else {

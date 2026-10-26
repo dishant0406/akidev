@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -27,7 +30,6 @@ fun VoicesScreen() {
     val model = app.readAloud
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
     AkiPage(underTabBar = false, spacing = 16.dp) {
         item { AkiBackHeader("Voice models", back = router::back, subtitle = "Reading aloud happens on this phone") }
         if (model.models.isEmpty()) item { AkiEmptyState("No models yet", "The voice repository has none to offer right now.", Modifier.heightIn(min = 260.dp)) }
@@ -72,6 +74,8 @@ fun VoiceChoiceScreen() {
     val app = LocalApp.current
     val router = LocalRouter.current
     val model = app.readAloud
+    // A sample stops when the person leaves.
+    DisposableEffect(Unit) { onDispose { model.stopHearing() } }
 
     /** The voices grouped by where they come from, in the order the model lists them. */
     val voices = model.current?.voices ?: emptyList()
@@ -108,7 +112,11 @@ private fun VoiceCard(id: String, name: String, detail: String?, description: St
             }
             AkiText(description, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 4)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (busy) AkiSpinner(Modifier.width(44.dp)) else AkiIconButton("play", "Hear $name") { scope.launch { model.hear(voice) } }
+                when {
+                    busy -> Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
+                    model.playing == id -> AkiIconButton("pause", "Stop $name") { model.stopHearing() }
+                    else -> AkiIconButton("play", "Hear $name") { scope.launch { model.hear(voice) } }
+                }
                 if (model.voiceInUse == id) AkiText("In use", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
                 else AkiButton("Use", size = AkiButtonSize.Small) { scope.launch { model.choose(voice) } }
             }

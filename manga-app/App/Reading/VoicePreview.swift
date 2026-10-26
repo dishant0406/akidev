@@ -3,15 +3,27 @@ import Foundation
 
 /// Plays a few seconds of speech once: what a voice sounds like, before it is chosen.
 @MainActor
-final class VoicePreview {
+final class VoicePreview: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
+    /// Called when the sample has played to its end (not when it is stopped).
+    var onFinish: () -> Void = {}
 
     func play(_ samples: [Float], rate: Int) {
-        guard let data = Self.wav(samples, rate: rate) else { return }
+        guard let data = Self.wav(samples, rate: rate) else { return onFinish() }
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         player?.stop()
         player = try? AVAudioPlayer(data: data)
-        player?.play()
+        player?.delegate = self
+        if player?.play() != true { onFinish() }
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in onFinish() }
     }
 
     /// The samples as a 16-bit mono WAV file, which is what the player reads from memory.

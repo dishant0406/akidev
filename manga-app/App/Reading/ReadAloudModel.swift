@@ -29,6 +29,8 @@ final class ReadAloudModel {
     /// The voices being fetched now, and the one being heard (empty for the model's own).
     private(set) var fetching: Set<String> = []
     private(set) var hearing: String?
+    /// The voice whose sample is playing now (empty for the model's own).
+    private(set) var playing: String?
     private let preview = VoicePreview()
 
     init(engine: Engine, prefs: Preferences) {
@@ -96,13 +98,21 @@ final class ReadAloudModel {
         if let voice, !(await fetch(voice)) { return }
         let engine = engine, id = model.id, name = voice?.id
         hearing = voice?.id ?? ""
-        defer { hearing = nil }
         let heard = try? await Task.detached(priority: .userInitiated) { () throws -> (samples: [Float], rate: Int) in
             let speaker = try engine.openSpeaker(id: id)
             return (try speaker.speak(text: "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice: name), Int(speaker.sampleRate()))
         }.value
+        hearing = nil
         guard let heard else { return failure = ("That did not work", "The voice could not be played.") }
+        playing = voice?.id ?? ""
+        preview.onFinish = { [weak self] in self?.playing = nil }
         preview.play(heard.samples, rate: heard.rate)
+    }
+
+    /// Stops a sample that is playing. Called by the button, and when the screen is left.
+    func stopHearing() {
+        preview.stop()
+        playing = nil
     }
 
     /// Fetches one of the model's voices; whether it is on the phone after.
