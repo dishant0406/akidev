@@ -100,7 +100,7 @@ class BookTypesetter(
         return when (val kind = block.kind) {
             is BookKind.Text -> {
                 val text = spanned(kind.runs)
-                LaidBlock(start, text.length + 1, staticLayout(text, block), null, space, heading, block.pageBreakBefore, text, 0f)
+                LaidBlock(start, text.length + 1, staticLayout(text, block), null, space, heading, block.pageBreakBefore, text, 0f, justifies(block, text))
             }
             is BookKind.Image -> {
                 val (w, h) = fit(pictureSize(kind.src), pictureOnly)

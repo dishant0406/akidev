@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,6 +68,9 @@ class BookListener(
         private set
 
     private class Queued(val span: BookSpan, val endFrame: Long)
+
+    /** A sentence made into speech, waiting to be written to the track. */
+    private class Spoken(val samples: FloatArray, val heading: Boolean, val span: BookSpan)
 
     private var speaker: VoiceSpeaker? = null
     private var track: AudioTrack? = null
@@ -190,11 +194,11 @@ class BookListener(
 
     private fun begin() {
         val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
-        // Room for twenty seconds, so writing a sentence never waits for the one before it to be heard.
+        // Half a second: a streaming track plays only once its whole buffer is full, so a big one would stay silent while sentences wait to fill it.
         val made = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-            .setBufferSizeInBytes(sampleRate * 4 * 20).setTransferMode(AudioTrack.MODE_STREAM).build()
+            .setBufferSizeInBytes(sampleRate * 4 / 2).setTransferMode(AudioTrack.MODE_STREAM).build()
         track = made
         // Another app's sound takes the voice away (a call, an alarm, other music), and unplugging the headphones pauses it.
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes)
@@ -249,12 +253,30 @@ class BookListener(
         val before = producing
         producing = scope.launch {
             before?.join()
-            produce(chapter, offset, mine)
+            // Anything the old position wrote after it was flushed goes too.
+            track?.flush()
+            // The speech is made ahead of the one being heard (a few sentences wait here) while another coroutine writes what is ready.
+            val spoken = Channel<Spoken>(queueLimit - 1)
+            launch {
+                produce(chapter, offset, mine, spoken)
+                spoken.close()
+            }
+            for (sentence in spoken) {
+                if (mine != generation) break
+                write(sentence, mine)
+            }
+            // A sentence still waiting (this position was dropped) is not wanted.
+            spoken.cancel()
+            if (mine != generation) return@launch
+            finishedQueueing = true
+            // The last sentence may be too short to fill the track: stopping makes it play what it has.
+            track?.stop()
+            if (queued.isEmpty()) stop()
         }
     }
 
-    /** Makes the speech of each sentence in turn and writes it, never more than `queueLimit` sentences ahead. */
-    private suspend fun produce(first: Int, offset: Int, mine: Int) {
+    /** Makes the speech of each sentence in turn and hands it over. */
+    private suspend fun produce(first: Int, offset: Int, mine: Int, spoken: Channel<Spoken>) {
         var chapter = first
         var from = offset
         var failures = 0
@@ -262,7 +284,6 @@ class BookListener(
             val list = sentences(chapter) ?: return
             val start = list.indexOfFirst { it.start.toInt() + it.length.toInt() > from }.let { if (it < 0) list.size else it }
             for (sentence in list.drop(start)) {
-                while (queued.size >= queueLimit && mine == generation) delay(100)
                 val voiceOfModel = speaker
                 if (mine != generation || voiceOfModel == null) return
                 val samples = try {
@@ -274,30 +295,32 @@ class BookListener(
                 }
                 failures = 0
                 if (mine != generation) return
-                write(samples, pause = sentence.heading, BookSpan(chapter, sentence.start.toInt(), (sentence.start + sentence.length).toInt()), mine)
+                spoken.send(Spoken(samples, sentence.heading, BookSpan(chapter, sentence.start.toInt(), (sentence.start + sentence.length).toInt())))
             }
-            chapter = chapter(after = chapter) ?: break
+            chapter = chapter(after = chapter) ?: return
             from = 0
         }
-        if (mine != generation) return
-        finishedQueueing = true
-        if (queued.isEmpty()) stop()
     }
 
-    private suspend fun write(samples: FloatArray, pause: Boolean, span: BookSpan, mine: Int) {
+    /** Writes a sentence to the track, a tenth of a second at a time: a write waits until the track has played enough to take it. */
+    private suspend fun write(sentence: Spoken, mine: Int) {
         val target = track ?: return
         // A heading is followed by a pause, as a reader would leave one.
-        val silence = if (pause) (sampleRate * 0.6).toInt() else 0
-        val frames = samples.copyOf(samples.size + silence)
-        withContext(Dispatchers.IO) { target.write(frames, 0, frames.size, AudioTrack.WRITE_BLOCKING) }
-        if (mine != generation) return
+        val silence = if (sentence.heading) (sampleRate * 0.6).toInt() else 0
+        val frames = sentence.samples.copyOf(sentence.samples.size + silence)
+        // Queued before it is written, so it is the sentence heard while it is still being written.
         written += frames.size
-        queued.addLast(Queued(span, written))
-        if (state == State.Loading) {
-            target.playbackParams = PlaybackParams().setSpeed(rate.toFloat()).setPitch(1f)
-            target.play()
-            state = State.Playing
-            ListenSession.update(context, true)
+        queued.addLast(Queued(sentence.span, written))
+        val piece = sampleRate / 10
+        for (from in frames.indices step piece) {
+            val done = withContext(Dispatchers.IO) { target.write(frames, from, minOf(piece, frames.size - from), AudioTrack.WRITE_BLOCKING) }
+            if (done < 0 || mine != generation) return
+            if (state == State.Loading) {
+                target.playbackParams = PlaybackParams().setSpeed(rate.toFloat()).setPitch(1f)
+                target.play()
+                state = State.Playing
+                ListenSession.update(context, true)
+            }
         }
     }
 

@@ -38,6 +38,8 @@ class LaidBlock(
     val text: CharSequence,
     /** The height of a picture or rule; a paragraph has its layout's. */
     val height: Float,
+    /** Its lines but the last are stretched to the full width: the layout draws them so, but answers every question as if they were not. */
+    val justified: Boolean = false,
 )
 
 /** What a page shows of one block: lines `firstLine` until `endLine` of its layout (a picture has one), at `top` on the page. */
@@ -119,13 +121,57 @@ class ChapterLayout(
                 val low = maxOf(from, block.start + layout.getLineStart(line))
                 val high = minOf(to, block.start + layout.getLineEnd(line))
                 if (low >= high) continue
-                val one = layout.getPrimaryHorizontal(low - block.start)
+                val one = horizontal(block, line, low - block.start)
                 // The end of a line that wraps is the start of the next one, so asking where it is would answer with the left margin: the line's own right edge is used.
-                val other = if (high - block.start >= layout.getLineEnd(line) && line < layout.lineCount - 1) layout.getLineRight(line) else layout.getPrimaryHorizontal(high - block.start)
+                val other = if (high - block.start >= layout.getLineEnd(line) && line < layout.lineCount - 1) lineRight(block, line) else horizontal(block, line, high - block.start)
                 found += RectF(minOf(one, other), piece.top + layout.getLineTop(line) - top, maxOf(one, other).coerceAtLeast(minOf(one, other) + 2f), piece.top + layout.getLineBottom(line) - top)
             }
         }
         return found
+    }
+
+    /** Whether the layout stretched this line: a justified paragraph's lines, but its last and any that ends in a line break. */
+    private fun stretched(block: LaidBlock, line: Int): Boolean {
+        val layout = block.layout ?: return false
+        return block.justified && line < layout.lineCount - 1 && block.text[layout.getLineEnd(line) - 1] != '\n'
+    }
+
+    /** The end of a line's text without the spaces after it. */
+    private fun trimmedEnd(block: LaidBlock, line: Int): Int {
+        val layout = block.layout!!
+        var end = layout.getLineEnd(line)
+        while (end > layout.getLineStart(line) && block.text[end - 1].isWhitespace()) end -= 1
+        return end
+    }
+
+    /**
+     * Where a place in a block is on its line, as drawn. The layout answers with the unstretched place, so on a justified line the room
+     * the line has to spare (shared equally by its spaces) is put back for each space before the place.
+     */
+    private fun horizontal(block: LaidBlock, line: Int, at: Int): Float {
+        val layout = block.layout!!
+        val x = layout.getPrimaryHorizontal(at)
+        if (!stretched(block, line)) return x
+        val first = layout.getLineStart(line)
+        val end = trimmedEnd(block, line)
+        var spaces = 0
+        for (index in first until end) if (block.text[index] == ' ') spaces += 1
+        if (spaces == 0) return x
+        // A line cut in the middle of a word ends with a hyphen that is drawn but is not in the text.
+        val cut = end < block.text.length && block.text[end - 1].isLetter() && block.text[end].isLetter()
+        val natural = layout.getPrimaryHorizontal(end) + if (cut) layout.paint.measureText("-") else 0f
+        val before = (first until minOf(at, end)).count { block.text[it] == ' ' }
+        return x + (layout.width - natural) / spaces * before
+    }
+
+    /** The right edge of a line as drawn: the full width when it is stretched. */
+    private fun lineRight(block: LaidBlock, line: Int) = if (stretched(block, line)) block.layout!!.width.toFloat() else block.layout!!.getLineRight(line)
+
+    /** The place on a line nearest to x, as drawn. */
+    private fun offsetAt(block: LaidBlock, line: Int, x: Float): Int {
+        val layout = block.layout!!
+        if (!stretched(block, line)) return layout.getOffsetForHorizontal(line, x)
+        return (layout.getLineStart(line)..trimmedEnd(block, line)).minBy { kotlin.math.abs(horizontal(block, line, it) - x) }
     }
 
     /** Where in the book's text a point (in the text area, y down) is: the nearest letter, on the nearest line. */
@@ -136,7 +182,7 @@ class ChapterLayout(
         val layout = block.layout
         val at = if (layout == null) block.start else {
             val line = layout.getLineForVertical((y - piece.top + layout.getLineTop(piece.firstLine)).toInt()).coerceIn(piece.firstLine, piece.endLine - 1)
-            block.start + layout.getOffsetForHorizontal(line, x)
+            block.start + offsetAt(block, line, x)
         }
         return at.coerceIn(shown.start, if (end) end(page) else maxOf(end(page) - 1, shown.start))
     }
@@ -184,8 +230,8 @@ class ChapterLayout(
             for (line in piece.firstLine until piece.endLine) {
                 val lineTop = piece.top + layout.getLineTop(line) - top
                 if (y < lineTop - 4 || y > piece.top + layout.getLineBottom(line) - top + 4) continue
-                if (x < layout.getLineLeft(line) || x > layout.getLineRight(line)) return null
-                val at = layout.getOffsetForHorizontal(line, x)
+                if (x < layout.getLineLeft(line) || x > lineRight(block, line)) return null
+                val at = offsetAt(block, line, x)
                 val spans = (block.text as? Spanned)?.getSpans(at, minOf(at + 1, block.text.length), LinkSpan::class.java)
                 return spans?.firstOrNull()
             }
