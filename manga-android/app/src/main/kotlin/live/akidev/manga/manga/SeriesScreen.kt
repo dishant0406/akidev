@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.offset
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
+import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.ReaderRoute
 import live.akidev.manga.app.SeriesRef
 import live.akidev.manga.app.SeriesRoute
@@ -151,7 +152,18 @@ private fun Controls(
     scope: kotlinx.coroutines.CoroutineScope,
 ) {
     val router = LocalRouter.current
+    val app = LocalApp.current
     val chapters = series.chapters
+    // A series from a source is shared as the source and the series; a comic that came from a file, as the file.
+    val share = {
+        val title = series.detail?.title ?: series.ref.title
+        app.sharing = Sharing(title) {
+            listOf(
+                if (series.ref.source == "device") app.engine.shareComic(series.ref.id, title)
+                else app.engine.shareCard(series.ref.source, series.ref.id, title, series.detail?.cover ?: series.ref.cover),
+            )
+        }
+    }
     Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         AkiIconButton("back", "Back", onMedia = true) { router.back() }
         Box(Modifier.weight(1f))
@@ -165,6 +177,7 @@ private fun Controls(
                 AkiMenuItem("Mark all as unread", "check") { series.markAll(read = false) },
                 AkiMenuItem("Download unread", "download") { scope.launch { series.download(chapters.filter { !it.finished && it.id !in series.kept }) } },
                 AkiMenuItem("Refresh", "refresh") { scope.launch { series.load(force = true) } },
+                AkiMenuItem("Share with a phone nearby", "share", onClick = share),
                 AkiMenuItem("Categories", "folder", onClick = onCategories),
                 AkiMenuItem("Choose a cover", "image", onClick = onCover),
                 AkiMenuItem("Reset cover", "refresh") { series.clearCover() },

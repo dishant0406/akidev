@@ -28,6 +28,7 @@ fun BookDetailSheet(
     read: () -> Unit,
     finish: () -> Unit,
     reset: () -> Unit,
+    share: () -> Unit,
     categories: () -> Unit,
     chooseCover: () -> Unit,
     ownCover: () -> Unit,
@@ -56,6 +57,7 @@ fun BookDetailSheet(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!book.finished) AkiButton("Mark as finished", icon = "check", fullWidth = true, onClick = finish)
                 if (book.openedMs != null) AkiButton("Mark as not started", icon = "restore", fullWidth = true, onClick = reset)
+                AkiButton("Share with a phone nearby", icon = "share", fullWidth = true, onClick = share)
                 AkiButton("Categories", icon = "folder", fullWidth = true, onClick = categories)
                 AkiButton("Choose a cover picture", icon = "image", fullWidth = true, onClick = chooseCover)
                 if (book.customCover) AkiButton("Use the book's own cover", icon = "restore", fullWidth = true, onClick = ownCover)

@@ -37,6 +37,8 @@ internal val akiIconSet: Map<String, Int> = mapOf(
     "play" to R.drawable.aki_icon_play,
     "play-solid" to R.drawable.aki_icon_play_solid,
     "previous" to R.drawable.aki_icon_previous,
+    "qr" to R.drawable.aki_icon_qr,
+    "qr" to R.drawable.aki_icon_qr,
     "refresh" to R.drawable.aki_icon_refresh,
     "restore" to R.drawable.aki_icon_restore,
     "search" to R.drawable.aki_icon_search,

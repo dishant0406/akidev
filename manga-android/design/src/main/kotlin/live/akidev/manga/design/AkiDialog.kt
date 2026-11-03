@@ -126,6 +126,15 @@ fun AkiPrompt(title: String, message: String, placeholder: String, confirm: Stri
     }
 }
 
+/** A yes or no that is not a warning: someone wants to send you a book. */
+@Composable
+fun AkiQuestion(title: String, message: String, yes: String, no: String, onYes: () -> Unit, onNo: () -> Unit) {
+    AkiDialogCard(title, message, onNo) {
+        AkiButton(no, Modifier.weight(1f), onClick = onNo)
+        AkiButton(yes, Modifier.weight(1f), variant = AkiButtonVariant.Primary, onClick = onYes)
+    }
+}
+
 /** A yes or no for something that cannot be undone. */
 @Composable
 fun AkiConfirm(title: String, message: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {

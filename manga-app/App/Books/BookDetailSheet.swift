@@ -9,6 +9,7 @@ struct BookDetailSheet: View {
     let finish: () -> Void
     let reset: () -> Void
     let categories: () -> Void
+    let share: () -> Void
     let chooseCover: () -> Void
     let ownCover: () -> Void
     let remove: () -> Void
@@ -35,6 +36,7 @@ struct BookDetailSheet: View {
                 VStack(spacing: 10) {
                     if !book.finished { AkiButton("Mark as finished", icon: "check", fullWidth: true, action: finish) }
                     if book.openedMs != nil { AkiButton("Mark as not started", icon: "restore", fullWidth: true, action: reset) }
+                    AkiButton("Share with a friend", icon: "share", fullWidth: true, action: share)
                     AkiButton("Categories", icon: "folder", fullWidth: true, action: categories)
                     AkiButton("Choose a cover picture", icon: "image", fullWidth: true, action: chooseCover)
                     if book.customCover { AkiButton("Use the book's own cover", icon: "restore", fullWidth: true, action: ownCover) }

@@ -62,14 +62,14 @@ val LocalAkiMenus = compositionLocalOf<AkiMenus?> { null }
 
 private val MenuShape = AkiShapes.rounded(28.dp)
 
-/** The list of rows on a glass card, with the shadow that lifts it off the page. */
+/** The list of rows on a solid card (a see-through menu is hard to read), with the shadow that lifts it off the page. */
 @Composable
-fun AkiMenuList(items: List<AkiMenuItem>, onClose: () -> Unit, modifier: Modifier = Modifier, glass: Boolean = true) {
+fun AkiMenuList(items: List<AkiMenuItem>, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val colors = Aki.colors
     Column(
         modifier.widthIn(min = 220.dp, max = 260.dp)
             .akiShadow(MenuShape, 20.dp, 8.dp)
-            .let { if (glass) it.akiGlass(MenuShape, tint = colors.background.copy(alpha = if (colors.dark) 0.75f else 0.3f)) else it.akiSolid(MenuShape, colors.background) }
+            .akiSolid(MenuShape, colors.background)
             .padding(vertical = 8.dp),
     ) { AkiMenuRows(items, onClose) }
 }
@@ -148,7 +148,7 @@ fun AkiMenuPopup(open: Boolean, onClose: () -> Unit, items: List<AkiMenuItem>, p
                 onDispose { if (menus.shown === mine) menus.shown = null }
             }
         } else if (open) {
-            Popup(alignment = Alignment.TopStart, onDismissRequest = onClose) { AkiMenuList(items, onClose, glass = false) }
+            Popup(alignment = Alignment.TopStart, onDismissRequest = onClose) { AkiMenuList(items, onClose) }
         }
     }
 }

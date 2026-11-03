@@ -13,6 +13,7 @@ pub mod http;
 pub mod local;
 pub mod model;
 pub mod repo;
+pub mod share;
 pub mod source;
 pub mod store;
 pub mod template;

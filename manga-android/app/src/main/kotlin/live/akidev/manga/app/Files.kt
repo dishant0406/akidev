@@ -43,7 +43,7 @@ fun rememberFilesPicker(types: Array<String> = arrayOf("*/*"), onPick: suspend (
     return { launcher.launch(types) }
 }
 
-private fun copyToCache(context: Context, uri: Uri): File? = runCatching {
+fun copyToCache(context: Context, uri: Uri): File? = runCatching {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "file"
     val folder = File(context.cacheDir, "picked-" + UUID.randomUUID()).apply { mkdirs() }
     File(folder, File(name).name).also { copy -> context.contentResolver.openInputStream(uri)!!.use { input -> copy.outputStream().use { input.copyTo(it) } } }

@@ -39,7 +39,8 @@ struct LibraryView: View {
                             + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
                                AkiMenuItem(title: "Only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
                                AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
-                               AkiMenuItem(title: "Categories", icon: "folder") { managing = true }]
+                               AkiMenuItem(title: "Categories", icon: "folder") { managing = true },
+                               AkiMenuItem(title: "Receive from a friend", icon: "share") { model.sharing = SharePresented(item: nil) }]
                             + shelfItems)
                     }
                     MangaPartPills()

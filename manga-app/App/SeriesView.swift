@@ -144,6 +144,7 @@ struct SeriesView: View {
                     AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
                     AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
+                    AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .series(ref)) },
                     AkiMenuItem(title: "Categories", icon: "folder") { choosingCategories = true },
                     AkiMenuItem(title: "Choose a cover", icon: "image") { choosingCover = true },
                     AkiMenuItem(title: "Reset cover", icon: "refresh") { clearCover() },

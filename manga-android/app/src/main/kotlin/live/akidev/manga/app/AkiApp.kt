@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import live.akidev.manga.design.AkiAlert
 import live.akidev.manga.design.AkiBackdrop
 import live.akidev.manga.design.AkiGlassMotion
 import live.akidev.manga.design.AkiGlassScope
@@ -49,6 +50,8 @@ import live.akidev.manga.manga.MangaHubScreen
 import live.akidev.manga.manga.UpdatesScreen
 import live.akidev.manga.manga.SeriesScreen
 import live.akidev.manga.reader.ReaderScreen
+import live.akidev.manga.share.CardSheet
+import live.akidev.manga.share.ShareSheet
 import live.akidev.manga.settings.SettingsScreen
 import live.akidev.manga.sources.RepoAddSheet
 import live.akidev.manga.sources.RepoScreen
@@ -73,6 +76,9 @@ fun AkiApp(model: AppModel) {
                     AkiBackdrop()
                     Shell(model, router)
                     model.pendingRepo?.let { pending -> RepoAddSheet(pending) { model.pendingRepo = null } }
+                    model.pendingCard?.let { pending -> CardSheet(pending) { model.pendingCard = null } }
+                    model.sharing?.let { sharing -> ShareSheet(sharing) { model.sharing = null } }
+                    model.notice?.let { AkiAlert(it.title, it.message) { model.notice = null } }
                     AnimatedVisibility(model.prefs.readerKind == null, enter = fadeIn(), exit = fadeOut()) { OnboardingScreen() }
                     AkiMenuLayer(menus)
                     AkiDialogLayer(dialogs)

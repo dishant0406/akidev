@@ -15,6 +15,14 @@ extension View {
         } message: { Text(message) }
     }
 
+    /// A question with two ways to answer, neither of them a warning: a friend's phone asks to send a book.
+    func akiQuestion(_ title: String, message: String, yes: String, no: String, isPresented: Binding<Bool>, onYes: @escaping () -> Void, onNo: @escaping () -> Void) -> some View {
+        alert(title, isPresented: isPresented) {
+            Button(yes, action: onYes)
+            Button(no, role: .cancel, action: onNo)
+        } message: { Text(message) }
+    }
+
     /// A yes or no for something that cannot be undone.
     func akiConfirm(_ title: String, message: String, confirm: String, isPresented: Binding<Bool>, onConfirm: @escaping () -> Void) -> some View {
         alert(title, isPresented: isPresented) {

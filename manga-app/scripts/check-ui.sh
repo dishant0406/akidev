@@ -17,7 +17,9 @@ echo "ok: screens use only Aki components"
 
 # PhotosUI pulls the audio, video and MIDI libraries into every launch (about 800 ms in the simulator): pictures come from
 # UIKit's own picker (see akiPhotoPicker in UI/AkiFiles.swift). Measured, not guessed: do not bring it back without measuring again.
-if grep -rn --include='*.swift' -E '^import (PhotosUI|AVFoundation|AVKit|MapKit)' . ; then
+# AVFoundation is allowed for the QR scanner (UI/AkiScanner.swift): the simulator has it loaded already by UIKit and SwiftUI, so linking
+# it costs 0 ms there (timed with dlopen, 2026-11-03); VisionKit took 120 to 1300 ms in the same test.
+if grep -rn --include='*.swift' -E '^import (PhotosUI|AVKit|MapKit|VisionKit)' . ; then
   echo "A heavy framework is imported: it slows every launch. Use a lighter route."
   exit 1
 fi

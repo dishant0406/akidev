@@ -29,6 +29,7 @@ import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.ReaderKind
+import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.VoicesRoute
 import live.akidev.manga.books.BookFont
 import live.akidev.manga.books.BookTheme
@@ -95,7 +96,7 @@ fun SettingsScreen() {
                     { shareFile(context, "AkiManga-${LocalDate.now()}.json", it, "application/json") },
                     { message = describe(it) },
                 )
-            }, onRestore = importer, onComic = comicImporter)
+            }, onRestore = importer, onComic = comicImporter, onReceive = { app.sharing = Sharing(null, null) })
             item { AkiText("Manga", AkiTextStyle.Title, Modifier.padding(top = 8.dp)) }
             item { ContentSection() }
             item { LibrarySection(categories) }
@@ -118,7 +119,7 @@ fun SettingsScreen() {
                     { shareFile(context, "AkiManga-${LocalDate.now()}.json", it, "application/json") },
                     { message = describe(it) },
                 )
-            }, onRestore = importer, onComic = comicImporter)
+            }, onRestore = importer, onComic = comicImporter, onReceive = { app.sharing = Sharing(null, null) })
             aboutSection()
         }
     }
@@ -268,13 +269,14 @@ private fun DownloadsSection(downloaded: Long, scope: kotlinx.coroutines.Corouti
     }
 }
 
-private fun LazyListScope.dataSection(onBackup: () -> Unit, onRestore: () -> Unit, onComic: () -> Unit) {
+private fun LazyListScope.dataSection(onBackup: () -> Unit, onRestore: () -> Unit, onComic: () -> Unit, onReceive: () -> Unit) {
     item {
         AkiSection("Your data", footer = "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories.") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AkiButton("Create a backup", icon = "server", fullWidth = true, onClick = onBackup)
                 AkiButton("Restore from a backup", icon = "restore", fullWidth = true, onClick = onRestore)
                 AkiButton("Open a comic file (CBZ)", icon = "zip", fullWidth = true, onClick = onComic)
+                AkiButton("Receive from a phone nearby", icon = "share", fullWidth = true, onClick = onReceive)
             }
         }
     }

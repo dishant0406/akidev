@@ -45,6 +45,7 @@ struct BooksView: View {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
                                 AkiMenu(symbol: "filter", label: "Sort and filter", items: sortItems)
+                                AkiMenu(symbol: "more", label: "More", items: moreItems)
                                 AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { importing = true }
                             }
                         }
@@ -56,7 +57,7 @@ struct BooksView: View {
                         AkiChips(items: [(Int64(-1), "All")] + categories.map { ($0.id, "\($0.name) \($0.books)") } + [(Int64(-2), "No category")], selection: $category)
                     }
                     if books.isEmpty {
-                        AkiEmptyState(title: "No books yet", message: "Add EPUB files from your device. They stay on this phone until you remove them.", action: ("Add books", { importing = true })).frame(minHeight: 380)
+                        AkiEmptyState(title: "No books yet", message: "Add EPUB files from your device. They stay on this phone until you remove them.", action: ("Add books", { importing = true }), secondary: ("Receive from a friend", { model.sharing = SharePresented(item: nil) })).frame(minHeight: 380)
                     } else {
                         if shown.isEmpty {
                             AkiEmptyState(title: "Nothing here", message: category == -2 ? "Every book is on a category." : "No books on this shelf yet. Long-press a book to put it on one.").frame(minHeight: 260)
@@ -80,6 +81,7 @@ struct BooksView: View {
             .akiNoNavigationBar()
         }
         .onAppear(perform: load)
+        .onChange(of: model.booksRevision) { load() }
         #if DEBUG
         // `-openBook 2` opens the third book on the shelf, `-openBook Pride` the first whose title has that word, to drive the reader
         // from a script.
@@ -129,9 +131,13 @@ struct BooksView: View {
         BookSort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.bookSort) { model.prefs.bookSort = option } }
             + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.bookReversed) { model.prefs.bookReversed.toggle() }]
             + BookFilter.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "filter", isSelected: option == filter) { filter = option } }
-            + [AkiMenuItem(title: searching ? "Hide search" : "Search", icon: "search") { searching.toggle(); if !searching { words = "" } },
-               AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
-               AkiMenuItem(title: "Categories", icon: "folder") { managing = true }]
+    }
+
+    private var moreItems: [AkiMenuItem] {
+        [AkiMenuItem(title: searching ? "Hide search" : "Search", icon: "search") { searching.toggle(); if !searching { words = "" } },
+         AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
+         AkiMenuItem(title: "Categories", icon: "folder") { managing = true },
+         AkiMenuItem(title: "Receive from a friend", icon: "share") { model.sharing = SharePresented(item: nil) }]
     }
 
     private func toggle(_ book: BookInfo) {
@@ -166,6 +172,7 @@ struct BooksView: View {
             finish: { try? model.engine.finishBook(id: book.id); details = nil; load() },
             reset: { try? model.engine.resetBook(id: book.id); details = nil; load() },
             categories: { details = nil; sorting = book },
+            share: { details = nil; model.sharing = SharePresented(item: .book(book)) },
             chooseCover: { details = nil; coverFor = book; choosingCover = true },
             ownCover: { try? model.engine.clearBookCustomCover(id: book.id); details = nil; load() },
             remove: { details = nil; removing = book }
@@ -174,6 +181,7 @@ struct BooksView: View {
 
     private func menu(for book: BookInfo) -> [AkiMenuItem] {
         var items = [AkiMenuItem(title: "Details", icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; details = book },
+                     AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .book(book)) },
                      AkiMenuItem(title: "Categories", icon: "folder") { sorting = book },
                      AkiMenuItem(title: "Choose a cover picture", icon: "image") { coverFor = book; choosingCover = true }]
         if book.customCover {

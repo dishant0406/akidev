@@ -16,6 +16,8 @@ testJunit = "1.3.0"
 coreKtx = "1.19.1"
 baselineProfile = "1.5.0"
 uiautomator = "2.4.0"
+camerax = "1.6.2"
+zxing = "3.5.4"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -37,6 +39,10 @@ profileinstaller = { module = "androidx.profileinstaller:profileinstaller", vers
 benchmark-macro = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "baselineProfile" }
 uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

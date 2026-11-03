@@ -27,12 +27,19 @@ import live.akidev.manga.updates.UpdateWorker
 import uniffi.akimanga.Engine
 import uniffi.akimanga.LibraryEntry
 import uniffi.akimanga.RepoInfo
+import uniffi.akimanga.ShareCard
 import uniffi.akimanga.SourceInfo
 import uniffi.akimanga.UpdateEntry
 import java.io.File
 
 /** An address to add as a repository, waiting for the person to confirm (a pasted link or an opened one). */
 class PendingRepo(val address: String)
+
+/** A series from a source that another phone shared, waiting for the person to say yes to adding it (and its source, if this phone does not have it). */
+class PendingCard(val path: String, val card: ShareCard)
+
+/** The Share sheet, open: what is being sent (a line for the sheet, and the files, made when the sheet opens), or nothing, to only receive. */
+class Sharing(val label: String?, val files: (() -> List<uniffi.akimanga.ShareFile>)?)
 
 /** Series the last refresh could not check, with why. */
 class UpdateFailure(val key: String, val title: String, val source: String, val message: String)
@@ -68,6 +75,11 @@ class AppModel(private val context: Context) {
     val booksScreen = BooksModel(this)
     var tab by mutableStateOf(AppTab.order(prefs.readerKind).first())
     var pendingRepo by mutableStateOf<PendingRepo?>(null)
+    var pendingCard by mutableStateOf<PendingCard?>(null)
+    var sharing by mutableStateOf<Sharing?>(null)
+
+    /** Something to tell the person, over whatever screen they are on. */
+    var notice by mutableStateOf<Problem?>(null)
 
     /** Set to open the file picker on the Books tab (from the Sources screen). */
     var addingBook by mutableStateOf(false)
@@ -159,6 +171,65 @@ class AppModel(private val context: Context) {
         var address = repository.trim()
         if (address.startsWith("akimanga:")) address = address.toUri().getQueryParameter("url") ?: address
         if (address.isNotEmpty()) pendingRepo = PendingRepo(address)
+    }
+
+    /**
+     * Puts a file that came from another phone, or from another app, where it belongs, and says what happened. A series from a source is
+     * not added here: it may bring a source with it, so the person is asked first (see [pendingCard]).
+     */
+    suspend fun takeIn(path: String, name: String): String = try {
+        val lower = name.lowercase()
+        when {
+            lower.endsWith(".epub") -> {
+                val book = io { engine.importBook(path) }
+                booksScreen.load()
+                "Added “${book.title}” to your books."
+            }
+            lower.endsWith(".cbz") -> {
+                io { engine.importFile(path) }
+                refresh()
+                "Added “${name.removeSuffix(".cbz")}” to your library."
+            }
+            lower.endsWith(".akidev.json") -> {
+                // The file is in a folder that is emptied soon, and the question may wait.
+                val kept = File(File(context.cacheDir, "cards"), java.util.UUID.randomUUID().toString())
+                io { kept.parentFile?.mkdirs(); File(path).copyTo(kept) }
+                val card = io { engine.shareReadCard(kept.path) }
+                if (card.installed) {
+                    engine.shareAddCard(kept.path)
+                    refresh()
+                    "Added “${card.title}” to your library."
+                } else {
+                    pendingCard = PendingCard(kept.path, card)
+                    ""
+                }
+            }
+            else -> "“$name” is not a book or a comic."
+        }
+    } catch (failure: Exception) {
+        "“$name”: ${describe(failure).message}"
+    }
+
+    /** A book, a comic or a shared series sent to the app from another one ("Open with", "Share"). */
+    fun openFile(uri: android.net.Uri) {
+        scope.launch {
+            val file = withContext(Dispatchers.IO) { copyToCache(context, uri) }
+            if (file == null) {
+                notice = Problem("Could not open it", "Android would not let Akidev read that file.")
+                return@launch
+            }
+            // The file's name may not say what it is; what the sender said it is may.
+            val extension = when (context.contentResolver.getType(uri)) {
+                "application/epub+zip" -> ".epub"
+                "application/vnd.comicbook+zip", "application/x-cbz" -> ".cbz"
+                "application/vnd.akidev.share+json" -> ".akidev.json"
+                else -> ""
+            }
+            val name = if (file.name.lowercase().endsWith(extension)) file.name else file.name + extension
+            val said = takeIn(file.path, name)
+            withContext(Dispatchers.IO) { file.parentFile?.deleteRecursively() }
+            if (said.isNotBlank()) notice = Problem("Opened", said)
+        }
     }
 
     fun report(source: String, error: Throwable?) {

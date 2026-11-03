@@ -17,6 +17,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+mod share;
+pub use share::*;
+
 uniffi::setup_scaffolding!();
 
 // ---------------------------------------------------------------------------------------------

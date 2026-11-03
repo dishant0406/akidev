@@ -83,7 +83,9 @@ struct AkiMangaApp: App {
                 .tint(Aki.text)
                 .fontDesign(.rounded)
                 .preferredColorScheme(model.prefs.appearance.scheme)
-                .onOpenURL { model.propose(repository: $0.absoluteString) }
+                .onOpenURL { url in
+                    if url.isFileURL { model.open(file: url) } else { model.propose(repository: url.absoluteString) }
+                }
                 .onChange(of: phase) { _, new in
                     if new == .background { AppDelegate.schedule() }
                     if new == .active { Task { await model.refreshLibrary(); await model.resumeDownloads() } }
@@ -131,6 +133,8 @@ struct RootView: View {
         // The bar stays at the bottom of the screen and the keyboard covers it, rather than lifting it over the page.
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .akiSheet(item: $model.pendingRepo) { RepoAddSheet(pending: $0) }
+        .akiSheet(item: $model.sharing) { ShareView(item: $0.item) }
+        .akiAlert(model.fileNotice?.title ?? "", message: model.fileNotice?.message, isPresented: Binding(get: { model.fileNotice != nil }, set: { if !$0 { model.fileNotice = nil } }))
         #if DEBUG
         // `-orientation landscape` turns the screen at start, to look at a landscape layout from a script.
         .task { if UserDefaults.standard.string(forKey: "orientation") != nil { try? await Task.sleep(for: .seconds(1)); AppDelegate.lock(model.prefs.orientation.mask) } }

@@ -23,6 +23,12 @@ final class AppModel {
     var tabs: [AppTab] { AppTab.order(for: prefs.readerKind) }
     /// Set to open the file picker on the Books tab (from the Sources screen).
     var addingBook = false
+    /// The share screen while it is open, and what it was opened to send (nothing, when it was opened to receive).
+    var sharing: SharePresented?
+    /// What opening a file from another app did, to tell the person.
+    var fileNotice: (title: String, message: String)?
+    /// Bumped when a book arrives from outside the Books screen (from a friend), so the shelf reads it again.
+    var booksRevision = 0
     /// Screens pushed over a tab that want the whole screen (a series page) hide the floating bar while shown.
     var barHiders = 0
     var tabBarHidden: Bool { barHiders > 0 }

@@ -53,6 +53,11 @@ dependencies {
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.runtime)
     implementation(libs.work.runtime)
+    // The camera that reads a QR code, and the library that makes and reads the codes (see share/Qr.kt).
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+    implementation(libs.zxing)
     // Reads src/main/baseline-prof.txt on install, so the first start does not interpret the whole interface.
     implementation(libs.profileinstaller)
 

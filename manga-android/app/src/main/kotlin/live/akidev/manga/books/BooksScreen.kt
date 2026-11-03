@@ -24,6 +24,7 @@ import live.akidev.manga.app.BookReaderRoute
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.ReaderKind
+import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.rememberFilesPicker
 import live.akidev.manga.app.rememberPhotoPicker
 import live.akidev.manga.design.*
@@ -54,6 +55,7 @@ fun BooksScreen() {
     }
     val columns = akiColumns()
     val open = { book: BookInfo -> router.push(BookReaderRoute(book)) }
+    val shareBook = { book: BookInfo -> app.sharing = Sharing(book.title) { listOf(app.engine.shareBook(book.id)) } }
 
     LaunchedEffect(Unit) { books.load() }
     LaunchedEffect(app.addingBook) { if (app.addingBook) { app.addingBook = false; importer() } }
@@ -63,7 +65,8 @@ fun BooksScreen() {
             item {
                 AkiHeader(if (app.prefs.readerKind == ReaderKind.Books) "Library" else "Books", subtitle = subtitle(books)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AkiMenu("filter", "Sort and filter", sortItems(app, books) { managing = true })
+                        AkiMenu("filter", "Sort and filter", sortItems(app, books))
+                        AkiMenu("more", "More", moreItems(app, books) { managing = true })
                         AkiIconButton("add", "Add books", tint = Aki.colors.primary, onClick = importer)
                     }
                 }
@@ -76,12 +79,12 @@ fun BooksScreen() {
                 }
             }
             if (books.books.isEmpty()) {
-                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you remove them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer)) }
+                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you remove them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer), secondary = AkiAction("Receive from a phone nearby") { app.sharing = Sharing(null, null) }) }
             } else {
                 val shown = books.shown
                 if (shown.isEmpty()) item { AkiEmptyState("Nothing here", if (books.category == -2L) "Every book is on a category." else "No books on this shelf yet. Long-press a book to put it on one.", Modifier.heightIn(min = 260.dp)) }
                 akiGrid(shown, columns, key = { it.id }) { book ->
-                    val menu = if (books.selecting) emptyList() else menuOf(app, books, book, scope, details = { detailMarks = runCatching { app.engine.bookMarks(book.id) }.getOrDefault(emptyList()); details = book }, sort = { sorting = book }, cover = { coverFor = book; chooseCover() }, remove = { removing = book })
+                    val menu = if (books.selecting) emptyList() else menuOf(app, books, book, scope, details = { detailMarks = runCatching { app.engine.bookMarks(book.id) }.getOrDefault(emptyList()); details = book }, share = { shareBook(book) }, sort = { sorting = book }, cover = { coverFor = book; chooseCover() }, remove = { removing = book })
                     AkiTapMenu(menu, onClick = { if (books.selecting) books.toggle(book) else open(book) }) {
                         Box {
                             AkiBookCard(book.title, book.authors.firstOrNull(), book.cover, progressLine(book))
@@ -112,6 +115,7 @@ fun BooksScreen() {
             read = { details = null; open(book) },
             finish = { runCatching { app.engine.finishBook(book.id) }; details = null; scope.launch { books.load() } },
             reset = { runCatching { app.engine.resetBook(book.id) }; details = null; scope.launch { books.load() } },
+            share = { details = null; shareBook(book) },
             categories = { details = null; sorting = book },
             chooseCover = { details = null; coverFor = book; chooseCover() },
             ownCover = { runCatching { app.engine.clearBookCustomCover(book.id) }; details = null; scope.launch { books.load() } },
@@ -139,20 +143,25 @@ private fun subtitle(books: BooksModel): String {
     return if (books.books.size == 1) "1 book" else "${books.books.size} books"
 }
 
-private fun sortItems(app: live.akidev.manga.app.AppModel, books: BooksModel, manage: () -> Unit): List<AkiMenuItem> = buildList {
+private fun sortItems(app: live.akidev.manga.app.AppModel, books: BooksModel): List<AkiMenuItem> = buildList {
     for (option in BookSort.entries) add(AkiMenuItem(option.title, "order", isSelected = option == app.prefs.bookSort) { app.prefs.bookSort = option })
     add(AkiMenuItem("Reverse order", "swap", isSelected = app.prefs.bookReversed) { app.prefs.bookReversed = !app.prefs.bookReversed })
     for (option in BookFilter.entries) add(AkiMenuItem(option.title, "filter", isSelected = option == books.filter) { books.filter = option })
+}
+
+private fun moreItems(app: live.akidev.manga.app.AppModel, books: BooksModel, manage: () -> Unit): List<AkiMenuItem> = buildList {
     add(AkiMenuItem(if (books.searching) "Hide search" else "Search", "search") { books.searching = !books.searching; if (!books.searching) books.words = "" })
     add(AkiMenuItem(if (books.selecting) "Done selecting" else "Select", "check") { books.select() })
     add(AkiMenuItem("Categories", "folder", onClick = manage))
+    add(AkiMenuItem("Receive from a friend", "share") { app.sharing = Sharing(null, null) })
 }
 
 private fun menuOf(
     app: live.akidev.manga.app.AppModel, books: BooksModel, book: BookInfo, scope: kotlinx.coroutines.CoroutineScope,
-    details: () -> Unit, sort: () -> Unit, cover: () -> Unit, remove: () -> Unit,
+    details: () -> Unit, share: () -> Unit, sort: () -> Unit, cover: () -> Unit, remove: () -> Unit,
 ): List<AkiMenuItem> = buildList {
     add(AkiMenuItem("Details", "list", onClick = details))
+    add(AkiMenuItem("Share with a phone nearby", "share", onClick = share))
     add(AkiMenuItem("Categories", "folder", onClick = sort))
     add(AkiMenuItem("Choose a cover picture", "image", onClick = cover))
     if (book.customCover) add(AkiMenuItem("Use the book's own cover", "restore") { runCatching { app.engine.clearBookCustomCover(book.id) }; scope.launch { books.load() } })

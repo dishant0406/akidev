@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -74,6 +75,7 @@ fun AkiSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable 
                     .fillMaxWidth()
                     // The sheet floats a little in from the edges, as on iOS.
                     .padding(horizontal = 8.dp)
+                    .statusBarsPadding()
                     .navigationBarsPadding()
                     .padding(bottom = 8.dp)
                     .animateContentSize()
