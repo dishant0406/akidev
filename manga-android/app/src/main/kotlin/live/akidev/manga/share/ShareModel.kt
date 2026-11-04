@@ -8,7 +8,9 @@ import android.provider.Settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
@@ -16,6 +18,7 @@ import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.describe
 import java.net.Inet4Address
 import uniffi.akimanga.Share
+import uniffi.akimanga.ShareCode
 import uniffi.akimanga.ShareEvents
 import uniffi.akimanga.ShareFile
 import uniffi.akimanga.ShareOffered
@@ -28,6 +31,10 @@ import uniffi.akimanga.ShareSend
 sealed interface SendState {
     data object Choosing : SendState
     class Scanning(val denied: Boolean = false) : SendState
+    /** Joining the other phone's private Wi-Fi, after a code that has one. */
+    data object Joining : SendState
+    /** On the same network as the sender, waiting for it to start sending (this phone is receiving). */
+    class Connected(val to: SharePeer) : SendState
     class Waiting(val to: SharePeer) : SendState
     class Sending(val to: SharePeer, val fraction: Double) : SendState
     class Done(val to: SharePeer) : SendState
@@ -50,8 +57,14 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     private var sender: ShareSend? = null
     private var lookup: Job? = null
     private var probing = false
+    private var scanJob: Job? = null
     private var badCode = ""
     private var badAt = 0L
+    private val hotspot = Hotspot(context)
+    private val joiner = WifiJoin(context)
+    private var limit: Job? = null
+    /** The code for the Wi-Fi both phones are on; [code] is this, or the private Wi-Fi's code while there is one. */
+    private var wifiCode: String? = null
     private val byName = mutableMapOf<String, SharePeer>()
 
     /** Opened to receive only, with nothing to send. */
@@ -75,8 +88,14 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     /** Nobody was found for a while. */
     var lonely by mutableStateOf(false)
         private set
-    /** The camera is reading something that is not our code. */
-    var wrongCode by mutableStateOf(false)
+    /** What the scanner says under the camera when the last code could not be used. */
+    var scanNote by mutableStateOf<String?>(null)
+        private set
+    /** The private Wi-Fi this phone made, while it is up. */
+    var network by mutableStateOf<HotspotInfo?>(null)
+        private set
+    /** The private Wi-Fi is being made. */
+    var making by mutableStateOf(false)
         private set
     /** False until the files to send are ready (a comic is packed first). */
     var ready by mutableStateOf(sharing.files == null)
@@ -92,7 +111,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
             runCatching { app.io(make) }.onSuccess { files = it; ready = true }.onFailure { message = describe(it) }
         }
         val port = runCatching { opened.start() }.getOrElse { message = describe(it); return }
-        code = opened.code()
+        wifiCode = opened.makeCode(null, null, null, null)
+        code = wifiCode
         started = true
         // Android drops multicast packets to save battery unless an app asks, so the lock is held only while this sheet is open.
         lock = context.applicationContext.getSystemService(WifiManager::class.java).createMulticastLock("akidev").apply { setReferenceCounted(false); acquire() }
@@ -110,6 +130,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     }
 
     fun close() {
+        endNetwork()
+        scanJob?.cancel()
         lookup?.cancel()
         nearby?.stop()
         lock?.release()
@@ -126,10 +148,57 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
 
     private fun add(peer: SharePeer) {
         if (peers.none { it.ip == peer.ip && it.port == peer.port }) peers = peers + peer
+        // On the private Wi-Fi this phone made, the one phone that joins is who the send is for.
+        if (network != null && !receiving && state is SendState.Choosing) send(peer)
+    }
+
+    // The private Wi-Fi, for when the phones share none.
+
+    /** Makes the private Wi-Fi and shows its code in place of the Wi-Fi one. The permission it needs was asked for already. */
+    suspend fun makeNetwork() {
+        val opened = share ?: return
+        if (network != null || making) return
+        making = true
+        try {
+            val info = hotspot.start(wifiAddress())
+            val text = opened.makeCode(info.address, info.ssid, info.password, null)
+            if (text == null) {
+                hotspot.stop()
+                message = Problem("Temporary Wi-Fi", "This phone could not make a code for the temporary Wi-Fi.")
+            } else {
+                network = info
+                code = text
+                // A private Wi-Fi is for one send: it does not stay up for ever.
+                limit = app.launch {
+                    delay(5 * 60_000L)
+                    endNetwork()
+                }
+            }
+        } catch (failure: NetworkProblem) {
+            message = Problem("Temporary Wi-Fi", failure.message.orEmpty())
+        }
+        making = false
+    }
+
+    fun networkDenied() {
+        val which = if (Build.VERSION.SDK_INT >= 33) "Nearby devices" else "Location"
+        message = Problem("Temporary Wi-Fi", "Allow $which for Akidev in Settings to make a temporary Wi-Fi.")
+    }
+
+    /** Takes down the Wi-Fi this phone made, or leaves the one it joined, and goes back to the Wi-Fi code. */
+    fun endNetwork() {
+        limit?.cancel()
+        limit = null
+        hotspot.stop()
+        joiner.leave()
+        if (network != null) {
+            network = null
+            code = wifiCode
+        }
     }
 
     fun startScanning() {
-        wrongCode = false
+        scanNote = null
         state = SendState.Scanning()
     }
 
@@ -137,20 +206,66 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         state = SendState.Scanning(denied = true)
     }
 
-    /** The camera read a code: if it is ours, the phone it points to gets the send at once. */
-    suspend fun codeScanned(text: String) {
-        val now = System.currentTimeMillis()
-        if (probing || state !is SendState.Scanning || (text == badCode && now - badAt < 2000)) return
-        probing = true
-        val peer = runCatching { share?.probeCode(text) }.getOrNull()
-        probing = false
+    /** The camera read a code (it reads the same one over and over): if it is ours, the phone it points to is reached at once. */
+    fun codeScanned(text: String) {
+        app.launch {
+            val now = System.currentTimeMillis()
+            if (probing || state !is SendState.Scanning || (text == badCode && now - badAt < 2000)) return@launch
+            probing = true
+            scanJob = currentCoroutineContext()[Job]
+            try {
+                val code = runCatching { share?.readCode(text) }.getOrNull()
+                if (code == null) {
+                    badCode = text
+                    badAt = now
+                    scanNote = "That is not an Akidev code"
+                } else {
+                    reach(code, text)
+                }
+            } finally {
+                probing = false
+            }
+        }
+    }
+
+    /** Joins the private Wi-Fi the code has, finds the phone it points to, then sends to it, or waits for it to send. */
+    private suspend fun reach(code: ShareCode, text: String) {
+        val ssid = code.ssid
+        val password = code.password
+        if (ssid != null && password != null) {
+            state = SendState.Joining
+            try {
+                joiner.join(ssid, password)
+            } catch (failure: NetworkProblem) {
+                state = SendState.Failed(failure.message.orEmpty())
+                return
+            }
+        }
+        // A phone that has just made a Wi-Fi may need a moment before its address answers.
+        val tries = if (ssid != null) 3 else 1
+        var peer: SharePeer? = null
+        if (code.ip != null) {
+            for (attempt in 1..tries) {
+                peer = try {
+                    share?.probeCode(text)
+                } catch (failure: CancellationException) {
+                    throw failure
+                } catch (failure: Exception) {
+                    null
+                }
+                if (peer != null) break
+                if (attempt < tries) delay(1500)
+            }
+        }
         if (peer == null) {
-            badCode = text
-            badAt = now
-            wrongCode = true
+            joiner.leave()
+            state = SendState.Failed(
+                if (code.peer != null) "That phone has no shared Wi-Fi with you. Tap “No shared Wi-Fi?” on this phone and ask them to scan your code."
+                else "Could not reach that phone.",
+            )
         } else {
             add(peer)
-            send(peer)
+            if (receiving) state = SendState.Connected(peer) else send(peer)
         }
     }
 
@@ -168,7 +283,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
             }
             val ended = try {
                 when (now.run()) {
-                    ShareOutcome.SENT -> SendState.Done(to)
+                    ShareOutcome.SENT -> SendState.Done(to).also { endNetwork() }
                     ShareOutcome.DECLINED -> SendState.Failed("${to.alias} said no, or did not answer in time.")
                     ShareOutcome.BUSY -> SendState.Failed("${to.alias} is busy. Try again in a moment.")
                     ShareOutcome.STOPPED -> SendState.Choosing
@@ -181,12 +296,20 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         }
     }
 
+    /** Stops a send, or leaves a Wi-Fi joined to wait for one. */
     fun stopSending() {
         sender?.stop()
+        if (state is SendState.Connected || state is SendState.Joining) {
+            scanJob?.cancel()
+            endNetwork()
+            state = SendState.Choosing
+        }
     }
 
     fun again() {
         state = SendState.Choosing
+        // The phone that joined this phone's private Wi-Fi is still there: send to it again.
+        if (network != null && !receiving) peers.lastOrNull()?.let(::send)
     }
 
     fun answer(accept: Boolean) {
@@ -213,6 +336,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     override fun finished(session: String, files: List<ShareReceived>) {
         app.launch {
             incoming = null
+            endNetwork()
             val said = files.map { app.takeIn(it.path, it.name) }.joinToString("\n")
             share?.clean()
             if (said.isNotBlank()) received = said

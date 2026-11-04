@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -60,6 +61,20 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
     }
     LaunchedEffect(Unit) { model.open() }
     DisposableEffect(Unit) { onDispose { model.close() } }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) model.startScanning() else model.cameraDenied() }
+    val scan = {
+        val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (allowed) model.startScanning() else askCamera.launch(Manifest.permission.CAMERA)
+    }
+    // A temporary Wi-Fi needs "Nearby devices" (Android 13 and newer) or Location (older); the person is asked only here.
+    val wifiPermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
+    val makeNetwork = { scope.launch { model.makeNetwork() }; Unit }
+    val askWifi = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) makeNetwork() else model.networkDenied() }
+    val startNetwork = {
+        if (ContextCompat.checkSelfPermission(context, wifiPermission) == PackageManager.PERMISSION_GRANTED) makeNetwork() else askWifi.launch(wifiPermission)
+    }
 
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -72,48 +87,68 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
             when {
                 model.received != null -> Finished("check", model.received.orEmpty(), "Done", onDismiss)
                 coming != null -> Working("Receiving from ${coming.from}", coming.fraction, null, model::stopReceiving)
+                state is SendState.Joining -> Working("Joining their Wi-Fi…", null, null, model::stopSending)
+                state is SendState.Connected -> Working("Connected. Waiting for ${state.to.alias} to send…", null, null, model::stopSending)
                 state is SendState.Waiting -> Working("Waiting for ${state.to.alias}…", null, null, model::stopSending)
                 state is SendState.Sending -> Working("Sending to ${state.to.alias}", state.fraction, "Keep Akidev open", model::stopSending)
                 state is SendState.Done -> Finished("check", "Sent to ${state.to.alias}", "Done", onDismiss)
                 state is SendState.Failed -> Finished("warning", state.message, "Try again", model::again, "Close", onDismiss)
                 state is SendState.Scanning -> Scan(model, state.denied)
-                model.receiving -> Receive(model)
-                else -> Choose(model)
+                model.receiving -> Receive(model, scan, startNetwork)
+                else -> Choose(model, scan, startNetwork)
             }
         }
+        // Inside the sheet: a dialog drawn outside it would sit behind the sheet's own window.
+        model.incoming?.takeIf { !it.accepted }?.let { asked ->
+            val what = asked.files.joinToString("\n") { "${it.name} (${Formatter.formatFileSize(context, it.size.toLong())})" }
+            AkiQuestion("${asked.from} wants to send you", what, "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
+        }
+        model.message?.let { AkiAlert(it.title, it.message) { model.message = null } }
     }
-    val context = LocalContext.current
-    model.incoming?.takeIf { !it.accepted }?.let { asked ->
-        val what = asked.files.joinToString("\n") { "${it.name} (${Formatter.formatFileSize(context, it.size.toLong())})" }
-        AkiQuestion("${asked.from} wants to send you", what, "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
-    }
-    model.message?.let { AkiAlert(it.title, it.message) { model.message = null } }
 }
 
 /** The code the other phone scans, and who this phone is. */
 @Composable
-private fun Receive(model: ShareModel) {
+private fun Receive(model: ShareModel, scan: () -> Unit, startNetwork: () -> Unit) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         val code = model.code
         when {
             code != null -> {
                 QrCode(code)
-                AkiText("Ask them to scan this, or open Share on their phone.", tone = AkiTone.Muted, align = TextAlign.Center)
+                AkiText(if (model.network != null) PRIVATE_HELP else "Ask them to scan this, or open Share on their phone.", tone = AkiTone.Muted, align = TextAlign.Center)
                 AkiText("Visible as ${model.alias}", AkiTextStyle.Caption, tone = AkiTone.Muted)
             }
             model.started -> AkiText("Connect to Wi-Fi to receive.", tone = AkiTone.Muted, align = TextAlign.Center)
             else -> AkiSpinner()
         }
+        if (model.started) {
+            AkiButton("Scan a code", variant = AkiButtonVariant.Ghost, icon = "qr", fullWidth = true, onClick = scan)
+            NetworkButton(model, startNetwork)
+        }
     }
 }
 
-/** Who to send to: the phones found, one tap each. */
+/** "No shared Wi-Fi?" makes a temporary Wi-Fi; while there is one, the way back to the ordinary Wi-Fi. */
 @Composable
-private fun Choose(model: ShareModel) {
-    val context = LocalContext.current
-    val asking = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) model.startScanning() else model.cameraDenied() }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (model.peers.isEmpty()) {
+private fun NetworkButton(model: ShareModel, startNetwork: () -> Unit) {
+    when {
+        model.making -> AkiSpinner()
+        model.network != null -> AkiButton("Use Wi-Fi instead", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = model::endNetwork)
+        else -> AkiButton("No shared Wi-Fi?", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = startNetwork)
+    }
+}
+
+private const val PRIVATE_HELP = "Ask them to scan this. It makes a private Wi-Fi just for this send."
+
+/** Who to send to: the phones found, one tap each. With a temporary Wi-Fi up, its code instead: the phone that scans it is who gets the send. */
+@Composable
+private fun Choose(model: ShareModel, scan: () -> Unit, startNetwork: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val code = model.code
+        if (model.network != null && code != null) {
+            QrCode(code)
+            AkiText(PRIVATE_HELP, tone = AkiTone.Muted, align = TextAlign.Center)
+        } else if (model.peers.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AkiSpinner()
                 AkiText("Looking nearby…", tone = AkiTone.Muted)
@@ -122,10 +157,8 @@ private fun Choose(model: ShareModel) {
         } else {
             for (peer in model.peers) PersonRow(peer, model.ready) { model.send(peer) }
         }
-        AkiButton("Scan their code", icon = "qr", fullWidth = true) {
-            val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-            if (allowed) model.startScanning() else asking.launch(Manifest.permission.CAMERA)
-        }
+        AkiButton("Scan their code", icon = "qr", fullWidth = true, onClick = scan)
+        if (model.started) NetworkButton(model, startNetwork)
     }
 }
 
@@ -138,7 +171,6 @@ private fun PersonRow(peer: SharePeer, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun Scan(model: ShareModel, denied: Boolean) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (denied) {
             AkiText("Allow the camera to scan a code.", tone = AkiTone.Muted, align = TextAlign.Center)
@@ -146,8 +178,8 @@ private fun Scan(model: ShareModel, denied: Boolean) {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
             }
         } else {
-            QrScanner({ text -> scope.launch { model.codeScanned(text) } }, Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(28.dp)))
-            AkiText(if (model.wrongCode) "That is not an Akidev code" else "Point at the code on their Receive sheet", AkiTextStyle.Caption, tone = if (model.wrongCode) AkiTone.Destructive else AkiTone.Muted, align = TextAlign.Center)
+            QrScanner(model::codeScanned, Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(28.dp)))
+            AkiText(model.scanNote ?: "Point at the code on their phone", AkiTextStyle.Caption, tone = if (model.scanNote != null) AkiTone.Destructive else AkiTone.Muted, align = TextAlign.Center)
         }
         AkiButton("Cancel", variant = AkiButtonVariant.Ghost, onClick = model::again)
     }

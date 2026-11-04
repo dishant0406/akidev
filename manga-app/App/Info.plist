@@ -70,6 +70,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_akidev._tcp</string>
+		<string>_akidev-p2p._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Akidev uses the camera only to scan a code from a friend's phone.</string>

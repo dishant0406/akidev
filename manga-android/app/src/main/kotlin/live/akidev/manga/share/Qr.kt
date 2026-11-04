@@ -89,7 +89,11 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            val view = PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
+            // A normal view, not a separate surface: the surface ignores the sheet's rounded corners and its slide.
+            val view = PreviewView(context).apply {
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
             val future = ProcessCameraProvider.getInstance(context)
             future.addListener({
                 if (gone[0]) return@addListener

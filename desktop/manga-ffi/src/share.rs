@@ -4,6 +4,7 @@
 use crate::{DEVICE, Engine, Result, failed, now_ms, plain_name};
 use akidev_manga::model as m;
 use akidev_manga::share::card::Card;
+use akidev_manga::share::code::Code;
 use akidev_manga::share::receive::{self, Received, Server};
 use akidev_manga::share::send::{Outgoing, Peer, SendError, Sending};
 use akidev_manga::share::{self, Device, FileMeta, Identity, PORT, clean_name, find};
@@ -49,6 +50,18 @@ pub struct SharePeer {
     pub device_type: Option<String>,
     pub port: u16,
     pub protocol: String,
+}
+
+/// What a scanned QR code says (see `Share::make_code`).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ShareCode {
+    pub ip: Option<String>,
+    pub port: Option<u16>,
+    /// A temporary Wi-Fi to join first: its name and password.
+    pub ssid: Option<String>,
+    pub password: Option<String>,
+    /// The name of an iPhone to link to directly.
+    pub peer: Option<String>,
 }
 
 /// A file on this phone, and the name it is sent under.
@@ -249,30 +262,56 @@ impl Share {
         Ok(peer(&ip, &device))
     }
 
-    /// What the QR code on the receive screen holds: where this phone is on the Wi-Fi. The other phone scans it with
-    /// `probe_code`. None when this phone has no Wi-Fi address, or is not receiving yet.
-    pub fn code(&self) -> Option<String> {
-        let ip = self.address()?;
+    /// What the QR code holds: how the other phone reaches this one. By default this phone's address on the Wi-Fi; `ip` replaces
+    /// it (the address on a temporary Wi-Fi this phone made, with that Wi-Fi's `ssid` and `password`), and `peer` is the name an
+    /// iPhone announces for a direct link. None when there is nothing to say yet: no address, no peer, or not receiving.
+    pub fn make_code(
+        &self,
+        ip: Option<String>,
+        ssid: Option<String>,
+        password: Option<String>,
+        peer: Option<String>,
+    ) -> Option<String> {
         let port = self.server.lock().unwrap().as_ref()?.device.port;
-        Some(format!("akidev://share?h={ip}&p={port}"))
+        let ip = match ip {
+            Some(ip) => Some(ip.parse().ok()?),
+            None => self.address(),
+        };
+        let network = ssid.zip(password);
+        // A temporary Wi-Fi is no use without the address on it.
+        if network.is_some() && ip.is_none() {
+            return None;
+        }
+        let code = Code {
+            port: ip.map(|_| port),
+            ip,
+            network,
+            peer,
+        };
+        (code.ip.is_some() || code.peer.is_some()).then(|| code.text())
     }
 
-    /// Finds the phone a scanned code points to. Fails for anything that is not one of our codes.
+    /// What a scanned code says, or an error when it is not one of ours.
+    pub fn read_code(&self, code: String) -> Result<ShareCode> {
+        let found = Code::read(&code).ok_or_else(|| failed("that is not a code from Akidev"))?;
+        let (ssid, password) = found.network.unzip();
+        Ok(ShareCode {
+            ip: found.ip.map(|ip| ip.to_string()),
+            port: found.port,
+            ssid,
+            password,
+            peer: found.peer,
+        })
+    }
+
+    /// Finds the phone a scanned code points to, by its address. Fails for anything that is not one of our codes, or that has no
+    /// address (a code with only a peer name is for the app's own direct link).
     pub async fn probe_code(&self, code: String) -> Result<SharePeer> {
-        let wrong = || failed("that is not a code from Akidev");
-        let query = code.strip_prefix("akidev://share?").ok_or_else(wrong)?;
-        let value = |name: &str| {
-            query
-                .split('&')
-                .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+        let found = self.read_code(code)?;
+        let (Some(ip), Some(port)) = (found.ip, found.port) else {
+            return Err(failed("that code has no address"));
         };
-        let ip: std::net::Ipv4Addr = value("h")
-            .and_then(|ip| ip.parse().ok())
-            .ok_or_else(wrong)?;
-        let port: u16 = value("p")
-            .and_then(|port| port.parse().ok())
-            .ok_or_else(wrong)?;
-        self.probe(ip.to_string(), port, "https".into()).await
+        self.probe(ip, port, "https".into()).await
     }
 
     /// The person's answer to `asked`.

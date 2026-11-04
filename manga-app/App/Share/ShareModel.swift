@@ -53,6 +53,10 @@ final class ShareModel {
     var looked = false
     /// The camera is open, looking for a friend's code.
     var scanningCode = false
+    /// A code with a temporary Wi-Fi in it was scanned and the phone is joining it.
+    var joining = false
+    /// Joined, or linked, and now waiting for the other phone to send (when this phone is the one receiving).
+    var connected: String?
     var codeNote: String?
     var sending: (peer: SharePeer, outcome: Outcome)?
     var asked: Asked?
@@ -73,6 +77,12 @@ final class ShareModel {
     private var waiting: [NewSource] = []
     /// The send being received, once the person said yes.
     private var receiving: String?
+    private var host: PeerHost?
+    private var gate: PeerGate?
+    /// The temporary Wi-Fi this phone joined, to leave when the send is over.
+    private var joined: String?
+    private var networkTimer: Task<Void, Never>?
+    private var connecting = false
 
     func begin(app: AppModel, item: ShareItem?) async {
         self.app = app
@@ -88,7 +98,12 @@ final class ShareModel {
             nearby.lost = { [weak self] ip, port in self?.peers.removeAll { $0.ip == ip && $0.port == port } }
             nearby.denied = { [weak self] in self?.denied = $0 }
             nearby.start(port: port)
-            code = share.code()
+            // Only a phone that is waiting to receive offers the direct link: Apple slows the Wi-Fi while it is on.
+            if item == nil {
+                let host = PeerHost()
+                if (try? host.start(enginePort: port)) != nil { self.host = host }
+            }
+            code = share.makeCode(ip: nil, ssid: nil, password: nil, peer: host?.name)
             if item != nil {
                 lookAgain = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(8))
@@ -103,6 +118,9 @@ final class ShareModel {
     func end() {
         lookAgain?.cancel()
         nearby.stop()
+        endNetwork()
+        host?.stop()
+        host = nil
         share?.stop()
         share = nil
         job?.stop()
@@ -120,19 +138,87 @@ final class ShareModel {
         add(peer)
     }
 
-    /// A friend's code was scanned: find their phone and send to it at once.
+    /// A friend's code was scanned: join their temporary Wi-Fi if it has one, find their phone, and send to it at once (or, when this
+    /// phone is the one receiving, wait for them to send).
     func connect(code: String) {
-        guard let share else { return }
+        guard let share, !connecting else { return }
+        connecting = true
         Task {
-            do {
-                let peer = try await share.probeCode(code: code)
+            defer { connecting = false }
+            guard let found = try? share.readCode(code: code) else {
+                codeNote = "That is not an Akidev code"
+                return
+            }
+            if let ssid = found.ssid, let password = found.password {
                 scanningCode = false
-                codeNote = nil
-                send(to: peer)
-            } catch {
-                codeNote = describe(error).message.contains("not a code") ? "That is not an Akidev code" : "Could not reach that phone"
+                joining = true
+                defer { joining = false }
+                do { try await WifiJoin.join(ssid: ssid, password: password) } catch {
+                    problem = "Could not join their Wi-Fi."
+                    return
+                }
+                joined = ssid
+                keepNetworkFor5Minutes()
+            }
+            guard let peer = await reach(found, code: code, share: share) else {
+                if joined != nil {
+                    endNetwork()
+                    problem = "Could not reach that phone."
+                } else {
+                    codeNote = "Could not reach that phone"
+                }
+                return
+            }
+            scanningCode = false
+            codeNote = nil
+            if item != nil { send(to: peer) } else { connected = peer.alias }
+        }
+    }
+
+    /// By its address (three tries on a temporary Wi-Fi, whose address can take a moment to work), or else by the direct link.
+    private func reach(_ found: ShareCode, code: String, share: Share) async -> SharePeer? {
+        if found.ip != nil {
+            for attempt in 0..<(joined == nil ? 1 : 3) {
+                if attempt > 0 { try? await Task.sleep(for: .milliseconds(1500)) }
+                if let peer = try? await share.probeCode(code: code) { return peer }
             }
         }
+        guard let name = found.peer else { return nil }
+        let gate = PeerGate()
+        guard let port = try? await gate.open(name: name), let peer = try? await share.probe(ip: "127.0.0.1", port: port, protocol: "https") else {
+            gate.stop()
+            return nil
+        }
+        self.gate?.stop()
+        self.gate = gate
+        keepNetworkFor5Minutes()
+        return peer
+    }
+
+    /// The temporary Wi-Fi or the direct link ends with the send, and at the latest after five minutes.
+    private func keepNetworkFor5Minutes() {
+        networkTimer?.cancel()
+        networkTimer = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(300))
+            guard !Task.isCancelled else { return }
+            self?.endNetwork()
+            self?.connected = nil
+        }
+    }
+
+    func endNetwork() {
+        networkTimer?.cancel()
+        networkTimer = nil
+        if let joined { WifiJoin.leave(ssid: joined) }
+        joined = nil
+        gate?.stop()
+        gate = nil
+    }
+
+    /// The person gives up waiting on the other phone.
+    func disconnect() {
+        endNetwork()
+        connected = nil
     }
 
     // MARK: sending
@@ -155,7 +241,9 @@ final class ShareModel {
                 let outcome = try await job.run()
                 poll.cancel()
                 switch outcome {
-                case .sent: sending = (peer, .done)
+                case .sent:
+                    sending = (peer, .done)
+                    endNetwork()
                 case .declined: sending = (peer, .declined)
                 case .busy: sending = (peer, .busy)
                 case .stopped: sending = nil
@@ -206,6 +294,10 @@ final class ShareModel {
     func finished(_ files: [ShareReceived]) {
         incoming = nil
         receiving = nil
+        connected = nil
+        endNetwork()
+        host?.stop()
+        host = nil
         guard let app, let share else { return }
         let engine = app.engine
         Task {

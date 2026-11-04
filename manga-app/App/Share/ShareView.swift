@@ -37,6 +37,11 @@ struct ShareView: View {
                 AkiText("Turn on Local Network for Akidev to see other phones.", .body, tone: .muted, align: .center)
                 AkiButton("Open Settings", variant: .primary) { openSettings() }
             }
+        } else if model.joining {
+            centered {
+                AkiSpinner()
+                AkiText("Joining their Wi-Fi…", .heading, align: .center)
+            }
         } else if let sending = model.sending {
             sendingState(sending.peer, sending.outcome)
         } else if let incoming = model.incoming {
@@ -47,6 +52,12 @@ struct ShareView: View {
             }
         } else if model.received, let line = model.added.last {
             done(line)
+        } else if let name = model.connected {
+            centered {
+                AkiSpinner()
+                AkiText("Connected. Waiting for \(name) to send…", .heading, lines: 3, align: .center)
+                AkiButton("Cancel", variant: .ghost, size: .small) { model.disconnect() }
+            }
         } else if model.scanningCode {
             scanner
         } else if item != nil {
@@ -145,6 +156,7 @@ struct ShareView: View {
             } else {
                 AkiText("Connect to Wi-Fi to receive.", .body, tone: .muted, align: .center)
             }
+            AkiButton("Scan a code", icon: "qr", variant: .ghost) { model.scanningCode = true }
         }
     }
 

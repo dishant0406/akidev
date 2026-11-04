@@ -5,6 +5,7 @@
 //! they learn of each other.
 
 pub mod card;
+pub mod code;
 pub mod find;
 pub mod receive;
 pub mod send;

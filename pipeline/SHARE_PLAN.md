@@ -205,3 +205,7 @@ The owner found Android showing Share as a page and iOS as a sheet, an IP addres
 **Verified.** Engine and app-call tests pass, clippy is clean. Android API 29: every state except the camera, the QR decoded from a screenshot, the full-height sheet scrolls and collapses. iOS Simulator: every state except the live camera; a 30 MB send went in and out; a valid code sent at once through a temporary hook (removed). Both apps build and lint, `check-ui.sh` passes.
 
 **Not verified.** The live camera scan on both (the Android emulator's camera is disabled by policy; the iOS Simulator has no camera). Choosing the Wi-Fi address on a phone with Wi-Fi and mobile data (Android uses the active network, iOS uses `en0`). The "Receiving from" screen and the "Add the source?" question inside the new sheet on Android, series sharing on the new sheet, dark theme, iPad, API 36. A phone with a display cutout for the sheet fix. Bonjour and Android discovery between real devices.
+
+## 13. No shared Wi-Fi (2026-11-03)
+
+A temporary Android hotspot for Android with iPhone, and Apple's peer-to-peer link for iPhone to iPhone, are built. The research, contract, flow and what is unverified are in `pipeline/SHARE_OFFLINE_PLAN.md`.

@@ -191,3 +191,62 @@ async fn a_comic_from_a_file_goes_as_the_file() {
     there.stop();
     let _ = std::fs::remove_dir_all(&temp);
 }
+
+#[tokio::test]
+async fn a_scanned_code_finds_the_phone_that_made_it() {
+    let temp = std::env::temp_dir().join(format!("akimanga-share-code-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&temp);
+    let engine = Engine::new(temp.to_string_lossy().to_string()).unwrap();
+    let share = engine
+        .share(
+            "Receiver".into(),
+            "Test".into(),
+            "mobile".into(),
+            Some("127.0.0.1".into()),
+            Arc::new(Screen::default()),
+        )
+        .unwrap();
+    // Nothing to say before the door is open.
+    assert_eq!(share.make_code(None, None, None, None), None);
+    let port = share.start().await.unwrap();
+
+    let wifi = share.make_code(None, None, None, None).unwrap();
+    assert_eq!(wifi, format!("akidev://share?h=127.0.0.1&p={port}"));
+    let hotspot = share
+        .make_code(
+            Some("192.168.49.1".into()),
+            Some("DIRECT-ab".into()),
+            Some("pass word".into()),
+            None,
+        )
+        .unwrap();
+    let read = share.read_code(hotspot).unwrap();
+    assert_eq!(read.ip.as_deref(), Some("192.168.49.1"));
+    assert_eq!(read.ssid.as_deref(), Some("DIRECT-ab"));
+    assert_eq!(read.password.as_deref(), Some("pass word"));
+    let peer = share
+        .make_code(None, None, None, Some("akidev-1a2b3c4d".into()))
+        .unwrap();
+    assert_eq!(
+        share.read_code(peer).unwrap().peer.as_deref(),
+        Some("akidev-1a2b3c4d")
+    );
+    // A network with no address, and text that is not ours, make nothing.
+    assert_eq!(share.make_code(Some("nope".into()), None, None, None), None);
+    assert!(share.read_code("https://example.com".into()).is_err());
+
+    // Another phone uses the Wi-Fi code to find this one.
+    let other = Engine::new(temp.join("other").to_string_lossy().to_string()).unwrap();
+    let there = other
+        .share(
+            "Sender".into(),
+            "Test".into(),
+            "mobile".into(),
+            None,
+            Arc::new(Screen::default()),
+        )
+        .unwrap();
+    assert_eq!(there.probe_code(wifi).await.unwrap().alias, "Receiver");
+    share.stop();
+    let _ = std::fs::remove_dir_all(&temp);
+}

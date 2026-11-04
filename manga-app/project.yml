@@ -32,6 +32,11 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Sources are served over plain http only from a developer's machine (the demo server).
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+    entitlements:
+      path: App/AkiManga.entitlements
+      properties:
+        # Joins the temporary Wi-Fi an Android phone makes for one send. Automatic signing adds the capability to the app's ID.
+        com.apple.developer.networking.HotspotConfiguration: true
     info:
       path: App/Info.plist
       properties:
@@ -50,7 +55,8 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         # The Share screen finds and announces phones with Bonjour; iOS asks the person first, and says why with this line.
         NSLocalNetworkUsageDescription: Akidev uses your local network to send books and series to a friend's phone on the same Wi-Fi, and to receive from them.
-        NSBonjourServices: [_akidev._tcp]
+        # _akidev-p2p._tcp is the direct link between two iPhones with no Wi-Fi in common.
+        NSBonjourServices: [_akidev._tcp, _akidev-p2p._tcp]
         # Only asked when the person taps "Scan their code".
         NSCameraUsageDescription: Akidev uses the camera only to scan a code from a friend's phone.
         # "Open in Akidev" for a book or a comic archive (a series card never travels as a file: it arrives through the Share screen).
