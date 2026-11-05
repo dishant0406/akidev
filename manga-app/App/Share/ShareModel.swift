@@ -175,10 +175,11 @@ final class ShareModel {
         }
     }
 
-    /// By its address (three tries on a temporary Wi-Fi, whose address can take a moment to work), or else by the direct link.
+    /// By its address (ten tries on a temporary Wi-Fi, about 15 seconds: a new Wi-Fi can take that long to give this phone an address),
+    /// or else by the direct link.
     private func reach(_ found: ShareCode, code: String, share: Share) async -> SharePeer? {
         if found.ip != nil {
-            for attempt in 0..<(joined == nil ? 1 : 3) {
+            for attempt in 0..<(joined == nil ? 1 : 10) {
                 if attempt > 0 { try? await Task.sleep(for: .milliseconds(1500)) }
                 if let peer = try? await share.probeCode(code: code) { return peer }
             }
@@ -203,6 +204,17 @@ final class ShareModel {
             guard !Task.isCancelled else { return }
             self?.endNetwork()
             self?.connected = nil
+        }
+    }
+
+    /// Leaves the temporary Wi-Fi in a few seconds: the "got it" reply to the sender is still on its way, and leaving now would cut it.
+    /// Joining another Wi-Fi in that time replaces this timer.
+    private func endNetworkSoon() {
+        networkTimer?.cancel()
+        networkTimer = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.endNetwork()
         }
     }
 
@@ -295,7 +307,7 @@ final class ShareModel {
         incoming = nil
         receiving = nil
         connected = nil
-        endNetwork()
+        endNetworkSoon()
         host?.stop()
         host = nil
         guard let app, let share else { return }
@@ -308,7 +320,8 @@ final class ShareModel {
             app.booksRevision += 1
             received = !added.isEmpty
             askNextSource()
-            if waiting.isEmpty { share.clean() }
+            // A card that waits for "Add the source?" is still a file: keep it until the person answers.
+            if newSource == nil { share.clean() }
         }
     }
 
