@@ -125,7 +125,8 @@ class WifiJoin(context: Context) {
         }
         callback = joining
         try {
-            connectivity.requestNetwork(request, joining, 30_000)
+            // The time counts the person's tap on the system's "Connect" question too, so it is not short.
+            connectivity.requestNetwork(request, joining, 60_000)
         } catch (failure: RuntimeException) {
             go.resumeWithException(NetworkProblem("Could not join their Wi-Fi."))
         }
