@@ -175,20 +175,21 @@ class AppModel(private val context: Context) {
 
     /**
      * Puts a file that came from another phone, or from another app, where it belongs, and says what happened. A series from a source is
-     * not added here: it may bring a source with it, so the person is asked first (see [pendingCard]).
+     * not added here: it may bring a source with it, so the person is asked first: by [ask] when the caller has a place for the question
+     * (the share sheet), else by [pendingCard].
      */
-    suspend fun takeIn(path: String, name: String): String = try {
+    suspend fun takeIn(path: String, name: String, ask: (PendingCard) -> Unit = { pendingCard = it }): String = try {
         val lower = name.lowercase()
         when {
             lower.endsWith(".epub") -> {
                 val book = io { engine.importBook(path) }
                 booksScreen.load()
-                "Added “${book.title}” to your books."
+                "\"${book.title}\" is on your shelf."
             }
             lower.endsWith(".cbz") -> {
                 io { engine.importFile(path) }
                 refresh()
-                "Added “${name.removeSuffix(".cbz")}” to your library."
+                "\"${name.removeSuffix(".cbz")}\" is in your library."
             }
             lower.endsWith(".akidev.json") -> {
                 // The file is in a folder that is emptied soon, and the question may wait.
@@ -198,9 +199,9 @@ class AppModel(private val context: Context) {
                 if (card.installed) {
                     engine.shareAddCard(kept.path)
                     refresh()
-                    "Added “${card.title}” to your library."
+                    "\"${card.title}\" is in your library."
                 } else {
-                    pendingCard = PendingCard(kept.path, card)
+                    ask(PendingCard(kept.path, card))
                     ""
                 }
             }

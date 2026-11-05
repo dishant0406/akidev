@@ -96,6 +96,7 @@ class LibraryModel(private val app: AppModel) {
         add(AkiMenuItem("Only unread", "check", isSelected = onlyUnread) { onlyUnread = !onlyUnread })
         add(AkiMenuItem(if (selecting) "Done selecting" else "Select", "check") { select() })
         add(AkiMenuItem("Categories", "folder", onClick = manage))
+        add(AkiMenuItem("Receive from a friend", "share") { app.sharing = live.akidev.manga.app.Sharing(null, null) })
         // Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
         if (inMangaTab && categories.isNotEmpty()) {
             val shelves = listOf(-1L to "All categories") + categories.map { it.id to it.name } + listOf(-2L to "No category")

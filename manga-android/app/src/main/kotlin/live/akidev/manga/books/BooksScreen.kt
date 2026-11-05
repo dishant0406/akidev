@@ -79,7 +79,7 @@ fun BooksScreen() {
                 }
             }
             if (books.books.isEmpty()) {
-                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you remove them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer), secondary = AkiAction("Receive from a phone nearby") { app.sharing = Sharing(null, null) }) }
+                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you remove them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer), secondary = AkiAction("Receive from a friend") { app.sharing = Sharing(null, null) }) }
             } else {
                 val shown = books.shown
                 if (shown.isEmpty()) item { AkiEmptyState("Nothing here", if (books.category == -2L) "Every book is on a category." else "No books on this shelf yet. Long-press a book to put it on one.", Modifier.heightIn(min = 260.dp)) }
@@ -161,7 +161,7 @@ private fun menuOf(
     details: () -> Unit, share: () -> Unit, sort: () -> Unit, cover: () -> Unit, remove: () -> Unit,
 ): List<AkiMenuItem> = buildList {
     add(AkiMenuItem("Details", "list", onClick = details))
-    add(AkiMenuItem("Share with a phone nearby", "share", onClick = share))
+    add(AkiMenuItem("Share", "share", onClick = share))
     add(AkiMenuItem("Categories", "folder", onClick = sort))
     add(AkiMenuItem("Choose a cover picture", "image", onClick = cover))
     if (book.customCover) add(AkiMenuItem("Use the book's own cover", "restore") { runCatching { app.engine.clearBookCustomCover(book.id) }; scope.launch { books.load() } })

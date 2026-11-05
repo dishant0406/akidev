@@ -5,6 +5,7 @@ import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.ExperimentalHazeApi
@@ -112,17 +115,18 @@ fun AkiGlassScope(reduce: Boolean = false, content: @Composable () -> Unit) {
 
 /**
  * A window of its own (a sheet, a dialog) cannot show what is on the screen behind it, so its glass shows the window's own background:
- * `content` is drawn over a source of `color`, in a glass scope of its own.
+ * `content` is drawn over a source of `color`, in a glass scope of its own. A card with margins around it gives its `shape` and
+ * the margin as `inset`, so the source is the card's own size and does not show as a square behind it.
  */
 @Composable
-fun AkiGlassWindow(color: Color, content: @Composable () -> Unit) {
+fun AkiGlassWindow(color: Color, shape: Shape = RectangleShape, inset: Dp = 0.dp, content: @Composable () -> Unit) {
     val state = rememberHazeState()
     val look = LocalGlassSource.current?.look ?: AkiGlassLook.Solid
     val source = remember(state, look) { GlassSource(state, look) }
     // A window of its own also has no layer for menus: they open as popups in it.
     CompositionLocalProvider(LocalGlassSource provides source, LocalAkiMenus provides null, LocalAkiDialogs provides null) {
         Box {
-            if (look == AkiGlassLook.Glass) Box(Modifier.matchParentSize().hazeSource(state, zIndex = -1f).background(color))
+            if (look == AkiGlassLook.Glass) Box(Modifier.matchParentSize().padding(horizontal = inset).hazeSource(state, zIndex = -1f).background(color, shape))
             content()
         }
     }

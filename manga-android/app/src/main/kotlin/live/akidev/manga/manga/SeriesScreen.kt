@@ -177,7 +177,7 @@ private fun Controls(
                 AkiMenuItem("Mark all as unread", "check") { series.markAll(read = false) },
                 AkiMenuItem("Download unread", "download") { scope.launch { series.download(chapters.filter { !it.finished && it.id !in series.kept }) } },
                 AkiMenuItem("Refresh", "refresh") { scope.launch { series.load(force = true) } },
-                AkiMenuItem("Share with a phone nearby", "share", onClick = share),
+                AkiMenuItem("Share", "share", onClick = share),
                 AkiMenuItem("Categories", "folder", onClick = onCategories),
                 AkiMenuItem("Choose a cover", "image", onClick = onCover),
                 AkiMenuItem("Reset cover", "refresh") { series.clearCover() },

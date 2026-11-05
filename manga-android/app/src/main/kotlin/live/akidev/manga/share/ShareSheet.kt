@@ -9,16 +9,12 @@ import android.provider.Settings
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -43,6 +39,8 @@ import live.akidev.manga.app.PendingCard
 import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
+import uniffi.akimanga.ShareCard
+import uniffi.akimanga.ShareOffered
 import uniffi.akimanga.SharePeer
 
 /**
@@ -86,13 +84,13 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
             val state = model.state
             when {
                 model.received != null -> Finished("check", model.received.orEmpty(), "Done", onDismiss)
-                coming != null -> Working("Receiving from ${coming.from}", coming.fraction, null, model::stopReceiving)
-                state is SendState.Joining -> Working("Joining their Wi-Fi…", null, null, model::stopSending)
-                state is SendState.Connected -> Working("Connected. Waiting for ${state.to.alias} to send…", null, null, model::stopSending)
-                state is SendState.Waiting -> Working("Waiting for ${state.to.alias}…", null, null, model::stopSending)
-                state is SendState.Sending -> Working("Sending to ${state.to.alias}", state.fraction, "Keep Akidev open", model::stopSending)
+                coming != null -> Working("Receiving from ${coming.from}", coming.fraction, false, null, model::stopReceiving)
+                state is SendState.Joining -> Working("Joining their Wi-Fi…", null, false, null, model::stopSending)
+                state is SendState.Connected -> Working("Connected. Waiting for ${state.to.alias} to send…", null, false, null, model::stopSending)
+                state is SendState.Waiting -> Working("Waiting for ${state.to.alias}…", null, false, null, model::stopSending)
+                state is SendState.Sending -> Working("Sending to ${state.to.alias}", state.fraction, true, "Keep Akidev open", model::stopSending)
                 state is SendState.Done -> Finished("check", "Sent to ${state.to.alias}", "Done", onDismiss)
-                state is SendState.Failed -> Finished("warning", state.message, "Try again", model::again, "Close", onDismiss)
+                state is SendState.Failed -> Finished(null, state.message, "Try again", model::again, "Close", onDismiss)
                 state is SendState.Scanning -> Scan(model, state.denied)
                 model.receiving -> Receive(model, scan, startNetwork)
                 else -> Choose(model, scan, startNetwork)
@@ -100,11 +98,29 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
         }
         // Inside the sheet: a dialog drawn outside it would sit behind the sheet's own window.
         model.incoming?.takeIf { !it.accepted }?.let { asked ->
-            val what = asked.files.joinToString("\n") { "${it.name} (${Formatter.formatFileSize(context, it.size.toLong())})" }
-            AkiQuestion("${asked.from} wants to send you", what, "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
+            val what = asked.files.joinToString(", ") { what(it, Formatter.formatFileSize(context, it.size.toLong())) }
+            AkiQuestion("${asked.from} wants to send you $what", "Only accept from someone you know.", "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
+        }
+        model.newSource?.let { pending ->
+            AkiQuestion("Add the source ${pending.card.sourceName}?", sourceMessage(pending.card), "Add", "Not now", { model.answerSource(true) }, { model.answerSource(false) })
         }
         model.message?.let { AkiAlert(it.title, it.message) { model.message = null } }
     }
+}
+
+private fun what(file: ShareOffered, size: String): String = when (file.kind) {
+    "book" -> "a book (${file.name}, $size)"
+    "comic" -> "a comic (${file.name}, $size)"
+    "card" -> "a series (${file.name.removeSuffix(".akidev.json")})"
+    else -> "a file (${file.name}, $size)"
+}
+
+/** What the person is told before a source from another phone is added: it is code that runs on this phone. */
+private fun sourceMessage(card: ShareCard): String {
+    val languages = if (card.languages.isEmpty()) "" else " (${card.languages.joinToString(", ")})"
+    val adult = if (card.nsfw) " It is marked 18+." else ""
+    val from = card.repo?.let { " It comes from the repository $it." } ?: " Your friend added it by hand."
+    return "\"${card.title}\" is read from ${card.sourceName}$languages, which this phone does not have.$adult$from A source is code that runs on this phone: add it only if you trust your friend."
 }
 
 /** The code the other phone scans, and who this phone is. */
@@ -122,7 +138,7 @@ private fun Receive(model: ShareModel, scan: () -> Unit, startNetwork: () -> Uni
             else -> AkiSpinner()
         }
         if (model.started) {
-            AkiButton("Scan a code", variant = AkiButtonVariant.Ghost, icon = "qr", fullWidth = true, onClick = scan)
+            AkiButton("Scan a code", variant = AkiButtonVariant.Ghost, icon = "qr", onClick = scan)
             NetworkButton(model, startNetwork)
         }
     }
@@ -173,40 +189,39 @@ private fun Scan(model: ShareModel, denied: Boolean) {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (denied) {
-            AkiText("Allow the camera to scan a code.", tone = AkiTone.Muted, align = TextAlign.Center)
-            AkiButton("Open settings", variant = AkiButtonVariant.Primary, fullWidth = true) {
+            AkiText("Allow the camera to scan a code", tone = AkiTone.Muted, align = TextAlign.Center)
+            AkiButton("Open Settings", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small) {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
             }
         } else {
             QrScanner(model::codeScanned, Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(28.dp)))
-            AkiText(model.scanNote ?: "Point at the code on their phone", AkiTextStyle.Caption, tone = if (model.scanNote != null) AkiTone.Destructive else AkiTone.Muted, align = TextAlign.Center)
+            model.scanNote?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Destructive, align = TextAlign.Center) }
         }
-        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, onClick = model::again)
+        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = model::again)
     }
 }
 
-/** A send, or a receive, under way: a spinner or a bar, and the way to stop it. */
+/** A send, or a receive, under way: a spinner or a bar, [percent] of it for a send, and the way to stop it. */
 @Composable
-private fun Working(title: String, fraction: Double?, note: String?, cancel: () -> Unit) {
+private fun Working(title: String, fraction: Double?, percent: Boolean, note: String?, cancel: () -> Unit) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        AkiText(title, AkiTextStyle.BodyStrong, align = TextAlign.Center)
-        if (fraction == null) AkiSpinner() else {
-            AkiProgressBar(fraction)
-            AkiText("${(fraction * 100).toInt()}%", AkiTextStyle.Caption, tone = AkiTone.Muted)
-        }
+        if (fraction == null) AkiSpinner()
+        AkiText(title, AkiTextStyle.Heading, align = TextAlign.Center)
+        if (fraction != null) AkiProgressBar(fraction)
+        if (fraction != null && percent) AkiText("${(fraction * 100).toInt()}%", AkiTextStyle.Caption, tone = AkiTone.Muted)
+        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = cancel)
         note?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted) }
-        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, onClick = cancel)
     }
 }
 
-/** How it ended: a mark, one sentence, one main button and, if it needs one, a quiet second. */
+/** How it ended: a mark (when it went well), one sentence, one main button and, if it needs one, a quiet second. */
 @Composable
-private fun Finished(icon: String, text: String, main: String, onMain: () -> Unit, other: String? = null, onOther: () -> Unit = {}) {
+private fun Finished(icon: String?, text: String, main: String, onMain: () -> Unit, other: String? = null, onOther: () -> Unit = {}) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(Modifier.size(56.dp).background(Aki.colors.primary, CircleShape), contentAlignment = Alignment.Center) { AkiIcon(icon, size = 24.dp, tone = AkiTone.OnPrimary) }
-        AkiText(text, AkiTextStyle.BodyStrong, align = TextAlign.Center)
-        AkiButton(main, variant = AkiButtonVariant.Primary, fullWidth = true, onClick = onMain)
-        other?.let { AkiButton(it, variant = AkiButtonVariant.Ghost, onClick = onOther) }
+        icon?.let { AkiIcon(it, size = 44.dp) }
+        AkiText(text, AkiTextStyle.Heading, align = TextAlign.Center)
+        AkiButton(main, variant = AkiButtonVariant.Primary, onClick = onMain)
+        other?.let { AkiButton(it, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = onOther) }
     }
 }
 

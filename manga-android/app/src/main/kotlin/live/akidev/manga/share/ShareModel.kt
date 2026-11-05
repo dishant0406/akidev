@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import live.akidev.manga.app.AppModel
+import live.akidev.manga.app.PendingCard
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.describe
@@ -80,6 +81,10 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     var received by mutableStateOf<String?>(null)
         private set
     var message by mutableStateOf<Problem?>(null)
+    /** The series that came from a source this phone does not have: the person is asked before the source is added. */
+    var newSource by mutableStateOf<PendingCard?>(null)
+        private set
+    private val waiting = mutableListOf<PendingCard>()
     /** What the other phone scans to find this one; none without Wi-Fi. Only true to read once [started]. */
     var code by mutableStateOf<String?>(null)
         private set
@@ -241,8 +246,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                 return
             }
         }
-        // A phone that has just made a Wi-Fi may need a moment before its address answers.
-        val tries = if (ssid != null) 3 else 1
+        // A new Wi-Fi can take a while to give this phone an address: ten tries, about 15 seconds.
+        val tries = if (ssid != null) 10 else 1
         var peer: SharePeer? = null
         if (code.ip != null) {
             for (attempt in 1..tries) {
@@ -284,8 +289,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
             val ended = try {
                 when (now.run()) {
                     ShareOutcome.SENT -> SendState.Done(to).also { endNetwork() }
-                    ShareOutcome.DECLINED -> SendState.Failed("${to.alias} said no, or did not answer in time.")
-                    ShareOutcome.BUSY -> SendState.Failed("${to.alias} is busy. Try again in a moment.")
+                    ShareOutcome.DECLINED -> SendState.Failed("${to.alias} said no.")
+                    ShareOutcome.BUSY -> SendState.Failed("${to.alias} is busy right now.")
                     ShareOutcome.STOPPED -> SendState.Choosing
                 }
             } catch (failure: Exception) {
@@ -336,17 +341,42 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     override fun finished(session: String, files: List<ShareReceived>) {
         app.launch {
             incoming = null
-            endNetwork()
-            val said = files.map { app.takeIn(it.path, it.name) }.joinToString("\n")
+            // The "got it" reply to the other phone is still on its way: taking the Wi-Fi down now would cut it.
+            app.launch { delay(3_000); endNetwork() }
+            val said = files.map { app.takeIn(it.path, it.name) { card -> waiting.add(card) } }.filter { it.isNotBlank() }.joinToString("\n")
             share?.clean()
             if (said.isNotBlank()) received = said
+            askNextSource()
+        }
+    }
+
+    private fun askNextSource() {
+        if (newSource == null && waiting.isNotEmpty()) newSource = waiting.removeAt(0)
+    }
+
+    /** The person's answer to "Add the source?". */
+    fun answerSource(accept: Boolean) {
+        val pending = newSource ?: return
+        newSource = null
+        app.launch {
+            if (accept) {
+                try {
+                    app.engine.shareAddCard(pending.path)
+                    app.refresh()
+                    received = "\"${pending.card.title}\" is in your library."
+                } catch (failure: Exception) {
+                    message = describe(failure)
+                }
+            }
+            java.io.File(pending.path).delete()
+            askNextSource()
         }
     }
 
     override fun ended(session: String, reason: String) {
         app.launch {
             // Saying no is the person's own doing; the rest is news.
-            if (incoming?.session == session && reason != "declined") message = Problem("Stopped", "${incoming?.from} — $reason.")
+            if (incoming?.session == session && reason != "declined" && reason != "stopped on this phone") message = Problem("Share", "The send stopped: $reason.")
             if (incoming?.session == session) incoming = null
         }
     }

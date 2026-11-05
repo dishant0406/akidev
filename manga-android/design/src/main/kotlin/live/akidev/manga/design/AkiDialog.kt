@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 
 private val CardShape = AkiShapes.rounded(44.dp)
+private val CardMargin = 24.dp
 
 /** The dialog that is open: what it holds and what closes it. */
 @Stable
@@ -79,7 +80,7 @@ fun AkiDialogLayer(dialogs: AkiDialogs) {
 private fun DialogCard(title: String, message: String?, content: @Composable () -> Unit, buttons: @Composable RowScope.() -> Unit) {
     val colors = Aki.colors
     Column(
-        Modifier.padding(horizontal = 24.dp).widthIn(max = 340.dp).fillMaxWidth()
+        Modifier.padding(horizontal = CardMargin).widthIn(max = 340.dp).fillMaxWidth()
             .akiShadow(CardShape, 30.dp, 12.dp)
             .akiGlass(CardShape, tint = colors.secondary.copy(alpha = if (colors.dark) 0.92f else 0.85f))
             .padding(28.dp),
@@ -106,7 +107,7 @@ private fun AkiDialogCard(title: String, message: String?, onDismiss: () -> Unit
             onDispose { if (dialogs.shown === mine) dialogs.shown = null }
         }
     } else {
-        Dialog(onDismissRequest = onDismiss) { AkiGlassWindow(Aki.colors.background) { card.value() } }
+        Dialog(onDismissRequest = onDismiss) { AkiGlassWindow(Aki.colors.background, CardShape, CardMargin) { card.value() } }
     }
 }
 
