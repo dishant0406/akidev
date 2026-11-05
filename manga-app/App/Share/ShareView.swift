@@ -58,6 +58,11 @@ struct ShareView: View {
                 AkiText("Connected. Waiting for \(name) to send…", .heading, lines: 3, align: .center)
                 AkiButton("Cancel", variant: .ghost, size: .small) { model.disconnect() }
             }
+        } else if model.connecting {
+            centered {
+                AkiSpinner()
+                AkiText("Finding their phone…", .heading, align: .center)
+            }
         } else if model.scanningCode {
             scanner
         } else if item != nil {

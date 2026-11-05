@@ -82,7 +82,8 @@ final class ShareModel {
     /// The temporary Wi-Fi this phone joined, to leave when the send is over.
     private var joined: String?
     private var networkTimer: Task<Void, Never>?
-    private var connecting = false
+    /// A scanned code is being followed: the Wi-Fi joined, the other phone looked for.
+    private(set) var connecting = false
 
     func begin(app: AppModel, item: ShareItem?) async {
         self.app = app
@@ -165,7 +166,7 @@ final class ShareModel {
                     endNetwork()
                     problem = "Could not reach that phone."
                 } else {
-                    codeNote = "Could not reach that phone"
+                    codeNote = found.peer == nil ? "Could not reach that phone" : "Could not reach that phone. Switch Wi-Fi on for both phones; it does not need to be connected."
                 }
                 return
             }
@@ -359,6 +360,7 @@ final class ShareModel {
                 do {
                     try await engine.shareAddCard(path: pending.path)
                     added.append("\"\(pending.card.title)\" is in your library.")
+                    received = true
                     app?.refresh()
                 } catch { problem = describe(error).message }
             }

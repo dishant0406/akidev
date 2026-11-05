@@ -259,7 +259,11 @@ impl Share {
         if device.fingerprint == self.me().fingerprint {
             return Err(failed("that is this phone"));
         }
-        Ok(peer(&ip, &device))
+        // The port this phone connected to, which is not always the one the other phone says it listens on: through
+        // the direct link it is a door on this phone, and the other phone's own port would lead back here.
+        let mut found = peer(&ip, &device);
+        found.port = port;
+        Ok(found)
     }
 
     /// What the QR code holds: how the other phone reaches this one. By default this phone's address on the Wi-Fi; `ip` replaces

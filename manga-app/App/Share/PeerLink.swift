@@ -10,7 +10,14 @@ private let linkType = "_akidev-p2p._tcp"
 private let queue = DispatchQueue(label: "live.akidev.peer-link")
 
 private func peerParameters() -> NWParameters {
-    let parameters = NWParameters.tcp
+    // The person on the other phone takes a few seconds to say yes, and without traffic the link goes dead in that time (the
+    // reply to "may I send?" never arrives): a small keep-alive every second keeps it busy.
+    let options = NWProtocolTCP.Options()
+    options.enableKeepalive = true
+    options.keepaliveIdle = 1
+    options.keepaliveInterval = 1
+    options.keepaliveCount = 30
+    let parameters = NWParameters(tls: nil, tcp: options)
     parameters.includePeerToPeer = true
     return parameters
 }
