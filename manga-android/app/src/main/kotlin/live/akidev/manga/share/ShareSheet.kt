@@ -104,7 +104,7 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
         model.newSource?.let { pending ->
             AkiQuestion("Add the source ${pending.card.sourceName}?", sourceMessage(pending.card), "Add", "Not now", { model.answerSource(true) }, { model.answerSource(false) })
         }
-        model.message?.let { AkiAlert(it.title, it.message) { model.message = null } }
+        model.message?.let { AkiAlert(it.title, it.message, model::closeMessage) }
     }
 }
 

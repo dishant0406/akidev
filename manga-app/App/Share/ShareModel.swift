@@ -67,7 +67,12 @@ final class ShareModel {
     /// Set when the last send that came in is over, so the sheet can say so.
     var received = false
     var newSource: NewSource?
-    var problem: String?
+    /// What went wrong, for the person to read. When it is closed and a source could not be added for want of the internet,
+    /// the question about that source comes back, so the person can connect and tap Add again.
+    var problem: String? {
+        didSet { if problem == nil, let again = retry { retry = nil; newSource = again } }
+    }
+    private var retry: NewSource?
 
     private var app: AppModel?
     private var share: Share?
@@ -362,10 +367,19 @@ final class ShareModel {
                     added.append("\"\(pending.card.title)\" is in your library.")
                     received = true
                     app?.refresh()
-                } catch { problem = describe(error).message }
+                } catch {
+                    let reason = describe(error).message
+                    if reason.contains("could not reach") {
+                        // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
+                        problem = "Could not add the source: this phone needs the internet to download it. Connect to Wi-Fi or mobile data, then tap Add again."
+                        retry = pending
+                    } else {
+                        problem = reason
+                    }
+                }
             }
             askNextSource()
-            if newSource == nil { share?.clean() }
+            if newSource == nil, retry == nil { share?.clean() }
         }
     }
 

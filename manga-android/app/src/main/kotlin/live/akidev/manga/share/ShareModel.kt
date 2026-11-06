@@ -85,6 +85,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     var newSource by mutableStateOf<PendingCard?>(null)
         private set
     private val waiting = mutableListOf<PendingCard>()
+    private var retry: PendingCard? = null
     /** What the other phone scans to find this one; none without Wi-Fi. Only true to read once [started]. */
     var code by mutableStateOf<String?>(null)
         private set
@@ -365,12 +366,27 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                     app.refresh()
                     received = "\"${pending.card.title}\" is in your library."
                 } catch (failure: Exception) {
-                    message = describe(failure)
+                    val problem = describe(failure)
+                    if (problem.message.contains("could not reach")) {
+                        // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
+                        message = Problem("Share", "Could not add the source: this phone needs the internet to download it. Connect to Wi-Fi or mobile data, then tap Add again.")
+                        retry = pending
+                        return@launch
+                    }
+                    message = problem
                 }
             }
             java.io.File(pending.path).delete()
             askNextSource()
         }
+    }
+
+    /** The person closed a message. When a source could not be added for want of the internet, its question comes back. */
+    fun closeMessage() {
+        message = null
+        val again = retry ?: return
+        retry = null
+        newSource = again
     }
 
     override fun ended(session: String, reason: String) {
