@@ -425,3 +425,64 @@ async fn a_real_model_installs_speaks_and_is_removed() {
     voice::remove(&root, &model.def.id).unwrap();
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_woof_definition_has_voices_with_no_file_of_their_own() {
+    let text = r#"{
+        "id": "woof-en", "name": "Underdog Woof", "version": 1, "family": "woof", "lang": "en", "languages": ["en"],
+        "licence": {"name": "Underdog Non-Commercial License 1.0", "url": "https://example.com/LICENSE", "commercial": false},
+        "files": [{"path": "woof_int8.npz", "url": "https://example.com/woof_int8.npz", "sha256": "d895fbbe84b8f4f461e3e94ab48b1164353b1988ce8d365f5aa8263d0de1203e", "bytes": 40595426}],
+        "voices": [{"id": "juno", "name": "Juno", "description": "The default."}, {"id": "mira", "name": "Mira", "description": "The other."}]
+    }"#;
+    let def = voice::VoiceDef::parse(text.as_bytes()).unwrap();
+    assert_eq!(def.voices.len(), 2);
+    assert!(def.voices[0].url.is_empty());
+    // They are in the weights file, so they count as fetched once the model is there.
+    let folder = std::env::temp_dir().join(format!("woof-voices-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    assert!(!voice::has_choice(&folder, "juno"));
+    std::fs::write(folder.join("woof_int8.npz"), b"x").unwrap();
+    assert!(voice::has_choice(&folder, "juno") && voice::has_choice(&folder, "mira"));
+    assert!(!voice::has_choice(&folder, "someone-else"));
+    std::fs::remove_dir_all(&folder).unwrap();
+}
+
+/// Woof installs from a repository, speaks in both of its voices and is removed:
+/// `AKI_WOOF_MODEL=<woof_int8.npz> cargo test --release --test voice woof_installs -- --ignored`.
+#[tokio::test]
+#[ignore]
+async fn woof_installs_speaks_in_both_voices_and_is_removed() {
+    let weights = std::fs::read(std::env::var("AKI_WOOF_MODEL").expect("AKI_WOOF_MODEL")).unwrap();
+    let (listener, base) = bind().await;
+    let mut def = definition(&base, &[("woof_int8.npz", weights.as_slice())]);
+    def["family"] = "woof".into();
+    def["voices"] = serde_json::json!([
+        {"id": "juno", "name": "Juno", "description": "The default."},
+        {"id": "mira", "name": "Mira", "description": "The other."}
+    ]);
+    let def = def.to_string().into_bytes();
+    let held = HashMap::from([
+        ("voices/test-model.json".to_string(), def.clone()),
+        ("files/woof_int8.npz".to_string(), weights),
+    ]);
+    serve(listener, held);
+    let root = root("woof");
+    voice::install(&root, &base, &offered(&def), "1.0.0", |_, _| {})
+        .await
+        .unwrap();
+    let model = voice::installed(&root).remove(0);
+    let speaker = voice::Speaker::open(&model.folder, &model.def.lang).unwrap();
+    assert_eq!(speaker.sample_rate(), 24_000);
+    let text = "It is a truth universally acknowledged, in 1813.";
+    let juno = speaker.speak(text, None).unwrap();
+    let mira = speaker.speak(text, Some("mira")).unwrap();
+    for pcm in [&juno, &mira] {
+        let seconds = pcm.len() as f32 / 24_000.0;
+        assert!((1.0..12.0).contains(&seconds), "{seconds} seconds");
+        assert!(pcm.iter().any(|sample| sample.abs() > 0.01));
+    }
+    assert_ne!(juno, mira, "another voice sounds different");
+    assert!(speaker.speak(text, Some("nobody")).is_err());
+    voice::remove(&root, &model.def.id).unwrap();
+    assert!(voice::installed(&root).is_empty());
+}

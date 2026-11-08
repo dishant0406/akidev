@@ -7,6 +7,7 @@ struct VoicesRoute: Hashable {}
 struct VoicesView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     private var model: ReadAloudModel { app.readAloud }
 
@@ -26,6 +27,13 @@ struct VoicesView: View {
                             AkiRow(title: "Voice of \(current.name)", subtitle: model.chosenVoice?.name ?? "Standard", icon: "headphones", showsChevron: true)
                         }
                     }
+                }
+                // Underdog Woof's licence asks every app that offers it to credit it, with a link.
+                if model.models.contains(where: { $0.id == "woof-en" }) {
+                    Button { openURL(URL(string: "https://underdog.ai/woof")!) } label: {
+                        AkiText("Voice by Underdog Woof, underdog.ai. Free for non-commercial use.", .caption, tone: .muted)
+                    }
+                    .buttonStyle(.plain)
                 }
                 AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", .caption, tone: .muted)
             }

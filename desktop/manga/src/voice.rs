@@ -3,7 +3,7 @@
 //! A model is a folder of files and a definition that names them (`voices/<id>.json` in a voices repository, see
 //! `repo.rs`). The definition is data: which files to download from where, and `family`, the kind of model, which says
 //! which runtime of the app runs it. A model of a family the app has needs no new app version; today that is `ptts`
-//! (Phonon, from Gradium). Nothing downloaded is ever run as code.
+//! (Phonon, from Gradium) and `woof` (Underdog Woof, see `woof.rs`). Nothing downloaded is ever run as code.
 //!
 //! On the device a model lives in `<root>/<id>/` with its files and a copy of its definition. It is put there whole or
 //! not at all: files are fetched and checked into `<id>.part`, the model speaks one sentence as a test, and only then
@@ -11,6 +11,7 @@
 
 use crate::http::client_builder;
 use crate::repo::{self, IndexVoice};
+use crate::woof;
 use anyhow::{Context, bail, ensure};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -20,7 +21,7 @@ use url::Url;
 
 const MAX_MODEL: u64 = 1024 * 1024 * 1024;
 const MAX_VOICE: u64 = 16 * 1024 * 1024;
-const FAMILIES: [&str; 1] = ["ptts"];
+const FAMILIES: [&str; 2] = ["ptts", "woof"];
 const TEST_SENTENCE: &str = "Hello, this is a test.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -55,8 +56,12 @@ pub struct VoiceChoice {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub age: Option<String>,
     pub description: String,
+    /// Where its file is. Empty for a voice that is inside the model's own files (Woof's two).
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub sha256: String,
+    #[serde(default)]
     pub bytes: u64,
 }
 
@@ -155,6 +160,9 @@ impl VoiceDef {
                 "voice {} has no usable name or too long a description",
                 voice.id
             );
+            if voice.url.is_empty() {
+                continue;
+            }
             ensure!(
                 voice.sha256.len() == 64 && voice.sha256.bytes().all(|b| b.is_ascii_hexdigit()),
                 "voice {}: sha256 must be 64 hex digits",
@@ -326,9 +334,10 @@ fn reuse(from: &Path, to: &Path, sha256: &str) -> bool {
     false
 }
 
-/// Whether a model's voice has been fetched.
+/// Whether a model's voice has been fetched. Woof's voices are inside its weights, so they always are.
 pub fn has_choice(folder: &Path, voice: &str) -> bool {
-    folder
+    (folder.join(WOOF_WEIGHTS).is_file() && woof::VOICES.contains(&voice))
+        || folder
         .join("voices")
         .join(format!("{voice}.safetensors"))
         .is_file()
@@ -346,6 +355,9 @@ pub async fn get_choice(root: &Path, model: &str, voice: &str) -> anyhow::Result
         .iter()
         .find(|found| found.id == voice)
         .with_context(|| format!("{} has no voice {voice}", model.def.name))?;
+    if choice.url.is_empty() {
+        return Ok(());
+    }
     let folder = model.folder.join("voices");
     std::fs::create_dir_all(&folder)?;
     let part = folder.join(format!("{voice}.part"));
@@ -410,14 +422,21 @@ async fn fetch_file(
     Ok(())
 }
 
+/// The weights file that marks a folder as an Underdog Woof model.
+const WOOF_WEIGHTS: &str = "woof_int8.npz";
+
 /// A model loaded and ready to speak.
-pub struct Speaker {
-    synth: ptts::synth::Synth,
+pub enum Speaker {
+    Phonon(ptts::synth::Synth),
+    Woof(Box<woof::Woof>),
 }
 
 impl Speaker {
     /// Loads the model in `folder`, whose text is read as `lang` (how numbers are spoken).
     pub fn open(folder: &Path, lang: &str) -> anyhow::Result<Speaker> {
+        if folder.join(WOOF_WEIGHTS).is_file() {
+            return Ok(Speaker::Woof(Box::new(woof::Woof::open(folder)?)));
+        }
         use ptts::checkpoint::{Checkpoint, ResolveOptions};
         use ptts::synth::{DeviceKind, Quant};
         let Ok(lang) = lang.parse::<ptts::preprocess::Lang>() else {
@@ -432,20 +451,27 @@ impl Speaker {
         )?;
         let mut synth = checkpoint.builder(lang).device(DeviceKind::Cpu).build()?;
         checkpoint.register_voices(&mut synth);
-        Ok(Speaker { synth })
+        Ok(Speaker::Phonon(synth))
     }
 
     /// The speech for `text` in one of the model's voices (its own when none is named), mono samples at `sample_rate()`.
     pub fn speak(&self, text: &str, voice: Option<&str>) -> anyhow::Result<Vec<f32>> {
         use ptts::synth::SpeechOptions;
+        let synth = match self {
+            Speaker::Phonon(synth) => synth,
+            Speaker::Woof(woof) => return woof.speak(text, voice),
+        };
         let options = match voice {
             Some(voice) => SpeechOptions::default().voice(voice),
             None => SpeechOptions::default(),
         };
-        Ok(self.synth.say_with(text, &options)?)
+        Ok(synth.say_with(text, &options)?)
     }
 
     pub fn sample_rate(&self) -> u32 {
-        self.synth.sample_rate()
+        match self {
+            Speaker::Phonon(synth) => synth.sample_rate(),
+            Speaker::Woof(_) => woof::SAMPLE_RATE,
+        }
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.LocalApp
@@ -30,6 +31,7 @@ fun VoicesScreen() {
     val model = app.readAloud
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     AkiPage(underTabBar = false, spacing = 16.dp) {
         item { AkiBackHeader("Voice models", back = router::back, subtitle = "Reading aloud happens on this phone") }
         if (model.models.isEmpty()) item { AkiEmptyState("No models yet", "The voice repository has none to offer right now.", Modifier.heightIn(min = 260.dp)) }
@@ -45,6 +47,10 @@ fun VoicesScreen() {
                     AkiTap({ router.push(VoiceChoiceRoute) }) { AkiRow("Voice of ${current.name}", subtitle = model.chosenVoice?.name ?: "Standard", icon = "headphones", showsChevron = true) }
                 }
             }
+        }
+        // Underdog Woof's licence asks every app that offers it to credit it, with a link.
+        if (model.models.any { it.id == "woof-en" }) {
+            item { AkiTap({ uriHandler.openUri("https://underdog.ai/woof") }) { AkiText("Voice by Underdog Woof, underdog.ai. Free for non-commercial use.", AkiTextStyle.Caption, tone = AkiTone.Muted) } }
         }
         item { AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", AkiTextStyle.Caption, tone = AkiTone.Muted) }
     }

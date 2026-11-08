@@ -400,3 +400,54 @@ fundamental frequency in semitones, loudness spread in dB):
   family, one release.
 
 Sources: <https://huggingface.co/gradium/phonon-31m-en>, <https://huggingface.co/gradium/phonon-voices>, <https://github.com/gradium-ai/xn-ptts>, <https://gradium.ai/blog/evaluating-phonon>.
+
+## 13. Underdog Woof (built 2026-11-08)
+
+Woof is a second voice model, from Underdog (https://underdog.ai/woof): 40.6 MB, two voices (Juno and Mira), and it reads
+numbers, dates and times well. It is a new `family`, `woof`, so it needed engine code, not only a definition in the voices repository.
+
+**What was chosen, and why**
+
+- **A port of Underdog's own numpy code**, in `desktop/manga/src/woof.rs`. It is plain Rust with no new crate (the `zip`
+  crate that reads EPUBs also opens the weights file, which is a `.npz`). Alternative rejected: running their Python, which an
+  app cannot do. Alternative rejected: converting the weights to GGUF for `ptts`, because the architecture is different.
+- **The noise is PyTorch's** (Mersenne Twister plus Box-Muller), so the same seed gives the same speech as Underdog's code. A test
+  holds the first numbers of `torch.manual_seed(0); torch.randn(16)`.
+- **Checked against the Python on the same sentence:** the same 85,440 samples, and the difference is 0.16% of the signal (float
+  rounding). A longer text with the normaliser and the retries was not compared, because the sandbox refused to run the downloaded
+  Python a second time.
+- **Text front end** in `desktop/manga/src/woof_text.rs`: a port of `fallback()` and the abbreviations of Underdog's
+  `normalize.py` (cardinals, ordinals, years, times, money, percent, decimals, dates). On 12 sentences it gives the same words as
+  the Python. Not ported: phone numbers, codes, web addresses, units, Roman numerals and the name respelling list (`respell.tsv`).
+  The Rust `regex` crate has no look-behind, and those rules are written with it; a book seldom needs them.
+- **Same retries as Underdog:** a sentence is made again, up to three times, if it runs away or stalls.
+- **Its two voices are inside the weights.** In the definition they are listed with no `url`, which means "built in"
+  (`voice.rs`: `has_choice` is true once `woof_int8.npz` is there, `get_choice` does nothing).
+- **`Speaker` is an enum**, Phonon or Woof, chosen by whether the folder has `woof_int8.npz`. The apps did not change.
+- **Not copied into our repository.** `voices/woof-en.json` in the voices repository points at a commit of
+  `ConwayResearch/Underdog-Woof` on Hugging Face and pins the size and SHA-256. There is no `min_app`: an app that does not
+  know the `woof` family hides the model by itself. (`min_app` is compared with the engine's crate version, `0.1.x`, not the
+  App Store version, so a `1.2` there would hide the model from every app.)
+
+**Licence.** Underdog Non-Commercial License 1.0: free for non-commercial use, which fits Akidev (free and open source, the
+owner's word), with credit: "Voice by Underdog Woof" with a link to underdog.ai wherever it is offered. The Voice models screen
+of both apps shows "Voice by Underdog Woof, underdog.ai. Free for non-commercial use." under the list whenever `woof-en` is in it, and
+tapping it opens underdog.ai/woof (`VoicesView.swift`, `VoicesScreen.kt`). The licence name in the definition is the short
+"Underdog NC 1.0", because a row shows one line and cut a longer one off. A credit on the reading screen, where the audio plays, is
+not built.
+If Akidev ever earns money, Woof must go or be licensed (license@conway.tech). The definition says `commercial: false`, so the
+app already warns before the download.
+
+**Speed.** 17 s of speech in 3 s on a Mac with one thread (about 6x real time), not tuned. Not measured on a phone.
+
+**Memory (2026-11-08).** The first version built whole-sentence buffers at the decoder's highest rates, so the peak grew with the
+text: 286 MB for a 3.6 s sentence, 545 MB for 21 s (Mac, one process). The decoder now runs its first six steps (low rates) on the
+whole sentence and the rest 8 frames at a time, each step carrying a small state to the next chunk (`Conv` keeps its last inputs,
+`ConvUp` the tail of its last frame), and `ConvUp` no longer builds a double-width buffer. The audio is the same (largest difference
+1 in 32768) and the peak is flat: 248 to 263 MB on the Mac whatever the length. In the apps: iOS Simulator `phys_footprint_peak`
+339 MB with a 129 MB idle app (Woof adds about 210 MB); Android emulator PSS about 290 MB with a 109 MB idle app (about 180 MB).
+What is left is mostly the weights, held as fp32 (about 150 MB). Keeping the big linear layers as int8 and scaling on the fly would
+save about 60 MB more; not done.
+
+**Not done:** a timing on an iPhone and an Android phone, the tappable credit, and a pass to make it faster (the work is
+plain loops over `f32`; the decoder's convolutions and the speech model's matrix products are the two places to look).

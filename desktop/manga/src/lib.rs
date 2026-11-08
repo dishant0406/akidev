@@ -19,6 +19,8 @@ pub mod store;
 pub mod template;
 pub mod theme;
 pub mod voice;
+pub mod woof;
+mod woof_text;
 
 pub use def::SourceDef;
 pub use source::Source;
