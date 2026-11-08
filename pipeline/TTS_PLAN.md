@@ -451,3 +451,18 @@ save about 60 MB more; not done.
 
 **Not done:** a timing on an iPhone and an Android phone, the tappable credit, and a pass to make it faster (the work is
 plain loops over `f32`; the decoder's convolutions and the speech model's matrix products are the two places to look).
+
+**The end of a book (2026-11-08).** Two bugs showed on a very small EPUB. On Android the end was never noticed: when the last
+sentence was written the listener called `track.stop()` so a short tail would play, but a stopped `AudioTrack` forgets how far it
+played (its head position goes back to 0), and the end was told by that position, so the bar stayed on the pause icon for ever and
+Play on it did nothing. On iOS the whole bar closed at the end. Now both do the same: at the end the bar stays, shows Play, and the
+last sentence stays marked; Play reads the book again from its first chapter (`startOver()`, `finish()` and `atEnd` in
+`BookListener.swift` and `BookListener.kt`); the paused voice is still dropped from memory after 3 minutes. On Android the track is
+no longer stopped: half a second of silence after the last sentence pushes a short tail through instead.
+
+**Speed on the phone (2026-11-08).** The `ios` build profile is size-optimised (`opt-level "z"`), and Woof's arithmetic lives in
+`akidev-manga`, which was not exempted like `ptts` and `xn`. Under "z" 7.8 s of speech took 14 s to make (slower than it plays); with
+`[profile.ios.package.akidev-manga] opt-level = 3` it takes 2 s (about 4x real time), and the Android library did not grow (22.0 MB,
+was 22.8 MB). The runaway check in `woof.rs` now allows a piece at least 2 s of speech: a one-word heading such as "One" is always
+slower than 0.095 s a letter, so it was made four times over. (Underdog's own code has the same quirk.)
+

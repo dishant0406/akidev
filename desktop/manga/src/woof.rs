@@ -1208,9 +1208,12 @@ impl Woof {
                 .collect();
             let audio = self.decoder.decode(&scaled, width);
             let quiet = longest_quiet(&audio);
-            let per_char =
-                audio.len() as f32 / SAMPLE_RATE as f32 / text.chars().count().max(1) as f32;
-            let ran_away = per_char > 0.095 || frames.len() / width >= self.max_frames;
+            let seconds = audio.len() as f32 / SAMPLE_RATE as f32;
+            let letters = text.chars().count().max(1) as f32;
+            let per_char = seconds / letters;
+            // At most 0.095 s a letter, but never under 2 s: a one-word heading is slower than that per letter and would be made four times.
+            let ran_away =
+                seconds > (0.095 * letters).max(2.0) || frames.len() / width >= self.max_frames;
             let bad = (quiet >= 1.0) as i32 + ran_away as i32;
             let score = (bad, quiet, per_char);
             if best.as_ref().is_none_or(|(old, _)| score < *old) {

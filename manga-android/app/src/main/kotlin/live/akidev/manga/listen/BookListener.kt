@@ -81,6 +81,9 @@ class BookListener(
     private var written = 0L
     private var finishedQueueing = false
 
+    /** The book has been read to the end: the controls show Play, and Play reads it again from the top. */
+    private var atEnd = false
+
     /** Bumped by anything that changes where reading is, so what the old position still has in flight is ignored. */
     private var generation = 0
     private var producing: Job? = null
@@ -120,7 +123,11 @@ class BookListener(
         track?.pause()
         state = State.Paused
         ListenSession.update(context, false)
-        // A paused voice is not kept in memory for long.
+        stopWhenIdle()
+    }
+
+    /** A paused voice is not kept in memory for long. */
+    private fun stopWhenIdle() {
         idle = scope.launch {
             delay(180_000)
             stop()
@@ -131,6 +138,7 @@ class BookListener(
         if (state != State.Paused) return
         pausedByFocus = false
         idle?.cancel()
+        if (atEnd) return startOver()
         // A call or a change of headphones can take the audio away: carry on from the sentence that was being heard.
         track?.apply { playbackParams = PlaybackParams().setSpeed(rate.toFloat()).setPitch(1f) }?.play()
         state = State.Playing
@@ -150,6 +158,21 @@ class BookListener(
     fun jump(chapter: Int, offset: Int) {
         if (state == State.Stopped || speaker == null) return
         run(chapter, offset)
+    }
+
+    /** Reads the book again from its first chapter. */
+    private fun startOver() {
+        val first = chapter(after = -1) ?: return stop()
+        run(first, 0)
+    }
+
+    /** The last sentence has been heard: the controls stay, showing Play. */
+    private fun finish() {
+        track?.apply { pause(); flush() }
+        atEnd = true
+        state = State.Paused
+        ListenSession.update(context, false)
+        stopWhenIdle()
     }
 
     /** Goes to the sentence after or before the one being heard. */
@@ -228,7 +251,7 @@ class BookListener(
             val front = queued.firstOrNull()
             if (front != null) {
                 if (current != front.span) heard(front.span)
-            } else if (finishedQueueing && state == State.Playing) stop()
+            } else if (finishedQueueing && state == State.Playing) finish()
         }
     }
 
@@ -248,6 +271,7 @@ class BookListener(
         written = 0
         current = null
         finishedQueueing = false
+        atEnd = false
         idle?.cancel()
         state = State.Loading
         val before = producing
@@ -269,9 +293,13 @@ class BookListener(
             spoken.cancel()
             if (mine != generation) return@launch
             finishedQueueing = true
-            // The last sentence may be too short to fill the track: stopping makes it play what it has.
-            track?.stop()
-            if (queued.isEmpty()) stop()
+            // The last sentence may be too short to fill the track (a streaming track plays only once its buffer is full): half a
+            // second of silence after it pushes it through. The track is not stopped, because a stopped track forgets how far it
+            // played, and the end of the book is told by that.
+            track?.let { silence -> withContext(Dispatchers.IO) { silence.write(FloatArray(sampleRate / 2), 0, sampleRate / 2, AudioTrack.WRITE_BLOCKING) } }
+            if (queued.isEmpty()) {
+                if (state == State.Loading) stop() else finish()
+            }
         }
     }
 

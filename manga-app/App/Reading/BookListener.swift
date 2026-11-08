@@ -39,6 +39,8 @@ final class BookListener {
     /// The sentences queued on the player, the first being heard now.
     private var queued: [BookSpan] = []
     private var finishedQueueing = false
+    /// The book has been read to the end: the controls show Play, and Play reads it again from the top.
+    private var atEnd = false
     /// Bumped by anything that changes where reading is, so what the old position still has in flight is ignored.
     private var generation = 0
     /// The task making the speech; a new one waits for the one before it, so the voice is never asked twice at once.
@@ -88,7 +90,11 @@ final class BookListener {
         player.pause()
         state = .paused
         publishNowPlaying()
-        // A paused voice is not kept in memory for long.
+        stopWhenIdle()
+    }
+
+    /// A paused voice is not kept in memory for long.
+    private func stopWhenIdle() {
         idle = Task { [weak self] in
             try? await Task.sleep(for: .seconds(180))
             guard !Task.isCancelled else { return }
@@ -99,6 +105,7 @@ final class BookListener {
     func resume() {
         guard state == .paused else { return }
         idle?.cancel()
+        if atEnd { return startOver() }
         // A call or a change of headphones stops the audio engine: start again from the sentence that was being heard.
         if !audio.isRunning, let current { return restart(at: current) }
         player.play()
@@ -107,6 +114,22 @@ final class BookListener {
     }
 
     func toggle() { state == .paused ? resume() : pause() }
+
+    /// Reads the book again from its first chapter.
+    private func startOver() {
+        guard let first = chapter(after: -1) else { return stop() }
+        do { try startAudio() } catch { return stop(failure: describe(error)) }
+        run(chapter: first, offset: 0)
+    }
+
+    /// The last sentence has been heard: the controls stay, showing Play.
+    private func finish() {
+        player.stop()
+        atEnd = true
+        state = .paused
+        publishNowPlaying()
+        stopWhenIdle()
+    }
 
     /// Reads on from `offset` in `chapter`, wherever it was.
     func jump(chapter: Int, offset: Int) {
@@ -202,6 +225,7 @@ final class BookListener {
         queued = []
         current = nil
         finishedQueueing = false
+        atEnd = false
         idle?.cancel()
         state = .loading
         let before = producing
@@ -240,7 +264,7 @@ final class BookListener {
         }
         guard mine == generation else { return }
         finishedQueueing = true
-        if queued.isEmpty { stop() }
+        if queued.isEmpty { state == .loading ? stop() : finish() }
     }
 
     private func queue(_ samples: [Float], pause: Bool, span: BookSpan, generation mine: Int) {
@@ -268,7 +292,7 @@ final class BookListener {
     private func played(generation mine: Int) {
         guard mine == generation, !queued.isEmpty else { return }
         queued.removeFirst()
-        if let next = queued.first { heard(next) } else if finishedQueueing { stop() }
+        if let next = queued.first { heard(next) } else if finishedQueueing { finish() }
     }
 
     private func publishNowPlaying() {

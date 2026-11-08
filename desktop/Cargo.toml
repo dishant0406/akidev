@@ -35,6 +35,9 @@ codegen-units = 1
 
 # Speech is arithmetic that must run faster than it plays, so the crates that do it are not built at "z" like the rest.
 # Measured on a Mac with the same text under this profile: "z" speaks 6 times faster than real time, "s" 12 times, 3 17 times.
+# Woof's arithmetic lives in akidev-manga (woof.rs); under "z" it made speech slower than it plays (7.8 s of speech took 14 s).
+[profile.ios.package.akidev-manga]
+opt-level = 3
 [profile.ios.package.ptts]
 opt-level = 3
 [profile.ios.package.xn]
