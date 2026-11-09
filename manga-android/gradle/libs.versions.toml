@@ -18,6 +18,7 @@ baselineProfile = "1.5.0"
 uiautomator = "2.4.0"
 camerax = "1.6.2"
 zxing = "3.5.4"
+fragment = "1.8.9"
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -42,6 +43,7 @@ jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+fragment = { module = "androidx.fragment:fragment", version.ref = "fragment" }
 zxing = { module = "com.google.zxing:core", version.ref = "zxing" }
 
 [plugins]

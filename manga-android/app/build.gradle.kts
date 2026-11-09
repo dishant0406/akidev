@@ -58,6 +58,8 @@ dependencies {
     implementation(libs.camera.lifecycle)
     implementation(libs.camera.view)
     implementation(libs.zxing)
+    // camera-view pulls in an old fragment 1.1.0 that Play flags as outdated
+    implementation(libs.fragment)
     // Reads src/main/baseline-prof.txt on install, so the first start does not interpret the whole interface.
     implementation(libs.profileinstaller)
 
