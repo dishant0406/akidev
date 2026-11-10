@@ -60,6 +60,8 @@ targets:
         # Only asked when the person taps "Scan their code".
         NSCameraUsageDescription: Akidev uses the camera only to scan a code from a friend's phone.
         # "Open in Akidev" for a book or a comic archive (a series card never travels as a file: it arrives through the Share screen).
+        # iOS hands the app a copy of the file, so nothing is opened in place (Apple asks every document app to say which: ITMS-90737).
+        LSSupportsOpeningDocumentsInPlace: false
         CFBundleDocumentTypes:
           - CFBundleTypeName: EPUB book
             CFBundleTypeRole: Viewer
