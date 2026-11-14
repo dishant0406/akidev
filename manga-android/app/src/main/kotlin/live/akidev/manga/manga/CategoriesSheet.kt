@@ -24,11 +24,7 @@ import uniffi.akimanga.CategoryInfo
 fun CategoriesSheet(onDismiss: () -> Unit) {
     val app = LocalApp.current
     var categories by remember { mutableStateOf(runCatching { app.engine.categories() }.getOrDefault(emptyList())) }
-    var naming by remember { mutableStateOf(false) }
-
-    /** The category being renamed; null when the name asked for is a new one. */
-    var renaming by remember { mutableStateOf<CategoryInfo?>(null) }
-    var deleting by remember { mutableStateOf<CategoryInfo?>(null) }
+    var asking by remember { mutableStateOf<CategoryAsk?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
 
     /** Reads the categories again and tells the library (the screen under this sheet) to do the same. */
@@ -51,43 +47,51 @@ fun CategoriesSheet(onDismiss: () -> Unit) {
             }
             categories.forEachIndexed { index, category ->
                 val items = buildList {
-                    add(AkiMenuItem("Rename", "sliders") { renaming = category; naming = true })
+                    add(AkiMenuItem("Rename", "sliders") { asking = CategoryAsk.Rename(category) })
                     if (index > 0) add(AkiMenuItem("Move up", "order") { move(index, -1) })
                     if (index < categories.size - 1) add(AkiMenuItem("Move down", "down") { move(index, 1) })
-                    add(AkiMenuItem("Delete", "trash", destructive = true) { deleting = category })
+                    add(AkiMenuItem("Delete", "trash", destructive = true) { asking = CategoryAsk.Delete(category) })
                 }
                 AkiRow(category.name, subtitle = contents(category)) { AkiMenu("more", "Options for ${category.name}", items) }
             }
-            AkiButton("Add a category", icon = "folder-add", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { renaming = null; naming = true }
+            AkiButton("Add a category", icon = "folder-add", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { asking = CategoryAsk.Add }
         }
     }
-    if (naming) {
-        val current = renaming
-        AkiPrompt(
-            if (current == null) "New category" else "Rename category", "A name for a shelf, for series and for books.", "Reading", if (current == null) "Add" else "Rename",
-            onDismiss = { naming = false }, initial = current?.name ?: "",
-            onConfirm = { text ->
-                naming = false
-                val name = text.trim()
-                if (name.isNotEmpty()) {
-                    try {
-                        if (current != null) app.engine.renameCategory(current.id, name) else app.engine.addCategory(name)
-                        reload()
-                    } catch (error: Exception) {
-                        problem = describe(error).message
+    when (val current = asking) {
+        CategoryAsk.Add, is CategoryAsk.Rename -> {
+            val renaming = (current as? CategoryAsk.Rename)?.category
+            AkiPrompt(
+                if (renaming == null) "New category" else "Rename category", "A name for a shelf, for series and for books.", "Reading", if (renaming == null) "Add" else "Rename",
+                onDismiss = { asking = null }, initial = renaming?.name ?: "",
+                onConfirm = { text ->
+                    asking = null
+                    val name = text.trim()
+                    if (name.isNotEmpty()) {
+                        try {
+                            if (renaming != null) app.engine.renameCategory(renaming.id, name) else app.engine.addCategory(name)
+                            reload()
+                        } catch (error: Exception) {
+                            problem = describe(error).message
+                        }
                     }
-                }
-            },
-        )
-    }
-    deleting?.let { category ->
-        AkiConfirm("Delete “${category.name}”?", "The series and books on it stay where they are.", "Delete", { deleting = null }) {
-            runCatching { app.engine.deleteCategory(category.id) }
-            if (app.prefs.saveCategory == category.id) app.prefs.saveCategory = 0
+                },
+            )
+        }
+        is CategoryAsk.Delete -> AkiConfirm("Delete “${current.category.name}”?", "The series and books on it stay where they are.", "Delete", { asking = null }) {
+            runCatching { app.engine.deleteCategory(current.category.id) }
+            if (app.prefs.saveCategory == current.category.id) app.prefs.saveCategory = 0
             reload()
         }
+        null -> {}
     }
     problem?.let { AkiAlert("That did not work", it) { problem = null } }
+}
+
+/** The question over the categories sheet: a new name, a new name for one, or whether to delete one. Only one is asked at a time. */
+private sealed interface CategoryAsk {
+    data object Add : CategoryAsk
+    data class Rename(val category: CategoryInfo) : CategoryAsk
+    data class Delete(val category: CategoryInfo) : CategoryAsk
 }
 
 private fun contents(category: CategoryInfo): String {

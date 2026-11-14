@@ -33,10 +33,8 @@ import live.akidev.manga.design.*
 fun SourcesScreen() {
     val model = LocalApp.current
     val router = LocalRouter.current
-    var addingRepo by remember { mutableStateOf(false) }
-    var pastingSource by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<SourcesSheet?>(null) }
     var catalogues by remember { mutableStateOf(loadCatalogues(model)) }
-    var addingCatalogue by remember { mutableStateOf(false) }
     var catalogueProblem by remember { mutableStateOf<Problem?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -46,32 +44,30 @@ fun SourcesScreen() {
                 AkiHeader("Sources", subtitle = "${model.sources.size} installed") {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         AkiIconButton("settings", "Settings") { router.push(SettingsRoute) }
-                        AkiIconButton("add", "Add a repository", tint = Aki.colors.primary) { addingRepo = true }
+                        AkiIconButton("add", "Add a repository", tint = Aki.colors.primary) { sheet = SourcesSheet.Repository }
                     }
                 }
             }
             if (model.prefs.readerKind == ReaderKind.Books) {
-                item { BooksSection(catalogues, onAddCatalogue = { addingCatalogue = true }, onChanged = { catalogues = loadCatalogues(model) }) }
-                item { InstalledSection(onAdd = { pastingSource = true }) }
+                item { BooksSection(catalogues, onAddCatalogue = { sheet = SourcesSheet.Catalogue }, onChanged = { catalogues = loadCatalogues(model) }) }
+                item { InstalledSection(onAdd = { sheet = SourcesSheet.Source }) }
             } else {
-                item { InstalledSection(onAdd = { pastingSource = true }) }
-                item { BooksSection(catalogues, onAddCatalogue = { addingCatalogue = true }, onChanged = { catalogues = loadCatalogues(model) }) }
+                item { InstalledSection(onAdd = { sheet = SourcesSheet.Source }) }
+                item { BooksSection(catalogues, onAddCatalogue = { sheet = SourcesSheet.Catalogue }, onChanged = { catalogues = loadCatalogues(model) }) }
             }
-            item { RepositoriesSection(onAdd = { addingRepo = true }) }
+            item { RepositoriesSection(onAdd = { sheet = SourcesSheet.Repository }) }
         }
     }
-    if (addingRepo) {
-        AkiPrompt(
+    when (sheet) {
+        SourcesSheet.Repository -> AkiPrompt(
             "Add a repository", "The address of a repository's folder on GitHub, or any https folder with an index.json.", "github.com/owner/repository", "Continue",
-            onDismiss = { addingRepo = false }, onConfirm = { addingRepo = false; model.propose(it) },
+            onDismiss = { sheet = null }, onConfirm = { sheet = null; model.propose(it) },
         )
-    }
-    if (pastingSource) SourceAddSheet { pastingSource = false }
-    if (addingCatalogue) {
-        AkiPrompt(
-            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add", { addingCatalogue = false },
+        SourcesSheet.Source -> SourceAddSheet { sheet = null }
+        SourcesSheet.Catalogue -> AkiPrompt(
+            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add", { sheet = null },
             onConfirm = { address ->
-                addingCatalogue = false
+                sheet = null
                 scope.launch {
                     try {
                         model.engine.addCatalogue(address)
@@ -82,9 +78,13 @@ fun SourcesScreen() {
                 }
             },
         )
+        null -> {}
     }
     catalogueProblem?.let { AkiAlert(it.title, it.message) { catalogueProblem = null } }
 }
+
+/** The sheet or prompt over the sources: only one is open at a time. */
+private enum class SourcesSheet { Repository, Source, Catalogue }
 
 private fun loadCatalogues(model: live.akidev.manga.app.AppModel) = runCatching { model.engine.catalogues() }.getOrDefault(emptyList())
 

@@ -50,8 +50,7 @@ fun ReaderScreen(route: ReaderRoute) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     val reader = remember(route) { ReaderModel(app, route.ref, route.chapters, route.target, scope) }
-    var settings by remember { mutableStateOf(false) }
-    var chapters by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<ReaderSheet?>(null) }
 
     LaunchedEffect(Unit) { reader.open(reader.current, reader.page, reader.restore?.offset ?: 0.0) }
     // The status and navigation bars go away with the controls.
@@ -99,21 +98,25 @@ fun ReaderScreen(route: ReaderRoute) {
             if (reader.error == null && (reader.segments.isEmpty() || (reader.mode == ReadingMode.Strip && reader.restoring))) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { AkiOpeningLoader(reader.chapter(reader.current)?.let { reader.label(it) }) }
             }
-            AnimatedVisibility(reader.chrome, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(reader, onChapters = { chapters = true }, onSettings = { settings = true }) }
-            AnimatedVisibility(reader.chrome && reader.currentSegment != null, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) { BottomBar(reader, onChapters = { chapters = true }) }
+            AnimatedVisibility(reader.chrome, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(reader, onChapters = { sheet = ReaderSheet.Chapters }, onSettings = { sheet = ReaderSheet.Settings }) }
+            AnimatedVisibility(reader.chrome && reader.currentSegment != null, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) { BottomBar(reader, onChapters = { sheet = ReaderSheet.Chapters }) }
         }
     }
 
     // Sheets follow the app's own look, not the reader's black.
-    if (settings) ReaderSettingsSheet(reader) { settings = false }
-    if (chapters) {
-        ReaderChaptersSheet(reader, onOpen = { chapter ->
-            chapters = false
+    when (sheet) {
+        ReaderSheet.Settings -> ReaderSettingsSheet(reader) { sheet = null }
+        ReaderSheet.Chapters -> ReaderChaptersSheet(reader, onOpen = { chapter ->
+            sheet = null
             // Opens where the person was in it, or at its start.
             scope.launch { reader.open(chapter.id, (chapter.page ?: 0u).toInt(), 0.0) }
-        }) { chapters = false }
+        }) { sheet = null }
+        null -> {}
     }
 }
+
+/** The sheet over the reader: only one is open at a time. */
+private enum class ReaderSheet { Settings, Chapters }
 
 @Composable
 private fun TopBar(reader: ReaderModel, onChapters: () -> Unit, onSettings: () -> Unit) {

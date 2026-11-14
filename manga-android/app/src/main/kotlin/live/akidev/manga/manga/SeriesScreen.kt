@@ -54,6 +54,9 @@ import uniffi.akimanga.ChapterEntry
 
 private enum class SeriesTab { Chapters, Bookmarks, Details }
 
+/** The sheet or dialog over a series: only one is open at a time. */
+private enum class SeriesPopup { Moving, Categories, Forgetting }
+
 /** A series: a full-width picture with its title, and a sheet that rises over it with the chapters. */
 @Composable
 fun SeriesScreen(ref: SeriesRef) {
@@ -63,9 +66,7 @@ fun SeriesScreen(ref: SeriesRef) {
     val haptic = LocalHapticFeedback.current
     val series = remember(ref) { SeriesModel(app, ref) }
     var tab by remember { mutableStateOf(SeriesTab.Chapters) }
-    var forgetting by remember { mutableStateOf(false) }
-    var moving by remember { mutableStateOf(false) }
-    var choosingCategories by remember { mutableStateOf(false) }
+    var popup by remember { mutableStateOf<SeriesPopup?>(null) }
     val chooseCover = rememberPhotoPicker { series.setCover(it) }
     val open = { target: ReaderTarget -> router.push(ReaderRoute(ref, series.chapters, target)) }
 
@@ -91,10 +92,10 @@ fun SeriesScreen(ref: SeriesRef) {
             scope.launch {
                 if (series.toggleSaved()) {
                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                    if (series.putOnSaveCategory()) choosingCategories = true
+                    if (series.putOnSaveCategory()) popup = SeriesPopup.Categories
                 }
             }
-        }, onCategories = { choosingCategories = true }, onCover = chooseCover, onMove = { moving = true }, onForget = { forgetting = true }, scope = scope)
+        }, onCategories = { popup = SeriesPopup.Categories }, onCover = chooseCover, onMove = { popup = SeriesPopup.Moving }, onForget = { popup = SeriesPopup.Forgetting }, scope = scope)
         AnimatedVisibility(
             series.resumable != null, Modifier.align(Alignment.BottomCenter), enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(),
         ) {
@@ -105,13 +106,14 @@ fun SeriesScreen(ref: SeriesRef) {
     }
 
     series.problem?.let { AkiAlert("Download failed", it) { series.problem = null } }
-    if (moving) MigrateSheet(ref, onMoved = { router.back() }) { moving = false }
-    if (choosingCategories) CategoryPicker(listOf(ref.source to ref.id), onDismiss = { choosingCategories = false })
-    if (forgetting) {
-        AkiConfirm("Forget ${ref.title}?", "It leaves your library and its reading progress and downloads are deleted.", "Forget", { forgetting = false }) {
+    when (popup) {
+        SeriesPopup.Moving -> MigrateSheet(ref, onMoved = { router.back() }) { popup = null }
+        SeriesPopup.Categories -> CategoryPicker(listOf(ref.source to ref.id), onDismiss = { popup = null })
+        SeriesPopup.Forgetting -> AkiConfirm("Forget ${ref.title}?", "It leaves your library and its reading progress and downloads are deleted.", "Forget", { popup = null }) {
             series.forget()
             router.back()
         }
+        null -> {}
     }
 }
 

@@ -80,7 +80,7 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
                 AkiText(if (model.receiving) "Receive" else "Send", AkiTextStyle.Title)
                 model.label?.let { AkiText(if (model.ready) it else "Getting “$it” ready…", AkiTextStyle.Body, tone = AkiTone.Muted, lines = 1) }
             }
-            val coming = model.incoming?.takeIf { it.accepted }
+            val coming = model.incoming?.takeIf { it.step == IncomingStep.Receiving }
             val state = model.state
             when {
                 model.received != null -> Finished("check", model.received.orEmpty(), "Done", onDismiss)
@@ -97,7 +97,7 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
             }
         }
         // Inside the sheet: a dialog drawn outside it would sit behind the sheet's own window.
-        model.incoming?.takeIf { !it.accepted }?.let { asked ->
+        model.incoming?.takeIf { it.step == IncomingStep.Asked }?.let { asked ->
             val what = asked.files.joinToString(", ") { what(it, Formatter.formatFileSize(context, it.size.toLong())) }
             AkiQuestion("${asked.from} wants to send you $what", "Only accept from someone you know.", "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
         }
@@ -134,10 +134,10 @@ private fun Receive(model: ShareModel, scan: () -> Unit, startNetwork: () -> Uni
                 AkiText(if (model.network != null) PRIVATE_HELP else "Ask them to scan this, or open Share on their phone.", tone = AkiTone.Muted, align = TextAlign.Center)
                 AkiText("Visible as ${model.alias}", AkiTextStyle.Caption, tone = AkiTone.Muted)
             }
-            model.started -> AkiText("Connect to Wi-Fi to receive.", tone = AkiTone.Muted, align = TextAlign.Center)
+            model.startup != Startup.Starting -> AkiText("Connect to Wi-Fi to receive.", tone = AkiTone.Muted, align = TextAlign.Center)
             else -> AkiSpinner()
         }
-        if (model.started) {
+        if (model.startup != Startup.Starting) {
             AkiButton("Scan a code", variant = AkiButtonVariant.Ghost, icon = "qr", onClick = scan)
             NetworkButton(model, startNetwork)
         }
@@ -168,13 +168,13 @@ private fun Choose(model: ShareModel, scan: () -> Unit, startNetwork: () -> Unit
             Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AkiSpinner()
                 AkiText("Looking nearby…", tone = AkiTone.Muted)
-                if (model.lonely) AkiText("Can't see them? Both phones need the same Wi-Fi.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
+                if (model.startup == Startup.Lonely) AkiText("Can't see them? Both phones need the same Wi-Fi.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
             }
         } else {
             for (peer in model.peers) PersonRow(peer, model.ready) { model.send(peer) }
         }
         AkiButton("Scan their code", icon = "qr", fullWidth = true, onClick = scan)
-        if (model.started) NetworkButton(model, startNetwork)
+        if (model.startup != Startup.Starting) NetworkButton(model, startNetwork)
     }
 }
 

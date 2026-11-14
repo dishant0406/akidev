@@ -40,13 +40,7 @@ fun BooksScreen() {
     val router = LocalRouter.current
     val books = app.booksScreen
     val scope = rememberCoroutineScope()
-    var managing by remember { mutableStateOf(false) }
-    var sorting by remember { mutableStateOf<BookInfo?>(null) }
-    var assigning by remember { mutableStateOf(emptyList<BookInfo>()) }
-    var details by remember { mutableStateOf<BookInfo?>(null) }
-    var detailMarks by remember { mutableStateOf(emptyList<BookHighlight>()) }
-    var removing by remember { mutableStateOf<BookInfo?>(null) }
-    var removingPicked by remember { mutableStateOf(emptyList<BookInfo>()) }
+    var sheet by remember { mutableStateOf<BooksSheet?>(null) }
     var coverFor by remember { mutableStateOf<BookInfo?>(null) }
     val importer = rememberFilesPicker(arrayOf("application/epub+zip", "*/*")) { books.add(it) }
     val chooseCover = rememberPhotoPicker { jpeg ->
@@ -66,7 +60,7 @@ fun BooksScreen() {
                 AkiHeader(if (app.prefs.readerKind == ReaderKind.Books) "Library" else "Books", subtitle = subtitle(books)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         AkiMenu("filter", "Sort and filter", sortItems(app, books))
-                        AkiMenu("more", "More", moreItems(app, books) { managing = true })
+                        AkiMenu("more", "More", moreItems(app, books) { sheet = BooksSheet.Managing })
                         AkiIconButton("add", "Add books", tint = Aki.colors.primary, onClick = importer)
                     }
                 }
@@ -84,7 +78,7 @@ fun BooksScreen() {
                 val shown = books.shown
                 if (shown.isEmpty()) item { AkiEmptyState("Nothing here", if (books.category == -2L) "Every book is on a category." else "No books on this shelf yet. Long-press a book to put it on one.", Modifier.heightIn(min = 260.dp)) }
                 akiGrid(shown, columns, key = { it.id }) { book ->
-                    val menu = if (books.selecting) emptyList() else menuOf(app, books, book, scope, details = { detailMarks = runCatching { app.engine.bookMarks(book.id) }.getOrDefault(emptyList()); details = book }, share = { shareBook(book) }, sort = { sorting = book }, cover = { coverFor = book; chooseCover() }, remove = { removing = book })
+                    val menu = if (books.selecting) emptyList() else menuOf(app, books, book, scope, details = { sheet = BooksSheet.Details(book, runCatching { app.engine.bookMarks(book.id) }.getOrDefault(emptyList())) }, share = { shareBook(book) }, sort = { sheet = BooksSheet.Sorting(book) }, cover = { coverFor = book; chooseCover() }, remove = { sheet = BooksSheet.Removing(book) })
                     AkiTapMenu(menu, onClick = { if (books.selecting) books.toggle(book) else open(book) }) {
                         Box {
                             AkiBookCard(book.title, book.authors.firstOrNull(), book.cover, progressLine(book))
@@ -98,44 +92,54 @@ fun BooksScreen() {
         if (books.selecting && chosen.isNotEmpty()) {
             // What can be done to the books picked: put them on categories, mark them finished or not started, remove them.
             Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 112.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiIconButton("folder", "Categories") { assigning = chosen }
+                AkiIconButton("folder", "Categories") { sheet = BooksSheet.Assigning(chosen) }
                 AkiIconButton("check", "Mark as finished") { books.finish(chosen); books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } }
                 AkiIconButton("restore", "Mark as not started") { books.reset(chosen); books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } }
-                AkiIconButton("trash", "Remove", tint = Aki.colors.destructive) { removingPicked = chosen }
+                AkiIconButton("trash", "Remove", tint = Aki.colors.destructive) { sheet = BooksSheet.RemovingPicked(chosen) }
             }
         }
     }
 
-    if (managing) CategoriesSheet { managing = false; scope.launch { books.load() } }
-    sorting?.let { book -> CategoryPicker(emptyList(), books = listOf(book), onDismiss = { sorting = null; scope.launch { books.load() } }) }
-    if (assigning.isNotEmpty()) CategoryPicker(emptyList(), books = assigning, onDismiss = { assigning = emptyList(); books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } })
-    details?.let { book ->
-        BookDetailSheet(
-            book, detailMarks, onDismiss = { details = null },
-            read = { details = null; open(book) },
-            finish = { runCatching { app.engine.finishBook(book.id) }; details = null; scope.launch { books.load() } },
-            reset = { runCatching { app.engine.resetBook(book.id) }; details = null; scope.launch { books.load() } },
-            share = { details = null; shareBook(book) },
-            categories = { details = null; sorting = book },
-            chooseCover = { details = null; coverFor = book; chooseCover() },
-            ownCover = { runCatching { app.engine.clearBookCustomCover(book.id) }; details = null; scope.launch { books.load() } },
-            remove = { details = null; removing = book },
-        )
-    }
-    books.problem?.let { AkiAlert(it.first, it.second) { books.problem = null } }
-    if (removingPicked.isNotEmpty()) {
-        AkiConfirm("Remove ${removingPicked.size} books?", "Their files are deleted from this phone. Your place in them is forgotten.", "Remove", { removingPicked = emptyList() }) {
-            books.remove(removingPicked)
+    when (val current = sheet) {
+        BooksSheet.Managing -> CategoriesSheet { sheet = null; scope.launch { books.load() } }
+        is BooksSheet.Sorting -> CategoryPicker(emptyList(), books = listOf(current.book), onDismiss = { sheet = null; scope.launch { books.load() } })
+        is BooksSheet.Assigning -> CategoryPicker(emptyList(), books = current.books, onDismiss = { sheet = null; books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } })
+        is BooksSheet.Details -> {
+            val book = current.book
+            BookDetailSheet(
+                book, current.marks, onDismiss = { sheet = null },
+                read = { sheet = null; open(book) },
+                finish = { runCatching { app.engine.finishBook(book.id) }; sheet = null; scope.launch { books.load() } },
+                reset = { runCatching { app.engine.resetBook(book.id) }; sheet = null; scope.launch { books.load() } },
+                share = { sheet = null; shareBook(book) },
+                categories = { sheet = BooksSheet.Sorting(book) },
+                chooseCover = { sheet = null; coverFor = book; chooseCover() },
+                ownCover = { runCatching { app.engine.clearBookCustomCover(book.id) }; sheet = null; scope.launch { books.load() } },
+                remove = { sheet = BooksSheet.Removing(book) },
+            )
+        }
+        is BooksSheet.RemovingPicked -> AkiConfirm("Remove ${current.books.size} books?", "Their files are deleted from this phone. Your place in them is forgotten.", "Remove", { sheet = null }) {
+            books.remove(current.books)
             books.picked = emptySet(); books.selecting = false
             scope.launch { books.load() }
         }
-    }
-    removing?.let { book ->
-        AkiConfirm("Remove “${book.title}”?", "Its file is deleted from this phone. Your place in it is forgotten.", "Remove", { removing = null }) {
-            books.remove(listOf(book))
+        is BooksSheet.Removing -> AkiConfirm("Remove “${current.book.title}”?", "Its file is deleted from this phone. Your place in it is forgotten.", "Remove", { sheet = null }) {
+            books.remove(listOf(current.book))
             scope.launch { books.load() }
         }
+        null -> {}
     }
+    books.problem?.let { AkiAlert(it.first, it.second) { books.problem = null } }
+}
+
+/** The sheet or dialog over the books: only one is open at a time. */
+private sealed interface BooksSheet {
+    data object Managing : BooksSheet
+    data class Sorting(val book: BookInfo) : BooksSheet
+    data class Assigning(val books: List<BookInfo>) : BooksSheet
+    data class Details(val book: BookInfo, val marks: List<BookHighlight>) : BooksSheet
+    data class Removing(val book: BookInfo) : BooksSheet
+    data class RemovingPicked(val books: List<BookInfo>) : BooksSheet
 }
 
 private fun subtitle(books: BooksModel): String {

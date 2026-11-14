@@ -103,32 +103,34 @@ fun CatalogueScreen(ref: CatalogueRef) {
     problem?.let { AkiAlert(it.title, it.message) { problem = null } }
 }
 
+/** Where the Get button of a book is: waiting to be tapped, getting the book, or the book is on the shelf. */
+private enum class Getting { Ready, Busy, Done }
+
 /** One line of a catalogue: a book with a Get button, or a shelf that opens. Getting a book puts it on the shelf in the Books tab. */
 @Composable
 fun CatalogueItemRow(item: CatalogueItem, search: String?) {
     val app = LocalApp.current
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    var getting by remember { mutableStateOf(false) }
-    var got by remember { mutableStateOf(false) }
+    var getting by remember { mutableStateOf(Getting.Ready) }
     var problem by remember { mutableStateOf<Problem?>(null) }
     val get = item.get
     val open = item.open
     if (get != null) {
         AkiListCard(item.cover, item.author ?: "", item.title) {
-            when {
-                got -> AkiBadge("On your shelf", icon = "tick")
-                getting -> AkiSpinner()
-                else -> AkiButton("Get", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) {
+            when (getting) {
+                Getting.Done -> AkiBadge("On your shelf", icon = "tick")
+                Getting.Busy -> AkiSpinner()
+                Getting.Ready -> AkiButton("Get", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) {
                     scope.launch {
-                        getting = true
-                        try {
+                        getting = Getting.Busy
+                        getting = try {
                             app.engine.getBook(get)
-                            got = true
+                            Getting.Done
                         } catch (failure: Exception) {
                             problem = describe(failure)
+                            Getting.Ready
                         }
-                        getting = false
                     }
                 }
             }

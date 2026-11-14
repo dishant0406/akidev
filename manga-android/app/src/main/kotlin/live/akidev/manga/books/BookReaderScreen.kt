@@ -77,9 +77,7 @@ private fun BookReaderView(model: BookModel) {
     val router = LocalRouter.current
     val view = LocalView.current
     val dark = isSystemInDarkTheme()
-    var settings by remember { mutableStateOf(false) }
-    var contents by remember { mutableStateOf(false) }
-    var searching by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<BookSheet?>(null) }
 
     model.systemDark = dark
     // The page is laid out for the screen, and for the room the system's bars take whether or not they are showing.
@@ -113,16 +111,19 @@ private fun BookReaderView(model: BookModel) {
                 BookComfortOverlay(model.style)
                 if (model.place == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { AkiOpeningLoader(model.info.title) }
             }
-            AnimatedVisibility(model.chromeVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(model, onContents = { contents = true }, onSearch = { searching = true }, onSettings = { settings = true }) }
+            AnimatedVisibility(model.chromeVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(model, onContents = { sheet = BookSheet.Contents }, onSearch = { sheet = BookSheet.Search }, onSettings = { sheet = BookSheet.Settings }) }
             Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (model.trail.isNotEmpty()) AkiButton("Back to where you were", icon = "back", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) { model.goBack() }
                 model.listener?.let { ListenBar(it) }
-                AnimatedVisibility(model.chromeVisible, enter = fadeIn(), exit = fadeOut()) { BottomBar(model, onContents = { contents = true }) }
+                AnimatedVisibility(model.chromeVisible, enter = fadeIn(), exit = fadeOut()) { BottomBar(model, onContents = { sheet = BookSheet.Contents }) }
             }
         }
-        if (settings) BookSettingsSheet(model) { settings = false }
-        if (contents) BookContentsSheet(model) { contents = false }
-        if (searching) BookSearchSheet(model) { searching = false }
+        when (sheet) {
+            BookSheet.Settings -> BookSettingsSheet(model) { sheet = null }
+            BookSheet.Contents -> BookContentsSheet(model) { sheet = null }
+            BookSheet.Search -> BookSearchSheet(model) { sheet = null }
+            null -> {}
+        }
         model.noteDraft?.let { draft -> BookNoteSheet(model, draft) { model.noteDraft = null } }
         model.footnote?.let { note -> BookFootnoteSheet(model, note) { model.footnote = null } }
         model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
@@ -131,6 +132,9 @@ private fun BookReaderView(model: BookModel) {
         }
     }
 }
+
+/** The sheet opened from the bars: only one is open at a time. */
+private enum class BookSheet { Settings, Contents, Search }
 
 /** A grey page: the paper-like display has no colour. */
 private fun Modifier.grey() = graphicsLayer { colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) }

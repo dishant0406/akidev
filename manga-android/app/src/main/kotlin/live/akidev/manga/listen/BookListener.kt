@@ -54,7 +54,8 @@ class BookListener(
     /** Told when reading ends, of itself (null) or because of a failure (what to tell the person). */
     private val ended: (Problem?) -> Unit,
 ) : ListenControls {
-    enum class State { Loading, Playing, Paused, Stopped }
+    /** `Ended` is the book read to the end: the controls show Play, and Play reads it again from the top. */
+    enum class State { Loading, Playing, Paused, Ended, Stopped }
 
     var state by mutableStateOf(State.Loading)
         private set
@@ -80,9 +81,6 @@ class BookListener(
     private val queued = ArrayDeque<Queued>()
     private var written = 0L
     private var finishedQueueing = false
-
-    /** The book has been read to the end: the controls show Play, and Play reads it again from the top. */
-    private var atEnd = false
 
     /** Bumped by anything that changes where reading is, so what the old position still has in flight is ignored. */
     private var generation = 0
@@ -135,17 +133,20 @@ class BookListener(
     }
 
     override fun play() {
-        if (state != State.Paused) return
+        if (!isPaused) return
         pausedByFocus = false
         idle?.cancel()
-        if (atEnd) return startOver()
+        if (state == State.Ended) return startOver()
         // A call or a change of headphones can take the audio away: carry on from the sentence that was being heard.
         track?.apply { playbackParams = PlaybackParams().setSpeed(rate.toFloat()).setPitch(1f) }?.play()
         state = State.Playing
         ListenSession.update(context, true)
     }
 
-    fun toggle() = if (state == State.Paused) play() else pause()
+    /** Paused, or ended (which also shows Play). */
+    private val isPaused get() = state == State.Paused || state == State.Ended
+
+    fun toggle() = if (isPaused) play() else pause()
 
     /** Sets the pace; it is kept for the next book too. */
     fun changeRate(value: Double) {
@@ -169,8 +170,7 @@ class BookListener(
     /** The last sentence has been heard: the controls stay, showing Play. */
     private fun finish() {
         track?.apply { pause(); flush() }
-        atEnd = true
-        state = State.Paused
+        state = State.Ended
         ListenSession.update(context, false)
         stopWhenIdle()
     }
@@ -271,7 +271,6 @@ class BookListener(
         written = 0
         current = null
         finishedQueueing = false
-        atEnd = false
         idle?.cancel()
         state = State.Loading
         val before = producing

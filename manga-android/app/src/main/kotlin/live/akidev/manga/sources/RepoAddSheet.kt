@@ -28,6 +28,13 @@ import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
 import uniffi.akimanga.RepoView
 
+/** What the address offers: still loading, not loadable, or the repository to look at. */
+private sealed interface RepoPreview {
+    data object Loading : RepoPreview
+    data class Failed(val problem: Problem) : RepoPreview
+    data class Ready(val view: RepoView) : RepoPreview
+}
+
 /**
  * "Add this repository?": shows what an address offers before anything is kept. A repository is code that decides which sites the app
  * contacts, so the person sees its name, whether it is signed and what it lists.
@@ -36,14 +43,13 @@ import uniffi.akimanga.RepoView
 fun RepoAddSheet(pending: PendingRepo, onDismiss: () -> Unit) {
     val model = LocalApp.current
     val scope = rememberCoroutineScope()
-    var view by remember { mutableStateOf<RepoView?>(null) }
-    var error by remember { mutableStateOf<Problem?>(null) }
+    var preview by remember { mutableStateOf<RepoPreview>(RepoPreview.Loading) }
     var adding by remember { mutableStateOf(false) }
     var attempt by remember { mutableStateOf(0) }
 
     LaunchedEffect(attempt) {
-        error = null
-        try { view = model.engine.previewRepo(pending.address) } catch (failure: Exception) { error = describe(failure) }
+        preview = RepoPreview.Loading
+        preview = try { RepoPreview.Ready(model.engine.previewRepo(pending.address)) } catch (failure: Exception) { RepoPreview.Failed(describe(failure)) }
     }
 
     AkiSheet(onDismiss) {
@@ -52,11 +58,11 @@ fun RepoAddSheet(pending: PendingRepo, onDismiss: () -> Unit) {
                 AkiLogo(size = 36.dp)
                 AkiText("Add a repository", AkiTextStyle.Title)
             }
-            val problem = error
-            val loaded = view
-            if (problem != null) {
-                AkiEmptyState(problem.title, problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again") { attempt += 1 })
-            } else if (loaded != null) {
+            val state = preview
+            if (state is RepoPreview.Failed) {
+                AkiEmptyState(state.problem.title, state.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again") { attempt += 1 })
+            } else if (state is RepoPreview.Ready) {
+                val loaded = state.view
                 AkiText(loaded.info.name, AkiTextStyle.Heading)
                 AkiText(if (loaded.info.signed) "Signed, so the app notices if it ever changes hands." else "Not signed: you are trusting this address.", AkiTextStyle.Caption, tone = AkiTone.Muted)
                 AkiCard(padding = 4.dp) {
@@ -75,7 +81,7 @@ fun RepoAddSheet(pending: PendingRepo, onDismiss: () -> Unit) {
                             model.tab = AppTab.Sources
                             onDismiss()
                         } catch (failure: Exception) {
-                            error = describe(failure)
+                            preview = RepoPreview.Failed(describe(failure))
                         }
                         adding = false
                     }

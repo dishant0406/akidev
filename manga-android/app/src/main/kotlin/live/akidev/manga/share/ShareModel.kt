@@ -42,9 +42,15 @@ sealed interface SendState {
     class Failed(val message: String) : SendState
 }
 
+/** How far the sheet has got in making this phone visible: starting up, listening, or listening with nobody found for a while. */
+enum class Startup { Starting, Listening, Lonely }
+
+/** Where an incoming send is: the question is on screen, or it was accepted and the files are coming. */
+enum class IncomingStep { Asked, Receiving }
+
 /** A send that is coming in, from the question to the last byte. */
 class Incoming(val session: String, val from: String, val files: List<ShareOffered>) {
-    var accepted by mutableStateOf(false)
+    var step by mutableStateOf(IncomingStep.Asked)
     var fraction by mutableStateOf(0.0)
 }
 
@@ -86,13 +92,10 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         private set
     private val waiting = mutableListOf<PendingCard>()
     private var retry: PendingCard? = null
-    /** What the other phone scans to find this one; none without Wi-Fi. Only true to read once [started]. */
+    /** What the other phone scans to find this one; none without Wi-Fi. Only true to read once [startup] is past Starting. */
     var code by mutableStateOf<String?>(null)
         private set
-    var started by mutableStateOf(false)
-        private set
-    /** Nobody was found for a while. */
-    var lonely by mutableStateOf(false)
+    var startup by mutableStateOf(Startup.Starting)
         private set
     /** What the scanner says under the camera when the last code could not be used. */
     var scanNote by mutableStateOf<String?>(null)
@@ -119,7 +122,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         val port = runCatching { opened.start() }.getOrElse { message = describe(it); return }
         wifiCode = opened.makeCode(null, null, null, null)
         code = wifiCode
-        started = true
+        startup = Startup.Listening
         // Android drops multicast packets to save battery unless an app asks, so the lock is held only while this sheet is open.
         lock = context.applicationContext.getSystemService(WifiManager::class.java).createMulticastLock("akidev").apply { setReferenceCounted(false); acquire() }
         nearby = Nearby(context, { name, ip, found -> app.launch { find(name, ip, found) } }, { name -> app.launch { byName.remove(name)?.let { gone -> peers = peers - gone } } })
@@ -129,7 +132,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         if (!receiving) lookup = app.launch {
             delay(8000)
             if (peers.isEmpty()) {
-                lonely = true
+                startup = Startup.Lonely
                 share?.scan()
             }
         }
@@ -321,7 +324,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     fun answer(accept: Boolean) {
         val asked = incoming ?: return
         share?.answer(asked.session, accept)
-        if (accept) asked.accepted = true else incoming = null
+        if (accept) asked.step = IncomingStep.Receiving else incoming = null
     }
 
     fun stopReceiving() {

@@ -44,6 +44,9 @@ class Sharing(val label: String?, val files: (() -> List<uniffi.akimanga.ShareFi
 /** Series the last refresh could not check, with why. */
 class UpdateFailure(val key: String, val title: String, val source: String, val message: String)
 
+/** The library is read one time at a time: `LoadingAndChanged` means something changed during a read, so another read follows. */
+private enum class LibraryRead { Idle, Loading, LoadingAndChanged }
+
 /**
  * What the whole app shares: the engine, the settings, and what is installed and saved. Screens read these fields (they update when
  * the fields change) and ask the model to change them.
@@ -96,8 +99,7 @@ class AppModel(private val context: Context) {
     var refreshing by mutableStateOf(false)
         private set
     private var lastRefreshMs = 0L
-    private var loadingLibrary = false
-    private var libraryChanged = false
+    private var libraryRead = LibraryRead.Idle
 
     /** The tabs, with what the person mostly reads first. */
     val tabs get() = AppTab.order(prefs.readerKind)
@@ -145,18 +147,16 @@ class AppModel(private val context: Context) {
 
     private fun reloadLibrary() {
         // One read at a time; a change that arrives during one asks for another when it ends.
-        if (loadingLibrary) {
-            libraryChanged = true
+        if (libraryRead != LibraryRead.Idle) {
+            libraryRead = LibraryRead.LoadingAndChanged
             return
         }
-        loadingLibrary = true
+        libraryRead = LibraryRead.Loading
         scope.launch {
             readLibrary()
-            loadingLibrary = false
-            if (libraryChanged) {
-                libraryChanged = false
-                reloadLibrary()
-            }
+            val changed = libraryRead == LibraryRead.LoadingAndChanged
+            libraryRead = LibraryRead.Idle
+            if (changed) reloadLibrary()
         }
     }
 

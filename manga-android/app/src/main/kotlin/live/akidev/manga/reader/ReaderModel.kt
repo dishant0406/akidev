@@ -60,8 +60,6 @@ class ReaderModel(private val app: AppModel, val ref: SeriesRef, chapters: List<
     /** The pages marked in this series. */
     var bookmarks by mutableStateOf(emptyList<Bookmark>())
         private set
-    var loading by mutableStateOf(false)
-        private set
     var error by mutableStateOf<Problem?>(null)
         private set
     var restore by mutableStateOf<Restore?>(Restore(start.chapterId, start.page, start.offset))
@@ -139,7 +137,6 @@ class ReaderModel(private val app: AppModel, val ref: SeriesRef, chapters: List<
     /** Opens a chapter, at a page and how far down it, using the pages already fetched if there are. */
     suspend fun open(chapterId: String, page: Int, offset: Double) {
         autoScrolling = false
-        loading = true
         error = null
         try {
             val list = pageList(chapterId)
@@ -162,10 +159,8 @@ class ReaderModel(private val app: AppModel, val ref: SeriesRef, chapters: List<
             restore = Restore(chapterId, at, offset)
             restoreToken += 1
             latest = Triple(chapterId, at, offset)
-            loading = false
             prefetchNewer()
         } catch (failure: Exception) {
-            loading = false
             error = describe(failure)
         }
     }

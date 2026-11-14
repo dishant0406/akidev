@@ -36,9 +36,7 @@ fun LibraryScreen() {
     val library = app.libraryScreen
     val part = LocalMangaPart.current
     val scope = rememberCoroutineScope()
-    var managing by remember { mutableStateOf(false) }
-    var assigning by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
-    var removing by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf<LibrarySheet?>(null) }
     val columns = akiColumns()
 
     LaunchedEffect(Unit) { app.refresh(); library.loadHistory(); library.loadCategories() }
@@ -58,7 +56,7 @@ fun LibraryScreen() {
             AkiPage(narrow = false, state = library.scroll) {
                 item {
                     AkiHeader("Library", subtitle = if (library.selecting) "${library.pickedShown.size} selected" else "${app.library.size} saved") {
-                        AkiMenu("filter", "Sort and filter", library.menu(inMangaTab = part != null) { managing = true })
+                        AkiMenu("filter", "Sort and filter", library.menu(inMangaTab = part != null) { sheet = LibrarySheet.Managing })
                     }
                 }
                 item { MangaPartPills() }
@@ -69,17 +67,25 @@ fun LibraryScreen() {
         if (library.tab == LibraryTab.Saved && library.selecting && library.pickedShown.isNotEmpty()) {
             // What can be done to the series picked: icons alone, round, so three of them fit and sit clear of the tab bar.
             Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 112.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiIconButton("folder", "Categories") { assigning = library.pickedShown.map { it.source to it.id } }
+                AkiIconButton("folder", "Categories") { sheet = LibrarySheet.Assigning(library.pickedShown.map { it.source to it.id }) }
                 AkiIconButton("check", "Mark as read") { library.markPickedRead() }
-                AkiIconButton("bookmark-off", "Remove from library", tint = Aki.colors.destructive) { removing = true }
+                AkiIconButton("bookmark-off", "Remove from library", tint = Aki.colors.destructive) { sheet = LibrarySheet.Removing }
             }
         }
     }
-    if (managing) CategoriesSheet { managing = false; library.loadCategories(); app.refresh() }
-    if (assigning.isNotEmpty()) CategoryPicker(assigning, onDismiss = { assigning = emptyList(); library.loadCategories(); library.picked = emptySet(); library.selecting = false })
-    if (removing) {
-        AkiConfirm("Remove ${library.pickedShown.size} from your library?", "Their read state stays; you can save them again.", "Remove", { removing = false }) { scope.launch { library.removePicked() } }
+    when (val current = sheet) {
+        LibrarySheet.Managing -> CategoriesSheet { sheet = null; library.loadCategories(); app.refresh() }
+        is LibrarySheet.Assigning -> CategoryPicker(current.series, onDismiss = { sheet = null; library.loadCategories(); library.picked = emptySet(); library.selecting = false })
+        LibrarySheet.Removing -> AkiConfirm("Remove ${library.pickedShown.size} from your library?", "Their read state stays; you can save them again.", "Remove", { sheet = null }) { scope.launch { library.removePicked() } }
+        null -> {}
     }
+}
+
+/** The sheet or dialog over the library: only one is open at a time. */
+private sealed interface LibrarySheet {
+    data object Managing : LibrarySheet
+    data class Assigning(val series: List<Pair<String, String>>) : LibrarySheet
+    data object Removing : LibrarySheet
 }
 
 private fun LazyListScope.saved(library: LibraryModel, columns: Int, inMangaTab: Boolean) {

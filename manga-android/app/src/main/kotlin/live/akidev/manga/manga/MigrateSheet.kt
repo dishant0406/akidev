@@ -38,9 +38,7 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
     val others = app.visibleSources.filter { it.id != ref.source && it.canSearch }
     var target by remember { mutableStateOf(others.firstOrNull()?.id ?: "") }
     var term by remember { mutableStateOf(ref.title) }
-    var results by remember { mutableStateOf(emptyList<Card>()) }
-    var searching by remember { mutableStateOf(false) }
-    var failure by remember { mutableStateOf<Problem?>(null) }
+    var found by remember { mutableStateOf<Found>(Found.Cards(emptyList())) }
     var chosen by remember { mutableStateOf<Card?>(null) }
     var problem by remember { mutableStateOf<Problem?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -48,16 +46,13 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
     suspend fun search() {
         val asked = target
         if (asked.isEmpty()) return
-        searching = true
-        failure = null
-        results = emptyList()
+        found = Found.Searching
         try {
-            val found = app.engine.search(asked, term.trim(), 1u, emptyList()).items
-            if (asked == target) results = found
+            val cards = app.engine.search(asked, term.trim(), 1u, emptyList()).items
+            if (asked == target) found = Found.Cards(cards)
         } catch (error: Exception) {
-            if (asked == target) failure = describe(error)
+            if (asked == target) found = Found.Failed(describe(error))
         }
-        searching = false
     }
     // Opening the sheet, and choosing another source, each look for the title straight away.
     LaunchedEffect(target) { search() }
@@ -93,7 +88,7 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
                 AkiMenuPill(target, { target = it }, others.map { AkiOption(it.id, it.name) }, icon = "sources")
                 val scopeForSearch = rememberCoroutineScope()
                 AkiInput("Search ${app.name(target)}", term, { term = it }, icon = "search", onSubmit = { scopeForSearch.launch { search() } })
-                Results(app.name(target), term, searching, failure, results, onRetry = { scope.launch { search() } }) { chosen = it }
+                Results(app.name(target), term, found, onRetry = { scope.launch { search() } }) { chosen = it }
             }
         }
     }
@@ -103,16 +98,24 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
     problem?.let { AkiAlert(it.title, it.message) { problem = null } }
 }
 
+/** What the search for the series on the other source has: waiting, an error, or the cards found (maybe none). */
+private sealed interface Found {
+    data object Searching : Found
+    data class Failed(val problem: Problem) : Found
+    data class Cards(val cards: List<Card>) : Found
+}
+
 @Composable
-private fun Results(source: String, term: String, searching: Boolean, failure: Problem?, results: List<Card>, onRetry: () -> Unit, onChoose: (Card) -> Unit) {
-    when {
-        searching -> Box(Modifier.fillMaxWidth().heightIn(min = 140.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
-        failure != null -> AkiEmptyState(failure.title, failure.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again", onRetry))
-        results.isEmpty() -> AkiEmptyState("Nothing found", "$source has nothing called “$term”. Try a shorter title, or another source.", Modifier.heightIn(min = 240.dp))
-        else -> {
+private fun Results(source: String, term: String, found: Found, onRetry: () -> Unit, onChoose: (Card) -> Unit) {
+    when (found) {
+        Found.Searching -> Box(Modifier.fillMaxWidth().heightIn(min = 140.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
+        is Found.Failed -> AkiEmptyState(found.problem.title, found.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again", onRetry))
+        is Found.Cards -> if (found.cards.isEmpty()) {
+            AkiEmptyState("Nothing found", "$source has nothing called “$term”. Try a shorter title, or another source.", Modifier.heightIn(min = 240.dp))
+        } else {
             AkiText("Tap the one that is the same series", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (card in results) {
+                for (card in found.cards) {
                     AkiTap({ onChoose(card) }) {
                         AkiListCard(card.cover, source, card.title, badges = listOfNotNull(chaptersLabel(card.chapters))) { AkiIcon("forward", size = 13.dp, tone = AkiTone.Muted) }
                     }
