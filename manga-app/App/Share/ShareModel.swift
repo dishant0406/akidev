@@ -41,6 +41,33 @@ private final class Hears: ShareEvents, @unchecked Sendable {
 final class ShareModel {
     enum Outcome { case waiting, sending(Double), done, declined, busy, failed(String) }
     struct Asked { let session: String; let from: String; let files: [ShareOffered] }
+    /// Where this phone is, one thing at a time: choosing who to send to (or showing its own code), scanning a friend's code, following
+    /// that code (joining their temporary Wi-Fi, then finding their phone), waiting for them to send (this phone is the one receiving),
+    /// or sending.
+    enum Step {
+        case choosing
+        case scanning
+        case joining
+        case connecting
+        case connected(String)
+        case sending(SharePeer, Outcome)
+
+        /// A scanned code is being followed.
+        var isFollowingCode: Bool {
+            switch self {
+            case .joining, .connecting: true
+            default: false
+            }
+        }
+    }
+    /// What another phone is sending to this one. The engine takes one send at a time.
+    enum Incoming {
+        case none
+        /// The person is being asked.
+        case asked(Asked)
+        /// The person said yes: which send it is, who sends, and how far it has got.
+        case receiving(session: String, from: String, fraction: Double)
+    }
     struct NewSource { let path: String; let card: ShareCard }
 
     var item: ShareItem?
@@ -51,21 +78,15 @@ final class ShareModel {
     var code: String?
     /// Eight seconds went by and nobody was listed: the sheet says what to check, and the Wi-Fi was looked through once.
     var looked = false
-    /// The camera is open, looking for a friend's code.
-    var scanningCode = false
-    /// A code with a temporary Wi-Fi in it was scanned and the phone is joining it.
-    var joining = false
-    /// Joined, or linked, and now waiting for the other phone to send (when this phone is the one receiving).
-    var connected: String?
+    var step = Step.choosing
     var codeNote: String?
-    var sending: (peer: SharePeer, outcome: Outcome)?
-    var asked: Asked?
-    /// Who is sending to this phone, and how far it has got, once the person said yes.
-    var incoming: (from: String, fraction: Double)?
-    /// What arrived and was added, one line each.
+    var incoming = Incoming.none
+    /// The person is being asked whether to accept a send.
+    var asked: Asked? {
+        if case .asked(let asked) = incoming { asked } else { nil }
+    }
+    /// What arrived and was added, one line each. Once there is one, the sheet says so.
     var added: [String] = []
-    /// Set when the last send that came in is over, so the sheet can say so.
-    var received = false
     var newSource: NewSource?
     /// What went wrong, for the person to read. When it is closed and a source could not be added for want of the internet,
     /// the question about that source comes back, so the person can connect and tap Add again.
@@ -80,15 +101,11 @@ final class ShareModel {
     private let nearby = Nearby()
     private var lookAgain: Task<Void, Never>?
     private var waiting: [NewSource] = []
-    /// The send being received, once the person said yes.
-    private var receiving: String?
     private var host: PeerHost?
     private var gate: PeerGate?
     /// The temporary Wi-Fi this phone joined, to leave when the send is over.
     private var joined: String?
     private var networkTimer: Task<Void, Never>?
-    /// A scanned code is being followed: the Wi-Fi joined, the other phone looked for.
-    private(set) var connecting = false
 
     func begin(app: AppModel, item: ShareItem?) async {
         self.app = app
@@ -147,24 +164,27 @@ final class ShareModel {
     /// A friend's code was scanned: join their temporary Wi-Fi if it has one, find their phone, and send to it at once (or, when this
     /// phone is the one receiving, wait for them to send).
     func connect(code: String) {
-        guard let share, !connecting else { return }
-        connecting = true
+        guard let share, !step.isFollowingCode else { return }
+        step = .connecting
         Task {
-            defer { connecting = false }
+            // Where the screen goes if this fails: the scanner stays open, unless a temporary Wi-Fi was joined.
+            var back = Step.scanning
             guard let found = try? share.readCode(code: code) else {
                 codeNote = "That is not an Akidev code"
+                step = back
                 return
             }
             if let ssid = found.ssid, let password = found.password {
-                scanningCode = false
-                joining = true
-                defer { joining = false }
+                back = .choosing
+                step = .joining
                 do { try await WifiJoin.join(ssid: ssid, password: password) } catch {
                     problem = "Could not join their Wi-Fi."
+                    step = back
                     return
                 }
                 joined = ssid
                 keepNetworkFor5Minutes()
+                step = .connecting
             }
             guard let peer = await reach(found, code: code, share: share) else {
                 if joined != nil {
@@ -173,11 +193,16 @@ final class ShareModel {
                 } else {
                     codeNote = found.peer == nil ? "Could not reach that phone" : "Could not reach that phone. Switch Wi-Fi on for both phones; it does not need to be connected."
                 }
+                step = back
                 return
             }
-            scanningCode = false
             codeNote = nil
-            if item != nil { send(to: peer) } else { connected = peer.alias }
+            if item != nil {
+                step = .choosing
+                send(to: peer)
+            } else {
+                step = .connected(peer.alias)
+            }
         }
     }
 
@@ -209,8 +234,13 @@ final class ShareModel {
             try? await Task.sleep(for: .seconds(300))
             guard !Task.isCancelled else { return }
             self?.endNetwork()
-            self?.connected = nil
+            self?.stopWaiting()
         }
+    }
+
+    /// Ends the waiting for the other phone to send, if this phone was waiting.
+    private func stopWaiting() {
+        if case .connected = step { step = .choosing }
     }
 
     /// Leaves the temporary Wi-Fi in a few seconds: the "got it" reply to the sender is still on its way, and leaving now would cut it.
@@ -236,14 +266,14 @@ final class ShareModel {
     /// The person gives up waiting on the other phone.
     func disconnect() {
         endNetwork()
-        connected = nil
+        stopWaiting()
     }
 
     // MARK: sending
 
     func send(to peer: SharePeer) {
         guard let share, let item, let engine = app?.engine else { return }
-        sending = (peer, .waiting)
+        step = .sending(peer, .waiting)
         Task {
             do {
                 let file = try await Task.detached { try item.file(engine) }.value
@@ -252,7 +282,7 @@ final class ShareModel {
                 let poll = Task {
                     while !Task.isCancelled {
                         let progress = job.progress()
-                        if progress.total > 0, !Task.isCancelled { sending = (peer, .sending(Double(progress.done) / Double(progress.total))) }
+                        if progress.total > 0, !Task.isCancelled { step = .sending(peer, .sending(Double(progress.done) / Double(progress.total))) }
                         try? await Task.sleep(for: .milliseconds(200))
                     }
                 }
@@ -260,13 +290,13 @@ final class ShareModel {
                 poll.cancel()
                 switch outcome {
                 case .sent:
-                    sending = (peer, .done)
+                    step = .sending(peer, .done)
                     endNetwork()
-                case .declined: sending = (peer, .declined)
-                case .busy: sending = (peer, .busy)
-                case .stopped: sending = nil
+                case .declined: step = .sending(peer, .declined)
+                case .busy: step = .sending(peer, .busy)
+                case .stopped: step = .choosing
                 }
-            } catch { sending = (peer, .failed(describe(error).message)) }
+            } catch { step = .sending(peer, .failed(describe(error).message)) }
             job = nil
             engine.shareClearOutgoing()
         }
@@ -275,44 +305,43 @@ final class ShareModel {
     func stopSending() { job?.stop() }
 
     func sendAgain() {
-        guard let peer = sending?.peer else { return }
+        guard case .sending(let peer, _) = step else { return }
         send(to: peer)
     }
 
-    func backToList() { sending = nil }
+    func backToList() { step = .choosing }
 
     // MARK: receiving
 
-    func asked(_ session: String, _ from: String, _ files: [ShareOffered]) { asked = Asked(session: session, from: from, files: files) }
+    func asked(_ session: String, _ from: String, _ files: [ShareOffered]) { incoming = .asked(Asked(session: session, from: from, files: files)) }
 
     func answer(_ accept: Bool) {
         guard let asked else { return }
         share?.answer(session: asked.session, accept: accept)
-        self.asked = nil
-        if accept {
-            incoming = (asked.from, 0)
-            receiving = asked.session
-        }
+        incoming = accept ? .receiving(session: asked.session, from: asked.from, fraction: 0) : .none
     }
 
-    func stopReceiving() { if let receiving { share?.stopReceiving(session: receiving) } }
+    func stopReceiving() { if case .receiving(let session, _, _) = incoming { share?.stopReceiving(session: session) } }
 
-    func progress(_ fraction: Double) { if let from = incoming?.from { incoming = (from, fraction) } }
+    func progress(_ fraction: Double) {
+        if case .receiving(let session, let from, _) = incoming { incoming = .receiving(session: session, from: from, fraction: fraction) }
+    }
 
     func ended(_ session: String, _ reason: String) {
-        let wasAsked = asked?.session == session
-        let wasReceiving = incoming != nil || wasAsked
-        asked = nil
-        incoming = nil
-        receiving = nil
+        let wasReceiving: Bool
+        switch incoming {
+        case .none: wasReceiving = false
+        case .asked(let asked): wasReceiving = asked.session == session
+        case .receiving: wasReceiving = true
+        }
+        incoming = .none
         if wasReceiving, reason != "declined", reason != "stopped on this phone" { problem = "The send stopped: \(reason)." }
     }
 
     /// Puts each arrived file where it belongs. A series from a source that is new here waits for a yes first.
     func finished(_ files: [ShareReceived]) {
-        incoming = nil
-        receiving = nil
-        connected = nil
+        incoming = .none
+        stopWaiting()
         endNetworkSoon()
         host?.stop()
         host = nil
@@ -324,7 +353,6 @@ final class ShareModel {
             }
             app.refresh()
             app.booksRevision += 1
-            received = !added.isEmpty
             askNextSource()
             // A card that waits for "Add the source?" is still a file: keep it until the person answers.
             if newSource == nil { share.clean() }
@@ -365,7 +393,6 @@ final class ShareModel {
                 do {
                     try await engine.shareAddCard(path: pending.path)
                     added.append("\"\(pending.card.title)\" is in your library.")
-                    received = true
                     app?.refresh()
                 } catch {
                     let reason = describe(error).message

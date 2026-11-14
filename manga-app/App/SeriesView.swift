@@ -31,13 +31,11 @@ struct SeriesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var kept: Set<String> = []
     @State private var bookmarks: [Bookmark] = []
-    @State private var forgetting = false
     /// Counters that only change on something the person did, so a haptic never fires just from opening the page.
     @State private var savedTaps = 0
     @State private var downloadsDone = 0
-    @State private var moving = false
-    @State private var choosingCategories = false
-    @State private var choosingCover = false
+    private enum Sheet { case move, categories, cover, forget }
+    @State private var presented: Sheet?
     /// The cover the person chose for this series, as an address, or nil.
     @State private var chosenCover: String?
     @State private var problem: String?
@@ -82,14 +80,14 @@ struct SeriesView: View {
         .akiHaptic(.success, trigger: downloadsDone)
         .akiHaptic(.error, trigger: problem)
         .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
-        .akiSheet(isPresented: $moving) { MigrateSheet(ref: ref) { dismiss() } }
-        .akiPhotoPicker(isPresented: $choosingCover) { jpeg in
+        .akiSheet(isPresented: $presented.equals(.move)) { MigrateSheet(ref: ref) { dismiss() } }
+        .akiPhotoPicker(isPresented: $presented.equals(.cover)) { jpeg in
             try? model.engine.setCustomCover(source: ref.source, series: ref.id, jpeg: jpeg)
             chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
             model.refresh()
         }
-        .akiSheet(isPresented: $choosingCategories) { CategoryPicker(series: [CategoryPicker.Series(source: ref.source, id: ref.id)]) }
-        .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $forgetting) {
+        .akiSheet(isPresented: $presented.equals(.categories)) { CategoryPicker(series: [CategoryPicker.Series(source: ref.source, id: ref.id)]) }
+        .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $presented.equals(.forget)) {
             try? model.engine.forgetSeries(source: ref.source, series: ref.id)
             model.refresh()
             dismiss()
@@ -145,11 +143,11 @@ struct SeriesView: View {
                     AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
                     AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .series(ref)) },
-                    AkiMenuItem(title: "Categories", icon: "folder") { choosingCategories = true },
-                    AkiMenuItem(title: "Choose a cover", icon: "image") { choosingCover = true },
+                    AkiMenuItem(title: "Categories", icon: "folder") { presented = .categories },
+                    AkiMenuItem(title: "Choose a cover", icon: "image") { presented = .cover },
                     AkiMenuItem(title: "Reset cover", icon: "refresh") { clearCover() },
-                    AkiMenuItem(title: "Move to another source", icon: "swap") { moving = true },
-                    AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { forgetting = true },
+                    AkiMenuItem(title: "Move to another source", icon: "swap") { presented = .move },
+                    AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { presented = .forget },
                 ])
             }
         }
@@ -385,7 +383,7 @@ struct SeriesView: View {
     private func putOnSaveCategory() {
         switch model.prefs.saveCategory {
         case 0: break
-        case -1: choosingCategories = true
+        case -1: presented = .categories
         // A category that has since been deleted (or came back from a backup under another number) is not one to put it on.
         case let id where ((try? model.engine.categories()) ?? []).contains { $0.id == id }: try? model.engine.setCategory(source: ref.source, series: ref.id, category: id, member: true)
         default: break

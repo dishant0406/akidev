@@ -9,7 +9,8 @@ import Observation
 /// stops at the back matter.
 @MainActor @Observable
 final class BookListener {
-    enum State { case loading, playing, paused, stopped }
+    /// `ended`: the book has been read to the end. The controls show Play, and Play reads it again from the top.
+    enum State { case loading, playing, paused, ended, stopped }
 
     private(set) var state = State.loading
     /// The sentence being heard, for the page to mark.
@@ -39,8 +40,6 @@ final class BookListener {
     /// The sentences queued on the player, the first being heard now.
     private var queued: [BookSpan] = []
     private var finishedQueueing = false
-    /// The book has been read to the end: the controls show Play, and Play reads it again from the top.
-    private var atEnd = false
     /// Bumped by anything that changes where reading is, so what the old position still has in flight is ignored.
     private var generation = 0
     /// The task making the speech; a new one waits for the one before it, so the voice is never asked twice at once.
@@ -103,9 +102,9 @@ final class BookListener {
     }
 
     func resume() {
-        guard state == .paused else { return }
+        guard state == .paused || state == .ended else { return }
         idle?.cancel()
-        if atEnd { return startOver() }
+        if state == .ended { return startOver() }
         // A call or a change of headphones stops the audio engine: start again from the sentence that was being heard.
         if !audio.isRunning, let current { return restart(at: current) }
         player.play()
@@ -113,7 +112,7 @@ final class BookListener {
         publishNowPlaying()
     }
 
-    func toggle() { state == .paused ? resume() : pause() }
+    func toggle() { state == .playing ? pause() : resume() }
 
     /// Reads the book again from its first chapter.
     private func startOver() {
@@ -125,8 +124,7 @@ final class BookListener {
     /// The last sentence has been heard: the controls stay, showing Play.
     private func finish() {
         player.stop()
-        atEnd = true
-        state = .paused
+        state = .ended
         publishNowPlaying()
         stopWhenIdle()
     }
@@ -225,7 +223,6 @@ final class BookListener {
         queued = []
         current = nil
         finishedQueueing = false
-        atEnd = false
         idle?.cancel()
         state = .loading
         let before = producing

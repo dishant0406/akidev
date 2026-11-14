@@ -163,13 +163,14 @@ final class PeerGate: @unchecked Sendable {
 /// `first()` is true once: for the one answer a continuation can take.
 private final class Once: @unchecked Sendable {
     private let lock = NSLock()
-    private var spent = false
+    private enum Gate { case open, spent }
+    private var gate = Gate.open
 
     func first() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        if spent { return false }
-        spent = true
+        if gate == .spent { return false }
+        gate = .spent
         return true
     }
 }

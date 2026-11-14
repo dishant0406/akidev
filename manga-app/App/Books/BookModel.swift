@@ -54,8 +54,21 @@ final class BookModel: BookPaging {
     /// The words a search found, shown until the page is turned.
     var found: BookSpan? { didSet { overlaysChanged() } }
     @ObservationIgnored var foundPage: BookPlace?
-    /// Reading aloud, while it goes on, and the sentence being read.
-    var listener: BookListener?
+    /// Reading aloud: off, or going on with the page following the voice, or going on with the person turned away from the page being read
+    /// (the page stays where they put it, until they come back to the page being read).
+    enum Follow {
+        case off
+        case following(BookListener)
+        case turnedAway(BookListener)
+    }
+    var follow = Follow.off
+    /// The reading aloud that goes on, if any.
+    var listener: BookListener? {
+        switch follow {
+        case .off: nil
+        case .following(let listener), .turnedAway(let listener): listener
+        }
+    }
     /// What reading aloud needs from the app: the models and the person's settings, given by the reader's screen.
     @ObservationIgnored var speech: (readAloud: ReadAloudModel, prefs: Preferences)?
     var speaking: BookSpan? { didSet { overlaysChanged() } }
@@ -71,8 +84,6 @@ final class BookModel: BookPaging {
     @ObservationIgnored private let fontBank = BookFontBank()
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var jumps = 0
-    /// The person turned away from the page being read aloud: the page stops following the voice until they come back to it.
-    @ObservationIgnored var userMoved = false
     /// The place the page last moved to because the voice did, so that is not taken for the person turning.
     @ObservationIgnored var speechTurn: BookPlace?
     @ObservationIgnored private var wanted: (spot: Spot, forward: Bool, animated: Bool)?
@@ -174,7 +185,7 @@ final class BookModel: BookPaging {
     }
 
     func turned(to place: BookPlace) {
-        if listener != nil, place != self.place, place != speechTurn { userMoved = true }
+        if case .following(let listener) = follow, place != self.place, place != speechTurn { follow = .turnedAway(listener) }
         self.place = place
         if selection != nil { selection = nil }
         if found != nil, foundPage != place { found = nil }

@@ -12,7 +12,8 @@ final class AutoDownloader {
     static let perSeries = 5
     private let engine: Engine
     private let wifiOnly: () -> Bool
-    private var running = false
+    private enum Run { case idle, running }
+    private var run = Run.idle
 
     init(engine: Engine, wifiOnly: @escaping () -> Bool) {
         self.engine = engine
@@ -46,10 +47,10 @@ final class AutoDownloader {
     /// Downloads what is queued, one chapter at a time, until it is done or the task is cancelled. A chapter that fails
     /// stays queued for next time; one already on the device is dropped from the list.
     func run() async {
-        guard !running, hasWork else { return }
+        guard run == .idle, hasWork else { return }
         if wifiOnly(), await Network.isMetered() { return }
-        running = true
-        defer { running = false }
+        run = .running
+        defer { run = .idle }
         let kept = Set(((try? engine.downloads()) ?? []).filter { $0.state == "done" }.map { "\($0.source)/\($0.series)/\($0.chapter)" })
         for item in queue {
             if Task.isCancelled { return }

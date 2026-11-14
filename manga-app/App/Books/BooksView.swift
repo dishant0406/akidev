@@ -10,6 +10,19 @@ struct BooksView: View {
     nonisolated(unsafe) private static var openedByArgument = false
     #endif
     @Environment(AppModel.self) private var model
+
+    private enum Sheet: Identifiable {
+        case categories, sort(BookInfo), assign([BookInfo]), details(BookInfo)
+
+        var id: String {
+            switch self {
+            case .categories: "categories"
+            case .sort(let book): "sort-\(book.id)"
+            case .assign: "assign"
+            case .details(let book): "details-\(book.id)"
+            }
+        }
+    }
     @State private var books: [BookInfo] = []
     @State private var importing = false
     /// What is being added now, for the line under the title.
@@ -20,9 +33,7 @@ struct BooksView: View {
     @State private var categories: [CategoryInfo] = []
     /// -1 is every category, -2 the books on none.
     @State private var category: Int64 = -1
-    @State private var managing = false
     /// The book whose categories are being changed, and the one a cover picture is being chosen for.
-    @State private var sorting: BookInfo?
     @State private var coverFor: BookInfo?
     @State private var choosingCover = false
     @State private var filter = BookFilter.all
@@ -30,8 +41,8 @@ struct BooksView: View {
     @State private var words = ""
     @State private var selecting = false
     @State private var picked: Set<String> = []
-    @State private var assigning: [BookInfo] = []
-    @State private var details: BookInfo?
+    /// The sheet that is open: the categories, or one for a book or for the books picked.
+    @State private var sheet: Sheet?
     @State private var detailMarks: [BookHighlight] = []
     @State private var removingPicked: [BookInfo] = []
     /// Two columns on a phone; as many as fit on a wider screen.
@@ -97,10 +108,14 @@ struct BooksView: View {
         #endif
         .onChange(of: model.addingBook, initial: true) { _, now in if now { model.addingBook = false; importing = true } }
         .akiFilesImporter(isPresented: $importing, types: [.epub], onPick: add)
-        .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear(perform: load) })
-        .akiSheet(item: $sorting, content: { book in CategoryPicker(series: [], books: [book]).onDisappear(perform: load) })
-        .akiSheet(isPresented: Binding(get: { !assigning.isEmpty }, set: { if !$0 { assigning = [] } }), content: { CategoryPicker(series: [], books: assigning).onDisappear { load(); picked = []; selecting = false } })
-        .akiSheet(item: $details, content: { book in detailSheet(book) })
+        .akiSheet(item: $sheet) { sheet in
+            switch sheet {
+            case .categories: CategoriesSheet().onDisappear(perform: load)
+            case .sort(let book): CategoryPicker(series: [], books: [book]).onDisappear(perform: load)
+            case .assign(let chosen): CategoryPicker(series: [], books: chosen).onDisappear { load(); picked = []; selecting = false }
+            case .details(let book): detailSheet(book)
+            }
+        }
         .akiPhotoPicker(isPresented: $choosingCover, width: 300) { jpeg in
             if let book = coverFor { try? model.engine.setBookCustomCover(id: book.id, jpeg: jpeg) }
             load()
@@ -136,7 +151,7 @@ struct BooksView: View {
     private var moreItems: [AkiMenuItem] {
         [AkiMenuItem(title: searching ? "Hide search" : "Search", icon: "search") { searching.toggle(); if !searching { words = "" } },
          AkiMenuItem(title: selecting ? "Done selecting" : "Select", icon: "check") { selecting.toggle(); picked = [] },
-         AkiMenuItem(title: "Categories", icon: "folder") { managing = true },
+         AkiMenuItem(title: "Categories", icon: "folder") { sheet = .categories },
          AkiMenuItem(title: "Receive from a friend", icon: "share") { model.sharing = SharePresented(item: nil) }]
     }
 
@@ -156,7 +171,7 @@ struct BooksView: View {
         let chosen = books.filter { picked.contains($0.id) }
         return AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "folder", label: "Categories") { assigning = chosen }
+                AkiIconButton(symbol: "folder", label: "Categories") { sheet = .assign(chosen) }
                 AkiIconButton(symbol: "check", label: "Mark as finished") { for book in chosen { try? model.engine.finishBook(id: book.id) }; picked = []; selecting = false; load() }
                 AkiIconButton(symbol: "restore", label: "Mark as not started") { for book in chosen { try? model.engine.resetBook(id: book.id) }; picked = []; selecting = false; load() }
                 AkiIconButton(symbol: "trash", label: "Remove", tint: Aki.destructive) { removingPicked = chosen }
@@ -168,21 +183,21 @@ struct BooksView: View {
     private func detailSheet(_ book: BookInfo) -> some View {
         BookDetailSheet(
             book: book, marks: detailMarks,
-            read: { details = nil; reading = book },
-            finish: { try? model.engine.finishBook(id: book.id); details = nil; load() },
-            reset: { try? model.engine.resetBook(id: book.id); details = nil; load() },
-            categories: { details = nil; sorting = book },
-            share: { details = nil; model.sharing = SharePresented(item: .book(book)) },
-            chooseCover: { details = nil; coverFor = book; choosingCover = true },
-            ownCover: { try? model.engine.clearBookCustomCover(id: book.id); details = nil; load() },
-            remove: { details = nil; removing = book }
+            read: { sheet = nil; reading = book },
+            finish: { try? model.engine.finishBook(id: book.id); sheet = nil; load() },
+            reset: { try? model.engine.resetBook(id: book.id); sheet = nil; load() },
+            categories: { sheet = .sort(book) },
+            share: { sheet = nil; model.sharing = SharePresented(item: .book(book)) },
+            chooseCover: { sheet = nil; coverFor = book; choosingCover = true },
+            ownCover: { try? model.engine.clearBookCustomCover(id: book.id); sheet = nil; load() },
+            remove: { sheet = nil; removing = book }
         )
     }
 
     private func menu(for book: BookInfo) -> [AkiMenuItem] {
-        var items = [AkiMenuItem(title: "Details", icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; details = book },
+        var items = [AkiMenuItem(title: "Details", icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; sheet = .details(book) },
                      AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .book(book)) },
-                     AkiMenuItem(title: "Categories", icon: "folder") { sorting = book },
+                     AkiMenuItem(title: "Categories", icon: "folder") { sheet = .sort(book) },
                      AkiMenuItem(title: "Choose a cover picture", icon: "image") { coverFor = book; choosingCover = true }]
         if book.customCover {
             items.append(AkiMenuItem(title: "Use the book's own cover", icon: "restore") { try? model.engine.clearBookCustomCover(id: book.id); load() })

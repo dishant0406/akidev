@@ -1,5 +1,12 @@
 import SwiftUI
 
+extension Binding {
+    /// A yes or no for a screen's `sheet` choice: true while it is `value`, and setting it false closes whatever is open.
+    @MainActor func equals<Choice: Equatable & Sendable>(_ value: Choice) -> Binding<Bool> where Value == Choice? {
+        Binding<Bool>(get: { wrappedValue == value }, set: { if !$0 { wrappedValue = nil } })
+    }
+}
+
 extension View {
     /// A message with one button.
     func akiAlert(_ title: String, message: String?, isPresented: Binding<Bool>) -> some View {

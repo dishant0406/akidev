@@ -8,9 +8,8 @@ struct BookReaderView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var phase
     @Environment(AppModel.self) private var app
-    @State private var settings = false
-    @State private var contents = false
-    @State private var searching = false
+    private enum Sheet { case settings, contents, searching }
+    @State private var sheet: Sheet?
 
     var body: some View {
         GeometryReader { proxy in
@@ -48,9 +47,9 @@ struct BookReaderView: View {
         .akiAnimation(quick: true, value: model.chromeVisible)
         .akiAnimation(quick: true, value: model.trail.count)
         .akiAnimation(quick: true, value: model.listener != nil)
-        .akiSheet(isPresented: $settings) { BookSettingsSheet(model: model) }
-        .akiSheet(isPresented: $contents, full: true) { BookContentsSheet(model: model) { contents = false } }
-        .akiSheet(isPresented: $searching, full: true) { BookSearchSheet(model: model) { searching = false } }
+        .akiSheet(isPresented: $sheet.equals(.settings)) { BookSettingsSheet(model: model) }
+        .akiSheet(isPresented: $sheet.equals(.contents), full: true) { BookContentsSheet(model: model) { sheet = nil } }
+        .akiSheet(isPresented: $sheet.equals(.searching), full: true) { BookSearchSheet(model: model) { sheet = nil } }
         .akiSheet(item: $model.noteDraft) { draft in BookNoteSheet(model: model, draft: draft) { model.noteDraft = nil } }
         .akiSheet(item: $model.footnote) { note in BookFootnoteSheet(model: model, note: note) { model.footnote = nil } }
         .akiAlert(model.failure?.title ?? "", message: model.failure?.message, isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } }))
@@ -68,7 +67,7 @@ struct BookReaderView: View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 AkiIconButton(symbol: "back", label: "Back", action: close)
-                AkiTap(action: { contents = true }) {
+                AkiTap(action: { sheet = .contents }) {
                     VStack(alignment: .leading, spacing: 0) {
                         AkiText(model.info.title, .captionStrong, lines: 1)
                         if let author = model.info.authors.first { AkiText(author, .caption, tone: .muted, lines: 1) }
@@ -81,8 +80,8 @@ struct BookReaderView: View {
                 if model.listener == nil, app.readAloud.current != nil {
                     AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen() }
                 }
-                AkiIconButton(symbol: "search", label: "Search in this book") { searching = true }
-                AkiIconButton(symbol: "sliders", label: "Type and theme") { settings = true }
+                AkiIconButton(symbol: "search", label: "Search in this book") { sheet = .searching }
+                AkiIconButton(symbol: "sliders", label: "Type and theme") { sheet = .settings }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -92,7 +91,7 @@ struct BookReaderView: View {
     private var bottomBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "list", label: "Contents") { contents = true }
+                AkiIconButton(symbol: "list", label: "Contents") { sheet = .contents }
                 HStack(spacing: 12) {
                     AkiSlider(value: $model.progress, onEnd: { model.go(toProgress: model.progress) })
                     AkiText("\(Int((model.progress * 100).rounded()))%", .caption, lines: 1)

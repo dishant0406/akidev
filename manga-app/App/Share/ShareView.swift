@@ -37,33 +37,33 @@ struct ShareView: View {
                 AkiText("Turn on Local Network for Akidev to see other phones.", .body, tone: .muted, align: .center)
                 AkiButton("Open Settings", variant: .primary) { openSettings() }
             }
-        } else if model.joining {
+        } else if case .joining = model.step {
             centered {
                 AkiSpinner()
                 AkiText("Joining their Wi-Fi…", .heading, align: .center)
             }
-        } else if let sending = model.sending {
-            sendingState(sending.peer, sending.outcome)
-        } else if let incoming = model.incoming {
+        } else if case .sending(let peer, let outcome) = model.step {
+            sendingState(peer, outcome)
+        } else if case .receiving(_, let from, let fraction) = model.incoming {
             centered {
-                AkiText("Receiving from \(incoming.from)", .heading, align: .center)
-                AkiProgressBar(fraction: incoming.fraction)
+                AkiText("Receiving from \(from)", .heading, align: .center)
+                AkiProgressBar(fraction: fraction)
                 AkiButton("Cancel", variant: .ghost, size: .small) { model.stopReceiving() }
             }
-        } else if model.received, let line = model.added.last {
+        } else if let line = model.added.last {
             done(line)
-        } else if let name = model.connected {
+        } else if case .connected(let name) = model.step {
             centered {
                 AkiSpinner()
                 AkiText("Connected. Waiting for \(name) to send…", .heading, lines: 3, align: .center)
                 AkiButton("Cancel", variant: .ghost, size: .small) { model.disconnect() }
             }
-        } else if model.connecting {
+        } else if case .connecting = model.step {
             centered {
                 AkiSpinner()
                 AkiText("Finding their phone…", .heading, align: .center)
             }
-        } else if model.scanningCode {
+        } else if case .scanning = model.step {
             scanner
         } else if item != nil {
             people
@@ -96,7 +96,7 @@ struct ShareView: View {
                     }
                 }
             }
-            AkiButton("Scan their code", icon: "qr", fullWidth: true) { model.scanningCode = true }
+            AkiButton("Scan their code", icon: "qr", fullWidth: true) { model.step = .scanning }
         }
         .frame(maxHeight: .infinity)
     }
@@ -105,7 +105,7 @@ struct ShareView: View {
         VStack(spacing: 14) {
             AkiScanner { model.connect(code: $0) }
             if let note = model.codeNote { AkiText(note, .caption, tone: .destructive, align: .center) }
-            AkiButton("Cancel", variant: .ghost, size: .small) { model.scanningCode = false; model.codeNote = nil }
+            AkiButton("Cancel", variant: .ghost, size: .small) { model.step = .choosing; model.codeNote = nil }
         }
         .frame(maxWidth: .infinity)
     }
@@ -161,7 +161,7 @@ struct ShareView: View {
             } else {
                 AkiText("Connect to Wi-Fi to receive.", .body, tone: .muted, align: .center)
             }
-            AkiButton("Scan a code", icon: "qr", variant: .ghost) { model.scanningCode = true }
+            AkiButton("Scan a code", icon: "qr", variant: .ghost) { model.step = .scanning }
         }
     }
 

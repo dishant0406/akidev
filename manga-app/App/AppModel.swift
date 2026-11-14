@@ -16,8 +16,9 @@ final class AppModel {
     var library: [LibraryEntry] = []
     /// The Updates screen's rows, read in one go with the library.
     var updates: [UpdateEntry] = []
-    private var loadingLibrary = false
-    private var libraryChanged = false
+    /// One library read at a time; a change that arrives during a read is remembered, to read again when it ends.
+    private enum LibraryRead { case idle, loading, loadingAndChanged }
+    private var libraryRead = LibraryRead.idle
     var tab: AppTab = .home
     /// The tabs, with what the person mostly reads first.
     var tabs: [AppTab] { AppTab.order(for: prefs.readerKind) }
@@ -98,16 +99,13 @@ final class AppModel {
     }
 
     private func reloadLibrary() {
-        // One read at a time; a change that arrives during one asks for another when it ends.
-        if loadingLibrary { return libraryChanged = true }
-        loadingLibrary = true
+        if libraryRead != .idle { return libraryRead = .loadingAndChanged }
+        libraryRead = .loading
         Task {
             await readLibrary()
-            loadingLibrary = false
-            if libraryChanged {
-                libraryChanged = false
-                reloadLibrary()
-            }
+            let changed = libraryRead == .loadingAndChanged
+            libraryRead = .idle
+            if changed { reloadLibrary() }
         }
     }
 

@@ -57,7 +57,6 @@ final class ReaderModel {
     var autoScrolling = false
     /// The pages marked in this series.
     var bookmarks: [Bookmark] = []
-    var loading = false
     var error: (title: String, message: String)?
     var restore: Restore?
     var restoreToken = 0
@@ -135,7 +134,6 @@ final class ReaderModel {
     /// Opens a chapter, at a page and how far down it, using the pages already fetched if there are.
     func open(_ chapterID: String, page: Int, offset: Double) async {
         autoScrolling = false
-        loading = true
         error = nil
         do {
             let list = try await pageList(chapterID)
@@ -153,10 +151,8 @@ final class ReaderModel {
             restore = Restore(chapter: chapterID, page: at, offset: offset)
             restoreToken += 1
             latest = (chapterID, at, offset)
-            loading = false
             prefetchNewer()
         } catch {
-            loading = false
             self.error = describe(error)
         }
     }
