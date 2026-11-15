@@ -165,7 +165,7 @@ struct RepoScreen: View {
         error = nil
         do {
             let view = try await model.engine.repoSources(base: repo.base)
-            sources = view.sources
+            sources = view.sources.filter { !$0.nsfw }
             signed = view.info.signed
             loaded = true
         } catch { self.error = describe(error) }

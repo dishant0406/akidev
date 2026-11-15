@@ -57,7 +57,14 @@ struct SourceAddSheet: View {
         checking = true
         defer { checking = false }
         error = nil
-        do { preview = try await model.engine.previewSource(json: json) } catch { self.error = describe(error) }
+        do {
+            let checked = try await model.engine.previewSource(json: json)
+            if checked.nsfw {
+                self.error = ("Not available", "Sources marked 18+ are not available in this app.")
+            } else {
+                preview = checked
+            }
+        } catch { self.error = describe(error) }
     }
 
     private func install() async {

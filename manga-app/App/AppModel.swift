@@ -84,7 +84,7 @@ final class AppModel {
     /// collection, and a screen must never wait for it.
     func refresh() {
         // Only a real change is published, so screens do not redraw for the same answer.
-        let installed = engine.sources().sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let installed = engine.sources().filter { !$0.nsfw }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         if installed != sources { sources = installed }
         let added = (try? engine.repos()) ?? []
         if added != repos { repos = added }
@@ -111,7 +111,7 @@ final class AppModel {
 
     var visibleSources: [SourceInfo] {
         sources.filter { source in
-            (prefs.showAdult || !source.nsfw) && (prefs.languages.isEmpty || source.languages.isEmpty || !Set(source.languages).isDisjoint(with: prefs.languages))
+            (prefs.languages.isEmpty || source.languages.isEmpty || !Set(source.languages).isDisjoint(with: prefs.languages))
         }
     }
 

@@ -39,8 +39,6 @@ final class Preferences {
     /// Nil until the person has said (a fresh install asks).
     var readerKind: ReaderKind? { didSet { defaults.set(readerKind?.rawValue, forKey: "readerKind") } }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
-    /// Sources marked 18+ are hidden until this is on.
-    var showAdult: Bool { didSet { defaults.set(showAdult, forKey: "showAdult") } }
     /// Languages to keep (empty is all).
     var languages: [String] { didSet { defaults.set(languages, forKey: "languages") } }
     var defaultMode: ReadingMode { didSet { defaults.set(defaultMode.rawValue, forKey: "defaultMode") } }
@@ -85,7 +83,6 @@ final class Preferences {
         let defaults = UserDefaults.standard
         readerKind = defaults.string(forKey: "readerKind").flatMap(ReaderKind.init(rawValue:))
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
-        showAdult = defaults.bool(forKey: "showAdult")
         languages = defaults.stringArray(forKey: "languages") ?? []
         defaultMode = ReadingMode(rawValue: defaults.string(forKey: "defaultMode") ?? "") ?? .strip
         invertTaps = defaults.bool(forKey: "invertTaps")

@@ -94,10 +94,9 @@ struct SettingsView: View {
 
     @ViewBuilder private var contentSection: some View {
         @Bindable var prefs = model.prefs
-                AkiSection(title: "Content", footer: "Sources marked 18+ stay out of Discover and Sources until you turn this on.") {
+                AkiSection(title: "Content", footer: "Sources marked 18+ are not available in this app.") {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
-                            AkiSwitch(title: "Show 18+ sources", isOn: $prefs.showAdult)
                             if !languages.isEmpty {
                                 AkiSelect(title: "Language", selection: Binding(get: { prefs.languages.first ?? "" }, set: { prefs.languages = $0.isEmpty ? [] : [$0] }),
                                           options: [("", "All")] + languages.map { ($0, $0.uppercased()) })
