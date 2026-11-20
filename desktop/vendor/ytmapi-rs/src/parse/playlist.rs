@@ -1,7 +1,7 @@
 use super::{
     DESCRIPTION_SHELF_RUNS, EpisodeDate, EpisodeDuration, ParseFrom, ParsedSongAlbum,
-    ParsedUploadArtist, ParsedUploadSongAlbum, ProcessedResult, STRAPLINE_TEXT, TITLE_TEXT,
-    TWO_COLUMN, fixed_column_item_pointer, flex_column_item_pointer, parse_flex_column_item,
+    ParsedUploadArtist, ParsedUploadSongAlbum, ProcessedResult, TITLE_TEXT, TWO_COLUMN,
+    fixed_column_item_pointer, flex_column_item_pointer, parse_flex_column_item,
     parse_library_management_items_from_menu, parse_upload_song_album, parse_upload_song_artists,
 };
 use crate::common::{
@@ -575,8 +575,9 @@ fn get_playlist_details(json_crawler: JsonCrawlerOwned) -> Result<GetPlaylistDet
         ))?,
     };
     let title = header.take_value_pointer(TITLE_TEXT)?;
-    // STRAPLINE_TEXT to be deprecated in future.
-    let author = header.take_value_pointers(&[STRAPLINE_TEXT, FACEPILE_TEXT])?;
+    // Retain the legacy author path alongside facepile during Google's A/B rollout.
+    #[allow(deprecated)]
+    let author = header.take_value_pointers(&[crate::nav_consts::STRAPLINE_TEXT, FACEPILE_TEXT])?;
     let thumbnails: Vec<Thumbnail> = header.take_value_pointer(THUMBNAILS)?;
     let author_avatar_url: Option<String> = header.take_value_pointer(FACEPILE_AVATAR_URL).ok();
     let description = header

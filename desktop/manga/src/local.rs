@@ -106,9 +106,13 @@ pub fn import(archive: &Path, dir: &Path) -> anyhow::Result<Imported> {
 /// already, so squeezing them again only costs time.
 pub fn export(pages: &[PathBuf], archive: &Path) -> anyhow::Result<()> {
     let mut zip = zip::ZipWriter::new(std::fs::File::create(archive)?);
-    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for page in pages {
-        let name = page.file_name().and_then(|name| name.to_str()).context("a page has no name")?;
+        let name = page
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("a page has no name")?;
         zip.start_file(name, options)?;
         std::io::copy(&mut std::fs::File::open(page)?, &mut zip)?;
     }
@@ -140,7 +144,12 @@ mod tests {
         let first = import(&dir.join("Comic.cbz"), &dir.join("one")).unwrap();
         export(&first.pages, &dir.join("Again.cbz")).unwrap();
         let second = import(&dir.join("Again.cbz"), &dir.join("two")).unwrap();
-        let read = |pages: &[PathBuf]| -> Vec<Vec<u8>> { pages.iter().map(|page| std::fs::read(page).unwrap()).collect() };
+        let read = |pages: &[PathBuf]| -> Vec<Vec<u8>> {
+            pages
+                .iter()
+                .map(|page| std::fs::read(page).unwrap())
+                .collect()
+        };
         assert_eq!(read(&first.pages), read(&second.pages));
         assert_eq!(second.pages.len(), 3);
     }

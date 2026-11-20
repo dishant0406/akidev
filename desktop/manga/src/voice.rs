@@ -338,9 +338,9 @@ fn reuse(from: &Path, to: &Path, sha256: &str) -> bool {
 pub fn has_choice(folder: &Path, voice: &str) -> bool {
     (folder.join(WOOF_WEIGHTS).is_file() && woof::VOICES.contains(&voice))
         || folder
-        .join("voices")
-        .join(format!("{voice}.safetensors"))
-        .is_file()
+            .join("voices")
+            .join(format!("{voice}.safetensors"))
+            .is_file()
 }
 
 /// Fetches one of an installed model's other voices, checks it and puts it in the model's `voices` folder.

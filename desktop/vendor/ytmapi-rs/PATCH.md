@@ -11,6 +11,11 @@ parse breaks, edit it here instead of waiting for a release.
   0.12 has. The `reqwest` TLS features were dropped from its feature list; the workspace picks the TLS.
 - `json-crawler` is a path dependency.
 - The live integration tests and `Cargo.lock` were removed.
+- Removed the unused `RUN_TEXT` import from the library parser. Upstream deprecations are allowed
+  only where compatibility still requires them: legacy library icons, playlist author straplines
+  (alongside facepile), podcast/episode strapline names and IDs, and the optional artist album type
+  from the older A/B response. The deprecation markers remain; no crate-wide lint suppression or
+  response-shape changes were added.
 
 **When YouTube Music changes shape** a search or an album comes back as a parse error naming the
 JSON path it expected. The paths are constants in `src/nav_consts.rs`; the parsers are in `src/parse/`.

@@ -59,7 +59,7 @@ fn cardinal(n: u64) -> String {
         return ONES[n as usize].to_string();
     }
     if n < 100 {
-        let ones = if n % 10 == 0 {
+        let ones = if n.is_multiple_of(10) {
             String::new()
         } else {
             format!(" {}", ONES[(n % 10) as usize])
@@ -67,7 +67,7 @@ fn cardinal(n: u64) -> String {
         return format!("{}{ones}", TENS[(n / 10) as usize]);
     }
     if n < 1000 {
-        let rest = if n % 100 == 0 {
+        let rest = if n.is_multiple_of(100) {
             String::new()
         } else {
             format!(" and {}", cardinal(n % 100))

@@ -356,7 +356,9 @@ pub(crate) fn parse_album_from_mtrir(mut navigator: impl JsonCrawler) -> Result<
         .try_into_iter()?
         .find_path("/toggleMenuServiceItemRenderer")?;
     let library_status = library_menu.take_value_pointer("/defaultIcon/iconType")?;
-    Ok(AlbumResult {
+    // Preserve the optional album type supplied by the legacy A/B response shape.
+    #[allow(deprecated)]
+    let result = AlbumResult {
         title,
         album_type,
         year,
@@ -364,7 +366,8 @@ pub(crate) fn parse_album_from_mtrir(mut navigator: impl JsonCrawler) -> Result<
         library_status,
         thumbnails,
         explicit,
-    })
+    };
+    Ok(result)
 }
 
 pub(crate) fn parse_library_management_items_from_menu(

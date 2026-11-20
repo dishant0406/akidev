@@ -1,6 +1,6 @@
 use super::{
-    ParseFrom, RUN_TEXT, SECONDARY_SECTION_LIST_ITEM, STRAPLINE_RUNS, TAB_CONTENT,
-    THUMBNAIL_RENDERER, THUMBNAILS, TITLE_TEXT, VISUAL_HEADER,
+    ParseFrom, RUN_TEXT, SECONDARY_SECTION_LIST_ITEM, TAB_CONTENT, THUMBNAIL_RENDERER, THUMBNAILS,
+    TITLE_TEXT, VISUAL_HEADER,
 };
 use crate::Result;
 use crate::common::{
@@ -233,8 +233,10 @@ impl ParseFrom<GetPodcastQuery<'_>> for GetPodcast {
             true => LibraryStatus::InLibrary,
             false => LibraryStatus::NotInLibrary,
         };
+        // Podcast channel names and IDs still use strapline runs; facepile is not equivalent.
+        #[allow(deprecated)]
         let channels = responsive_header
-            .borrow_pointer(STRAPLINE_RUNS)?
+            .borrow_pointer(crate::nav_consts::STRAPLINE_RUNS)?
             .try_into_iter()?
             .map(parse_podcast_channel)
             .collect::<Result<_>>()?;
@@ -274,7 +276,10 @@ impl ParseFrom<GetEpisodeQuery<'_>> for GetEpisode {
             true => IsSaved::Saved,
             false => IsSaved::NotSaved,
         };
-        let mut strapline = responsive_header.navigate_pointer(concatcp!(STRAPLINE_RUNS, "/0"))?;
+        // Episode podcast names and IDs still use strapline runs; facepile is not equivalent.
+        #[allow(deprecated)]
+        let mut strapline = responsive_header
+            .navigate_pointer(concatcp!(crate::nav_consts::STRAPLINE_RUNS, "/0"))?;
         let podcast_name = strapline.take_value_pointer("/text")?;
         let podcast_id = strapline.take_value_pointer(NAVIGATION_BROWSE_ID)?;
         let description = two_column

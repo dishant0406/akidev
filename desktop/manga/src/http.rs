@@ -23,10 +23,17 @@ pub fn client_builder() -> reqwest::ClientBuilder {
 fn android_roots() -> &'static Vec<reqwest::Certificate> {
     static ROOTS: OnceLock<Vec<reqwest::Certificate>> = OnceLock::new();
     ROOTS.get_or_init(|| {
-        let folder = ["/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts"]
+        let folder = [
+            "/apex/com.android.conscrypt/cacerts",
+            "/system/etc/security/cacerts",
+        ]
+        .into_iter()
+        .find(|path| std::path::Path::new(path).is_dir());
+        let files = folder
+            .and_then(|path| std::fs::read_dir(path).ok())
             .into_iter()
-            .find(|path| std::path::Path::new(path).is_dir());
-        let files = folder.and_then(|path| std::fs::read_dir(path).ok()).into_iter().flatten().flatten();
+            .flatten()
+            .flatten();
         files
             .filter_map(|file| std::fs::read(file.path()).ok())
             .filter_map(|pem| reqwest::Certificate::from_pem(&pem).ok())

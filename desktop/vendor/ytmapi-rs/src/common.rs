@@ -115,6 +115,8 @@ enum LibraryStatusIcon {
 
 impl From<LibraryStatusIcon> for LibraryStatus {
     fn from(value: LibraryStatusIcon) -> Self {
+        // Accept legacy library icons as well as bookmarks during Google's A/B rollout.
+        #[allow(deprecated)]
         match value {
             LibraryStatusIcon::LibrarySaved => {
                 ab_warn!();

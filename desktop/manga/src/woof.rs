@@ -131,7 +131,9 @@ fn load_weights(path: &Path) -> Result<Weights> {
         if name == "__tree__" {
             // A text: UTF-32, four bytes a letter.
             let text: String = body
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .filter_map(|c| char::from_u32(u32::from_le_bytes([c[0], c[1], c[2], c[3]])))
                 .collect();
             tree = Some(serde_json::from_str(&text).context("the weights' tree is not JSON")?);
@@ -139,12 +141,16 @@ fn load_weights(path: &Path) -> Result<Weights> {
         }
         let data = match kind.as_str() {
             "<f4" => Data::Float(
-                body.chunks_exact(4)
+                body.as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                     .collect(),
             ),
             "<f2" => Data::Float(
-                body.chunks_exact(2)
+                body.as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|c| half_to_float(u16::from_le_bytes([c[0], c[1]])))
                     .collect(),
             ),
@@ -251,9 +257,9 @@ impl Weights {
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut sums = [0f32; 8];
-    let (a_chunks, b_chunks) = (a.chunks_exact(8), b.chunks_exact(8));
-    let (a_rest, b_rest) = (a_chunks.remainder(), b_chunks.remainder());
-    for (x, y) in a_chunks.zip(b_chunks) {
+    let (a_chunks, a_rest) = a.as_chunks::<8>();
+    let (b_chunks, b_rest) = b.as_chunks::<8>();
+    for (x, y) in a_chunks.iter().zip(b_chunks) {
         for i in 0..8 {
             sums[i] += x[i] * y[i];
         }
