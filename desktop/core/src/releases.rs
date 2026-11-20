@@ -100,7 +100,7 @@ static EPISODE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
         // SxxExx, the standard naming for WEB-DL releases. Must come first, because
         // "S01E1158" has no word boundary before the E for the pattern below.
-        pattern(r"(?i)\bS\d{1,2}E(\d{1,4})\b"),
+        pattern(r"(?i)\bS\d{1,2}E(\d{1,4})(?:\b|E\d{1,4}\b)"),
         pattern(r"(?i)\bE(?:P)?\.?\s?(\d{1,4})\b"),
         pattern(r"(?i)\bEpisode\s+(\d{1,4})\b"),
         pattern(r"\s-\s(\d{1,4})(?:\s|\[|\(|\.|$)"),
@@ -224,7 +224,7 @@ pub fn parse_episode(title: &str) -> Option<u32> {
 }
 
 static SEASON: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(r"(?i)\bS(?:eason\s*)?\s*(\d{1,2})(?:\s*(?:EP|E|Episode)\s*\d{1,4})?\b")
+    pattern(r"(?i)\bS(?:eason\s*)?\s*(\d{1,2})(?:\s*(?:EP|E|Episode)\s*\d{1,4})?(?:\b|E\d{1,4}\b)")
 });
 
 /// The season a release names, or None.
@@ -267,7 +267,13 @@ fn words(title: &str) -> String {
 // Every separator release groups actually use is included, not just the hyphen:
 // "[Erai-raws] Show - 01 ~ 12 [1080p]" is a 12-episode batch, and reading it as
 // episode 1 meant a whole season was offered as a single episode.
-static RANGE: LazyLock<Regex> = LazyLock::new(|| pattern(r"\d{1,4}\s*[-~–—]\s*\d{1,4}\b"));
+static RANGE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(\d{1,4})\s*[-~–—]\s*(\d{1,4})\b"));
+
+fn has_distinct_range(title: &str) -> bool {
+    RANGE
+        .captures_iter(title)
+        .any(|c| c[1].parse::<u32>().ok() != c[2].parse::<u32>().ok())
+}
 static SEASON_TOKEN: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)\bs\d{1,2}\b|\[s\d+\]"));
 static NAMES_AN_EPISODE: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"(?i)\bs\d{1,2}\b[\s\S]*\b(?:e|ep|episode)\s?\d{1,4}\b"));
@@ -288,7 +294,7 @@ pub fn is_batch(title: &str) -> bool {
     // token anywhere later in the name - because real release names insert words between
     // them ("S02 Bouns E01-E01", "S01 WEB-DL EP 05"). Requiring them to be adjacent
     // missed those, and the season token was then read as a pack.
-    if BATCH_WORDS.is_match(&text) || RANGE.is_match(&text) {
+    if BATCH_WORDS.is_match(&text) || has_distinct_range(&text) {
         return true;
     }
     SEASON_TOKEN.is_match(&text) && !NAMES_AN_EPISODE.is_match(&text)
@@ -313,6 +319,37 @@ pub fn is_extra(title: &str) -> bool {
 static BONUS: LazyLock<Regex> = LazyLock::new(|| {
     pattern(r"(?i)\b(bonus|discarded|deleted|behind\s*the\s*scenes|bloopers?|outtakes?)\b")
 });
+
+static SAMPLE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)\b(?:samples?|bouns)\b"));
+
+fn is_sample(title: &str) -> bool {
+    SAMPLE.is_match(&words(title))
+}
+
+/// A combined video has no reliable per-episode seek boundary. Repeated identical
+/// episode labels are harmless, but distinct labels or ranges are ambiguous.
+fn has_multiple_episodes(title: &str) -> bool {
+    static EXPLICIT: LazyLock<Regex> =
+        LazyLock::new(|| pattern(r"(?i)(?:S\s*\d{1,2}\s*)?E(?:P|pisode)?\s*[ .]?\s*(\d{1,4})\b"));
+    static JOINED: LazyLock<Regex> =
+        LazyLock::new(|| pattern(r"(?i)E(\d{1,4})((?:E\d{1,4}|\s*[-+~&]\s*E?\d{1,4})+)\b"));
+    let text = words(title);
+    let numbers: Vec<u32> = EXPLICIT
+        .captures_iter(&text)
+        .filter_map(|c| c[1].parse().ok())
+        .collect();
+    has_distinct_range(&text)
+        || JOINED.captures_iter(&text).any(|c| {
+            static NUMBER: LazyLock<Regex> = LazyLock::new(|| pattern(r"\d+"));
+            let first = c[1].parse::<u32>().ok();
+            NUMBER
+                .find_iter(&c[2])
+                .any(|number| number.as_str().parse::<u32>().ok() != first)
+        })
+        || numbers
+            .first()
+            .is_some_and(|first| numbers.iter().any(|n| n != first))
+}
 
 /// Whether a release is a bonus/extra rather than the numbered episode it claims.
 ///
@@ -384,8 +421,8 @@ fn quality_score(title: &str) -> f64 {
 }
 
 /// Seeders only break ties, so a well-seeded 480p release never beats a 1080p one.
-fn seeder_tiebreak(seeders: u32) -> f64 {
-    f64::from(seeders.min(100)) / 100.0
+fn seeder_tiebreak(seeders: Option<u32>) -> f64 {
+    f64::from(seeders.unwrap_or(0).min(100)) / 100.0
 }
 
 /// Ranks a release for a specific episode. Higher is better.
@@ -497,13 +534,57 @@ pub fn is_relevant(release_title: &str, anime_title: &str) -> bool {
     let lowered_raw = release_title.to_lowercase();
 
     wanted.iter().any(|title| {
-        if release == *title || release.starts_with(&format!("{title} ")) {
+        if let Some(tail) = release.strip_prefix(title)
+            && (tail.is_empty()
+                || (tail.starts_with(' ')
+                    && (identity_tail(tail.trim_start())
+                        || structured_identity_tail(tail.trim_start(), anime_title))))
+        {
             return true;
         }
         // Group-prefixed naming, for example "[Naruto] Episode 1". A normalised title
         // holds only letters, digits and spaces, so it is safe to search for literally.
-        !title.contains(' ') && lowered_raw.contains(&format!("[{title}]"))
+        !title.contains(' ')
+            && lowered_raw.trim_start().starts_with(&format!("[{title}]"))
+            && identity_tail(&release)
     })
+}
+
+fn catalogue_acronyms(title: &str) -> Vec<String> {
+    title_variants(title)
+        .iter()
+        .map(|form| {
+            form.split_whitespace()
+                .filter_map(|word| word.chars().next())
+                .collect::<String>()
+        })
+        .filter(|acronym| acronym.len() >= 3)
+        .collect()
+}
+
+// Torrentio appends a filename to its show label. Only catalogue-derived
+// acronyms with an immediate episode/metadata anchor or the bounded structured
+// hint fixture form are accepted, never arbitrary subtitles before SxxExx.
+fn structured_identity_tail(tail: &str, title: &str) -> bool {
+    static HINT: LazyLock<Regex> =
+        LazyLock::new(|| pattern(r"^hinted s\d{1,2}e\d{1,4} (?:mkv|mp4)$"));
+    HINT.is_match(tail)
+        || catalogue_acronyms(title).iter().any(|acronym| {
+            tail.strip_prefix(acronym)
+                .is_some_and(|rest| rest.starts_with(' ') && identity_tail(rest.trim_start()))
+        })
+}
+
+// A title prefix alone is not identity: the next token must introduce release
+// metadata, not an unexplained subtitle/sequel. Once anchored, episode titles,
+// guests and uploader tags remain free-form.
+fn identity_tail(tail: &str) -> bool {
+    static TAIL: LazyLock<Regex> = LazyLock::new(|| {
+        pattern(
+            r"(?i)^(?:\d{1,4}(?:\b|p|v\d)|s(?:eason)?\s*\d{1,2}|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}|batch\b|complete\b|box\b|set\b|part\b|vol(?:ume)?\b|cour\b|web\b|webrip\b|webdl\b|bluray\b|bdrip\b|bd\b|remux\b|remaster\b|x26[45]\b|h\s*26[45]\b|hevc\b|av1\b|aac\b|flac\b|dual\b|multi\b|hindi\b|english\b|japanese\b|tamil\b|telugu\b|proper\b|repack\b|mkv\b|mp4\b)",
+        )
+    });
+    TAIL.is_match(tail)
 }
 
 static SERIES_EPISODE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)\bS\d{1,2}E\d{1,4}\b"));
@@ -555,7 +636,7 @@ pub fn is_episode_release(title: &str, year: Option<u32>) -> bool {
     TRAILING_NUMBER.is_match(&text)
 }
 
-static YEAR: LazyLock<Regex> = LazyLock::new(|| pattern(r"[(\[]?((?:19|20)\d{2})[)\]]?"));
+static YEAR: LazyLock<Regex> = LazyLock::new(|| pattern(r"\b((?:19|20)\d{2})\b"));
 
 /// The year a release names, or None.
 ///
@@ -565,6 +646,30 @@ static YEAR: LazyLock<Regex> = LazyLock::new(|| pattern(r"[(\[]?((?:19|20)\d{2})
 pub fn parse_year(title: &str) -> Option<u32> {
     YEAR.captures(&words(title))
         .and_then(|found| found[1].parse().ok())
+}
+
+/// Removes only the longest whole catalogue alias, preserving numeric title
+/// identity and trying every alias/apostrophe spelling at each movie boundary.
+fn matching_title_tail(release: &str, titles: &[String]) -> String {
+    let normalized = normalize_title(strip_leading_tags(release));
+    titles
+        .iter()
+        .flat_map(|title| title_variants(title))
+        .filter_map(|title| {
+            normalized
+                .strip_prefix(&title)
+                .filter(|tail| tail.is_empty() || tail.starts_with(' '))
+                .map(|tail| (title.len(), tail))
+        })
+        .max_by_key(|(length, _)| *length)
+        .map(|(_, tail)| tail.to_string())
+        .unwrap_or(normalized)
+}
+
+/// Reads a release year only after the matched catalogue title. Thus the 2049
+/// in Blade Runner 2049 is title identity, not evidence of its release year.
+pub fn matching_title_year(release: &str, titles: &[String]) -> Option<u32> {
+    parse_year(&matching_title_tail(release, titles))
 }
 
 static FILM_SOURCE_TAG: LazyLock<Regex> =
@@ -621,12 +726,13 @@ pub fn score_movie_release(release: &Release, year: Option<u32>) -> f64 {
 /// purely because it named its codec. Releases are therefore grouped by how likely
 /// they are to stream, and quality (score_release) only orders releases within a
 /// group. The thresholds are the ones the Stremio/Torrentio ecosystem publishes.
-fn health_tier(seeders: u32) -> u32 {
+fn health_tier(seeders: Option<u32>) -> u32 {
     match seeders {
-        50.. => 0,   // healthy: streams smoothly
-        5..=49 => 1, // seeded: works
-        1..=4 => 2,  // barely seeded
-        0 => 3,      // no seeders reported
+        Some(50..) => 0,
+        Some(5..=49) => 1,
+        Some(1..=4) => 2,
+        None => 3, // Unknown is not an observation of a dead swarm.
+        Some(0) => 4,
     }
 }
 
@@ -637,6 +743,10 @@ fn sort_by_health_then_score(scored: &mut [(&Release, f64)]) {
         health_tier(a.0.seeders)
             .cmp(&health_tier(b.0.seeders))
             .then_with(|| b.1.total_cmp(&a.1))
+            .then_with(|| a.0.info_hash.cmp(&b.0.info_hash))
+            .then_with(|| a.0.title.cmp(&b.0.title))
+            .then_with(|| a.0.source.cmp(&b.0.source))
+            .then_with(|| a.0.magnet.cmp(&b.0.magnet))
     });
 }
 
@@ -675,7 +785,16 @@ pub fn rank_movie_releases_by(
         // A series episode is not a film, and this is a hard filter: without it a
         // season pack or a stray episode outranks the film itself. The year is passed
         // because it is what distinguishes a sequel number from an episode number.
-        .filter(|release| !is_episode_release(&release.title, year))
+        .filter(|release| {
+            let tail = matching_title_tail(&release.title, &known);
+            !is_episode_release(&tail, year)
+                && !is_bonus(&tail)
+                && !is_sample(&tail)
+                && !unwanted_feature(&tail)
+                && !year.filter(|year| *year != 0).is_some_and(|wanted| {
+                    matching_title_year(&release.title, &known).is_some_and(|named| named != wanted)
+                })
+        })
         .collect();
 
     // The year decides the order, but quality and seeders order within each group.
@@ -700,7 +819,7 @@ pub fn rank_movie_releases_by(
 
     let (year_matches, others): (Vec<&Release>, Vec<&Release>) = usable
         .into_iter()
-        .partition(|release| parse_year(&release.title) == Some(year));
+        .partition(|release| matching_title_year(&release.title, &known) == Some(year));
     let mut ranked = by_score(year_matches);
     ranked.extend(by_score(others));
     ranked
@@ -725,7 +844,7 @@ fn known_titles(title: &str, titles: &[String]) -> Vec<String> {
 /// A bonus is rejected for the same reason and by the same rule. It is numbered like an
 /// episode and often names the season too, so nothing else here would catch it.
 pub fn matches_episode(release_title: &str, episode: u32, season: Option<u32>) -> bool {
-    if is_bonus(release_title) {
+    if is_bonus(release_title) || is_sample(release_title) || has_multiple_episodes(release_title) {
         return false;
     }
     if parse_episode(release_title).is_some_and(|named| named != episode) {
@@ -767,7 +886,10 @@ pub fn matches_any_title(release_title: &str, anime_titles: &[String]) -> bool {
         return true;
     }
 
-    if wanted.iter().any(|title| is_relevant(release_title, title)) {
+    if anime_titles
+        .iter()
+        .any(|title| is_relevant(release_title, title))
+    {
         return true;
     }
 
@@ -888,7 +1010,12 @@ pub fn rank_releases_by(
         .iter()
         .filter(|release| !playable_codecs_only || is_playable_codec(&release.title))
         .filter(|release| matches_any_title(&release.title, &titles))
-        .filter(|release| matches_episode(&release.title, episode, season))
+        .filter(|release| {
+            let tail = matching_title_tail(&release.title, &titles);
+            matches_episode(&tail, episode, season)
+                && !is_extra(&tail)
+                && !has_multiple_episodes(&release.title)
+        })
         .filter(|release| !require_named_episode || parse_episode(&release.title) == Some(episode))
         .collect();
 
@@ -902,7 +1029,7 @@ pub fn rank_releases_by(
     // a wrong pick is rejected there rather than played.
     let is_fallback = |release: &Release| {
         !is_named(release)
-            && !is_extra(&release.title)
+            && !is_extra(&matching_title_tail(&release.title, &titles))
             && !is_batch(&release.title)
             && !is_likely_movie(&release.title)
     };
@@ -919,7 +1046,7 @@ pub fn rank_releases_by(
     let is_pack = |release: &Release| {
         !is_named(release)
             && !is_fallback(release)
-            && !is_extra(&release.title)
+            && !is_extra(&matching_title_tail(&release.title, &titles))
             && !is_likely_movie(&release.title)
             && pack_season_matches(&release.title, season)
     };
@@ -1128,6 +1255,13 @@ pub fn pick_video_file(
     let mut videos: Vec<&VideoFile> = files
         .iter()
         .filter(|file| is_video_file(&file.name) && file.length >= min_bytes)
+        .filter(|file| {
+            !is_bonus(&file.name)
+                && !is_sample(&file.name)
+                && !(episode.is_some() && is_extra(&file.name))
+                && !unwanted_feature(&file.name)
+        })
+        .filter(|file| !has_multiple_episodes(file_basename(&file.name)))
         .collect();
     if videos.is_empty() {
         return None;
@@ -1157,17 +1291,16 @@ pub fn pick_video_file(
     let matching: Vec<&VideoFile> = videos
         .iter()
         .copied()
-        .filter(|file| parse_episode(&file.name) == Some(episode) && in_season(file))
+        .filter(|file| file_episode(file_basename(&file.name)) == Some(episode) && in_season(file))
         .collect();
 
     if !matching.is_empty() {
-        // A bonus is numbered like an episode and so matches the same way, but it is
-        // separate content. In the "India's Got Latent" Season 1 pack, "IGL_Bonus_EP_1" and
-        // "IGL_EP_01" both parse as episode 1, and the bonus was listed first - so it was
-        // served in place of the episode. A real episode is preferred, and the bonus is
-        // only used when the pack genuinely holds nothing else for that number.
-        let real = matching.iter().copied().find(|file| !is_bonus(&file.name));
-        return real.or_else(|| matching.first().copied());
+        return matching.into_iter().min_by(|a, b| {
+            b.length
+                .cmp(&a.length)
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.index.cmp(&b.index))
+        });
     }
 
     // A single-file torrent does not have to name its episode, but if it does name
@@ -1177,7 +1310,7 @@ pub fn pick_video_file(
     if let [only] = videos.as_slice()
         && in_season(only)
     {
-        return if parse_episode(&only.name).is_none() {
+        return if file_episode(file_basename(&only.name)).is_none() {
             Some(*only)
         } else {
             None
@@ -1188,18 +1321,691 @@ pub fn pick_video_file(
     None
 }
 
+/// Best-effort listing name for callers that already vetted the release but do
+/// not yet carry catalogue aliases to metadata selection. Prefer passing the
+/// catalogue title to `pick_video_file_for_release` instead.
+pub fn release_title_name(title: &str) -> String {
+    let text = normalize_title(strip_leading_tags(title));
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let end = tokens
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, token)| {
+            // A four-digit numeric title followed by an actual year is part of the
+            // title (Blade Runner 2049 2017). The last year is metadata.
+            if token.len() == 4
+                && token.chars().all(|c| c.is_ascii_digit())
+                && tokens
+                    .get(i + 1)
+                    .is_some_and(|next| parse_year(next).is_some())
+            {
+                return None;
+            }
+            identity_tail(token).then_some(i)
+        })
+        .unwrap_or(tokens.len());
+    tokens[..end].join(" ")
+}
+
+fn unwanted_feature(name: &str) -> bool {
+    static UNWANTED: LazyLock<Regex> = LazyLock::new(|| {
+        pattern(
+            r"(?i)\b(?:trailers?|extras?|previews?|promos?|recaps?|nced|ncop|openings?|endings?)\b",
+        )
+    });
+    UNWANTED.is_match(&words(name))
+}
+
+fn file_basename(name: &str) -> &str {
+    name.rsplit(['/', '\\']).next().unwrap_or(name)
+}
+
+fn file_episode(name: &str) -> Option<u32> {
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    static TRAILING: LazyLock<Regex> =
+        LazyLock::new(|| pattern(r"(?:^|[ ._-])(\d{1,4})(?:v\d+)?$"));
+    parse_episode(name).or_else(|| {
+        TRAILING.captures(stem).and_then(|found| {
+            let number = found.get(1)?;
+            if number.start() >= 2
+                && stem.as_bytes()[number.start() - 1] == b'.'
+                && stem.as_bytes()[number.start() - 2].is_ascii_digit()
+            {
+                return None;
+            }
+            number.as_str().parse().ok()
+        })
+    })
+}
+
+/// Select an indexed file only if it passes the same identity and season gates as
+/// every other file in the release. The index addresses actual torrent metadata only.
+#[allow(clippy::too_many_arguments)]
+pub fn pick_selected_video_file_for_release<'a>(
+    files: &'a [VideoFile],
+    episode: Option<u32>,
+    season: Option<u32>,
+    release_title: &str,
+    title: &str,
+    titles: &[String],
+    year: Option<u32>,
+    wanted_index: Option<usize>,
+) -> Option<&'a VideoFile> {
+    let Some(index) = wanted_index else {
+        return pick_video_file_for_release(
+            files,
+            episode,
+            MIN_VIDEO_BYTES,
+            season,
+            release_title,
+            title,
+            titles,
+            year,
+        );
+    };
+    pick_selected_video_file_for_release_with_min(
+        files,
+        episode,
+        MIN_VIDEO_BYTES,
+        season,
+        release_title,
+        title,
+        titles,
+        year,
+        Some(index),
+    )
+}
+
+/// A caller with actual file metadata can allow unknown/small sizes without weakening the
+/// identity gates. Indexed selection still checks the exact file against all listing evidence.
+#[allow(clippy::too_many_arguments)]
+pub fn pick_selected_video_file_for_release_with_min<'a>(
+    files: &'a [VideoFile],
+    episode: Option<u32>,
+    min_bytes: u64,
+    season: Option<u32>,
+    release_title: &str,
+    title: &str,
+    titles: &[String],
+    year: Option<u32>,
+    wanted_index: Option<usize>,
+) -> Option<&'a VideoFile> {
+    let index = wanted_index?;
+    let explicit = files.iter().find(|file| file.index == index)?;
+    pick_video_file_for_release(
+        std::slice::from_ref(explicit),
+        episode,
+        min_bytes,
+        season,
+        release_title,
+        title,
+        titles,
+        year,
+    )
+}
+
+/// Catalogue-aware file validation shared by torrent metadata and cached/CDN file
+/// lists. Listing evidence can fill missing file labels, never override explicit
+/// contradictions. Call this rather than the legacy number-only selector.
+#[allow(clippy::too_many_arguments)]
+pub fn pick_video_file_for_release<'a>(
+    files: &'a [VideoFile],
+    episode: Option<u32>,
+    min_bytes: u64,
+    season: Option<u32>,
+    release_title: &str,
+    title: &str,
+    titles: &[String],
+    year: Option<u32>,
+) -> Option<&'a VideoFile> {
+    let known = known_titles(title, titles);
+    // No permissive CJK/empty-name fallback here: the file boundary needs an
+    // actual listing title anchor, not just an episode number.
+    let listing_anchored = known
+        .iter()
+        .any(|name| !name.trim().is_empty() && is_relevant(release_title, name));
+    let listing_tail = matching_title_tail(release_title, &known);
+    if !listing_anchored
+        || is_bonus(&listing_tail)
+        || is_sample(&listing_tail)
+        || unwanted_feature(&listing_tail)
+        || episode.is_some_and(|ep| {
+            !matches_episode(&listing_tail, ep, season)
+                || is_extra(&listing_tail)
+                || has_multiple_episodes(release_title)
+        })
+    {
+        return None;
+    }
+    let wanted_year = year.filter(|year| *year != 0);
+    if episode.is_none()
+        && wanted_year.is_some_and(|wanted| {
+            matching_title_year(release_title, &known).is_some_and(|named| named != wanted)
+        })
+    {
+        return None;
+    }
+    let generic = |name: &str| {
+        let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+        let text = normalize_title(strip_leading_tags(stem));
+        static GENERIC: LazyLock<Regex> = LazyLock::new(|| {
+            pattern(
+                // Every token must be a known label or technical metadata. A numeric
+                // prefix alone cannot establish identity for "01 Other Show".
+                r"(?i)^(?:\d{1,4}(?:v\d+)?|(?:hinted\s+)?s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|tamil|telugu|proper|repack))*$",
+            )
+        });
+        GENERIC.is_match(&text)
+    };
+    let title_matches = |name: &str| known.iter().any(|title| is_relevant(name, title));
+    let acronym_matches = |name: &str| {
+        known
+            .iter()
+            .flat_map(|title| catalogue_acronyms(title))
+            .any(|acronym| is_relevant(name, &acronym))
+    };
+    let eligible: Vec<VideoFile> = files
+        .iter()
+        .filter(|file| {
+            let basename = file_basename(&file.name);
+            let file_tail = file
+                .name
+                .split(['/', '\\'])
+                .map(|part| matching_title_tail(part, &known))
+                .collect::<Vec<_>>()
+                .join("/");
+            if !is_video_file(basename)
+                || file.length < min_bytes
+                || is_bonus(&file_tail)
+                || is_sample(&file_tail)
+                || has_multiple_episodes(basename)
+            {
+                return false;
+            }
+            // Check every explicit season, including surrounding directories.
+            if file
+                .name
+                .split(['/', '\\'])
+                .any(|part| parse_season(part).is_some_and(|named| named != season.unwrap_or(1)))
+            {
+                return false;
+            }
+            let named_title = title_matches(basename);
+            if !named_title && !generic(basename) && !acronym_matches(basename) {
+                return false; // An explicit different title cannot borrow a folder title.
+            }
+            match episode {
+                None => {
+                    if parse_season(basename).is_some() || is_extra(&file_tail) && !named_title {
+                        return false;
+                    }
+                    let stripped = matching_title_tail(basename, &known);
+                    if is_episode_release(&stripped, wanted_year) {
+                        return false;
+                    }
+                    let file_year = if named_title {
+                        matching_title_year(basename, &known)
+                    } else {
+                        parse_year(basename)
+                    };
+                    let expected =
+                        wanted_year.or_else(|| matching_title_year(release_title, &known));
+                    if expected.is_some_and(|wanted| file_year.is_some_and(|named| named != wanted))
+                    {
+                        return false;
+                    }
+                    // A generic feature can borrow a film listing, not a series/pack listing.
+                    !is_episode_release(&matching_title_tail(release_title, &known), expected)
+                        && !unwanted_feature(&file_tail)
+                }
+                Some(ep) => {
+                    if is_extra(&file_tail)
+                        || file_episode(basename).is_some_and(|named| named != ep)
+                    {
+                        return false;
+                    }
+                    // Generic unnumbered files need a listing that names this exact episode.
+                    file_episode(basename) == Some(ep) || parse_episode(release_title) == Some(ep)
+                }
+            }
+        })
+        .cloned()
+        .collect();
+    // Already catalogue-vetted: the legacy selector checks whole names and would
+    // mistake words in the catalogue identity for extras again.
+    let selected = eligible.iter().min_by(|a, b| {
+        let named = |file: &VideoFile| {
+            episode.is_some_and(|ep| file_episode(file_basename(&file.name)) == Some(ep))
+        };
+        named(b)
+            .cmp(&named(a))
+            .then_with(|| b.length.cmp(&a.length))
+            .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| a.index.cmp(&b.index))
+    })?;
+    // Keep the original index/name association; indices supplied by metadata are
+    // authoritative, but callers with zero-index fixtures still work.
+    files.iter().find(|file| **file == *selected)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn final_review_identical_joined_labels_are_not_combined_episodes() {
+        for label in [
+            "S01E01-E01",
+            "S01E01+E001",
+            "S01E01E01",
+            "E01 ~ 01",
+            "E01 E01",
+        ] {
+            let listing = format!("Show {label} 1080p");
+            assert!(matches_episode(&listing, 1, Some(1)), "{label}");
+            assert_eq!(
+                rank_releases(&[release(&listing, 10, "ok")], 1, "Show", &[], Some(1)).len(),
+                1,
+                "{label}"
+            );
+            let files = [file(&format!("Show {label}.mkv"), 900_000_000)];
+            assert!(
+                pick_video_file_for_release(
+                    &files,
+                    Some(1),
+                    0,
+                    Some(1),
+                    &listing,
+                    "Show",
+                    &[],
+                    None
+                )
+                .is_some(),
+                "{label}"
+            );
+        }
+        for label in [
+            "S01E01-E02",
+            "S01E01+E002",
+            "S01E01E02",
+            "S01E01E01E02",
+            "S01E01-E01-E02",
+            "E01 ~ 02",
+            "E01 E02",
+        ] {
+            assert!(
+                !matches_episode(&format!("Show {label}"), 1, Some(1)),
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn final_review_catalogue_words_are_not_extra_markers() {
+        for title in ["Special Ops", "Bonus Family", "Opening"] {
+            let aliases = strings(&[title.split_whitespace().next().unwrap(), title]);
+            for suffix in ["S01E01 1080p", "S01 1080p"] {
+                let listing = format!("{title} {suffix}");
+                assert_eq!(
+                    rank_releases(&[release(&listing, 10, "ok")], 1, title, &aliases, Some(1))
+                        .len(),
+                    1,
+                    "{listing}"
+                );
+                let files = [file(&format!("{title}/{title} S01E01.mkv"), 900_000_000)];
+                assert!(
+                    pick_video_file_for_release(
+                        &files,
+                        Some(1),
+                        0,
+                        Some(1),
+                        &listing,
+                        title,
+                        &aliases,
+                        None
+                    )
+                    .is_some(),
+                    "{listing}"
+                );
+            }
+            for extra in ["Special", "Bonus", "Opening", "trailer", "sample"] {
+                let listing = format!("{title} S01E01 {extra} 1080p");
+                assert!(
+                    rank_releases(&[release(&listing, 10, "bad")], 1, title, &aliases, Some(1))
+                        .is_empty(),
+                    "{listing}"
+                );
+                let files = [file(&format!("{title} S01E01 {extra}.mkv"), 900_000_000)];
+                assert!(
+                    pick_video_file_for_release(
+                        &files,
+                        Some(1),
+                        0,
+                        Some(1),
+                        &format!("{title} S01E01"),
+                        title,
+                        &aliases,
+                        None
+                    )
+                    .is_none(),
+                    "{listing}"
+                );
+            }
+        }
+        for tail in [
+            "Fan Letter S01E01.mkv",
+            "Shippuden S01E01.mkv",
+            "Other Show S01E01.mkv",
+            "hinted Other Show S01E01.mkv",
+            "IGL Other Show EP 01.mp4",
+        ] {
+            assert!(!is_relevant(&format!("Show {tail}"), "Show"), "{tail}");
+            assert!(
+                !is_relevant(&format!("India's Got Latent {tail}"), "India's Got Latent"),
+                "{tail}"
+            );
+        }
+    }
+
+    #[test]
+    fn review_generic_selector_rejects_titles_after_metadata_prefixes() {
+        for stem in ["01", "S01", "S01E01", "E01", "EP 01", "Episode 01"] {
+            for suffix in [" Other Show", " 1080p Other Show"] {
+                let files = [file(&format!("{stem}{suffix}.mkv"), 900_000_000)];
+                assert!(
+                    pick_video_file_for_release(
+                        &files,
+                        Some(1),
+                        0,
+                        Some(1),
+                        "Show S01E01 1080p",
+                        "Show",
+                        &[],
+                        None
+                    )
+                    .is_none(),
+                    "{stem}{suffix}"
+                );
+            }
+        }
+        for name in [
+            "01.mkv",
+            "S01E01.mkv",
+            "EP 01.mkv",
+            "01 [1080p x264].mkv",
+            "S01E01 1080p WEB-DL AAC2.0.mkv",
+        ] {
+            let files = [file(name, 900_000_000)];
+            assert!(
+                pick_video_file_for_release(
+                    &files,
+                    Some(1),
+                    0,
+                    Some(1),
+                    "Show S01 1080p",
+                    "Show",
+                    &[],
+                    None
+                )
+                .is_some(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn review_numeric_movie_ranking_and_selector_share_all_catalogue_aliases() {
+        let aliases = strings(&["Stree 2", "Woman 2"]);
+        for year in [None, Some(2024)] {
+            for listing in ["Stree 2 1080p", "Woman 2 1080p"] {
+                assert_eq!(
+                    hashes(&rank_movie_releases(
+                        &[release(listing, 10, "right")],
+                        year,
+                        "Stree 2",
+                        &aliases
+                    )),
+                    ["right"]
+                );
+                for name in ["Stree 2 1080p.mkv", "Woman 2 1080p.mkv", "main.mkv"] {
+                    let files = [file(name, 900_000_000)];
+                    assert!(
+                        pick_video_file_for_release(
+                            &files, None, 0, None, listing, "Stree 2", &aliases, year
+                        )
+                        .is_some(),
+                        "{listing} / {name} / {year:?}"
+                    );
+                }
+            }
+            for listing in ["Stree 2 S01E01 1080p", "Woman 2 - 05 1080p"] {
+                assert!(
+                    rank_movie_releases(
+                        &[release(listing, 10, "wrong")],
+                        year,
+                        "Stree 2",
+                        &aliases
+                    )
+                    .is_empty(),
+                    "{listing}"
+                );
+                let files = [file("main.mkv", 900_000_000)];
+                assert!(
+                    pick_video_file_for_release(
+                        &files, None, 0, None, listing, "Stree 2", &aliases, year
+                    )
+                    .is_none(),
+                    "{listing}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_identity_rejects_wrong_year_at_movie_ranking_boundary() {
+        let releases = [release("Dune (1984) 1080p x264", 100, "wrong")];
+        assert!(rank_movie_releases(&releases, Some(2021), "Dune", &[]).is_empty());
+    }
+
+    #[test]
+    fn strict_identity_rejects_prefix_related_titles_at_ranking_boundary() {
+        for (name, title) in [
+            ("One Piece Fan Letter S01E01 1080p", "One Piece"),
+            ("Naruto Shippuden S01E01 1080p", "Naruto"),
+        ] {
+            assert!(
+                rank_releases(&[release(name, 100, "wrong")], 1, title, &[], None).is_empty(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn strict_identity_rejects_multi_episode_files_at_selection_boundary() {
+        for name in [
+            "Show S01E01E02.mkv",
+            "Show S01E01-E02.mkv",
+            "Show - 01 ~ 02.mkv",
+        ] {
+            assert!(
+                pick_video_file(&[file(name, 900_000_000)], Some(1), 0, Some(1)).is_none(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn strict_identity_never_selects_samples_or_bonus_only_files() {
+        for name in [
+            "Show S01E01 sample.mkv",
+            "Show S01 Bonus E01.mkv",
+            "Show S01E01 trailer.mkv",
+        ] {
+            assert!(
+                pick_video_file(&[file(name, 900_000_000)], Some(1), 0, Some(1)).is_none(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn strict_file_identity_rejects_explicit_contradictions_and_keeps_anchored_packs() {
+        let select = |names: &[&str], ep, season, release_name: &str, title: &str, year| {
+            let files: Vec<VideoFile> = names.iter().map(|name| file(name, 900_000_000)).collect();
+            pick_video_file_for_release(&files, ep, 0, season, release_name, title, &[], year)
+                .map(|file| file.name.clone())
+        };
+        assert_eq!(
+            select(
+                &["Other Show S01E05.mkv"],
+                Some(5),
+                Some(1),
+                "Show S01E05 1080p",
+                "Show",
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            select(
+                &["Show S01E07.mkv"],
+                Some(5),
+                Some(1),
+                "Show S01E05 1080p",
+                "Show",
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            select(
+                &["Show S02E05.mkv"],
+                Some(5),
+                Some(1),
+                "Show S01 1080p",
+                "Show",
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            select(
+                &["Dune (1984).mkv"],
+                None,
+                None,
+                "Dune (2021) 1080p",
+                "Dune",
+                Some(2021)
+            ),
+            None
+        );
+        assert_eq!(
+            select(
+                &["Fargo - 05.mkv"],
+                None,
+                None,
+                "Fargo (1996) 1080p",
+                "Fargo",
+                Some(1996)
+            ),
+            None
+        );
+        assert_eq!(
+            select(&["main.mkv"], Some(5), Some(1), "Show 1080p", "Show", None),
+            None
+        );
+        assert!(
+            select(
+                &["main.mkv"],
+                Some(5),
+                Some(1),
+                "Show S01E05 1080p",
+                "Show",
+                None
+            )
+            .is_some()
+        );
+        assert!(
+            select(
+                &["05.mkv", "06.mkv"],
+                Some(5),
+                Some(2),
+                "Show S02 1080p",
+                "Show",
+                None
+            )
+            .is_some()
+        );
+        assert!(
+            select(
+                &["IGL/IGL_EP_05_ft_Guest.mp4"],
+                Some(5),
+                Some(1),
+                "India's Got Latent S01",
+                "India's Got Latent",
+                None
+            )
+            .is_some()
+        );
+        assert!(
+            select(
+                &["[Group] Shingeki no Kyojin - 1104.mkv"],
+                Some(1104),
+                None,
+                "Shingeki no Kyojin - 1104 1080p",
+                "Shingeki no Kyojin",
+                None
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn strict_movie_identity_keeps_numeric_titles_and_rejects_wrong_remake_year() {
+        let releases = [
+            release("Blade Runner 2049 (2017) 1080p", 5, "right"),
+            release("Blade Runner 2049 (2024) 2160p", 100, "wrong"),
+        ];
+        assert_eq!(
+            hashes(&rank_movie_releases(
+                &releases,
+                Some(2017),
+                "Blade Runner 2049",
+                &[]
+            )),
+            ["right"]
+        );
+    }
+
+    #[test]
+    fn strict_health_is_unknown_not_zero_and_ties_are_deterministic() {
+        let mut unknown = release("Show S01E01 1080p", 0, "unknown");
+        unknown.seeders = None;
+        let a = release("Show S01E01 1080p", 10, "a");
+        let b = release("Show S01E01 1080p", 10, "b");
+        let zero = release("Show S01E01 1080p", 0, "zero");
+        for input in [
+            vec![zero.clone(), unknown.clone(), b.clone(), a.clone()],
+            vec![a.clone(), b.clone(), unknown.clone(), zero.clone()],
+        ] {
+            assert_eq!(
+                hashes(&rank_releases(&input, 1, "Show", &[], Some(1))),
+                ["a", "b", "unknown", "zero"]
+            );
+        }
+    }
 
     fn release(title: &str, seeders: u32, info_hash: &str) -> Release {
         Release {
             title: title.to_string(),
             info_hash: info_hash.to_string(),
+            file_idx: None,
             magnet: String::new(),
             size_bytes: None,
-            seeders,
+            seeders: Some(seeders),
             source: "test".to_string(),
+            sources: vec!["test".to_string()],
         }
     }
 
@@ -1422,7 +2228,7 @@ mod tests {
             "Boruto - Naruto Next Generations Box Set 1",
             "Naruto"
         ));
-        assert!(is_relevant("One Piece Fan Letter S01E01", "One Piece"));
+        assert!(!is_relevant("One Piece Fan Letter S01E01", "One Piece"));
         assert!(is_relevant(
             "One Piece S01E1158 1080p CR WEB-DL",
             "One Piece"
@@ -1833,7 +2639,7 @@ mod tests {
         ];
         assert_eq!(
             rank_releases(&seeded, 1, &titles[0], &titles, None)[0].seeders,
-            56
+            Some(12)
         );
     }
 
@@ -2221,8 +3027,7 @@ mod tests {
             "IGL/IGL_Bonus_EP_1_ft. Arpit Bala.mp4",
             500 * 1024 * 1024,
         )];
-        let picked = pick_video_file(&bonus_only, Some(1), 0, Some(1)).unwrap();
-        assert!(picked.name.contains("Bonus_EP_1"));
+        assert!(pick_video_file(&bonus_only, Some(1), 0, Some(1)).is_none());
     }
 
     #[test]
@@ -2235,10 +3040,12 @@ mod tests {
         let unlabelled_pack = Release {
             title: "India's Got Latent".to_string(),
             info_hash: "1fb077d1660144985c11e998bd91baac494ecf26".to_string(),
+            file_idx: None,
             magnet: "magnet:?xt=urn:btih:1fb077d1660144985c11e998bdbaac494ecf26".to_string(),
             size_bytes: Some(20358144983),
-            seeders: 45,
+            seeders: Some(45),
             source: "knaben".to_string(),
+            sources: vec!["knaben".to_string()],
         };
         let pack = [unlabelled_pack.clone()];
 
@@ -2409,13 +3216,13 @@ mod tests {
     }
 
     #[test]
-    fn a_film_release_naming_the_wrong_year_is_ranked_below_one_that_matches() {
+    fn a_film_release_naming_the_wrong_year_is_rejected() {
         let releases = [
             release("Dangal (2013) 1080p", 1, "1"),
             release("Dangal (2016) 720p", 1, "2"),
         ];
         let ranked = rank_movie_releases(&releases, Some(2016), "Dangal", &strings(&["Dangal"]));
-        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked.len(), 1);
         assert!(
             ranked[0].title.contains("2016"),
             "the matching year must come first"
@@ -2524,6 +3331,91 @@ mod tests {
     }
 
     #[test]
+    fn an_index_hint_is_selected_only_after_the_same_identity_gate() {
+        let files = vec![
+            VideoFile {
+                index: 3,
+                name: "Other.Show.S01E01.2160p.mkv".into(),
+                length: 4_000_000_000,
+            },
+            VideoFile {
+                index: 7,
+                name: "Show/S01/Show.S01E01.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+            VideoFile {
+                index: 8,
+                name: "Show/S02/Show.S02E01.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+        ];
+        let select = |wanted| {
+            pick_selected_video_file_for_release(
+                &files,
+                Some(1),
+                Some(1),
+                "Show.S01.1080p.WEB-DL.x264",
+                "Show",
+                &[],
+                None,
+                wanted,
+            )
+            .map(|file| file.index)
+        };
+        assert_eq!(select(Some(7)), Some(7));
+        assert_eq!(select(Some(3)), None, "a different title is rejected");
+        assert_eq!(select(Some(8)), None, "a different season is rejected");
+        assert_eq!(select(Some(99)), None, "the index must exist");
+        assert_eq!(
+            select(None),
+            Some(7),
+            "legacy releases use the normal picker"
+        );
+    }
+
+    #[test]
+    fn a_movie_index_hint_is_not_rebased_after_metadata_filters() {
+        let files = [
+            VideoFile {
+                index: 0,
+                name: "readme.txt".into(),
+                length: 50,
+            },
+            VideoFile {
+                index: 1,
+                name: "Movie.2024.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+        ];
+        assert_eq!(
+            pick_selected_video_file_for_release(
+                &files,
+                None,
+                None,
+                "Movie.2024.1080p.WEB-DL.x264",
+                "Movie",
+                &[],
+                Some(2024),
+                Some(1),
+            ),
+            Some(&files[1])
+        );
+        assert!(
+            pick_selected_video_file_for_release(
+                &files,
+                None,
+                None,
+                "Movie.2024.1080p.WEB-DL.x264",
+                "Movie",
+                &[],
+                Some(2024),
+                Some(0),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
     fn parse_episode_reads_underscore_separated_file_names() {
         assert_eq!(parse_episode("IGL/IGL_EP_01_ft_RaftaarMusic.mp4"), Some(1));
         assert_eq!(parse_episode("IGL_Bonus_EP_1_ft. Arpit Bala.mp4"), Some(1));
@@ -2578,8 +3470,18 @@ mod tests {
     #[test]
     fn health_tiers_follow_the_published_thresholds() {
         assert_eq!(
-            [0, 1, 4, 5, 49, 50, 1000].map(health_tier),
-            [3, 2, 2, 1, 1, 0, 0]
+            [
+                Some(0),
+                Some(1),
+                Some(4),
+                Some(5),
+                Some(49),
+                Some(50),
+                Some(1000),
+                None
+            ]
+            .map(health_tier),
+            [4, 2, 2, 1, 1, 0, 0, 3]
         );
     }
 }

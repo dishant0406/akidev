@@ -46,7 +46,7 @@ pub struct Hit {
     pub title: String,
     pub hash: String,
     pub size: Option<u64>,
-    pub seeders: u32,
+    pub seeders: Option<u32>,
     pub source: String,
 }
 
@@ -70,7 +70,8 @@ struct Row {
     #[serde(rename = "downloadUrl")]
     download_url: Option<String>,
     size: Option<u64>,
-    seeders: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_seeders")]
+    seeders: Option<u32>,
     indexer: Option<String>,
     protocol: Option<String>,
 }
@@ -293,7 +294,7 @@ impl Fallback {
                 title: row.title,
                 hash,
                 size: row.size,
-                seeders: row.seeders.unwrap_or(0).clamp(0, u32::MAX as i64) as u32,
+                seeders: row.seeders,
                 source: row.indexer.unwrap_or_default(),
             })
             .collect();
@@ -336,6 +337,15 @@ impl Fallback {
             query.unwrap_or_default()
         ))
     }
+}
+
+/// Missing or malformed provider counts are unknown, never a fabricated zero.
+fn deserialize_seeders<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_u64().and_then(|count| u32::try_from(count).ok()))
 }
 
 /// The hash a result carries, in its own field or in its magnet link.
@@ -627,6 +637,39 @@ mod tests {
         );
         let down = fallback("http://127.0.0.1:1").status().await;
         assert_eq!(down, json!({ "configured": true, "reachable": false }));
+    }
+
+    #[tokio::test]
+    async fn missing_and_invalid_seeders_stay_null_while_zero_is_known() {
+        let fallback = fallback("http://127.0.0.1:1");
+        for seeders in [
+            None,
+            Some(json!(null)),
+            Some(json!(-1)),
+            Some(json!(1.5)),
+            Some(json!("12")),
+            Some(json!(true)),
+            Some(json!(u64::MAX)),
+            Some(json!(0)),
+            Some(json!(u32::MAX)),
+        ] {
+            let mut body = json!({ "title": "Count", "infoHash": A });
+            if let Some(value) = seeders.clone() {
+                body["seeders"] = value;
+            }
+            let row: Row = serde_json::from_value(body).unwrap();
+            let expected = seeders
+                .as_ref()
+                .and_then(|value| value.as_u64())
+                .and_then(|count| u32::try_from(count).ok());
+            let (hits, complete) = fallback.hits(vec![row], Instant::now()).await;
+            assert!(complete);
+            assert_eq!(hits[0].seeders, expected);
+            assert_eq!(
+                serde_json::to_value(&hits[0]).unwrap()["seeders"],
+                json!(expected)
+            );
+        }
     }
 
     #[test]

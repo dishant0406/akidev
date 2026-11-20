@@ -64,12 +64,15 @@ export interface Detail {
 
 /** One release of an episode or film, from `GET /v1/releases`. Any field the name does not say is null. */
 export interface Release {
-  /** The info hash; sent to /v1/play as `release` to play exactly this one. */
+  /** A hash, or <hash>:<fileIdx> for a selected addon file; sent to /v1/play as `release`. */
   id: string;
   title: string;
   size_bytes: number | null;
-  seeders: number;
+/** Null means the provider did not report a valid count; zero is a known empty swarm. */
+  seeders: number | null;
   source: string;
+  /** All contributing indexers; absent on older servers. */
+  sources?: string[];
   /** 480, 720, 1080 or 2160. */
   resolution: number | null;
   codec: "h264" | "hevc" | "av1" | null;
@@ -104,7 +107,7 @@ export type PlayResult =
       /** "hls" when the container needed converting, "file" when the browser plays it directly. */
       stream_type: "file" | "hls";
       release: string | null;
-      /** The release's info hash, when the source has one: what a watch party names, and what `release` in the request plays. */
+      /** Bare hash or file-scoped selection id: what a watch party names, and what `release` replays. */
       release_id?: string | null;
       source: string | null;
       /** Seconds, when known. */

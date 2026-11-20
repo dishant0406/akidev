@@ -133,9 +133,45 @@ pub struct Release {
     pub title: String,
     /// 40 lowercase hex characters. See `magnet::to_hex_info_hash`.
     pub info_hash: String,
+    /// Optional zero-based file index within the torrent, preserving an addon's selected file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_idx: Option<usize>,
     pub magnet: String,
     pub size_bytes: Option<u64>,
-    pub seeders: u32,
+    /// Upstream-reported count; missing is not an observed dead swarm.
+    #[serde(default)]
+    pub seeders: Option<u32>,
     /// Which indexer, or which tracker an aggregating indexer got it from.
     pub source: String,
+    /// Ordered indexer observations; old cached rows may only carry `source`.
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+impl Release {
+    /// A hash identifies a swarm; an optional index keeps an addon's pack file distinct.
+    pub fn selection_id(&self) -> String {
+        match self.file_idx {
+            Some(file_idx) => format!("{}:{file_idx}", self.info_hash),
+            None => self.info_hash.clone(),
+        }
+    }
+
+    /// Parses a legacy hash or a file-scoped `<hash>:<fileIdx>` selection.
+    pub fn parse_selection_id(id: &str) -> Option<(String, Option<usize>)> {
+        let (hash, file_idx) = match id.split_once(':') {
+            Some((hash, index)) if !index.contains(':') => {
+                if index.is_empty() || !index.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return None;
+                }
+                (hash, Some(index.parse().ok()?))
+            }
+            Some(_) => return None,
+            None => (id, None),
+        };
+        if hash.len() != 40 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        Some((hash.to_ascii_lowercase(), file_idx))
+    }
 }

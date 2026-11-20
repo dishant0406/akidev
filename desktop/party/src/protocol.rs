@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Item {
-    /// A film or an episode: the media id, like `series-tt0903747-s1e5`, and the release the
-    /// host is playing (its info hash), so every device plays the same source. Until the host
+    /// A film or an episode: the media id, like `series-tt0903747-s1e5`, and the bare-hash or
+    /// file-scoped release id the host is playing, so every device plays the same file. Until the host
     /// has opened one, `candidates` lists the releases it is trying, best first, so a guest can
     /// start on the first while the host is still finding its source.
     Video {

@@ -1,6 +1,6 @@
 "use client";
 
-import { groupReleases, playingRelease, releaseFacts } from "@/lib/releases";
+import { groupReleases, playingRelease, releaseFacts, releaseSources } from "@/lib/releases";
 import { cn } from "@/lib/utils";
 import { useReleases } from "@/query/use-releases";
 import type { Release } from "@/types/media";
@@ -104,6 +104,7 @@ function Row({ release, playing, onPick }: { release: Release; playing: boolean;
             </span>
           )}
           <span>{releaseFacts(release).join(" · ")}</span>
+          {releaseSources(release).length > 0 && <span>{releaseSources(release).join(" · ")}</span>}
         </span>
       </span>
     </button>

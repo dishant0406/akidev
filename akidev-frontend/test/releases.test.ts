@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { groupReleases, playingRelease, releaseFacts, sizeLabel } from "../src/lib/releases.ts";
+import { groupReleases, playingRelease, releaseFacts, releaseSources, seedersLabel, sizeLabel } from "../src/lib/releases.ts";
 import type { Release } from "../src/types/media.ts";
 
 function release(patch: Partial<Release>): Release {
@@ -29,7 +29,24 @@ test("a release is worded in reading order, without what the name did not say", 
     releaseFacts(release({ resolution: 2160, codec: "hevc", audio: "lossless", pack: true, seeders: 1 })),
     ["4K", "HEVC", "Lossless", "1.4 GB", "1 seeder", "Season pack"],
   );
-  assert.deepEqual(releaseFacts(release({ resolution: null, codec: null, size_bytes: null, seeders: 0 })), ["No seeders"]);
+  assert.deepEqual(releaseFacts(release({ resolution: null, codec: null, size_bytes: null, seeders: 0 })), ["0 seeders"]);
+});
+
+test("missing or invalid seeders are unknown, never zero", () => {
+  for (const count of [null, -1, 1.5, NaN, Infinity, 0x1_0000_0000]) {
+    assert.equal(seedersLabel(count), "Seeders unknown");
+  }
+  assert.equal(seedersLabel(0), "0 seeders");
+  assert.equal(seedersLabel(1), "1 seeder");
+  assert.equal(seedersLabel(0xffff_ffff), "4294967295 seeders");
+  assert.ok(releaseFacts(release({ seeders: null })).includes("Seeders unknown"));
+});
+
+test("provenance works on old servers and retains every contributing source", () => {
+  assert.deepEqual(releaseSources(release({})), ["knaben"]);
+  assert.deepEqual(releaseSources(release({ sources: [] })), ["knaben"]);
+  assert.deepEqual(releaseSources(release({ sources: [" nyaa ", "knaben", "nyaa", ""] })), ["nyaa", "knaben"]);
+  assert.deepEqual(releaseSources(release({ source: "", sources: [] })), []);
 });
 
 test("sizes use decimal units and round small ones to megabytes", () => {

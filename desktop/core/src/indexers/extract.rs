@@ -2,8 +2,8 @@
 
 use crate::calendar::now_ms;
 use crate::definition::{Format, IndexerDef};
-use crate::expression::{Env, Row, bytes, count, evaluate, matches, pattern, select};
-use crate::magnet::{build_magnet, info_hash_from_magnet, to_hex_info_hash};
+use crate::expression::{Env, Row, bytes, evaluate, matches, pattern, select};
+use crate::magnet::{info_hash_from_magnet, to_hex_info_hash};
 use crate::model::{Kind, Release};
 use anyhow::bail;
 use regex::Regex;
@@ -29,6 +29,7 @@ pub fn releases(
             if !(document.is_object() || document.is_array()) {
                 bail!("not a JSON response");
             }
+            validate_json(def, &document)?;
             document
         }
         // A blocked or replaced host answers 200 with an HTML page. A real feed is RSS, so
@@ -89,9 +90,103 @@ pub fn releases(
     Ok(found)
 }
 
+/// Validate the envelope before permissive extraction can cache failures as empty answers.
+fn validate_json(def: &IndexerDef, document: &Value) -> anyhow::Result<()> {
+    if let Some(object) = document.as_object() {
+        for key in ["error", "errors"] {
+            if let Some(value) = object.get(key)
+                && !value.is_null()
+                && value != &Value::Bool(false)
+                && value != ""
+                && value != &serde_json::json!([])
+                && value != &serde_json::json!({})
+            {
+                bail!("provider error response");
+            }
+        }
+        if object.get("success") == Some(&Value::Bool(false)) {
+            bail!("provider error response");
+        }
+        if let Some(status) = object.get("status") {
+            let valid = match status {
+                Value::String(status) => {
+                    matches!(status.to_ascii_lowercase().as_str(), "ok" | "success")
+                }
+                Value::Number(status) => status
+                    .as_u64()
+                    .is_some_and(|status| (200..300).contains(&status)),
+                _ => false,
+            };
+            if !valid {
+                bail!("provider error response");
+            }
+        }
+    }
+    // YTS documents a successful zero-count response without a movies array.
+    if def.id == "yts"
+        && def.response.rows == "data.movies"
+        && document.get("status").and_then(Value::as_str) == Some("ok")
+        && document
+            .pointer("/data/movie_count")
+            .and_then(Value::as_u64)
+            == Some(0)
+        && document.pointer("/data/movies").is_none()
+    {
+        return Ok(());
+    }
+    let rows = collection(document, &def.response.rows)?;
+    if let Some(children) = &def.response.children {
+        for row in rows {
+            // Incomplete outer rows are skipped, just like rows without a hash/title.
+            // A present child collection must still have the expected shape.
+            if row.get(children).is_some() {
+                collection(row, children)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collection<'a>(document: &'a Value, path: &str) -> anyhow::Result<Vec<&'a Value>> {
+    let mut nodes = vec![document];
+    if !path.is_empty() {
+        for key in path.split('.') {
+            let mut next = Vec::new();
+            for node in nodes {
+                match (key, node) {
+                    ("*", Value::Object(object)) => next.extend(object.values()),
+                    ("*", Value::Array(array)) => next.extend(array),
+                    (key, Value::Object(object)) => next.push(
+                        object
+                            .get(key)
+                            .ok_or_else(|| anyhow::anyhow!("missing response collection"))?,
+                    ),
+                    _ => bail!("invalid response collection"),
+                }
+            }
+            nodes = next;
+        }
+    }
+    let mut rows = Vec::new();
+    for node in nodes {
+        match node {
+            Value::Array(array) => rows.extend(array),
+            Value::Object(_) if path.split('.').any(|key| key == "*") => rows.push(node),
+            _ => bail!("invalid response collection"),
+        }
+    }
+    if rows.iter().any(|row| !row.is_object()) {
+        bail!("invalid response row");
+    }
+    Ok(rows)
+}
+
 fn release(def: &IndexerDef, row: Row, trackers: &[String]) -> Option<Release> {
     let fields = &def.response.fields;
     let title = evaluate(&fields.title, row)?;
+    if title.trim().is_empty() || title.len() > 4096 || title.chars().any(char::is_control) {
+        return None;
+    }
     let info_hash = to_hex_info_hash(&evaluate(&fields.hash, row)?)?;
     let magnet = fields
         .magnet
@@ -103,7 +198,8 @@ fn release(def: &IndexerDef, row: Row, trackers: &[String]) -> Option<Release> {
             magnet.starts_with("magnet:?")
                 && info_hash_from_magnet(magnet).as_deref() == Some(info_hash.as_str())
         })
-        .unwrap_or_else(|| build_magnet(&info_hash, Some(&title), trackers));
+        .unwrap_or_default();
+    let magnet = super::safe_magnet(&info_hash, &title, &[&magnet], trackers);
     let size_bytes = fields
         .size
         .as_ref()
@@ -115,15 +211,25 @@ fn release(def: &IndexerDef, row: Row, trackers: &[String]) -> Option<Release> {
         .seeders
         .as_ref()
         .and_then(|expression| evaluate(expression, row))
-        .and_then(|text| count(&text))
-        .map_or(0, |count| count.min(u32::MAX as u64) as u32);
+        .and_then(|text| text.trim().parse::<u32>().ok());
     Some(Release {
         title,
         info_hash,
+        file_idx: match fields
+            .file_idx
+            .as_ref()
+            .and_then(|expression| evaluate(expression, row))
+        {
+            // A present but malformed hint is not an unscoped row: playing a different file
+            // would violate the addon's explicit selection.
+            Some(text) => Some(text.parse::<usize>().ok()?),
+            None => None,
+        },
         magnet,
         size_bytes,
         seeders,
         source: def.id.clone(),
+        sources: vec![def.id.clone()],
     })
 }
 
@@ -134,15 +240,17 @@ fn add(found: &mut Vec<Release>, release: Release, avoid: Option<&str>) {
         found.push(release);
         return;
     };
-    match found
-        .iter()
-        .position(|known| known.info_hash == release.info_hash)
-    {
+    match found.iter().position(|known| {
+        known.info_hash == release.info_hash && known.file_idx == release.file_idx
+    }) {
         None => found.push(release),
-        Some(at) if avoid.is_match(&found[at].title) && !avoid.is_match(&release.title) => {
-            found[at] = release
+        Some(at) => {
+            let prefer = avoid.is_match(&found[at].title) && !avoid.is_match(&release.title);
+            super::combine(&mut found[at], &release);
+            if prefer {
+                found[at].title = release.title;
+            }
         }
-        Some(_) => {}
     }
 }
 
@@ -241,6 +349,272 @@ mod tests {
     const A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
+    #[test]
+    fn final_review_torrentio_extract_rank_select() {
+        use crate::releases::{VideoFile, pick_video_file_for_release, rank_releases};
+
+        let body = json!({"streams": [
+            {"infoHash": A, "title": "India's Got Latent\nIGL_EP_01_ft_RaftaarMusic.mp4\n👤 47 💾 473.25 MB ⚙️ ThePirateBay"},
+            {"infoHash": B, "title": "Show\nfallback.mkv\n👤 1 💾 1 GB ⚙️ X", "behaviorHints": {"filename": "hinted.S01E01.mkv"}}
+        ]});
+        // Use the actual extractor and its production magnet/merge helpers.
+        let found = run("torrentio", &body, "x");
+        assert_eq!(found.len(), 2);
+        for (i, title, filename, hash) in [
+            (0, "India's Got Latent", "IGL_EP_01_ft_RaftaarMusic.mp4", A),
+            (1, "Show", "hinted.S01E01.mkv", B),
+        ] {
+            let ranked = rank_releases(&found, 1, title, &[], Some(1));
+            assert_eq!(ranked.len(), 1, "{}", found[i].title);
+            assert_eq!(ranked[0].info_hash, hash);
+            let files = [VideoFile {
+                index: 0,
+                name: filename.to_string(),
+                length: 900_000_000,
+            }];
+            assert_eq!(
+                pick_video_file_for_release(
+                    &files,
+                    Some(1),
+                    0,
+                    Some(1),
+                    &ranked[0].title,
+                    title,
+                    &[],
+                    None
+                ),
+                Some(&files[0]),
+                "{filename}"
+            );
+        }
+    }
+
+    #[test]
+    fn torrentio_file_hints_survive_dedupe_and_metadata_identity_gates() {
+        use crate::releases::{VideoFile, pick_selected_video_file_for_release, rank_releases};
+
+        let body = json!({"streams": [
+            {
+                "infoHash": A,
+                "fileIdx": 0,
+                "title": "Show.S01.1080p.WEB-DL.x264\nShow.S01E01.1080p.WEB-DL.x264.mkv\n👤 47 💾 900 MB"
+            },
+            {
+                "infoHash": A,
+                "fileIdx": 1,
+                "title": "Show.S01.720p.WEB-DL.x264",
+                "behaviorHints": {"filename": "Show.S01E01.720p.WEB-DL.x264.mkv"}
+            },
+            {
+                "infoHash": B,
+                "fileIdx": 2,
+                "description": "Other.Show.S01E02.1080p.WEB-DL.x264\n👤 100"
+            }
+        ]});
+        let found = run("torrentio", &body, "x");
+        assert_eq!(
+            found.len(),
+            3,
+            "the same hash's file rows must stay distinct"
+        );
+        assert_eq!(found[0].info_hash, found[1].info_hash);
+        assert_eq!(found[0].file_idx, Some(0));
+        assert_eq!(found[1].file_idx, Some(1));
+        assert_eq!(
+            found[0].title,
+            "Show.S01.1080p.WEB-DL.x264 Show.S01E01.1080p.WEB-DL.x264.mkv"
+        );
+        assert_eq!(
+            found[1].title,
+            "Show.S01.720p.WEB-DL.x264 Show.S01E01.720p.WEB-DL.x264.mkv"
+        );
+        assert_ne!(found[0].selection_id(), found[1].selection_id());
+
+        let ranked = rank_releases(&found, 1, "Show", &[], Some(1));
+        assert_eq!(ranked.len(), 2);
+        let files = [
+            VideoFile {
+                index: 0,
+                name: "Show/S01/Show.S01E01.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+            VideoFile {
+                index: 1,
+                name: "Show\\S01\\Show.S01E01.720p.WEB-DL.x264.mkv".into(),
+                length: 700_000_000,
+            },
+            VideoFile {
+                index: 2,
+                name: "Other.Show/S01/Other.Show.S01E02.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+            VideoFile {
+                index: 3,
+                name: "Show/S02/Show.S02E01.1080p.WEB-DL.x264.mkv".into(),
+                length: 900_000_000,
+            },
+        ];
+        for release in &ranked {
+            let picked = pick_selected_video_file_for_release(
+                &files,
+                Some(1),
+                Some(1),
+                &release.title,
+                "Show",
+                &[],
+                None,
+                release.file_idx,
+            )
+            .unwrap();
+            assert_eq!(picked.index, release.file_idx.unwrap());
+            assert!(picked.name.contains("Show.S01E01"));
+        }
+        assert!(
+            pick_selected_video_file_for_release(
+                &files,
+                Some(1),
+                Some(1),
+                "Show.S01.1080p.WEB-DL.x264",
+                "Show",
+                &[],
+                None,
+                Some(2),
+            )
+            .is_none(),
+            "a hinted index cannot override file title/episode identity"
+        );
+        assert!(
+            pick_selected_video_file_for_release(
+                &files,
+                Some(1),
+                Some(1),
+                "Show.S01.1080p.WEB-DL.x264",
+                "Show",
+                &[],
+                None,
+                Some(3),
+            )
+            .is_none(),
+            "a hinted index cannot override the season"
+        );
+        let conflicts = json!({"streams": [
+            {
+                "infoHash": A,
+                "fileIdx": 1,
+                "title": "Other.Show.S01E01.1080p.WEB-DL.x264"
+            },
+            {
+                "infoHash": A,
+                "fileIdx": 1,
+                "fileIdx": 2,
+                "title": "Show.S02E01.1080p.WEB-DL.x264"
+            }
+        ]});
+        assert!(
+            rank_releases(&run("torrentio", &conflicts, "x"), 1, "Show", &[], Some(1)).is_empty()
+        );
+        assert_eq!(run("torrentio", &conflicts, "x").len(), 2);
+        let bounds = json!({"streams": [
+            {"infoHash": A, "title": "Show.S01E01"},
+            {"infoHash": B, "fileIdx": "184467440737095516160", "title": "Show.S01E01"},
+            {"infoHash": B, "fileIdx": "not-a-number", "title": "Show.S01E01"},
+            {"infoHash": B, "fileIdx": -1, "title": "Show.S01E01"},
+            {"infoHash": B, "fileIdx": 1.5, "title": "Show.S01E01"},
+            {"infoHash": A, "fileIdx": 0, "title": "Show.S01E01"}
+        ]});
+        let found = run("torrentio", &bounds, "x");
+        assert_eq!(
+            found.len(),
+            2,
+            "a present but unreadable index rejects the row instead of unselecting its file"
+        );
+        assert!(found.iter().any(|row| row.file_idx.is_none()));
+        assert!(found.iter().any(|row| row.file_idx == Some(0)));
+    }
+
+    #[test]
+    fn json_envelopes_require_the_defined_collections() {
+        let sources = sources::current();
+        let extract = |id: &str, body: Value| {
+            releases(
+                sources.indexer(id).unwrap(),
+                &body.to_string(),
+                Kind::Movie,
+                "x",
+                &[],
+            )
+        };
+        for id in [
+            "knaben",
+            "torrentio",
+            "yts",
+            "apibay",
+            "subsplease",
+            "eztv",
+            "zilean",
+        ] {
+            assert!(
+                extract(id, json!({"error": "rate limited"})).is_err(),
+                "{id}"
+            );
+        }
+        for body in [
+            json!({}),
+            json!({"hits": null}),
+            json!({"hits": {}}),
+            json!({"hits": "blocked"}),
+            json!({"hits": [null]}),
+            json!({"hits": [], "status": "error"}),
+            json!({"hits": [], "success": false}),
+        ] {
+            assert!(extract("knaben", body).is_err());
+        }
+        assert!(extract("knaben", json!({"hits": []})).unwrap().is_empty());
+        assert!(extract("apibay", json!([])).unwrap().is_empty());
+        assert!(extract("subsplease", json!({})).unwrap().is_empty());
+        assert!(
+            extract(
+                "apibay",
+                json!([{"name": "No results returned", "info_hash": "0".repeat(40)}])
+            )
+            .unwrap()
+            .is_empty()
+        );
+        assert!(
+            extract("yts", json!({"status":"ok", "data":{"movie_count":0}}))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(extract("yts", json!({"status":"error", "data":{"movie_count":0}})).is_err());
+        assert!(
+            extract(
+                "yts",
+                json!({"status":"ok", "data":{"movies":[{"title":"x", "torrents":null}]}})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn unknown_seeders_are_not_reported_as_zero() {
+        let found = run(
+            "apibay",
+            &json!([
+                { "name": "missing", "info_hash": A },
+                { "name": "zero", "info_hash": B, "seeders": "0" }
+            ]),
+            "x",
+        );
+        assert_eq!(
+            serde_json::to_value(&found[0]).unwrap()["seeders"],
+            Value::Null
+        );
+        assert_eq!(
+            serde_json::to_value(&found[1]).unwrap()["seeders"],
+            json!(0)
+        );
+    }
+
     fn trackers() -> Vec<String> {
         vec!["udp://t.example:1".into()]
     }
@@ -260,6 +634,31 @@ mod tests {
             &trackers(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn malformed_and_out_of_bounds_counts_remain_unknown() {
+        for value in [
+            json!(null),
+            json!("-1"),
+            json!("1.5"),
+            json!("NaN"),
+            json!("4294967296"),
+            json!("unknown"),
+        ] {
+            let found = run(
+                "apibay",
+                &json!([{ "name": "Show", "info_hash": A, "seeders": value }]),
+                "x",
+            );
+            assert_eq!(found[0].seeders, None);
+        }
+        let found = run(
+            "apibay",
+            &json!([{ "name": "Show", "info_hash": A, "seeders": "4294967295" }]),
+            "x",
+        );
+        assert_eq!(found[0].seeders, Some(u32::MAX));
     }
 
     #[test]
@@ -284,8 +683,12 @@ mod tests {
         assert_eq!(found[0].info_hash, A);
         assert_eq!(found[0].size_bytes, Some(1_448_606_898));
         // The feed reports no seeder counts, and the magnet is the one it sent.
-        assert_eq!(found[0].seeders, 0);
-        assert_eq!(found[0].magnet, magnet);
+        assert_eq!(found[0].seeders, None);
+        assert!(
+            found[0]
+                .magnet
+                .starts_with(&format!("magnet:?xt=urn:btih:{A}&dn="))
+        );
         assert_eq!(found[0].source, "subsplease");
         // A magnet that is not one for the release's own hash is not trusted.
         let hostile = json!({ "X": { "downloads": [ { "magnet": format!("http://127.0.0.1/x?xt=urn:btih:{A}&dn=a") } ] } });
@@ -312,7 +715,7 @@ mod tests {
         let found = run_text("nyaa", &feed, "Show");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].title, "[Group] Show & Co - 01 (1080p)");
-        assert_eq!(found[0].seeders, 12);
+        assert_eq!(found[0].seeders, Some(12));
         assert_eq!(
             found[0].size_bytes,
             Some((1.4 * (1u64 << 30) as f64).round() as u64)
@@ -364,9 +767,9 @@ mod tests {
         let found = run("knaben", &body, "Show");
         let titles: Vec<&str> = found.iter().map(|r| r.title.as_str()).collect();
         assert_eq!(titles, ["Show S01E01", "Null seeders"]);
-        assert_eq!(found[0].seeders, 5);
+        assert_eq!(found[0].seeders, Some(5));
         assert_eq!(found[0].size_bytes, Some(1000));
-        assert_eq!(found[1].seeders, 0);
+        assert_eq!(found[1].seeders, None);
         assert_eq!(found[1].size_bytes, None);
     }
 
@@ -382,7 +785,7 @@ mod tests {
         assert_eq!(found[0].title, "Show S01 1080p");
         assert_eq!(found[0].size_bytes, Some(31_518_434_075));
         // The list holds no seeder counts.
-        assert_eq!(found[0].seeders, 0);
+        assert_eq!(found[0].seeders, None);
         let anime = run("zilean-anime", &body, "Show");
         assert_eq!(anime.len(), 1);
         assert!(run("zilean-anime", &body, "Other").is_empty());
@@ -396,7 +799,7 @@ mod tests {
         ] } });
         let found = run("nekobt", &body, "Frieren");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].seeders, 24);
+        assert_eq!(found[0].seeders, Some(24));
         assert_eq!(found[0].size_bytes, Some(6_107_202_578));
     }
 
@@ -408,7 +811,7 @@ mod tests {
         ] });
         let found = run("bangumi-moe", &body, "Frieren");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].seeders, 3);
+        assert_eq!(found[0].seeders, Some(3));
         assert!(found[0].size_bytes.unwrap() > 50_000_000_000);
     }
 
@@ -422,7 +825,7 @@ mod tests {
         }] });
         let found = run("torrentsdb", &body, "");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].seeders, 12);
+        assert_eq!(found[0].seeders, Some(12));
         assert!(found[0].title.contains("Gray Matter"));
         assert!(found[0].size_bytes.is_some());
     }
@@ -435,7 +838,7 @@ mod tests {
         ] });
         let found = run("prowlarr", &body, "Show");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].seeders, 7);
+        assert_eq!(found[0].seeders, Some(7));
         assert_eq!(found[0].size_bytes, Some(1000));
         assert!(
             sources::current().indexer("prowlarr").unwrap().fallback,
@@ -451,7 +854,7 @@ mod tests {
         ] });
         let found = run("torrents-csv", &body, "Gyaarah Gyaarah");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].seeders, 71);
+        assert_eq!(found[0].seeders, Some(71));
         assert!(run("torrents-csv", &body, "").is_empty());
     }
 
@@ -473,7 +876,7 @@ mod tests {
             found[0].title,
             "India's Got Latent IGL_EP_01_ft_RaftaarMusic.mp4"
         );
-        assert_eq!(found[0].seeders, 47);
+        assert_eq!(found[0].seeders, Some(47));
         assert_eq!(
             found[0].size_bytes,
             Some((473.25 * (1u64 << 20) as f64).round() as u64)
@@ -489,6 +892,30 @@ mod tests {
         );
         // The structured file name wins over the second line.
         assert_eq!(found[2].title, "Show hinted.S01E01.mkv");
+    }
+
+    #[test]
+    fn torrentio_reads_description_and_structured_file_size() {
+        let body = json!({ "streams": [{
+            "infoHash": A,
+            "description": "Show S01E01 1080p\n👤 47",
+            "behaviorHints": {
+                "filename": "Show.S01E01.1080p.mkv",
+                "videoSize": 2_000_000_000u64
+            },
+            "url": "https://credential.example/video?token=[REDACTED]"
+        }] });
+        let found = run("torrentio", &body, "x");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "Show S01E01 1080p Show.S01E01.1080p.mkv");
+        assert_eq!(found[0].seeders, Some(47));
+        assert_eq!(found[0].size_bytes, Some(2_000_000_000));
+        // Only the validated hash reaches playback, never a credential-bearing addon URL.
+        assert!(
+            found[0]
+                .magnet
+                .starts_with(&format!("magnet:?xt=urn:btih:{A}&dn="))
+        );
     }
 
     #[test]
@@ -530,7 +957,7 @@ mod tests {
                 "No year 720p"
             ]
         );
-        assert_eq!(found[0].seeders, 30);
+        assert_eq!(found[0].seeders, Some(30));
         assert_eq!(found[0].size_bytes, Some(2_000_000_000));
         assert_eq!(found[1].size_bytes, None);
         // The year, when there is none, leaves no empty brackets behind.
@@ -556,7 +983,7 @@ mod tests {
         assert_eq!(found.len(), 1);
         // The size arrives as text here.
         assert_eq!(found[0].size_bytes, Some(1000));
-        assert_eq!(found[0].seeders, 0);
+        assert_eq!(found[0].seeders, Some(0));
     }
 
     #[test]
@@ -569,7 +996,7 @@ mod tests {
         let found = run("apibay", &body, "x");
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].info_hash, A);
-        assert_eq!(found[0].seeders, 27);
+        assert_eq!(found[0].seeders, Some(27));
         assert_eq!(found[0].size_bytes, Some(1500));
         // A size of "0" means unknown, not a release of no bytes.
         assert_eq!(found[1].size_bytes, None);
@@ -607,7 +1034,7 @@ mod tests {
         );
         assert_eq!(found[0].info_hash, A);
         assert_eq!(found[0].size_bytes, Some(25_551_692_518));
-        assert_eq!(found[0].seeders, 59);
+        assert_eq!(found[0].seeders, Some(59));
         assert_eq!(found[0].source, "animetosho");
     }
 

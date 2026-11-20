@@ -33,9 +33,17 @@ export function sizeLabel(bytes: number | null): string | null {
   return `${Math.max(1, Math.round(bytes / 1e6))} MB`;
 }
 
-export function seedersLabel(seeders: number): string {
-  if (seeders <= 0) return "No seeders";
+export function seedersLabel(seeders: number | null): string {
+  if (seeders === null || !Number.isInteger(seeders) || seeders < 0 || seeders > 0xffff_ffff) return "Seeders unknown";
   return seeders === 1 ? "1 seeder" : `${seeders} seeders`;
+}
+
+/** Provenance added by newer servers, falling back to the original source on older ones. */
+export function releaseSources(release: Release): string[] {
+  const sources = Array.isArray(release.sources) ? release.sources : [];
+  const names = sources.filter((source): source is string => typeof source === "string")
+    .map((source) => source.trim()).filter(Boolean);
+  return [...new Set(names.length > 0 ? names : [release.source.trim()].filter(Boolean))];
 }
 
 /** The quiet badges under a title, in reading order, leaving out what the name did not say. */

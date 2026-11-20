@@ -72,11 +72,30 @@ Body `{ "id": "series-tt0903747-s1e1", "hevc": false, "start": 1200, "release": 
 can play HEVC; the server then keeps HEVC video as it is, and converts it otherwise. `start` is
 where the viewer means to begin, in seconds, and lets a conversion run that far ahead for a
 resume. `release` is the `id` of a release the viewer picked from `GET /v1/releases`: that one is
-played, and no other (`{ "available": false }` with a reason when it cannot be). `skip` is up to eight
-info hashes of releases that did not play for the viewer, which are left out when the best is found.
+played, and no other (`{ "available": false }` with a reason when it cannot be). Addon rows may use `<hash>:<zero-based fileIdx>`; legacy bare-hash ids remain accepted. `skip` accepts up to 24
+bare hashes or file-scoped ids of releases that did not play. A bare hash excludes its swarm; a
+file-scoped id excludes only that file.
 All of them are optional.
 
-Finding a source searches indexers and can take up to a minute, so the request stays open.
+Finding a source searches indexers and may take tens of seconds, so the request stays open.
+The server admits four resolve tasks, waiting at most three seconds for a slot. Matching concurrent
+play requests share one task; abandoned work is cancelled after a grace period. The core also bounds
+indexer work process-wide: 96 new request producers and 24 HTTP exchanges, including hedged mirrors.
+Cache hits and callers joining an existing producer do not consume new-producer admission.
+
+After the catalogue/search plan is built, each configured stream source gets a share of the remaining
+resolve budget, divided by the number of sources still to try. Retries and media preparation share
+that source deadline; they do not restart the budget. A pinned `release` is never substituted with
+another hash, and Archive is excluded because it cannot honor a torrent hash. `skip` still applies:
+a hash both pinned and skipped is unavailable, not a request to choose an alternative.
+
+Catalogue aliases and known film year constrain release and actual file selection. Conflicting
+file title/year/season/episode evidence and extras are rejected. Torrent startup requires the whole
+bounded file-head range, not merely any downloaded bytes. The server probes through its media reader
+before delivery and rejects a known runtime outside 65–150% of the catalogue runtime. These are
+identity/structure/startup gates, not proof of semantic content identity or uninterrupted playback.
+Archive separately rejects redirects and unknown duration, and runs local `ffprobe` on a capped
+media head before handing out its direct URL (see the [status and limitations](../../pipeline/SOURCE_RELIABILITY_PLAN.md)).
 
 ```json
 { "available": true, "url": "https://api.akidev.live/s/<token>", "stream_type": "file",
@@ -92,8 +111,9 @@ set) or the plays of ten minutes.
 The origin of `url` is `STREAM_URL` when that is set (video can be served from a host of its own),
 otherwise `PUBLIC_URL`.
 
-`release_id` (absent when the source has no hash) is the info hash of the release being played: pass it back as
-`release` to play exactly that one, which is how a watch party puts every device on the same source.
+`release_id` (absent when the source has no hash) is the bare hash or file-scoped selection id of
+the release being played: pass it back as `release` to replay the same file. Watch parties use the
+same id so guests do not substitute a sibling file from the same torrent.
 
 `stream_type` is `file` (give `url` to a `<video>` element) or `hls` (attach hls.js to `url`;
 Safari plays it natively). `duration` is seconds when known. `subtitles` is always empty now (kept so older clients parse the reply); use
@@ -104,22 +124,45 @@ over with a new `POST /v1/play`.
 
 Every release found for an episode or a film, for a viewer to pick one: the best first, in the
 order they would be tried, then the ones with a codec that may not decode where it is shown
-(`uncommon`). The first call searches the indexers and can take ten seconds; later ones are kept.
+(`uncommon`). The first call searches the indexers and can take several seconds; validated per-request
+answers are reused. A successful empty answer is different from a provider failure.
 
 ```json
 { "releases": [{
-    "id": "ab12...40 hex characters (the info hash; pass it to /v1/play as `release`)",
+"id": "ab12...40 hex characters (or <hash>:<fileIdx> for a file-scoped addon row; pass it to /v1/play as `release`)",
     "title": "Show S01E01 1080p WEB-DL x264 AAC",
-    "size_bytes": 1400000000, "seeders": 66, "source": "knaben",
+    "size_bytes": 1400000000, "seeders": 66, "source": "knaben", "sources": ["knaben", "nyaa"],
     "resolution": 1080, "codec": "h264", "audio": "compressed",
     "pack": false, "uncommon": false, "cached": true } ] }
 ```
 
 `resolution` is 480, 720, 1080 or 2160; `codec` is `h264`, `hevc` or `av1`; `audio` is `lossless`
 (FLAC, DTS, AC-3) or `compressed` (AAC, MP3, Opus); any of them may be `null` when the name does
-not say. `size_bytes` may be `null`. `pack` is a whole season in one torrent. `cached` is whether the
+not say. `size_bytes` and `seeders` may be `null`. `seeders: null` means unknown (missing,
+malformed or out-of-range upstream data); `seeders: 0` is an observed upstream zero, not a missing
+value. A positive count is an upstream report, not a current swarm measurement. Bounded torrent
+trials prefer positive reports, then unknown, then observed zero.
+
+`source` retains the first observation's source label; `sources` is ordered, unique provenance for
+merged sightings of the same `(hash, fileIdx)`, in planned source/query order rather than network completion
+order. Seed counts are not summed and multiple sightings do not vote on identity. Old internal
+cached rows without `sources` retain their `source` as provenance.
+
+`pack` is a whole season in one torrent. `cached` is whether the
 debrid service already holds the release (it starts at once; the others wait for a swarm) and is
-`null` when there is no such service or it could not be asked.
+`null` when there is no such service or it could not be asked. This is cache availability evidence,
+not proof the selected file is correct or decodes.
+
+The core caches successfully parsed per-indexer answers for ten minutes when non-empty and sixty
+seconds when empty. HTTP/parse/timeout failures and local admission failures are not cached as
+healthy empty answers. Keys include definition version, endpoints and filled request context.
+Partial search results retain failed/pending request counts internally; a wholly failed empty search
+is unavailable rather than an authoritative no-match. The releases snapshot drains existing late
+search answers under one bounded wait (at most eight seconds, below the per-indexer timeout setting);
+a timeout keeps valid initial results, with no frontend polling loop. `GET /v1/releases` errors are not successful
+release-list responses. Successful lists currently use `Cache-Control: private, max-age=120`.
+The web play-query policy keeps ready responses reusable, but makes `available: false` immediately
+stale with automatic retry disabled: revisiting/refetching can search again without a retry storm.
 
 ## `GET /v1/fallback/search?q=<title>[&season=<n>][&episode=<n>]`
 
@@ -134,7 +177,10 @@ episode alone is added as a number (an anime). Either may be empty. It takes up 
     "size": 1400000000, "seeders": 12, "source": "limetorrents" }] }
 ```
 
-At most 100 results, best seeded first, each with a hash. A search is kept for ten minutes. `404` when
+At most 100 results, best reported seed count first, each with a hash. `seeders` is nullable here too:
+`null` is unknown and `0` is an observed zero. A complete successful search is kept for ten minutes;
+a search with unfinished link-to-hash lookups is not promoted to a complete cached answer. Failed
+requests are not cached as empty searches. `404` when
 Prowlarr is not set up (`PROWLARR_API_KEY` is empty), `502` when it did not answer, `503` (`busy`) when
 two searches are already running and none finished in time, `429` past the allowance.
 

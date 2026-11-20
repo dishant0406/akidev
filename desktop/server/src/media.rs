@@ -122,6 +122,12 @@ pub fn parse_probe(json: &str) -> anyhow::Result<Probe> {
 /// Identifies a file by reading its header through `origin`, never from a path: a torrent's file
 /// on disk is sparse until its pieces arrive, so a tool reading the path stops at the first gap.
 pub async fn probe(origin: &Origin) -> anyhow::Result<Probe> {
+    tokio::time::timeout(PROBE_TIMEOUT, probe_file(origin))
+        .await
+        .context("reading media timed out")?
+}
+
+async fn probe_file(origin: &Origin) -> anyhow::Result<Probe> {
     let mut child = Command::new("ffprobe")
         .args([
             "-v",
@@ -134,6 +140,9 @@ pub async fn probe(origin: &Origin) -> anyhow::Result<Probe> {
             "-show_streams",
             "-of",
             "json",
+            // Demuxers can follow embedded URLs. Only Origin may open input resources.
+            "-protocol_whitelist",
+            "pipe",
             "-i",
             "pipe:0",
         ])
@@ -165,9 +174,7 @@ pub async fn probe(origin: &Origin) -> anyhow::Result<Probe> {
         let (_, output) = tokio::join!(feed, run);
         output
     };
-    let output = tokio::time::timeout(PROBE_TIMEOUT, work)
-        .await
-        .map_err(|_| anyhow::anyhow!("reading \"{}\" timed out", origin.name()))??;
+    let output = work.await?;
     if !output.stderr.is_empty() {
         tracing::debug!(
             "[probe] ffprobe: {}",
@@ -329,8 +336,89 @@ pub async fn ffmpeg_available() -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::sync::Arc;
+
+    /// Untrusted playlist input backed by an existing private media fixture.
+    pub(crate) struct EmbeddedReference {
+        pub origin: Arc<Origin>,
+        pub listener: tokio::net::TcpListener,
+        pub root: std::path::PathBuf,
+    }
+
+    impl EmbeddedReference {
+        pub async fn new(http: bool) -> Self {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let mut bytes = [0u8; 8];
+            getrandom::fill(&mut bytes).unwrap();
+            let root = std::env::temp_dir().join(format!(
+                "akidev-embedded-reference-{:016x}",
+                u64::from_ne_bytes(bytes)
+            ));
+            std::fs::create_dir_all(&root).unwrap();
+            let resource = root.join("private.mp4");
+            std::fs::copy(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/archive-clip.mp4"),
+                &resource,
+            )
+            .unwrap();
+            let reference = if http {
+                format!("http://{}/private.mp4", listener.local_addr().unwrap())
+            } else {
+                format!("file:{}", resource.display())
+            };
+            let playlist = format!(
+                "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\n{reference}\n#EXT-X-ENDLIST\n"
+            );
+            let path = root.join("input.m3u8");
+            std::fs::write(&path, &playlist).unwrap();
+            Self {
+                origin: Arc::new(Origin::File {
+                    path,
+                    length: playlist.len() as u64,
+                    name: "input.m3u8".into(),
+                }),
+                listener,
+                root,
+            }
+        }
+
+        pub async fn assert_no_request(&self) {
+            assert!(
+                tokio::time::timeout(Duration::from_millis(100), self.listener.accept())
+                    .await
+                    .is_err(),
+                "the demuxer connected to an embedded HTTP reference"
+            );
+        }
+    }
+
+    impl Drop for EmbeddedReference {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_rejects_embedded_http_and_file_references() {
+        if !ffmpeg_available().await {
+            eprintln!("ffmpeg/ffprobe missing: skipping embedded-reference probe test");
+            return;
+        }
+        for http in [false, true] {
+            let input = EmbeddedReference::new(http).await;
+            let result = tokio::time::timeout(Duration::from_secs(5), probe(&input.origin))
+                .await
+                .expect("embedded reference must fail promptly");
+            assert!(
+                result.is_err(),
+                "probe must not read referenced media (http={http})"
+            );
+            input.assert_no_request().await;
+        }
+    }
 
     fn probe_of(container: &str, video: (&str, &str, &str), audio: Option<(&str, u32)>) -> Probe {
         Probe {

@@ -422,9 +422,16 @@ async fn bad_requests_are_refused_before_any_work_is_done() {
         StatusCode::BAD_REQUEST
     );
     assert_eq!(post(r#"{"id":"../../etc"}"#).await, StatusCode::BAD_REQUEST);
-    // And the third attempt within the window is told to slow down.
+    // Invalid input never consumes a playback allowance or starts upstream work.
+    assert_eq!(post(r#"{"id":"nonsense"}"#).await, StatusCode::BAD_REQUEST);
+    for _ in 0..2 {
+        assert_ne!(
+            post(r#"{"id":"movie-tt0063350"}"#).await,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
     assert_eq!(
-        post(r#"{"id":"nonsense"}"#).await,
+        post(r#"{"id":"movie-tt0063350"}"#).await,
         StatusCode::TOO_MANY_REQUESTS
     );
 }
@@ -545,6 +552,23 @@ async fn health_says_what_is_running() {
     assert_eq!(json["ffmpeg"], true);
     assert_eq!(json["debrid"]["configured"], false);
     assert_eq!(json["sources"][0], "torrent");
+    let totals = json["playback_totals"]
+        .as_object()
+        .expect("aggregate numeric totals");
+    assert_eq!(totals.len(), 5);
+    for key in [
+        "source_attempts",
+        "source_successes",
+        "source_errors",
+        "delivery_errors",
+        "deadline_exceeded",
+    ] {
+        assert_eq!(
+            totals[key].as_u64(),
+            Some(0),
+            "{key} is a numeric counter, not request data"
+        );
+    }
 }
 
 /// A request to the fallback search, as an app sends it (marked) or as one that predates the flag does.

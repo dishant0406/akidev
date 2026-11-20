@@ -28,6 +28,7 @@ const FEED_URL: &str = "https://sources.akidev.live";
 const PUBLIC_KEY: &str = "e0776a868d11f70f94e6aaee3a28205cdc15002c246e97811b3100c4d4a04bbe";
 
 const EMBEDDED: &str = include_str!("../../sources/sources.json");
+const ANIME_KITSU: &str = include_str!("../../sources/anime_kitsu.json");
 
 /// A document is a few tens of kilobytes; anything much larger is not one.
 const MAX_BYTES: usize = 1 << 20;
@@ -174,6 +175,10 @@ impl Sources {
         }
         Ok(())
     }
+}
+
+pub fn anime_kitsu() -> ProviderDef {
+    serde_json::from_str(ANIME_KITSU).expect("the bundled Anime Kitsu definition is valid")
 }
 
 /// Parses and validates a document. Used for the embedded copy, a downloaded one and the
@@ -391,6 +396,23 @@ mod tests {
         assert_eq!(sources.indexers.len(), 16);
         assert_eq!(sources.providers.len(), 4);
         assert!(!sources.trackers.is_empty());
+        let mut older = embedded_json();
+        older["indexers"][5]
+            .as_object_mut()
+            .unwrap()
+            .remove("anime_kitsu");
+        older["indexers"][5]["response"]["fields"]
+            .as_object_mut()
+            .unwrap()
+            .remove("file_idx");
+        assert!(parse(&serde_json::to_vec(&older).unwrap()).is_ok());
+        assert!(anime_kitsu().base_url.starts_with("https://"));
+        assert!(
+            sources
+                .providers
+                .iter()
+                .all(|provider| provider.id != "anime-kitsu")
+        );
         for kind in Kind::ALL {
             assert!(!sources.chain(kind).is_empty());
         }

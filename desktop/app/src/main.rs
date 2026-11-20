@@ -27,6 +27,7 @@ mod music_ui;
 mod palette;
 mod panels;
 mod party;
+mod playback_telemetry;
 mod player;
 mod prefetch;
 mod progress;

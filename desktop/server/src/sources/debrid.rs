@@ -13,7 +13,10 @@
 use crate::origin::{BoxRead, Origin};
 use akidev_core::cache;
 use akidev_core::model::Release;
-use akidev_core::releases::{VideoFile, pick_video_file};
+use akidev_core::releases::{
+    VideoFile, pick_selected_video_file_for_release_with_min, pick_video_file_for_release,
+    release_title_name,
+};
 use anyhow::{Context, bail};
 use futures::TryStreamExt;
 use serde::Deserialize;
@@ -65,6 +68,8 @@ struct AccountFile {
 pub struct Found {
     pub release: String,
     pub info_hash: String,
+    /// Bare hash for a legacy row, or the exact addon file the viewer selected.
+    pub selection_id: String,
     pub origin: Origin,
 }
 
@@ -79,7 +84,7 @@ impl Debrid {
         cdn_hosts: Vec<String>,
         base: String,
     ) -> Option<Arc<Debrid>> {
-        if token.is_empty() {
+        if token.is_empty() || timeout.is_zero() {
             return None;
         }
         let client = reqwest::Client::builder()
@@ -113,7 +118,7 @@ impl Debrid {
     }
 
     fn bounded(&self, left: Duration) -> Duration {
-        left.min(self.timeout).max(MIN_STEP)
+        left.min(self.timeout)
     }
 
     /// TorBox answers every route with `{ success, error, detail, data }`.
@@ -135,6 +140,9 @@ impl Debrid {
         query: &[(&str, String)],
         left: Duration,
     ) -> anyhow::Result<Value> {
+        if left.is_zero() {
+            bail!("the download service request ran out of time");
+        }
         let response = self
             .client
             .get(format!("{}/{route}", self.base))
@@ -152,6 +160,9 @@ impl Debrid {
     }
 
     async fn add_if_cached(&self, release: &Release, left: Duration) -> Option<Option<i64>> {
+        if left.is_zero() {
+            return None;
+        }
         let form = reqwest::multipart::Form::new()
             .text("magnet", release.magnet.clone())
             .text("add_only_if_cached", "true");
@@ -374,6 +385,7 @@ impl Debrid {
             request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
         }
         let response = request
+            .timeout(self.timeout)
             .send()
             .await
             .map_err(|error| anyhow::anyhow!(self.redact(error.without_url())))?;
@@ -390,11 +402,52 @@ impl Debrid {
     }
 
     /// The best cached copy of the episode the service holds, if any.
+    #[cfg(test)]
     pub async fn find(
         self: &Arc<Self>,
         ranked: &[Release],
         episode: Option<u32>,
         season: Option<u32>,
+        max_tries: usize,
+        deadline: Instant,
+    ) -> Result<Found, String> {
+        self.find_for_identity(ranked, episode, season, "", &[], None, max_tries, deadline)
+            .await
+    }
+
+    /// Selects only files consistent with the catalogue identity and release listing.
+    /// The compatibility `find` wrapper derives a conservative title from each listing.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn find_for_identity(
+        self: &Arc<Self>,
+        ranked: &[Release],
+        episode: Option<u32>,
+        season: Option<u32>,
+        title: &str,
+        titles: &[String],
+        year: Option<u32>,
+        max_tries: usize,
+        deadline: Instant,
+    ) -> Result<Found, String> {
+        tokio::time::timeout_at(
+            tokio::time::Instant::from_std(deadline),
+            self.find_for_identity_before(
+                ranked, episode, season, title, titles, year, max_tries, deadline,
+            ),
+        )
+        .await
+        .unwrap_or_else(|_| Err("The debrid service ran out of time for this episode.".into()))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn find_for_identity_before(
+        self: &Arc<Self>,
+        ranked: &[Release],
+        episode: Option<u32>,
+        season: Option<u32>,
+        title: &str,
+        titles: &[String],
+        year: Option<u32>,
         max_tries: usize,
         deadline: Instant,
     ) -> Result<Found, String> {
@@ -434,7 +487,8 @@ impl Debrid {
             .into_iter()
             .filter(|release| match cached.get(&release.info_hash) {
                 Some(Some(files)) if !files.is_empty() => {
-                    pick_video_file(files, episode, 0, season).is_some()
+                    pick_for_identity(files, release, episode, season, title, titles, year)
+                        .is_some()
                 }
                 _ => true,
             })
@@ -455,7 +509,9 @@ impl Debrid {
                 break;
             }
             let tried = Instant::now();
-            let outcome = self.file_for(release, episode, season, left()).await;
+            let outcome = self
+                .file_for(release, episode, season, title, titles, year, deadline)
+                .await;
             tracing::info!(
                 "[debrid] \"{}\": {} after {:?}",
                 release.title,
@@ -471,6 +527,7 @@ impl Debrid {
                     return Ok(Found {
                         release: release.title.clone(),
                         info_hash: release.info_hash.clone(),
+                        selection_id: release.selection_id(),
                         origin,
                     });
                 }
@@ -488,34 +545,37 @@ impl Debrid {
         Err("Cached copies exist, but none holds a file that could be played.".into())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn file_for(
         self: &Arc<Self>,
         release: &Release,
         episode: Option<u32>,
         season: Option<u32>,
-        left: Duration,
+        title: &str,
+        titles: &[String],
+        year: Option<u32>,
+        deadline: Instant,
     ) -> anyhow::Result<Option<Origin>> {
+        let left = || deadline.saturating_duration_since(Instant::now());
         // A cached release the account does not hold yet has no ids, so it is added first. That
         // is the step that makes the source work on a fresh account at all.
-        let mut entry = self.account_entry(&release.info_hash, left).await?;
+        let mut entry = self.account_entry(&release.info_hash, left()).await?;
         if entry.is_none()
-            && let Some(id) = self.add_if_cached(release, left).await
+            && let Some(id) = self.add_if_cached(release, left()).await
         {
             if let Some(id) = id {
-                entry = self.entry_by_id(id, left).await.unwrap_or(None);
+                entry = self.entry_by_id(id, left()).await.unwrap_or(None);
             }
             if entry.is_none() {
                 // The id was not given, or the entry was not ready. The add is asynchronous on the
                 // service's side: the listing read straight after can still be the pre-add
                 // snapshot, so it is read once more after a short pause.
                 cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
-                entry = self.account_entry(&release.info_hash, left).await?;
-                if entry.is_none() && left > SETTLE + MIN_STEP {
+                entry = self.account_entry(&release.info_hash, left()).await?;
+                if entry.is_none() && left() > SETTLE + MIN_STEP {
                     tokio::time::sleep(SETTLE).await;
                     cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
-                    entry = self
-                        .account_entry(&release.info_hash, left - SETTLE)
-                        .await?;
+                    entry = self.account_entry(&release.info_hash, left()).await?;
                 }
             }
         }
@@ -536,7 +596,8 @@ impl Debrid {
             })
             .collect();
         // No size floor: an absent size would otherwise reject every file.
-        let Some(picked) = pick_video_file(&files, episode, 0, season) else {
+        let Some(picked) = pick_for_identity(&files, release, episode, season, title, titles, year)
+        else {
             return Ok(None);
         };
         let file = &entry.files[picked.index];
@@ -553,6 +614,51 @@ impl Debrid {
             length: file.size,
             name,
         }))
+    }
+}
+
+/// Both provider file lists pass the same catalogue/listing validation boundary.
+fn pick_for_identity<'a>(
+    files: &'a [VideoFile],
+    release: &Release,
+    episode: Option<u32>,
+    season: Option<u32>,
+    title: &str,
+    titles: &[String],
+    year: Option<u32>,
+) -> Option<&'a VideoFile> {
+    let derived;
+    let title = if title.trim().is_empty() && titles.is_empty() {
+        derived = release_title_name(&release.title);
+        derived.as_str()
+    } else {
+        title
+    };
+    if release.file_idx.is_some() {
+        // The addon names a particular actual file, but the index never bypasses the
+        // catalogue, episode or season metadata checks.
+        pick_selected_video_file_for_release_with_min(
+            files,
+            episode,
+            0,
+            season,
+            &release.title,
+            title,
+            titles,
+            year,
+            release.file_idx,
+        )
+    } else {
+        pick_video_file_for_release(
+            files,
+            episode,
+            0,
+            season,
+            &release.title,
+            title,
+            titles,
+            year,
+        )
     }
 }
 
@@ -589,6 +695,9 @@ pub fn host_allowed(host: &str, allowed: &[String]) -> bool {
 mod tests {
     use super::*;
 
+    // The local API stand-ins share the process-wide TorBox account cache.
+    static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     fn debrid() -> Arc<Debrid> {
         Debrid::new(
             "secret-key".into(),
@@ -602,6 +711,8 @@ mod tests {
     /// listing that only shows the torrent after it is added, the link, and a ranged read.
     #[tokio::test]
     async fn a_cached_release_is_added_found_and_read_from_an_offset() {
+        let _guard = TEST_LOCK.lock().await;
+        cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
         use axum::extract::{Query, State};
         use axum::http::{HeaderMap, StatusCode, header};
         use axum::response::IntoResponse;
@@ -711,10 +822,12 @@ mod tests {
         let release = Release {
             title: "Show - 05 [1080p]".into(),
             info_hash: HASH.into(),
+            file_idx: None,
             magnet: format!("magnet:?xt=urn:btih:{HASH}"),
             size_bytes: None,
-            seeders: 3,
+            seeders: Some(3),
             source: "t".into(),
+            sources: vec!["t".into()],
         };
         let other = Release {
             info_hash: "b".repeat(40),
@@ -758,6 +871,7 @@ mod tests {
     /// without adding it to the account or reading the account.
     #[tokio::test]
     async fn a_cached_release_without_the_episode_is_skipped_without_touching_the_account() {
+        let _guard = TEST_LOCK.lock().await;
         use axum::routing::{get, post};
         use axum::{Json, Router};
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -802,10 +916,12 @@ mod tests {
         let release = Release {
             title: "Show S01".into(),
             info_hash: HASH.into(),
+            file_idx: None,
             magnet: String::new(),
             size_bytes: None,
-            seeders: 1,
+            seeders: Some(1),
             source: "t".into(),
+            sources: vec!["t".into()],
         };
         let reason = debrid
             .find(
@@ -822,6 +938,216 @@ mod tests {
         assert_eq!(touched.load(Ordering::SeqCst), 0, "the account was touched");
     }
 
+    /// Exercise the account boundary even when checkcached cannot provide filenames.
+    #[tokio::test]
+    async fn account_files_must_match_catalogue_identity() {
+        let _guard = TEST_LOCK.lock().await;
+        use axum::extract::State;
+        use axum::routing::get;
+        use axum::{Json, Router};
+
+        let app = Router::new()
+            .route(
+                "/mylist",
+                get(|State(data): State<Value>| async move {
+                    Json(serde_json::json!({ "success": true, "data": data }))
+                }),
+            )
+            .with_state(serde_json::json!([
+                { "id": 101, "hash": "identity-wrong-title", "files": [
+                    { "id": 1, "name": "Dune/Other Film (2021).mkv", "size": 100 }
+                ] },
+                { "id": 102, "hash": "identity-wrong-year", "files": [
+                    { "id": 2, "name": "Dune (1984).mkv", "size": 100 }
+                ] },
+                { "id": 103, "hash": "identity-wrong-episode", "files": [
+                    { "id": 3, "name": "Show S01E02.mkv", "size": 100 }
+                ] },
+                { "id": 104, "hash": "identity-generic-film", "files": [
+                    { "id": 4, "short_name": "main.mkv", "size": 100 }
+                ] },
+                { "id": 105, "hash": "identity-generic-episode", "files": [
+                    { "id": 5, "name": "video.mkv", "size": 100 }
+                ] },
+                { "id": 106, "hash": "identity-ambiguous-pack", "files": [
+                    { "id": 6, "name": "video.mkv", "size": 100 }
+                ] },
+                { "id": 107, "hash": "identity-misleading-episode", "files": [
+                    { "id": 7, "name": "Other Show S01E01.mkv", "size": 100 }
+                ] }
+            ]));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let debrid = Debrid::with_base(
+            "secret-key".into(),
+            Duration::from_secs(5),
+            vec![],
+            format!("http://127.0.0.1:{port}"),
+        )
+        .unwrap();
+
+        for (hash, listing, title, episode, expected) in [
+            (
+                "identity-wrong-title",
+                "Dune (2021) 1080p",
+                "Dune",
+                None,
+                false,
+            ),
+            (
+                "identity-wrong-year",
+                "Dune (2021) 1080p",
+                "Dune",
+                None,
+                false,
+            ),
+            (
+                "identity-wrong-episode",
+                "Show S01E01 1080p",
+                "Show",
+                Some(1),
+                false,
+            ),
+            (
+                "identity-generic-film",
+                "Dune (2021) 1080p",
+                "Dune",
+                None,
+                true,
+            ),
+            (
+                "identity-generic-episode",
+                "Show S01E01 1080p",
+                "Show",
+                Some(1),
+                true,
+            ),
+            (
+                "identity-ambiguous-pack",
+                "Show S01 1080p",
+                "Show",
+                Some(1),
+                false,
+            ),
+            (
+                "identity-misleading-episode",
+                "Show S01E01 1080p",
+                "Show",
+                Some(1),
+                false,
+            ),
+        ] {
+            let release = Release {
+                title: listing.into(),
+                info_hash: hash.into(),
+                file_idx: None,
+                magnet: String::new(),
+                size_bytes: None,
+                seeders: Some(1),
+                source: "t".into(),
+                sources: vec!["t".into()],
+            };
+            // Isolate the account snapshot from the other local stand-ins' global cache.
+            cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
+            let origin = debrid
+                .file_for(
+                    &release,
+                    episode,
+                    episode.map(|_| 1),
+                    title,
+                    &[],
+                    episode.is_none().then_some(2021),
+                    Instant::now() + Duration::from_secs(5),
+                )
+                .await
+                .unwrap();
+            assert_eq!(origin.is_some(), expected, "{hash}");
+        }
+    }
+
+    #[test]
+    fn cached_files_use_catalogue_aliases_and_reject_contradictions() {
+        let release = Release {
+            title: "Alternate Name (2021) 1080p".into(),
+            info_hash: "identity-cache".into(),
+            file_idx: None,
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: Some(1),
+            source: "t".into(),
+            sources: vec!["t".into()],
+        };
+        let aliases = vec!["Alternate Name".into()];
+        for (name, expected) in [
+            ("Other Film (2021).mkv", false),
+            ("Alternate Name (1984).mkv", false),
+            ("main.mkv", true),
+        ] {
+            let files = [VideoFile {
+                index: 0,
+                name: name.into(),
+                length: 100,
+            }];
+            assert_eq!(
+                pick_for_identity(
+                    &files,
+                    &release,
+                    None,
+                    None,
+                    "Catalogue Name",
+                    &aliases,
+                    Some(2021),
+                )
+                .is_some(),
+                expected,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_file_index_chooses_that_actual_cached_file_after_identity_checks() {
+        let mut release = Release {
+            title: "Show.S01.1080p".into(),
+            info_hash: "a".repeat(40),
+            file_idx: Some(0),
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: Some(1),
+            source: "t".into(),
+            sources: vec!["t".into()],
+        };
+        let files = [
+            VideoFile {
+                index: 0,
+                name: "Show/S01/Show.S01E01.720p.mkv".into(),
+                length: 100,
+            },
+            VideoFile {
+                index: 1,
+                name: "Show/S01/Show.S01E01.1080p.mkv".into(),
+                length: 200,
+            },
+            VideoFile {
+                index: 2,
+                name: "Show/S02/Show.S02E01.mkv".into(),
+                length: 100,
+            },
+        ];
+        let pick = |release: &Release| {
+            pick_for_identity(&files, release, Some(1), Some(1), "Show", &[], None)
+        };
+        assert_eq!(pick(&release).map(|file| file.index), Some(0));
+        release.file_idx = Some(2);
+        assert!(
+            pick(&release).is_none(),
+            "the hint does not bypass the season"
+        );
+        release.file_idx = None;
+        assert_eq!(pick(&release).map(|file| file.index), Some(1));
+    }
+
     #[test]
     fn a_checkcached_entry_lists_its_files_or_none() {
         let with = serde_json::json!({ "files": [{ "name": "a/b.mkv", "size": 5 }] });
@@ -833,6 +1159,7 @@ mod tests {
 
     #[tokio::test]
     async fn nothing_cached_is_a_reason_not_an_error() {
+        let _guard = TEST_LOCK.lock().await;
         use axum::routing::get;
         use axum::{Json, Router};
         let app = Router::new().route(
@@ -852,10 +1179,12 @@ mod tests {
         let release = Release {
             title: "Show - 77".into(),
             info_hash: "c".repeat(40),
+            file_idx: None,
             magnet: String::new(),
             size_bytes: None,
-            seeders: 1,
+            seeders: Some(1),
             source: "t".into(),
+            sources: vec!["t".into()],
         };
         let reason = debrid
             .find(
@@ -869,6 +1198,173 @@ mod tests {
             .map(|_| ())
             .unwrap_err();
         assert!(reason.contains("No cached copy"), "{reason}");
+    }
+
+    #[tokio::test]
+    async fn delayed_requests_do_not_extend_the_absolute_deadline() {
+        let _guard = TEST_LOCK.lock().await;
+        use axum::extract::Query;
+        use axum::routing::{get, post};
+        use axum::{Json, Router};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const HASH: &str = "deadline-regression";
+        let requests = Arc::new(AtomicUsize::new(0));
+        let listings = requests.clone();
+        let adds = requests.clone();
+        let app = Router::new()
+            .route(
+                "/checkcached",
+                get(|| async {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Json(serde_json::json!({ "success": true, "data": { HASH: {} } }))
+                }),
+            )
+            .route(
+                "/mylist",
+                get(move |Query(query): Query<HashMap<String, String>>| {
+                    listings.fetch_add(1, Ordering::SeqCst);
+                    async move {
+                        let delay = if query.contains_key("id") { 600 } else { 90 };
+                        tokio::time::sleep(Duration::from_millis(delay)).await;
+                        Json(serde_json::json!({ "success": true, "data": [] }))
+                    }
+                }),
+            )
+            .route(
+                "/createtorrent",
+                post(move || {
+                    adds.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        tokio::time::sleep(Duration::from_millis(90)).await;
+                        Json(serde_json::json!({ "success": true, "data": { "torrent_id": 7 } }))
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let debrid = Debrid::with_base(
+            "secret-key".into(),
+            Duration::from_secs(5),
+            vec![],
+            format!("http://127.0.0.1:{port}"),
+        )
+        .unwrap();
+        let release = Release {
+            title: "Show - 05 [1080p]".into(),
+            info_hash: HASH.into(),
+            file_idx: None,
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: Some(1),
+            source: "t".into(),
+            sources: vec!["t".into()],
+        };
+
+        // A budget below MIN_STEP must not be rounded up to 250 ms.
+        let started = Instant::now();
+        assert!(
+            debrid
+                .find(
+                    std::slice::from_ref(&release),
+                    Some(5),
+                    None,
+                    1,
+                    started + Duration::from_millis(30)
+                )
+                .await
+                .is_err()
+        );
+        assert!(started.elapsed() < Duration::from_millis(90));
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+
+        // Exercise file_for without the outer timeout: account and add each spend part of the
+        // same budget, leaving only 120 ms (not another 300 ms) for the delayed entry lookup.
+        cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
+        let started = Instant::now();
+        let _ = debrid
+            .file_for(
+                &release,
+                Some(5),
+                None,
+                "Show",
+                &[],
+                None,
+                started + Duration::from_millis(300),
+            )
+            .await;
+        assert!(started.elapsed() < Duration::from_millis(400));
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
+
+        // The public operation also includes checkcached in its one absolute deadline.
+        cache::put("torbox:mylist", Vec::<Account>::new(), Duration::ZERO);
+        let started = Instant::now();
+        assert!(
+            debrid
+                .find(
+                    &[release],
+                    Some(5),
+                    None,
+                    1,
+                    started + Duration::from_millis(450)
+                )
+                .await
+                .is_err()
+        );
+        assert!(started.elapsed() < Duration::from_millis(550));
+        assert_eq!(requests.load(Ordering::SeqCst), 6);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn opening_a_delayed_cdn_response_has_a_finite_timeout() {
+        let _guard = TEST_LOCK.lock().await;
+        use axum::Router;
+        use axum::routing::get;
+
+        let app = Router::new().route(
+            "/file",
+            get(|| async {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                "video"
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut debrid = Debrid::with_base(
+            "secret-key".into(),
+            Duration::from_millis(80),
+            vec!["127.0.0.1".into()],
+            format!("http://127.0.0.1:{port}"),
+        )
+        .unwrap();
+        Arc::get_mut(&mut debrid).unwrap().require_https = false;
+        cache::put(
+            "torbox:dl:987654:1",
+            format!("http://127.0.0.1:{port}/file"),
+            LINK_TTL,
+        );
+        let started = Instant::now();
+        assert!(debrid.open(987654, 1, 0).await.is_err());
+        assert!(started.elapsed() < Duration::from_millis(250));
+        server.abort();
+    }
+
+    #[test]
+    fn a_request_budget_is_never_extended() {
+        let debrid = debrid();
+        assert_eq!(
+            debrid.bounded(Duration::from_millis(10)),
+            Duration::from_millis(10)
+        );
+        assert_eq!(debrid.bounded(Duration::ZERO), Duration::ZERO);
+        assert_eq!(
+            debrid.bounded(Duration::from_secs(10)),
+            Duration::from_secs(5)
+        );
+        assert!(Debrid::new("secret-key".into(), Duration::ZERO, vec![]).is_none());
     }
 
     #[test]

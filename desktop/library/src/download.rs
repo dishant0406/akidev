@@ -10,7 +10,7 @@
 use crate::container::{self, MasterKey};
 use crate::store::{Item, Kind, State, Store, SubtitleRef};
 use akidev_core::music::Music;
-use akidev_core::releases::{MIN_VIDEO_BYTES, VideoFile, pick_video_file};
+use akidev_core::releases::{MIN_VIDEO_BYTES, VideoFile, pick_video_file_for_release};
 use anyhow::Context;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::dht::Id20;
@@ -819,7 +819,7 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// The file of the torrent to save: the one chosen last time, else the best match for the episode.
+/// The file to save, revalidating remembered choices against catalogue and metadata identity.
 fn choose_file(handle: &Arc<ManagedTorrent>, item: &Item) -> Option<VideoFile> {
     let files: Vec<VideoFile> = handle
         .with_metadata(|metadata| {
@@ -835,12 +835,48 @@ fn choose_file(handle: &Arc<ManagedTorrent>, item: &Item) -> Option<VideoFile> {
                 .collect()
         })
         .ok()?;
+    // A remembered index is meaningful only within the same immutable torrent.
+    if item
+        .release
+        .as_deref()
+        .is_some_and(|hash| !hash.eq_ignore_ascii_case(&handle.info_hash().as_string()))
+    {
+        return None;
+    }
+    select_video_file(&files, item, &handle.name()?)
+}
+
+fn select_video_file(files: &[VideoFile], item: &Item, release_title: &str) -> Option<VideoFile> {
+    // Existing library rows store the film year as their display subtitle. Episodes
+    // use a descriptive subtitle instead; never interpret its numbers as a year.
+    let year = item
+        .episode
+        .is_none()
+        .then(|| item.subtitle.parse::<u32>().ok())
+        .flatten()
+        .filter(|year| (1800..=2100).contains(year));
+    let validate = |files: &[VideoFile]| {
+        pick_video_file_for_release(
+            files,
+            item.episode,
+            MIN_VIDEO_BYTES,
+            item.season,
+            release_title,
+            &item.title,
+            &[],
+            year,
+        )
+        .cloned()
+    };
     if let Some(index) = item.file_index
         && let Some(file) = files.iter().find(|file| file.index == index as usize)
     {
-        return Some(file.clone());
+        // Validate the exact remembered choice without replacing a valid smaller
+        // encode with the automatic selector's preference. Contradictory choices
+        // fail closed, including non-video, sample, title, year and episode mismatches.
+        return validate(std::slice::from_ref(file));
     }
-    pick_video_file(&files, item.episode, MIN_VIDEO_BYTES, item.season).cloned()
+    validate(files)
 }
 
 /// Where a fetched file is on disk: in the torrent's folder, under its own path.
@@ -891,6 +927,90 @@ mod tests {
     use librqbit::{CreateTorrentOptions, ListenerOptions, create_torrent};
 
     const MIB: usize = 1024 * 1024;
+
+    fn video(index: usize, name: &str, length: u64) -> VideoFile {
+        VideoFile {
+            index,
+            name: name.into(),
+            length,
+        }
+    }
+
+    #[test]
+    fn saved_selection_rejects_number_only_and_unrelated_title_matches() {
+        let item = episode_item("hash", 2);
+        for name in ["Other.Show.S01E02.mkv", "02.Other.Show.mkv"] {
+            let files = [video(0, name, MIN_VIDEO_BYTES)];
+            assert!(
+                select_video_file(&files, &item, "Show.S01").is_none(),
+                "{name}"
+            );
+        }
+        let files = [video(0, "02.mkv", MIN_VIDEO_BYTES)];
+        assert!(select_video_file(&files, &item, "Other.Show.S01").is_none());
+        assert!(select_video_file(&files, &item, "Show.S01").is_some());
+    }
+
+    #[test]
+    fn remembered_index_cannot_bypass_file_identity_or_video_checks() {
+        let mut item = episode_item("hash", 2);
+        item.file_index = Some(0);
+        for (name, length) in [
+            ("Other.Show.S01E02.mkv", MIN_VIDEO_BYTES),
+            ("Show.S02E02.mkv", MIN_VIDEO_BYTES),
+            ("Show.S01E03.mkv", MIN_VIDEO_BYTES),
+            ("Show.S01E02.sample.mkv", MIN_VIDEO_BYTES),
+            ("Show.S01E02.txt", MIN_VIDEO_BYTES),
+            ("Show.S01E02.mkv", MIN_VIDEO_BYTES - 1),
+        ] {
+            let files = [
+                video(0, name, length),
+                video(1, "Show.S01E02.mkv", MIN_VIDEO_BYTES * 2),
+            ];
+            assert!(
+                select_video_file(&files, &item, "Show.S01").is_none(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_remembered_choice_is_preserved_instead_of_largest_encode() {
+        let mut item = episode_item("hash", 2);
+        item.file_index = Some(4);
+        let files = [
+            video(4, "Show.S01E02.720p.mkv", MIN_VIDEO_BYTES),
+            video(7, "Show.S01E02.1080p.mkv", MIN_VIDEO_BYTES * 2),
+        ];
+        assert_eq!(
+            select_video_file(&files, &item, "Show.S01").unwrap().index,
+            4
+        );
+        item.file_index = None;
+        assert_eq!(
+            select_video_file(&files, &item, "Show.S01").unwrap().index,
+            7
+        );
+    }
+
+    #[test]
+    fn remembered_movie_choice_rejects_wrong_year_and_series_files() {
+        let mut item = Item::new(
+            "movie#hash".into(),
+            Kind::Video,
+            "movie".into(),
+            "Dune".into(),
+        );
+        item.subtitle = "2021".into();
+        item.file_index = Some(0);
+        for name in ["Dune.1984.mkv", "Dune.S01E01.mkv"] {
+            let files = [video(0, name, MIN_VIDEO_BYTES)];
+            assert!(select_video_file(&files, &item, "Dune.2021").is_none());
+        }
+        let files = [video(0, "Dune.2021.mkv", MIN_VIDEO_BYTES)];
+        assert!(select_video_file(&files, &item, "Dune.1984").is_none());
+        assert!(select_video_file(&files, &item, "Dune.2021").is_some());
+    }
 
     /// A file of bytes that do not compress, different for each seed.
     fn noise(seed: u64, bytes: usize) -> Vec<u8> {

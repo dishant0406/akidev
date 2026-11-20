@@ -108,8 +108,8 @@ pub struct Ready {
     pub url: String,
     pub stream_type: &'static str,
     pub release: String,
-    /// The release's info hash, when the source has one: what a watch party names so every
-    /// device plays the same release (`release` in the request plays exactly that one).
+    /// Bare hash or file-scoped selection id: what a watch party names so every device plays
+    /// the same file (`release` in the request plays exactly that one).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_id: Option<String>,
     pub source: &'static str,

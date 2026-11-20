@@ -62,11 +62,15 @@ async fn queue(
 ) -> Result<String, String> {
     let plan = streamer.get().await?.plan(id).await?;
     let chosen = match release {
-        Some(hash) => plan
-            .ranked
-            .iter()
-            .chain(&plan.extra)
-            .find(|release| release.info_hash.eq_ignore_ascii_case(hash)),
+        Some(selection) => {
+            let Some((hash, file_idx)) = Release::parse_selection_id(selection) else {
+                return Err("That release is no longer listed. Pick another.".into());
+            };
+            plan.ranked.iter().chain(&plan.extra).find(|release| {
+                release.info_hash.eq_ignore_ascii_case(&hash)
+                    && file_idx.is_none_or(|file_idx| release.file_idx == Some(file_idx))
+            })
+        }
         // The player here decodes anything, so the releases a browser could not play are fair game.
         None => plan.ranked.first().or(plan.extra.first()),
     }
@@ -91,6 +95,12 @@ pub async fn queue_release(
         media.title.clone(),
     );
     item.release = Some(release.info_hash.clone());
+    item.file_index = release
+        .file_idx
+        .map(|index| {
+            u32::try_from(index).map_err(|_| "That file cannot be saved by this app.".to_string())
+        })
+        .transpose()?;
     item.magnet = Some(release.magnet.clone());
     item.poster = media.poster.clone();
     item.season = plan.parsed.season;

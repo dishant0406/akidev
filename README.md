@@ -68,6 +68,22 @@ see [desktop/sources/README.md](desktop/sources/README.md) for the format and fo
 signed and published. The server and the app both load the signed copy from
 `https://sources.akidev.live` and keep the last good one on disk.
 
+**Torrentio is already one of the indexers.** For a film or series with an IMDb id,
+`desktop/sources/sources.json` asks its Stremio addon once and reads each result's validated
+`infoHash`, optional `fileIdx`, file name and optional size. For anime, the bundled Anime Kitsu
+metadata provider maps an AniList id to a Kitsu episode only when its episode number exactly matches
+the requested one; Torrentio is then asked for that Kitsu episode. A missing or mismatched mapping
+skips Torrentio rather than substituting another episode. Kitsu supplies metadata, never streams.
+
+Those releases use exactly the same identity checks, swarm playback and debrid cache checks as every
+other indexer's results: the desktop joins the swarm on the viewer's device; the website's server
+joins it or relays a cached TorBox file. Distinct `(infoHash, fileIdx)` rows remain distinct choices,
+and the selected file is checked against the requested title, season and episode again after torrent
+or debrid metadata arrives. Stremio's local client is what joins the swarm there, so copying an addon
+response without this delivery layer would not itself play anything. A configured addon's direct URL
+is not accepted either: it may hold a debrid credential. Only its validated torrent hash enters the
+shared pipeline.
+
 A stream source is different: it is code, because where the bytes come from is a different
 mechanism each time (`desktop/server/src/sources/` for debrid and the Internet Archive, and the
 torrent engine in `desktop/core`). `STREAM_SOURCES` lists them in order of preference: `debrid`
@@ -256,8 +272,48 @@ so the bytes go straight from archive.org to the viewer. It is listed last in `S
 
 Its gate refuses to guess. A search for a show also returns news clips and reviews about
 it, and a clip holds exactly one video file naming no episode - so "the item has one
-video, so it must be the episode" served a 650MB news package as S2E5. An item is now
-served only when its title or its file name actually names the requested episode.
+video, so it must be the episode" served a 650MB news package as S2E5. Acceptance now
+requires catalogue-relative item/file identity, explicit requested episode evidence and agreeing
+season evidence when a season is requested; named files cannot inherit a contradictory title.
+Samples, commentary, reviews, short clips and unknown-duration candidates are rejected. A known
+catalogue runtime constrains duration to 65–150%; without one, the minimum is five minutes.
+The production Archive lookup also passes the catalogue film year and rejects conflicting explicit
+film years; unknown year remains separate evidence, not a verified year match.
+
+Archive requests use only the administrator-pinned origin and reject redirects, even legitimate
+Archive CDN redirects. Before returning a direct URL, the server reads at most 8 MiB of the media
+head with validated range/length semantics and runs local `ffprobe` restricted to its stdin pipe.
+It requires a decoded video frame, bounded dimensions, known probed duration and duration agreement.
+This is an actual media-head check, **not full-file integrity or full playback verification**. A
+valid file whose index is outside the head, whose bounded probe fails, or whose URL redirects is
+unavailable rather than accepted on metadata alone.
+
+## Source reliability: implemented scope and limits
+
+Release `seeders` is nullable end to end: `null` means unknown, `0` an observed upstream zero.
+Positive reports lead bounded torrent trials, then unknown, then observed zero; none guarantees a
+live swarm. Hash duplicates carry ordered, unique `sources` provenance while retaining the first
+`source` label. Counts are merged by maximum, not addition or confidence voting.
+
+Successful per-indexer answers are cached for ten minutes, genuine empty answers for sixty seconds;
+HTTP/parse/timeout/local-admission failures are not cached as healthy empty answers. Partial searches
+retain failed/pending counts internally. The web play query makes unavailable answers immediately
+stale rather than hiding a recovering source for ten minutes, without automatic retry.
+
+Core indexer admission is global to the process: 96 new request producers and 24 HTTP exchanges,
+including hedges. Cache hits/coalesced waiters need no new producer. Catalogue aliases and known
+film year constrain release and actual-file gates; contradictory title/year/episode/season evidence
+and extras are rejected. Torrent readiness requires the complete bounded head range, not any bytes.
+The server admits four resolve tasks and divides its post-plan remaining budget across the stream
+sources still to try. Retries/media preparation share the source deadline. Pinned releases never
+substitute another hash or fall back to Archive, and skip exclusions remain in force.
+
+These are local implementation facts, not a measured live success rate. The historical
+[Torrential research](pipeline/TORRENTIAL_RESEARCH.md) is a revision-pinned static review with
+future adoption hypotheses, not a report that every recommendation shipped. The separate
+[implementation status and verification limits](pipeline/SOURCE_RELIABILITY_PLAN.md) distinguish
+current controls from follow-up experiments. No new dependencies, secrets or configuration are
+required for this reliability scope.
 
 ## Requirements
 
@@ -447,8 +503,29 @@ title routes, and then finds real sources: an anime episode (and fetches its fir
 episode out of a season pack, a title only the id-searched indexer can find, and a later season
 that must *not* resolve to the wrong one.
 
-### Operating it
+### Shipping source-reliability changes
 
+Production website rollout must include **both the API/server and frontend** from the same tested
+revision: shared-core fixes ship in the compiled `akidev-server`, and nullable-health/play-cache
+contract changes ship in the Next.js frontend. The existing **Deploy** workflow
+(`.github/workflows/deploy.yml`) targets the `production` environment and waits on verify and
+build-server before deployment; dispatching it is a remote deployment, not a local verification.
+Keep existing credentials/settings; this scope requires no new secrets, dependencies or config.
+
+The desktop embeds the core, so a website deploy does not update installed apps. Use the existing
+**Release desktop** workflow (`.github/workflows/release-desktop.yml`) to publish a new workspace
+version for the intended macOS/Windows platforms through their existing build/sign/publish jobs.
+Consumers of `desktop/library` likewise need a rebuilt/released artifact containing the new core;
+signed source definitions cannot deliver library/code fixes. The workflow creates version commits
+and platform tags, so release execution is a separate authorized step, not part of a docs edit.
+
+After rollout, verify website and native/library paths separately with authorized media and current
+source definitions. Check response contracts, selected filename/episode, actual head/probe/first
+frame, cancellation/load and sustained playback. Existing smoke routes or `available: true` alone
+cannot establish improved reliability. No deploy, release, live-feed inspection or live playback is
+claimed by the documentation update.
+
+### Operating it
 ```bash
 cd /opt/konflix
 docker compose ps                      # what is running

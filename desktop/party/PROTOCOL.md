@@ -33,8 +33,8 @@ One JSON object per data-channel message, as text. `t` says which. The Rust list
 | `pong` | host | `id`, `sent`, `at` | The answer: `sent` as it came, `at` the host's clock. |
 | `bye` | either | | Leaving. From the host it ends the party. |
 
-`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<info hash>", "candidates": ["<info hash>", ...] }` (a media id, as
-in `desktop/server/API.md`, the release the host plays, and, until it has one, the releases it is trying, best first; `release` and `candidates` are optional,
+`item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<selection id>", "candidates": ["<selection id>", ...] }` (a media id, as
+in `desktop/server/API.md`, the bare-hash or file-scoped release the host plays, and, until it has one, the releases it is trying, best first; `release` and `candidates` are optional,
 and the website ignores `candidates`), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
 "cover" }` (the last three are only what a guest shows before its own copy has loaded).
 
@@ -55,9 +55,9 @@ joining no longer begins after the host's.
 
 ## The same source
 
-A video item carries the release the host is playing (its info hash). A guest asks for exactly that
-release (`release` in `POST /v1/play`, or `Plan::only` in the desktop app), so everyone watches the
-same source, always. A guest never picks another release itself: if it cannot get the host's, its
+A video item carries the bare-hash or file-scoped selection the host is playing. A guest asks for
+exactly that release (`release` in `POST /v1/play`, or `Plan::only_selected` in the desktop app), so
+everyone watches the same file, always. A guest never picks another release itself: if it cannot get the host's, its
 `status` is `trouble` and the host sees "Can't play". **The host then moves everyone on**: when a guest
 is in `trouble` for the release it plays, early in the film (the first minute), and the host did not pick
 that release by hand, the host drops it, finds the next best (the same list, without the ones that

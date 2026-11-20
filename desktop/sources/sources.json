@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 10,
+  "version": 36,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -241,8 +241,10 @@
     },
     {
       "id": "torrentio",
-      "name": "Torrentio",
+      "name": "Torrentio (IMDb and mapped Anime Kitsu)",
+      "anime_kitsu": true,
       "kinds": [
+        "anime",
         "series",
         "movie"
       ],
@@ -254,7 +256,8 @@
         "path": {
           "$kind": {
             "movie": "/stream/movie/{imdb}.json",
-            "series": "/stream/series/{imdb}:{season}:{episode}.json"
+            "series": "/stream/series/{imdb}:{season}:{episode}.json",
+            "anime": "/stream/series/{kitsu}.json"
           }
         }
       },
@@ -269,7 +272,12 @@
             "join": [
               {
                 "line": {
-                  "from": "title",
+                  "from": {
+                    "coalesce": [
+                      "title",
+                      "description"
+                    ]
+                  },
                   "skip": "👤|💾",
                   "index": 0
                 }
@@ -279,14 +287,24 @@
                   "behaviorHints.filename",
                   {
                     "line": {
-                      "from": "title",
+                      "from": {
+                        "coalesce": [
+                          "title",
+                          "description"
+                        ]
+                      },
                       "skip": "👤|💾",
                       "index": 1
                     }
                   },
                   {
                     "line": {
-                      "from": "title",
+                      "from": {
+                        "coalesce": [
+                          "title",
+                          "description"
+                        ]
+                      },
                       "skip": "👤|💾",
                       "index": 0
                     }
@@ -296,15 +314,31 @@
             ]
           },
           "hash": "infoHash",
+          "file_idx": "fileIdx",
           "size": {
-            "regex": {
-              "from": "title",
-              "pattern": "(?i)💾\\s*([0-9.]+\\s*(?:KB|MB|GB|TB))"
-            }
+            "coalesce": [
+              "behaviorHints.videoSize",
+              {
+                "regex": {
+                  "from": {
+                    "coalesce": [
+                      "title",
+                      "description"
+                    ]
+                  },
+                  "pattern": "(?i)💾\\s*([0-9.]+\\s*(?:KB|MB|GB|TB))"
+                }
+              }
+            ]
           },
           "seeders": {
             "regex": {
-              "from": "title",
+              "from": {
+                "coalesce": [
+                  "title",
+                  "description"
+                ]
+              },
               "pattern": "👤\\s*([0-9]+)"
             }
           }
@@ -571,7 +605,12 @@
             "join": [
               {
                 "line": {
-                  "from": "title",
+                  "from": {
+                    "coalesce": [
+                      "title",
+                      "description"
+                    ]
+                  },
                   "skip": "👤|💾",
                   "index": 0
                 }
@@ -581,14 +620,24 @@
                   "behaviorHints.filename",
                   {
                     "line": {
-                      "from": "title",
+                      "from": {
+                        "coalesce": [
+                          "title",
+                          "description"
+                        ]
+                      },
                       "skip": "👤|💾",
                       "index": 1
                     }
                   },
                   {
                     "line": {
-                      "from": "title",
+                      "from": {
+                        "coalesce": [
+                          "title",
+                          "description"
+                        ]
+                      },
                       "skip": "👤|💾",
                       "index": 0
                     }
@@ -598,15 +647,31 @@
             ]
           },
           "hash": "infoHash",
+          "file_idx": "fileIdx",
           "size": {
-            "regex": {
-              "from": "title",
-              "pattern": "(?i)💾\\s*([0-9.]+\\s*(?:KB|MB|GB|TB))"
-            }
+            "coalesce": [
+              "behaviorHints.videoSize",
+              {
+                "regex": {
+                  "from": {
+                    "coalesce": [
+                      "title",
+                      "description"
+                    ]
+                  },
+                  "pattern": "(?i)💾\\s*([0-9.]+\\s*(?:KB|MB|GB|TB))"
+                }
+              }
+            ]
           },
           "seeders": {
             "regex": {
-              "from": "title",
+              "from": {
+                "coalesce": [
+                  "title",
+                  "description"
+                ]
+              },
               "pattern": "👤\\s*([0-9]+)"
             }
           }

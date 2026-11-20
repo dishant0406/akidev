@@ -149,6 +149,38 @@ pub async fn detail(id: &str) -> Option<Detail> {
     None
 }
 
+/// Free mapping provider and conservative match. This is metadata, not a torrent source.
+pub async fn anime_kitsu_episode(provider_id: &str, episode: u32) -> Option<String> {
+    if episode == 0
+        || provider_id.is_empty()
+        || !provider_id.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let detail = detail::detail(&crate::sources::anime_kitsu(), Kind::Anime, provider_id)
+        .await
+        .ok()??;
+    // `provider_id` is AniList's id; the response identifies the distinct Kitsu title.
+    let kitsu_id = detail.media.id.strip_prefix("anime-")?;
+    let selected = detail
+        .episodes
+        .into_iter()
+        .find(|entry| entry.number == episode)?
+        .id;
+    is_actual_compatible_episode(&selected, kitsu_id, episode).then_some(selected)
+}
+
+/// Reject malformed or changed episode coordinates rather than finding another title.
+fn is_actual_compatible_episode(id: &str, provider_id: &str, episode: u32) -> bool {
+    let mut pieces = id.split(':');
+    pieces.next() == Some("kitsu")
+        && pieces.next() == Some(provider_id)
+        && !provider_id.is_empty()
+        && provider_id.bytes().all(|byte| byte.is_ascii_digit())
+        && pieces.next() == Some(&episode.to_string())
+        && pieces.next().is_none()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +219,28 @@ mod tests {
             std::future::ready(script.next().unwrap())
         })
         .await
+    }
+
+    #[test]
+    fn anime_kitsu_episode_ids_must_match_the_mapped_title_and_episode() {
+        for (id, title, episode) in [("kitsu:7442:1", "7442", 1), ("kitsu:1:12", "1", 12)] {
+            assert!(is_actual_compatible_episode(id, title, episode));
+        }
+        for id in [
+            "",
+            "kitsu:130003:1",
+            "kitsu:7442:2",
+            "kitsu:7442:01",
+            "kitsu:7442:0",
+            "kitsu:7442:-1",
+            "kitsu:7442",
+            "kitsu:7442:1:extra",
+            "Kitsu:7442:1",
+            "anilist:7442:1",
+            "kitsu:nope:1",
+        ] {
+            assert!(!is_actual_compatible_episode(id, "7442", 1), "{id}");
+        }
     }
 
     #[tokio::test]

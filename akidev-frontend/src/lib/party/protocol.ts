@@ -6,7 +6,7 @@
 export type Item = {
   kind: "video";
   id: string;
-  /** The release (info hash) the host plays, so every device plays the same source. */
+  /** The bare-hash or file-scoped release id the host plays, so every device plays the same file. */
   release?: string | null;
 };
 

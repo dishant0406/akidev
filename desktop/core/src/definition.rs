@@ -226,6 +226,9 @@ pub struct IndexerDef {
     pub hosts: Vec<String>,
     #[serde(default = "a_minute")]
     pub cooldown_secs: u64,
+    /// Use the def-configured Anime Kitsu metadata bridge to fill the `kitsu` request hole.
+    #[serde(default)]
+    pub anime_kitsu: bool,
     /// Asked only when the other indexers found nothing worth opening, and given longer to answer.
     /// For a slow service that should not be paid for on every search.
     #[serde(default)]
@@ -295,7 +298,7 @@ pub struct ResponseDef {
     /// category to filter on, so unrelated rows are not returned.
     #[serde(default)]
     pub must_contain_term: bool,
-    /// One row per info hash.
+    /// One row per (info hash, selected file index).
     #[serde(default)]
     pub dedupe: Option<Dedupe>,
 }
@@ -303,7 +306,12 @@ pub struct ResponseDef {
 impl ResponseDef {
     fn check(&self) -> anyhow::Result<()> {
         let fields = &self.fields;
-        let optional = [&fields.magnet, &fields.size, &fields.seeders];
+        let optional = [
+            &fields.magnet,
+            &fields.size,
+            &fields.seeders,
+            &fields.file_idx,
+        ];
         for expression in [&fields.title, &fields.hash]
             .into_iter()
             .chain(optional.into_iter().flatten())
@@ -332,6 +340,9 @@ pub struct Fields {
     pub magnet: Option<Expression>,
     #[serde(default)]
     pub size: Option<Expression>,
+    /// Zero-based file in the torrent. A metadata-indexed scene row can carry it explicitly.
+    #[serde(default)]
+    pub file_idx: Option<Expression>,
     #[serde(default)]
     pub seeders: Option<Expression>,
 }
@@ -355,6 +366,12 @@ impl IndexerDef {
         ensure!(self.cooldown_secs <= 3600, "rests longer than an hour");
         for host in &self.hosts {
             check_url(host)?;
+        }
+        if self.anime_kitsu {
+            ensure!(
+                self.kinds.contains(&Kind::Anime),
+                "an anime bridge serves no anime"
+            );
         }
         self.response.check()?;
         crate::indexers::check(self)

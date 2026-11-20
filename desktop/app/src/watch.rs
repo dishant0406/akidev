@@ -99,41 +99,43 @@ enum Sources {
     Failed(String),
 }
 
-/// What the page tells analytics: how long it took to start, and how long it played.
+/// Only fixed-space, numeric session measurements reach analytics.
 struct Stats {
-    id: String,
-    resolving_since: Option<Instant>,
-    playing_since: Option<Instant>,
-    watched: Duration,
+    opened: Instant,
+    session: crate::playback_telemetry::Session,
+    attempted: bool,
 }
-
 impl Stats {
-    fn new(id: String) -> Stats {
-        Stats {
-            id,
-            resolving_since: None,
-            playing_since: None,
-            watched: Duration::ZERO,
+    fn new() -> Self {
+        Self {
+            opened: Instant::now(),
+            session: Default::default(),
+            attempted: false,
         }
     }
-
-    /// Closes the stretch that was playing, if one was.
-    fn stop(&mut self) {
-        if let Some(since) = self.playing_since.take() {
-            self.watched += since.elapsed();
+    fn finish(&mut self, outcome: &str) {
+        if !self.attempted || !self.session.finish() {
+            return;
         }
+        let s = &self.session;
+        crate::analytics::capture(
+            "playback_ended",
+            serde_json::json!({
+                "outcome": outcome, "first_frame_ms": s.first_frame_ms,
+                "active_play_ms": s.active_ms, "actual_play_advance_seconds": s.advance_seconds,
+                "stall_count": s.stall_count, "stall_ms": s.stall_ms, "recovery_count": s.recoveries,
+                "buffered_lead_seconds": s.lead,
+                "buffered_lead_mean_seconds": if s.samples > 0 { s.lead_total / s.samples as f64 } else { 0.0 },
+                "interval_rate_mean": if s.samples > 0 { s.rate_total / s.samples as f64 } else { 0.0 },
+                "interval_rate_min": s.rate_min.unwrap_or(0.0), "interval_samples": s.samples,
+                "frame_measurement": "gpui_render_submission"
+            }),
+        );
     }
 }
-
 impl Drop for Stats {
     fn drop(&mut self) {
-        self.stop();
-        if self.watched >= Duration::from_secs(5) {
-            crate::analytics::capture(
-                "playback_ended",
-                serde_json::json!({ "title_id": self.id, "watched_seconds": self.watched.as_secs() }),
-            );
-        }
+        self.finish("left");
     }
 }
 
@@ -155,6 +157,7 @@ impl Drop for AbortOnDrop {
 /// The picture. It is its own view so a new frame redraws only the picture, not the page.
 struct VideoView {
     frame: Option<Arc<RenderImage>>,
+    first_rendered: Option<Instant>,
     _frames: Task<()>,
 }
 
@@ -170,6 +173,9 @@ impl VideoView {
                     let Some(new) = player.take_frame() else {
                         return;
                     };
+                    if !player.state().video_ready {
+                        return;
+                    }
                     if let Some(old) = view.frame.replace(new) {
                         cx.drop_image(old, None);
                     }
@@ -189,6 +195,7 @@ impl VideoView {
         .detach();
         VideoView {
             frame: None,
+            first_rendered: None,
             _frames: task,
         }
     }
@@ -196,6 +203,9 @@ impl VideoView {
 
 impl Render for VideoView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        if self.frame.is_some() && self.first_rendered.is_none() {
+            self.first_rendered = Some(Instant::now());
+        }
         div().size_full().bg(rgb(0x000000)).children(
             self.frame
                 .clone()
@@ -264,16 +274,18 @@ pub struct WatchPage {
     holding: Option<Instant>,
     /// The speed a guest was last set to, so it is only set when it changes.
     speed: f64,
-    /// The release (info hash) a guest last set out to play because the host plays it, so it is
-    /// asked for once, even if it could not be found and the best one is playing instead.
+    /// The bare-hash or file-scoped release a guest last set out to play because the host plays
+    /// it, so it is asked for once, even if it could not be found and the best one is playing instead.
     party_tried: Option<String>,
+    /// A host selection already given one bounded wait for late provider rows.
+    selection_waited: Option<String>,
     /// The releases found for this film, kept so switching to another does not search again.
     plan: Option<Plan>,
     /// The release being opened or played, when one was asked for rather than the best.
     wanted: Option<String>,
     /// The viewer picked `wanted` themselves, so it is never replaced without their say.
     picked: bool,
-    /// Releases (info hashes) that opened but would not play, or that a guest could not get.
+    /// Bare hashes or file-scoped selections that opened but would not play, or a guest could not get.
     failed: Vec<String>,
     /// How many times this page has moved on to another source.
     switches: u8,
@@ -363,7 +375,7 @@ impl WatchPage {
         });
 
         let mut page = WatchPage {
-            stats: Stats::new(id.clone()),
+            stats: Stats::new(),
             id,
             parsed,
             detail: None,
@@ -402,6 +414,7 @@ impl WatchPage {
             holding: None,
             speed: 1.,
             party_tried: None,
+            selection_waited: None,
             plan: None,
             wanted: None,
             picked: false,
@@ -430,6 +443,7 @@ impl WatchPage {
         if fresh {
             self.plan = None;
             self.failed.clear();
+            self.selection_waited = None;
             self.switches = 0;
         }
         self.picked = false;
@@ -481,7 +495,7 @@ impl WatchPage {
             || self
                 .stream
                 .as_ref()
-                .is_some_and(|stream| stream.info_hash.eq_ignore_ascii_case(&release))
+                .is_some_and(|stream| stream.selection_id().eq_ignore_ascii_case(&release))
         {
             return;
         }
@@ -565,7 +579,8 @@ impl WatchPage {
         if self.guest || self.picked || self.switches >= SOURCE_TRIES || !self.is_early() {
             return false;
         }
-        self.failed.push(stream.info_hash.clone());
+        self.failed.push(stream.selection_id());
+        self.stats.finish("failed");
         self.switches += 1;
         self.begin(None, false, cx);
         self.say("That source would not play, trying another…", cx);
@@ -594,8 +609,9 @@ impl WatchPage {
         if release.is_some() && self.state.position > 0. {
             self.resume_from = Some(self.state.position);
         }
-        self.stats.stop();
-        self.stats.resolving_since = Some(Instant::now());
+        self.stats.finish("left");
+        self.stats = Stats::new();
+        self.stats.attempted = true;
         self.online_in_use = None;
         self.subtitles_started = false;
         self.offline_subtitles = false;
@@ -659,10 +675,34 @@ impl WatchPage {
             None => left.candidate_hashes(SHARED_CANDIDATES),
         };
         let wanted = match &release {
-            Some(info_hash) => plan.only(info_hash),
+            Some(selection) => chosen_plan(&plan, selection),
             None => Some(left),
         };
         let Some(wanted) = wanted else {
+            // The host may have picked a row that arrived after this guest's first snapshot.
+            // Give the existing provider tail one bounded wait before declaring it missing.
+            if self.guest
+                && release.is_some()
+                && self.host_release(cx).as_deref() == release.as_deref()
+                && self.selection_waited.as_deref() != release.as_deref()
+                && plan.live.is_some()
+            {
+                self.selection_waited = release.clone();
+                let handle = runtime::spawn(async move {
+                    plan.latest_until(Instant::now() + Duration::from_secs(8))
+                        .await
+                });
+                self.resolving = Some(AbortOnDrop(handle.abort_handle()));
+                cx.spawn(async move |page, cx| {
+                    let Ok(latest) = handle.await else { return };
+                    let _ = page.update(cx, |page, cx| {
+                        page.plan = Some(latest);
+                        page.open(release, fresh, cx);
+                    });
+                })
+                .detach();
+                return;
+            }
             // A guess at the host's release that this device never found is no failure: the host
             // has not chosen yet.
             if !self.guest || self.host_release(cx).is_some() {
@@ -700,7 +740,15 @@ impl WatchPage {
     /// The saved copy of this film or episode (of `release` when one is asked for), ready to play.
     fn saved_copy(&mut self, release: Option<&str>, cx: &App) -> Option<Resolution> {
         let library = &cx.global::<Backend>().library;
-        let item = library.saved_video(&self.id, release)?;
+        let selected = match release {
+            Some(selection) => Some(akidev_core::model::Release::parse_selection_id(selection)?),
+            None => None,
+        };
+        let item =
+            library.saved_video(&self.id, selected.as_ref().map(|(hash, _)| hash.as_str()))?;
+        if selected.is_some() && !saved_file_matches(selected?.1, item.file_index) {
+            return None;
+        }
         let sealed = match library.open(&item) {
             Ok(sealed) => sealed,
             Err(error) => {
@@ -741,6 +789,7 @@ impl WatchPage {
             stream: StreamId {
                 info_hash: item.release.unwrap_or_default(),
                 file_index: item.file_index.unwrap_or(0) as usize,
+                selection: release.map(str::to_string),
             },
         })
     }
@@ -755,8 +804,9 @@ impl WatchPage {
             Resolution::Unavailable { reason } => {
                 crate::analytics::capture(
                     "playback_failed",
-                    serde_json::json!({ "stage": "no_source", "title_id": self.id }),
+                    serde_json::json!({ "stage": "no_source" }),
                 );
+                self.stats.finish("failed");
                 self.phase = Phase::Unavailable(reason);
                 cx.notify();
                 return;
@@ -785,22 +835,14 @@ impl WatchPage {
                 if let Some(player) = self.player.clone() {
                     self.hold_for_party(&player, cx);
                 }
-                self.stats.playing_since = Some(Instant::now());
-                crate::analytics::capture(
-                    "playback_started",
-                    serde_json::json!({
-                        "title_id": self.id,
-                        "start_ms": self.stats.resolving_since.map(|since| since.elapsed().as_millis() as u64),
-                        "resumed": resume.is_some(),
-                    }),
-                );
             }
             Err(error) => {
                 crate::analytics::capture(
                     "playback_failed",
-                    serde_json::json!({ "stage": "player", "title_id": self.id }),
+                    serde_json::json!({ "stage": "player" }),
                 );
-                crate::analytics::error("player_start", &error);
+                self.stats.finish("failed");
+                crate::analytics::error("player_start", "The native player could not start");
                 self.phase = Phase::Unavailable(error);
             }
         }
@@ -820,11 +862,45 @@ impl WatchPage {
             return;
         };
         let state = player.state();
+        if let Some(first) = self
+            .video
+            .as_ref()
+            .and_then(|video| video.read(cx).first_rendered)
+            && self.stats.session.frame(
+                first
+                    .saturating_duration_since(self.stats.opened)
+                    .as_millis() as u64,
+            )
+        {
+            crate::analytics::capture(
+                "playback_started",
+                serde_json::json!({
+                                        "first_frame_ms": self.stats.session.first_frame_ms, "frame_measurement": "gpui_render_submission"
+                }),
+            );
+        }
+        self.stats
+            .session
+            .sample(crate::playback_telemetry::Sample {
+                ms: self
+                    .stats
+                    .opened
+                    .elapsed()
+                    .as_millis()
+                    .min(u64::MAX as u128) as u64,
+                position: state.position,
+                paused: state.paused,
+                seeking: state.seeking || self.scrubbing.is_some(),
+                buffering: state.buffering,
+                ended: state.ended,
+                lead: state.buffered_lead,
+            });
 
         if let Some(error) = &state.error {
             if self.try_another_source(cx) {
                 return;
             }
+            self.stats.finish("failed");
             self.phase = Phase::Unavailable(format!("The video could not be played: {error}"));
             self.player = None;
             self.video = None;
@@ -873,6 +949,9 @@ impl WatchPage {
         }
         // An end well short of the duration is a cut-off stream, not a finished episode.
         let watched = self.state.duration > 0. && self.state.position >= self.state.duration * 0.9;
+        if self.state.ended {
+            self.stats.finish(if watched { "ended" } else { "failed" });
+        }
         if self.state.ended && !self.finished && watched {
             self.finish(cx);
         }
@@ -1045,7 +1124,7 @@ impl WatchPage {
     /// What is playing, as the party names it: the film and the release this window plays.
     fn party_item(&self) -> Item {
         let release = match &self.stream {
-            Some(stream) => Some(stream.info_hash.clone()),
+            Some(stream) => Some(stream.selection_id()),
             None => self.wanted.clone(),
         };
         Item::Video {
@@ -1284,6 +1363,7 @@ impl WatchPage {
             self.activity(cx);
             return;
         }
+        self.stats.session.reset_interval();
         self.with_player(cx, |player| player.seek_by(seconds));
     }
 
@@ -1293,6 +1373,7 @@ impl WatchPage {
             cx.notify();
             return;
         }
+        self.stats.session.reset_interval();
         if let Some(player) = &self.player {
             player.seek_to(seconds);
         }
@@ -1748,7 +1829,7 @@ impl WatchPage {
         let release = self
             .stream
             .as_ref()
-            .map(|stream| stream.info_hash.clone())
+            .map(|stream| stream.selection_id())
             .filter(|hash| !hash.is_empty());
         Some(icon_button(
             "watch-save",
@@ -2372,6 +2453,17 @@ impl Render for WatchPage {
     }
 }
 
+fn chosen_plan(plan: &Plan, selection: &str) -> Option<Plan> {
+    akidev_core::model::Release::parse_selection_id(selection)
+        .and_then(|(hash, file_idx)| plan.only_selected(&hash, file_idx))
+}
+
+/// Legacy hash-only choices keep their old saved-copy behavior; a scoped choice must name the
+/// same actual file that was downloaded.
+fn saved_file_matches(selected: Option<usize>, saved: Option<u32>) -> bool {
+    selected.is_none_or(|wanted| saved.map(|index| index as usize) == Some(wanted))
+}
+
 /// "3.1 MB/s · 22 peers".
 fn transfer_line(transfer: &StreamStats) -> String {
     let megabytes = transfer.bytes_per_second as f64 / 1_000_000.;
@@ -2391,7 +2483,8 @@ fn clock(seconds: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{StreamStats, clock, transfer_line};
+    use super::{Plan, StreamStats, chosen_plan, clock, saved_file_matches, transfer_line};
+    use akidev_core::model::Media;
 
     #[test]
     fn describes_a_transfer() {
@@ -2401,6 +2494,81 @@ mod tests {
             peers: 22,
         };
         assert_eq!(transfer_line(&transfer), "3.1 MB/s · 22 peers");
+    }
+
+    #[test]
+    fn file_scoped_picker_and_party_identity_are_distinct() {
+        use akidev_core::media_id;
+        use akidev_core::model::{Detail, Kind, Release};
+        let release = |file_idx| Release {
+            title: format!("Show S01E01 1080p file {file_idx}"),
+            info_hash: "a".repeat(40),
+            file_idx: Some(file_idx),
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: Some(1),
+            source: "test".into(),
+            sources: vec!["test".into()],
+        };
+        let plan = Plan {
+            id: "series-1-s1e1".into(),
+            parsed: media_id::parse("series-1-s1e1").unwrap(),
+            detail: Detail {
+                media: Media {
+                    id: "series-1".into(),
+                    kind: Kind::Series,
+                    title: "Show".into(),
+                    title_variants: Vec::new(),
+                    poster: None,
+                    banner: None,
+                    description: None,
+                    format: None,
+                    year: None,
+                    episodes: None,
+                    runtime_minutes: None,
+                    status: None,
+                    score: None,
+                    popularity: 0,
+                    genres: Vec::new(),
+                    is_adult: false,
+                },
+                studios: Vec::new(),
+                trailer: None,
+                episodes: Vec::new(),
+                cast: Vec::new(),
+                related: Vec::new(),
+                recommended: Vec::new(),
+                imdb_id: None,
+            },
+            terms: Vec::new(),
+            source_reports: Vec::new(),
+            ranked: vec![release(0), release(1)],
+            extra: Vec::new(),
+            live: None,
+        };
+        let chosen = chosen_plan(&plan, &format!("{}:1", "a".repeat(40))).unwrap();
+        assert_eq!(chosen.ranked, vec![release(1)]);
+        assert!(chosen_plan(&plan, &format!("{}:2", "a".repeat(40))).is_none());
+        let stream = akidev_core::stream::StreamId {
+            info_hash: "a".repeat(40),
+            file_index: 1,
+            selection: Some(chosen.ranked[0].selection_id()),
+        };
+        assert_eq!(stream.selection_id(), format!("{}:1", "a".repeat(40)));
+        let legacy = akidev_core::stream::StreamId {
+            selection: None,
+            ..stream
+        };
+        assert_eq!(legacy.selection_id(), "a".repeat(40));
+    }
+
+    #[test]
+    fn legacy_saved_copies_still_match_while_scoped_choices_require_the_same_file() {
+        assert!(saved_file_matches(None, Some(3)));
+        assert!(saved_file_matches(None, None));
+        assert!(saved_file_matches(Some(3), Some(3)));
+        assert!(!saved_file_matches(Some(3), Some(2)));
+        assert!(!saved_file_matches(Some(3), None));
     }
 
     #[test]

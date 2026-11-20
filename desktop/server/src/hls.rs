@@ -347,9 +347,19 @@ impl Hls {
             ]);
         }
         args.extend(
-            ["-i", "pipe:0", "-map", "0:v:0", "-map", "0:a:0?"]
-                .into_iter()
-                .map(str::to_string),
+            // Input-only: block embedded resources without restricting output files.
+            [
+                "-protocol_whitelist",
+                "pipe",
+                "-i",
+                "pipe:0",
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+            ]
+            .into_iter()
+            .map(str::to_string),
         );
         args.extend(codec_args(video, audio, self.settings.transcode_threads));
         let dir = session.dir.display();
@@ -749,6 +759,33 @@ fn new_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn conversion_rejects_embedded_http_and_file_references() {
+        if !crate::media::ffmpeg_available().await {
+            eprintln!("ffmpeg/ffprobe missing: skipping embedded-reference HLS test");
+            return;
+        }
+        for http in [false, true] {
+            for video in [VideoMode::Copy, VideoMode::Encode] {
+                let input = crate::media::tests::EmbeddedReference::new(http).await;
+                let mut settings = Settings::from_env();
+                settings.cache_dir = input.root.join("cache");
+                let hls = Hls::new(Arc::new(settings), vec![]);
+                let session = hls
+                    .start(input.origin.clone(), video, AudioMode::None, None, None)
+                    .await
+                    .expect("start the installed converter");
+                assert!(
+                    !session.wait_ready(Duration::from_secs(5)).await,
+                    "embedded resource must not produce playable output"
+                );
+                assert!(session.is_dead(), "rejected input must end the session");
+                input.assert_no_request().await;
+                hls.shutdown();
+            }
+        }
+    }
 
     #[test]
     fn only_a_real_segment_name_passes() {

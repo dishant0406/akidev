@@ -132,6 +132,8 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p akidev-server -p akidev-core --all-targets -- -D warnings
           cargo test -p akidev-server -p akidev-core
+          cargo test -p akidev-core --no-default-features --locked
+          cargo clippy -p akidev-core --no-default-features --all-targets --locked -- -D warnings
 
   # Builds the server binary. It is compiled inside the Debian release the runtime image is
   # based on, so it links the same libc and OpenSSL it will run against, and it is built here

@@ -45,6 +45,39 @@ fn day(text: &str) -> i64 {
     parse_date_ms(text).unwrap()
 }
 
+#[test]
+fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
+    let def = sources::anime_kitsu();
+    let body = json!({"meta": {
+        "id":"kitsu:7442", "kitsu_id":"7442", "name":"Attack on Titan", "releaseInfo":"2013",
+        "videos":[{"id":"kitsu:7442:1", "season":1, "episode":1},
+                  {"id":"kitsu:7442:2", "season":1, "episode":2}]
+    }});
+    let detail = read_for_test(&def, Kind::Anime, &body, [None, None]).unwrap();
+    assert_eq!(detail.media.id, "anime-7442");
+    assert_eq!(detail.episodes[0].id, "kitsu:7442:1");
+    assert_eq!(detail.episodes[1].number, 2);
+    let mut incomplete = body;
+    incomplete["meta"]["videos"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("episode");
+    incomplete["meta"]["videos"]
+        .as_array_mut()
+        .unwrap()
+        .remove(1);
+    let incomplete = read_for_test(&def, Kind::Anime, &incomplete, [None, None]).unwrap();
+    assert!(incomplete.episodes.is_empty());
+    assert!(
+        sources::current()
+            .indexers
+            .iter()
+            .filter(|indexer| indexer.anime_kitsu)
+            .count()
+            == 1
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // AniList
 // ---------------------------------------------------------------------------------------------

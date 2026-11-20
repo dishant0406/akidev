@@ -10,7 +10,7 @@ use crate::party;
 use crate::play::{Outcome, Player};
 use akidev_core::indexers::FALLBACK_HEADER;
 use akidev_core::media_id;
-use akidev_core::model::{Filters, Kind, Media, Sort};
+use akidev_core::model::{Filters, Kind, Media, Release, Sort};
 use akidev_core::{providers, search};
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -158,7 +158,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/fallback/search", get(fallback_search))
         .route("/v1/subtitles", get(subtitle_list))
         .route("/v1/subtitles/file/{token}", get(subtitle_file))
-        .route("/v1/play", post(play))
+        .route(
+            "/v1/play",
+            post(play).layer(DefaultBodyLimit::max(PLAY_BODY_LIMIT)),
+        )
         .layer(CompressionLayer::new().gzip(true))
         .with_state(state.clone());
 
@@ -340,6 +343,7 @@ async fn health(State(state): State<AppState>) -> Response {
         "active_torrents": state.engine.as_ref().map_or(0, |engine| engine.active_torrents()),
         "hls_sessions": state.hls.count(),
         "resolving": state.player.resolving(),
+        "playback_totals": state.player.metrics(),
         "video_bytes_sent": state.usage.total(),
         "streams": state.registry.len(),
         "cache_bytes": cache,
@@ -589,34 +593,271 @@ async fn title(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PlayBody {
     id: String,
     #[serde(default)]
     hevc: bool,
     /// Where the viewer means to start, in seconds.
     start: Option<f64>,
-    /// The info hash of a release the viewer picked from `/v1/releases`. That one is played, and
-    /// no other.
+    /// The selection id of a release picked from `/v1/releases`. It may also carry the file index
+    /// of a source row within a pack. That one is played, and no other.
     release: Option<String>,
-    /// Info hashes of releases that did not play for this viewer, so the next best is found.
+    /// Bare hashes or file-scoped selection ids that did not play, so the next best is found.
     #[serde(default)]
     skip: Vec<String>,
 }
 
-/// An info hash is 40 hex characters.
-fn is_info_hash(text: &str) -> bool {
-    text.len() == 40 && text.bytes().all(|b| b.is_ascii_hexdigit())
+/// The most releases a viewer may ask to skip.
+const MOST_SKIPPED: usize = 24;
+const MAX_PLAY_START: f64 = 12.0 * 60.0 * 60.0;
+const MAX_PLAY_ID: usize = 128;
+const PLAY_BODY_LIMIT: usize = 4096;
+
+impl PlayBody {
+    fn validate(mut self) -> Result<Self, &'static str> {
+        if self.id.is_empty() || self.id.len() > MAX_PLAY_ID {
+            return Err("That is not an episode or a film.");
+        }
+        match media_id::parse(&self.id) {
+            Some(parsed) if parsed.kind == Kind::Movie || parsed.episode.is_some() => {}
+            _ => return Err("That is not an episode or a film."),
+        }
+        if self
+            .start
+            .is_some_and(|start| !start.is_finite() || !(0.0..=MAX_PLAY_START).contains(&start))
+        {
+            return Err("start must be between 0 and 43200 seconds.");
+        }
+        if let Some(release) = &mut self.release {
+            let Some((hash, file_idx)) = Release::parse_selection_id(release) else {
+                return Err("That release selection is not valid.");
+            };
+            *release = match file_idx {
+                Some(file_idx) => format!("{hash}:{file_idx}"),
+                None => hash,
+            };
+        }
+        if self.skip.len() > MOST_SKIPPED {
+            return Err("skip must be a short list of release selection ids.");
+        }
+        for selection in &mut self.skip {
+            let Some((hash, file_idx)) = Release::parse_selection_id(selection) else {
+                return Err("skip must be a short list of release selection ids.");
+            };
+            *selection = match file_idx {
+                Some(file_idx) => format!("{hash}:{file_idx}"),
+                None => hash,
+            };
+        }
+        let mut seen = std::collections::HashSet::new();
+        self.skip.retain(|hash| seen.insert(hash.clone()));
+        Ok(self)
+    }
 }
 
-/// The most releases a viewer may ask to skip.
-const MOST_SKIPPED: usize = 8;
+fn valid_play_body(
+    body: Result<Json<PlayBody>, axum::extract::rejection::JsonRejection>,
+) -> Result<PlayBody, Box<Response>> {
+    let Json(body) = body
+        .map_err(|rejection| Box::new(error(rejection.status(), "Invalid play request JSON.")))?;
+    body.validate()
+        .map_err(|message| Box::new(error(StatusCode::BAD_REQUEST, message)))
+}
+
+#[cfg(test)]
+mod play_request_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    // Production JSON extraction/validation seam, without a player or external services.
+    async fn boundary(
+        body: Result<Json<PlayBody>, axum::extract::rejection::JsonRejection>,
+    ) -> Response {
+        match valid_play_body(body) {
+            Ok(body) => {
+                Json(json!({"start": body.start, "release": body.release, "skip": body.skip}))
+                    .into_response()
+            }
+            Err(response) => *response,
+        }
+    }
+
+    async fn send(body: String, content_type: &str) -> (StatusCode, serde_json::Value) {
+        let router = Router::new().route(
+            "/v1/play",
+            post(boundary).layer(DefaultBodyLimit::max(PLAY_BODY_LIMIT)),
+        );
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/play")
+                    .header(header::CONTENT_TYPE, content_type)
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn play_json_rejections_are_generic_and_preserve_status() {
+        for (body, content_type, status) in [
+            ("{", "application/json", StatusCode::BAD_REQUEST),
+            (
+                r#"{"id":"movie-1","secret_field":"private"}"#,
+                "application/json",
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
+            (
+                r#"{"id":1}"#,
+                "application/json",
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
+            (
+                r#"{"id":"movie-1","hevc":"yes"}"#,
+                "application/json",
+                StatusCode::UNPROCESSABLE_ENTITY,
+            ),
+            (
+                r#"{"id":"movie-1"}"#,
+                "text/plain",
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            ),
+        ] {
+            let (actual, message) = send(body.into(), content_type).await;
+            assert_eq!(actual, status);
+            assert_eq!(message, json!({"error": "Invalid play request JSON."}));
+        }
+        let (status, message) = send(" ".repeat(PLAY_BODY_LIMIT + 1), "application/json").await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(message, json!({"error": "Invalid play request JSON."}));
+    }
+
+    #[tokio::test]
+    async fn play_start_and_id_bounds_are_enforced() {
+        for start in [0.0, MAX_PLAY_START] {
+            assert_eq!(
+                send(
+                    json!({"id":"movie-1", "start":start}).to_string(),
+                    "application/json"
+                )
+                .await
+                .0,
+                StatusCode::OK
+            );
+        }
+        for start in [-0.001, MAX_PLAY_START + 0.001] {
+            assert_eq!(
+                send(
+                    json!({"id":"movie-1", "start":start}).to_string(),
+                    "application/json"
+                )
+                .await
+                .0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        for start in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut body: PlayBody = serde_json::from_str(r#"{"id":"movie-1"}"#).unwrap();
+            body.start = Some(start);
+            assert!(body.validate().is_err());
+        }
+        for id in [
+            "".into(),
+            "anime-1".into(),
+            "movie-1-ep1".into(),
+            format!("movie-{}", "a".repeat(MAX_PLAY_ID)),
+        ] {
+            assert_eq!(
+                send(json!({"id":id}).to_string(), "application/json")
+                    .await
+                    .0,
+                StatusCode::BAD_REQUEST
+            );
+        }
+        assert_eq!(
+            send(
+                json!({"id":format!("movie-{}", "a".repeat(MAX_PLAY_ID - 6))}).to_string(),
+                "application/json"
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn play_hashes_are_validated_normalized_and_deduplicated() {
+        let upper = "ABCDEF0123".repeat(4);
+        let lower = upper.to_ascii_lowercase();
+        let (status, body) = send(
+            json!({"id":"movie-1", "release":upper, "skip":[upper, lower]}).to_string(),
+            "application/json",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["release"], lower);
+        assert_eq!(body["skip"], json!([lower]));
+        let (status, body) = send(
+            json!({"id":"movie-1", "release":format!("{upper}:0"), "skip":[format!("{upper}:0")]})
+                .to_string(),
+            "application/json",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["release"], format!("{lower}:0"));
+        assert_eq!(body["skip"], json!([format!("{lower}:0")]));
+        for bad in [
+            "a".repeat(39),
+            "a".repeat(41),
+            "g".repeat(40),
+            format!(" {}", "a".repeat(40)),
+        ] {
+            for value in [
+                json!({"id":"movie-1", "release":bad}),
+                json!({"id":"movie-1", "skip":[bad]}),
+            ] {
+                assert_eq!(
+                    send(value.to_string(), "application/json").await.0,
+                    StatusCode::BAD_REQUEST
+                );
+            }
+        }
+        for (count, expected) in [
+            (MOST_SKIPPED, StatusCode::OK),
+            (MOST_SKIPPED + 1, StatusCode::BAD_REQUEST),
+        ] {
+            assert_eq!(
+                send(
+                    json!({"id":"movie-1", "skip":vec!["a".repeat(40); count]}).to_string(),
+                    "application/json"
+                )
+                .await
+                .0,
+                expected
+            );
+        }
+    }
+}
 
 async fn play(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    Json(body): Json<PlayBody>,
+    body: Result<Json<PlayBody>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
+    let body = match valid_play_body(body) {
+        Ok(body) => body,
+        Err(response) => return *response,
+    };
     let client = client_of(&headers, Some(peer));
     if !state.limiter.allow(
         &client,
@@ -631,26 +872,6 @@ async fn play(
         .used_up(&client, state.settings.max_stream_bytes_per_day)
     {
         return daily_limit();
-    }
-    match media_id::parse(&body.id) {
-        Some(parsed) if parsed.kind == Kind::Movie || parsed.episode.is_some() => {}
-        _ => return error(StatusCode::BAD_REQUEST, "That is not an episode or a film."),
-    }
-    if body
-        .release
-        .as_deref()
-        .is_some_and(|release| !is_info_hash(release))
-    {
-        return error(
-            StatusCode::BAD_REQUEST,
-            "release must be a 40 character info hash.",
-        );
-    }
-    if body.skip.len() > MOST_SKIPPED || !body.skip.iter().all(|hash| is_info_hash(hash)) {
-        return error(
-            StatusCode::BAD_REQUEST,
-            "skip must be a short list of 40 character info hashes.",
-        );
     }
     match state
         .player
@@ -696,7 +917,10 @@ async fn releases(
             let list: Vec<serde_json::Value> = choices
                 .into_iter()
                 .map(|choice| {
-                    let cached = held.as_ref().map(|held| held.contains(&choice.id));
+                    let cached = held.as_ref().map(|held| {
+                        Release::parse_selection_id(&choice.id)
+                            .is_some_and(|(hash, _)| held.contains(&hash))
+                    });
                     let mut value = serde_json::to_value(&choice).unwrap_or_default();
                     value["cached"] = json!(cached);
                     value

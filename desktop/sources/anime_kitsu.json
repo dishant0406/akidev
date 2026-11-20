@@ -1,0 +1,21 @@
+{
+  "id": "anime-kitsu",
+  "kinds": ["anime"],
+  "base_url": "https://anime-kitsu.strem.fun",
+  "card": {
+    "id": "kitsu_id",
+    "title": "name",
+    "year": { "year": "releaseInfo" }
+  },
+  "detail": {
+    "request": { "url": "{base}/meta/anime/anilist:{id}.json" },
+    "id_pattern": "^[0-9]+$",
+    "root": "meta",
+    "episodes": {
+      "rows": "videos",
+      "id": "id",
+      "season": "season",
+      "number": "episode"
+    }
+  }
+}

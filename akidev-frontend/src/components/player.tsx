@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import type { Choosing } from "@/lib/party/protocol";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/play";
+import { track } from "@/lib/analytics";
+import { PlaybackTelemetry, type PlaybackOutcome } from "@/lib/playback-telemetry";
 import { optionForChoice, preferRelease, readChoice, shiftCues, writeChoice } from "@/lib/subtitles";
 import { cn, formatSeconds } from "@/lib/utils";
 import { useParty } from "@/providers/party";
@@ -53,7 +55,7 @@ type Props = {
   subtitles?: SubtitleOption[];
   /** The name of the release being played, so the subtitles made for it are offered first. */
   release?: string | null;
-  /** The release's id (info hash), which a watch party names so every device plays the same source. */
+  /** The bare-hash or file-scoped release id, which a watch party names for the same file. */
   releaseId?: string | null;
   /** Still looking for them, so the captions button says so instead of "none". */
   subtitlesLoading?: boolean;
@@ -147,7 +149,89 @@ export default function Player({
   // Callbacks are held in refs so a caller passing inline functions cannot tear down and
   // rebuild the stream on every render.
   const callbacks = useRef({ onError, onStarted, onProgress, onNext });
-  const started = useRef(false);
+const started = useRef(false);
+  const endTelemetry = useRef<(outcome: PlaybackOutcome) => void>(() => {});
+
+  useEffect(() => {
+    const element = video.current;
+    if (!element || !src) return;
+    const session = new PlaybackTelemetry(performance.now());
+    started.current = false;
+    let waiting = false;
+    let frameCallback: number | null = null;
+    let fallbackPosition = element.currentTime;
+    const sample = () => {
+      let lead = 0;
+      for (let i = 0; i < element.buffered.length; i++) {
+        if (element.buffered.start(i) <= element.currentTime && element.buffered.end(i) >= element.currentTime) {
+          lead = element.buffered.end(i) - element.currentTime;
+          break;
+        }
+      }
+      session.sample({ now: performance.now(), position: element.currentTime, paused: element.paused,
+        seeking: element.seeking || pendingStart.current !== null, waiting, ended: element.ended, bufferedLead: lead });
+    };
+    const finish = (outcome: PlaybackOutcome) => {
+      sample();
+      const properties = session.finish(outcome);
+if (properties) {
+        track("playback_ended", { ...properties, stream_type: isHls ? "hls" : "file" });
+        if (outcome === "failed") track("playback_failed", { stage: "player", stream_type: isHls ? "hls" : "file" });
+      }
+    };
+    endTelemetry.current = finish;
+    const rendered = () => {
+      if (element.seeking || pendingStart.current !== null || element.paused) return;
+      if (session.frame(performance.now())) {
+        started.current = true;
+        track("playback_started", { stream_type: isHls ? "hls" : "file", frame_measurement: "video_frame_callback" });
+        callbacks.current.onStarted?.();
+      }
+    };
+    const onFrame = () => {
+      rendered();
+      if (!started.current) frameCallback = element.requestVideoFrameCallback(onFrame);
+    };
+    const onWaiting = () => { sample(); waiting = true; sample(); };
+    const onPlaying = () => { waiting = false; sample(); };
+    const onReset = () => { sample(); waiting = false; fallbackPosition = element.currentTime; };
+    const onEnded = () => finish("ended");
+    const onError = () => finish("failed");
+    const onPageHide = () => finish("left");
+    element.addEventListener("waiting", onWaiting);
+    element.addEventListener("playing", onPlaying);
+    element.addEventListener("pause", onReset);
+    element.addEventListener("seeking", onReset);
+    element.addEventListener("ended", onEnded);
+    element.addEventListener("error", onError);
+    window.addEventListener("pagehide", onPageHide);
+    if (typeof element.requestVideoFrameCallback === "function") frameCallback = element.requestVideoFrameCallback(onFrame);
+    const timer = setInterval(() => {
+      // Older browsers: require an advancing decoded picture, not merely the `playing` event.
+      if (typeof element.requestVideoFrameCallback !== "function" && element.readyState >= 2 && !element.paused && !element.seeking && pendingStart.current === null && element.currentTime > fallbackPosition) {
+        if (session.frame(performance.now())) {
+          started.current = true;
+          track("playback_started", { stream_type: isHls ? "hls" : "file", frame_measurement: "advancing_picture_fallback" });
+          callbacks.current.onStarted?.();
+        }
+      }
+      fallbackPosition = element.currentTime;
+      sample();
+    }, 1000);
+    return () => {
+      finish("left");
+      clearInterval(timer);
+      if (frameCallback !== null) element.cancelVideoFrameCallback(frameCallback);
+      element.removeEventListener("waiting", onWaiting);
+      element.removeEventListener("playing", onPlaying);
+      element.removeEventListener("pause", onReset);
+      element.removeEventListener("seeking", onReset);
+      element.removeEventListener("ended", onEnded);
+      element.removeEventListener("error", onError);
+      window.removeEventListener("pagehide", onPageHide);
+if (endTelemetry.current === finish) endTelemetry.current = () => {};
+    };
+  }, [src, isHls, startAt]);
   useEffect(() => {
     callbacks.current = { onError, onStarted, onProgress, onNext };
   });
@@ -209,20 +293,23 @@ export default function Player({
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         // Only a fatal error means playback has stopped; hls.js recovers from the rest.
-        if (!data.fatal) return;
+if (cancelled || !data.fatal) return;
         // A manifest that will not load cannot be fixed by loading it again: the usual cause
         // is an expired session, which answers 404 every time.
         if (data.response?.code === 429) {
           // Loading again would only be refused again, until tomorrow.
-          hls.destroy();
+hls.destroy();
+          endTelemetry.current("failed");
           callbacks.current.onError(DAILY_LIMIT_MESSAGE);
         } else if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR) {
-          hls.destroy();
+hls.destroy();
+          endTelemetry.current("failed");
           callbacks.current.onError("This stream has expired. Reload the episode to start it again.");
         } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
         else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         else {
-          hls.destroy();
+hls.destroy();
+          endTelemetry.current("failed");
           callbacks.current.onError("Playback failed. Reload the episode to try again.");
         }
       });
@@ -230,7 +317,11 @@ export default function Player({
       hls.attachMedia(element);
       stop = () => hls.destroy();
     };
-    void attach();
+void attach().catch(() => {
+      if (cancelled) return;
+      endTelemetry.current("failed");
+      callbacks.current.onError("Playback could not be started.");
+    });
 
     return () => {
       cancelled = true;
@@ -315,7 +406,10 @@ export default function Player({
     if (!element) return;
     // A guest asks the host, and plays or pauses when the host says so.
     if (party.role === "guest") return party.ask({ t: element.paused ? "play" : "pause" });
-    if (element.paused) element.play().catch(() => callbacks.current.onError("Playback could not be started."));
+    if (element.paused) element.play().catch(() => {
+      endTelemetry.current("failed");
+      callbacks.current.onError("Playback could not be started.");
+    });
     else element.pause();
   }, [party]);
 
@@ -529,10 +623,7 @@ export default function Player({
         onPlaying={() => {
           setReady(true);
           publish(false);
-          if (!started.current) {
-            started.current = true;
-            callbacks.current.onStarted?.();
-          }
+
         }}
         onEnded={() => callbacks.current.onNext?.()}
         onError={(event) => {

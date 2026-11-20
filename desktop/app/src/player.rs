@@ -22,6 +22,8 @@ pub struct PlayerState {
     pub paused: bool,
     /// Waiting for the download to catch up.
     pub buffering: bool,
+    pub seeking: bool,
+    pub buffered_lead: f64,
     /// A picture has been decoded, so frames show video and not black.
     pub video_ready: bool,
     /// Playback reached the end of the file.
@@ -59,6 +61,8 @@ impl Default for PlayerState {
             duration: 0.,
             paused: false,
             buffering: false,
+            seeking: false,
+            buffered_lead: 0.0,
             video_ready: false,
             ended: false,
             volume: 100.,
@@ -119,6 +123,8 @@ const MUTE: u64 = 8;
 const SUBTITLE_TRACK: u64 = 9;
 const AUDIO_TRACK: u64 = 10;
 const TRACK_COUNT: u64 = 11;
+const SEEKING: u64 = 12;
+const BUFFERED_LEAD: u64 = 13;
 
 /// Frames are never larger than this, whatever the window: software rendering costs CPU
 /// in proportion to its area, and GPUI scales the image up to the window.
@@ -185,6 +191,12 @@ impl Player {
                 (DURATION, "duration", mpv_format_MPV_FORMAT_DOUBLE),
                 (PAUSE, "pause", mpv_format_MPV_FORMAT_FLAG),
                 (BUFFERING, "paused-for-cache", mpv_format_MPV_FORMAT_FLAG),
+                (SEEKING, "seeking", mpv_format_MPV_FORMAT_FLAG),
+                (
+                    BUFFERED_LEAD,
+                    "demuxer-cache-duration",
+                    mpv_format_MPV_FORMAT_DOUBLE,
+                ),
                 (VIDEO_READY, "vo-configured", mpv_format_MPV_FORMAT_FLAG),
                 (ENDED, "eof-reached", mpv_format_MPV_FORMAT_FLAG),
                 (VOLUME, "volume", mpv_format_MPV_FORMAT_DOUBLE),
@@ -494,6 +506,15 @@ unsafe fn handle_events(mpv: &Mpv, shared: &Shared) {
                         DURATION => state.duration = *(property.data as *const f64),
                         PAUSE => state.paused = *(property.data as *const i32) != 0,
                         BUFFERING => state.buffering = *(property.data as *const i32) != 0,
+                        SEEKING => state.seeking = *(property.data as *const i32) != 0,
+                        BUFFERED_LEAD => {
+                            let lead = *(property.data as *const f64);
+                            state.buffered_lead = if lead.is_finite() {
+                                lead.clamp(0.0, 3600.0)
+                            } else {
+                                0.0
+                            };
+                        }
                         VIDEO_READY => state.video_ready = *(property.data as *const i32) != 0,
                         ENDED => state.ended = *(property.data as *const i32) != 0,
                         VOLUME => state.volume = *(property.data as *const f64),

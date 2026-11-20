@@ -38,7 +38,7 @@ pub struct DownloadPicker {
     session: u64,
     id: String,
     sources: Sources,
-    /// The info hash of the release chosen.
+    /// The bare-hash or file-scoped selection id of the release chosen.
     selected: Option<String>,
     /// The subtitles found, or `None` while the sites are being asked.
     subtitles: Option<Vec<Group>>,
@@ -155,7 +155,7 @@ impl DownloadPicker {
             .ranked
             .iter()
             .chain(&plan.extra)
-            .find(|release| release.info_hash.eq_ignore_ascii_case(&hash))
+            .find(|release| release.selection_id().eq_ignore_ascii_case(&hash))
             .cloned()
         else {
             return;

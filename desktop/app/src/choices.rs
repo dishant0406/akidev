@@ -49,9 +49,23 @@ pub fn badges(choice: &Choice) -> Vec<String> {
     badges.extend(choice.codec.and_then(codec_label).map(str::to_string));
     badges.extend(choice.audio.and_then(audio_label).map(str::to_string));
     badges.extend(choice.size_bytes.map(size_label));
-    badges.push(format!("{} seeders", choice.seeders));
+    badges.push(match choice.seeders {
+        Some(seeders) => format!("{seeders} seeders"),
+        None => "Seeders unknown".to_string(),
+    });
     if choice.pack {
         badges.push("Season pack".to_string());
+    }
+    let sources = if choice.sources.is_empty() {
+        std::slice::from_ref(&choice.source)
+    } else {
+        &choice.sources
+    };
+    for source in sources {
+        let source = source.trim();
+        if !source.is_empty() && !badges.iter().any(|badge| badge == source) {
+            badges.push(source.to_string());
+        }
     }
     badges
 }
@@ -71,8 +85,9 @@ mod tests {
             id: title.to_string(),
             title: title.to_string(),
             size_bytes: Some(1_400_000_000),
-            seeders: 42,
+            seeders: Some(42),
             source: "x".into(),
+            sources: vec!["x".into()],
             resolution: Some(1080),
             codec: Some("h264"),
             audio: Some("compressed"),
@@ -118,7 +133,8 @@ mod tests {
                 "Stereo",
                 "1.4 GB",
                 "42 seeders",
-                "Season pack"
+                "Season pack",
+                "x"
             ]
         );
     }
@@ -132,7 +148,25 @@ mod tests {
             release.audio,
             release.size_bytes,
         ) = (None, None, None, None);
-        assert_eq!(badges(&release), ["42 seeders"]);
+        assert_eq!(badges(&release), ["42 seeders", "x"]);
+    }
+
+    #[test]
+    fn retains_provenance_with_a_legacy_source_fallback() {
+        let mut release = choice("a");
+        release.sources = vec!["one".into(), "two".into(), "one".into()];
+        assert_eq!(&badges(&release)[5..], ["one", "two"]);
+        release.sources.clear();
+        assert_eq!(&badges(&release)[5..], ["x"]);
+    }
+
+    #[test]
+    fn distinguishes_unknown_seeders_from_zero() {
+        let mut release = choice("a");
+        release.seeders = None;
+        assert!(badges(&release).contains(&"Seeders unknown".to_string()));
+        release.seeders = Some(0);
+        assert!(badges(&release).contains(&"0 seeders".to_string()));
     }
 
     #[test]

@@ -97,14 +97,54 @@ it again, publish a document without the field (or with a lower one) and a highe
   is `torznab:attr@seeders`, so any Torznab feed can be read. `rows` is a dotted path to the rows (`*` means every value of an
   object; a list found there is read element by element; empty means the body itself). `children`
   reads rows nested in each row, whose fields reach the outer row with `^.`.
-- `fields` are `title` and `hash` (required), `magnet`, `size` (bytes, or text like `1.3 GB`)
-  and `seeders`. Each is a dotted path, or one of: `{"template": "{^.title}[ ({^.year})]"}`
+- `fields` are `title` and `hash` (required), `magnet`, `size` (bytes, or text like `1.3 GB`),
+  `file_idx` and `seeders`. Each is a dotted path, or one of: `{"template": "{^.title}[ ({^.year})]"}`
   (`{? ... ?}` vanishes when a hole inside is empty), `{"regex": {"from": path, "pattern": ...}}`
   (first capture group), `{"line": {"from": path, "skip": pattern, "index": n}}`,
   `{"coalesce": [...]}`, `{"join": [...]}`, `{"magnet_hash": path}`, `{"magnet_name": path}`,
   `{"magnet_size": path}`. Without a `magnet` field one is built from the hash and the trackers.
+  Stremio-shaped addons, including Torrentio, may supply their description in either `title` or
+  `description`; `behaviorHints.filename` identifies the selected file and `behaviorHints.videoSize`
+  its exact size. `file_idx` reads the addon's zero-based `fileIdx`, preserving distinct files within
+  one torrent as distinct choices without bypassing title/episode checks. Only a validated torrent
+  `infoHash` is used, never an addon's credential-bearing direct-play URL.
+- `anime_kitsu: true` opts an anime-capable indexer into the bundled Anime Kitsu metadata bridge.
+  Its request must use `{kitsu}` for anime. The bridge accepts only an exact same-number Kitsu
+  episode; a missing or mismatched mapping skips that indexer instead of falling back to IMDb or
+  playing another episode.
+- `seeders` is optional observation data: missing, malformed, negative, fractional or out-of-range
+  values stay unknown (`null` in API output); an explicit valid `0` remains observed zero. Do not
+  define a default zero for providers that omit health. Counts are upstream reports, not live
+  measurements made by Akidev.
 - `drop` removes rows (`{"path": ..., "equals": ...}` or `"starts_with"`); `must_contain_term`
-  keeps only rows whose title holds the whole searched title; `dedupe` keeps one row per hash.
+  keeps only rows whose title holds the whole searched title; `dedupe` keeps one row per
+  `(hash, file_idx)`. Across requests, duplicates of that pair merge before ranking: unique `sources`
+  provenance follows planned source/query order, not arrival order. The first `source` label stays
+  compatible; known seeder observations use the maximum, never a sum, and safe trackers are limited
+  to the signed configured list (at most 32). Corroboration is not proof of title/episode identity.
+
+### Search execution and failure semantics
+
+The engine has process-wide admission for at most **96 new request producers** and **24 HTTP
+exchanges**, including hedged mirrors. Each search's planned request list is also capped at 96.
+A cache hit or a caller joining the same in-flight request does not start another producer.
+Permit waits count against host timeouts; local congestion is not evidence that a mirror is down,
+and a mirror that was never contacted is not put on cooldown for losing a hedge.
+
+Successfully parsed per-request observations are cached for ten minutes when non-empty, sixty
+seconds when empty. Definition version, endpoints and filled request context participate in the
+key. HTTP errors, malformed/blocked responses, timeouts and admission failures are not cached as
+healthy empty answers. Late bounded producers may fill their own successful cache entries, while
+failed/pending variants remain visible in the internal source report. A partial aggregate is not
+promoted into a new complete per-provider observation.
+
+The shared core resolves catalogue identity and applies aliases, episode/season and known film-year
+gates before ranking and again to actual torrent/debrid filenames. Startup needs the whole bounded
+torrent head range. The server additionally probes media and budgets preparation by stream source;
+these code controls cannot be added or changed by publishing definitions alone. A definition check
+or fixture parse does **not** prove current reachability, correct episode content or sustained
+playback. See [SOURCE_RELIABILITY_PLAN.md](../../pipeline/SOURCE_RELIABILITY_PLAN.md) for implemented
+scope, remaining hypotheses and verification limits.
 
 ### Providers
 
