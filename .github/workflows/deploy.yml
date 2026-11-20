@@ -114,10 +114,18 @@ jobs:
 
       - name: Install ffmpeg
         # The server's tests run the real conversion path against a generated file, so ffmpeg
-        # must be present. Without it they say so and pass, which would hide a broken one.
+        # must be present. Ubuntu's image already includes it; avoid an unnecessary apt update,
+        # and bound repository waits when an install is actually needed.
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update -qq \
+              -o Acquire::Retries=2 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
 
       - uses: dtolnay/rust-toolchain@stable
         with:
