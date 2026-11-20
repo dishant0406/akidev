@@ -169,7 +169,7 @@ pub struct Metrics {
 }
 impl Metrics {
     fn increment(counter: &std::sync::atomic::AtomicU64) {
-        let _ = counter.fetch_update(
+        let _ = counter.try_update(
             std::sync::atomic::Ordering::Relaxed,
             std::sync::atomic::Ordering::Relaxed,
             |n| Some(n.saturating_add(1)),
