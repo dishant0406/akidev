@@ -324,15 +324,40 @@ fn too_many() -> Response {
 }
 
 async fn health(State(state): State<AppState>) -> Response {
-    let debrid = match state.player.debrid() {
-        Some(debrid) => json!({ "configured": true, "reachable": debrid.status().await }),
-        None => json!({ "configured": false }),
-    };
-    let fallback = match &state.fallback {
-        Some(fallback) => fallback.status().await,
-        None => json!({ "configured": false }),
-    };
-    let cache = crate::hls::dir_size(&state.settings.cache_dir).await;
+    // Liveness must not hang behind an upstream outage or a large cache walk. These checks run
+    // concurrently and each has a shorter budget than the container's five-second health probe.
+    let (debrid, fallback, cache) = tokio::join!(
+        async {
+            match state.player.debrid() {
+                Some(debrid) => {
+                    match tokio::time::timeout(Duration::from_secs(3), debrid.status()).await {
+                        Ok(reachable) => json!({ "configured": true, "reachable": reachable }),
+                        Err(_) => json!({ "configured": true, "reachable": false }),
+                    }
+                }
+                None => json!({ "configured": false }),
+            }
+        },
+        async {
+            match &state.fallback {
+                Some(fallback) => {
+                    match tokio::time::timeout(Duration::from_secs(3), fallback.status()).await {
+                        Ok(status) => status,
+                        Err(_) => json!({ "configured": true, "reachable": false }),
+                    }
+                }
+                None => json!({ "configured": false }),
+            }
+        },
+        async {
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                crate::hls::dir_size(&state.settings.cache_dir),
+            )
+            .await
+            .unwrap_or(0)
+        }
+    );
     Json(json!({
         "status": "ok",
         "version": env!("CARGO_PKG_VERSION"),
