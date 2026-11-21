@@ -3,9 +3,11 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 
-import { CATALOGUES, SORTS, genresFor, type ContentType } from "@/constants/site";
+import type { ContentType } from "@/constants/site";
 import type { Card } from "@/lib/media";
-import type { Page as CataloguePage } from "@/types/media";
+import { defaultSort, genresFor } from "@/lib/screens";
+import { useScreens } from "@/providers/screens";
+import type { Page as CataloguePage, Screens } from "@/types/media";
 import { cn } from "@/lib/utils";
 import { useBrowse, useSearch } from "@/query/use-media";
 
@@ -50,20 +52,33 @@ function Page({ heading, filters, children }: { heading: string; filters: React.
 
 /** One catalogue, or all of them: sort tabs, a genre list, and a grid that loads more. */
 export function CatalogueView({ kind, initial }: { kind: ContentType | null; initial?: CataloguePage }) {
-  const [sort, setSort] = useState(SORTS[0].value);
+  const screens = useScreens();
+  if (!screens) {
+    return (
+      <Page heading="Browse" filters={null}>
+        <ErrorState title="Couldn't reach the catalogue" detail="Check your connection and try again." />
+      </Page>
+    );
+  }
+  return <Catalogue screens={screens} kind={kind} initial={initial} />;
+}
+
+function Catalogue({ screens, kind, initial }: { screens: Screens; kind: ContentType | null; initial?: CataloguePage }) {
+  const [picked, setSort] = useState<string | undefined>();
+  const sort = picked ?? defaultSort(screens);
   const [genre, setGenre] = useState<string | undefined>();
   const [genresOpen, setGenresOpen] = useState(false);
-  const browse = useBrowse(kind, sort, genre, initial);
+  const browse = useBrowse(kind, sort, genre, sort === defaultSort(screens) ? initial : undefined);
 
-  const heading = CATALOGUES.find((page) => page.kind === kind)?.label ?? "Browse";
+  const heading = screens.tabs.find((tab) => tab.kind === kind)?.label ?? "Browse";
 
   const filters = (
     <div className="flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         {/* Reaches the screen edges on a phone, so a tab that does not fit is seen running off. */}
         <div className="no-scrollbar -mx-5 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:gap-5 sm:px-0">
-          {SORTS.map((each) => (
-            <Tab key={each.value} active={sort === each.value} onClick={() => setSort(each.value)}>
+          {screens.sorts.map((each) => (
+            <Tab key={each.sort} active={sort === each.sort} onClick={() => setSort(each.sort)}>
               {each.label}
             </Tab>
           ))}
@@ -81,7 +96,7 @@ export function CatalogueView({ kind, initial }: { kind: ContentType | null; ini
       </div>
       {genresOpen && (
         <div className="flex flex-wrap gap-x-6 gap-y-2 pt-5">
-          {genresFor(kind).map((each) => {
+          {genresFor(screens, kind).map((each) => {
             const active = genre === each;
             return (
               <button
@@ -121,20 +136,20 @@ export function CatalogueView({ kind, initial }: { kind: ContentType | null; ini
   );
 }
 
-const KIND_TABS: { kind: ContentType | null; label: string }[] = [
-  { kind: null, label: "All" },
-  ...CATALOGUES.map((page) => ({ kind: page.kind, label: page.label })),
-];
-
 /** The full results of a search, across every catalogue, narrowed by a tab. */
 export function SearchView({ term }: { term: string }) {
+  const screens = useScreens();
+  const kindTabs: { kind: ContentType | null; label: string }[] = [
+    { kind: null, label: "All" },
+    ...(screens?.tabs ?? []).map((tab) => ({ kind: tab.kind, label: tab.label })),
+  ];
   const [kind, setKind] = useState<ContentType | null>(null);
   const search = useSearch(term, 60);
   const shown = search.results.filter((card) => !kind || card.kind === kind);
 
   const filters = (
     <div className="no-scrollbar -mx-5 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:gap-5 sm:px-0">
-      {KIND_TABS.map((tab) => (
+      {kindTabs.map((tab) => (
         <Tab key={tab.label} active={kind === tab.kind} onClick={() => setKind(tab.kind)}>
           {tab.label}
         </Tab>

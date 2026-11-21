@@ -16,12 +16,17 @@
 // different titles. It also means a page can tell what it is looking at from the URL
 // alone.
 //
+// A title from a plugin's catalogue says which provider it came from, as `provider~id`, with every
+// character of the id that is not a letter or a digit written as `_` and two hex digits:
+// `movie-myprovider~abc_2d12` is the film `abc-12` of `myprovider`. Only the desktop app has plugins,
+// but a link or a party can carry one of these ids to the site.
+//
 // This mirrors desktop/core/src/media_id.rs. The server is the contract, so the two must
 // agree; they are kept deliberately small so that stays obvious.
 
 export type ContentType = "anime" | "series" | "movie";
 
-const MEDIA_ID = /^(anime|series|movie)-([A-Za-z0-9]+)(?:-(.*))?$/;
+const MEDIA_ID = /^(anime|series|movie)-([A-Za-z0-9]+|[A-Za-z0-9]+~(?:[A-Za-z0-9]|_[0-9a-fA-F]{2})+)(?:-(.*))?$/;
 const ANIME_SUFFIX = /^ep(\d+)$/;
 const SERIES_SUFFIX = /^s(\d+)e(\d+)$/;
 

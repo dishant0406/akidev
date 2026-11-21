@@ -4,15 +4,17 @@ import Hero from "@/components/hero";
 import MediaRow from "@/components/row";
 import { watchPath } from "@/constants/routes";
 import { fraction, useRecent } from "@/lib/progress";
+import { useScreens } from "@/providers/screens";
 import { useHome } from "@/query/use-media";
 import type { HomeResponse } from "@/types/media";
 
-/** The rows drawn as placeholders while the page loads. */
-const LOADING_ROWS = ["Trending Anime", "New Releases", "Popular Series"];
+/** How many rows are drawn as placeholders while the page loads. */
+const LOADING_ROWS = 3;
 
 export default function HomeView({ initial }: { initial?: HomeResponse }) {
   const home = useHome(initial);
   const recent = useRecent();
+  const loadingTitles = (useScreens()?.home ?? []).slice(0, LOADING_ROWS).map((row) => row.title);
 
   return (
     <div className="pb-8">
@@ -31,7 +33,7 @@ export default function HomeView({ initial }: { initial?: HomeResponse }) {
       )}
 
       {home.loading
-        ? LOADING_ROWS.map((title) => <MediaRow key={title} title={title} items={[]} loading />)
+        ? loadingTitles.map((title) => <MediaRow key={title} title={title} items={[]} loading />)
         : home.rows.map((row, index) => <MediaRow key={row.title} title={row.title} items={row.items} eager={index < 2} />)}
     </div>
   );

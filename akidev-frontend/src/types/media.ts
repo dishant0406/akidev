@@ -122,6 +122,15 @@ export interface HomeRow {
   items: Media[];
 }
 
+/** What the apps draw, from GET /v1/screens: the tabs, sorts, genres and home rows. */
+export interface Screens {
+  tabs: { kind: Kind; slug: string; label: string }[];
+  sorts: { sort: string; label: string }[];
+  /** By kind name, and `all` for the page that shows every catalogue. */
+  genres: Record<string, string[]>;
+  home: { title: string; kind: Kind; sort: string; genre?: string }[];
+}
+
 export interface HomeResponse {
   featured: Media[];
   rows: HomeRow[];

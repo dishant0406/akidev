@@ -6,6 +6,8 @@
 
 import { headers } from "next/headers";
 
+import type { Screens } from "@/types/media";
+
 const BASE = (process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:9000").replace(/\/+$/, "");
 
 /** `path` answered as JSON, kept by the framework for `revalidate` seconds, or null when it could not be. */
@@ -16,6 +18,19 @@ export async function serverGet<T>(path: string, revalidate: number): Promise<T 
   } catch {
     return null;
   }
+}
+
+let kept: { at: number; screens: Screens } | null = null;
+
+/**
+ * The tabs, sorts, genres and home rows. This server asks the API at most once every five minutes
+ * and keeps the answer, so no page waits on it, and the last answer is kept if a refresh fails.
+ */
+export async function getScreens(): Promise<Screens | null> {
+  if (kept && Date.now() - kept.at < 5 * 60 * 1000) return kept.screens;
+  const screens = await serverGet<Screens>("/v1/screens", 0);
+  if (screens) kept = { at: Date.now(), screens };
+  return screens ?? kept?.screens ?? null;
 }
 
 /**

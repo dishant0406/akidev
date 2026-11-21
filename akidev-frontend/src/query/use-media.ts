@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "react-query";
 
-import { DEFAULT_SORT, type ContentType } from "@/constants/site";
+import type { ContentType } from "@/constants/site";
 import { ApiError, get } from "@/lib/api";
 import type { Card } from "@/lib/media";
 import type { Detail, HomeResponse, Media, Page } from "@/types/media";
@@ -42,8 +42,8 @@ export function useBrowse(kind: ContentType | null, sort: string, genre: string 
       getNextPageParam: (last, pages) => (last.has_next ? pages.length + 1 : undefined),
       keepPreviousData: true,
       staleTime: 5 * MINUTE,
-      // The first page, as the server rendered it, for the view the page opens on.
-      initialData: initial && sort === DEFAULT_SORT && !genre ? { pages: [initial], pageParams: [undefined] } : undefined,
+      // The first page, as the server rendered it, for the view the page opens on (the caller passes it only for the default sort).
+      initialData: initial && !genre ? { pages: [initial], pageParams: [undefined] } : undefined,
     },
   );
 

@@ -1,22 +1,21 @@
 import { notFound } from "next/navigation";
 
 import { CatalogueView } from "@/components/browse";
-import { CATALOGUES, DEFAULT_SORT, catalogueForSlug } from "@/constants/site";
-import { isClientNavigation, serverGet } from "@/lib/api-server";
+import { getScreens, isClientNavigation, serverGet } from "@/lib/api-server";
+import { defaultSort, tabForSlug } from "@/lib/screens";
 import type { Page } from "@/types/media";
-
-export function generateStaticParams() {
-  return CATALOGUES.map((page) => ({ kind: page.slug }));
-}
-
-export const dynamicParams = false;
 
 // Rendered for each request with the first page already in it; see app/page.tsx.
 export const dynamic = "force-dynamic";
 
 export default async function CataloguePage({ params }: { params: Promise<{ kind: string }> }) {
-  const page = catalogueForSlug((await params).kind);
-  if (!page) notFound();
-  const first = (await isClientNavigation()) ? null : await serverGet<Page>(`/v1/catalogue?kind=${page.kind}&sort=${DEFAULT_SORT}&page=1`, 60);
-  return <CatalogueView kind={page.kind} initial={first ?? undefined} />;
+  const screens = await getScreens();
+  // With no answer the page is an error, not a 404: a 404 would be kept by the edge for a while.
+  if (!screens) throw new Error("The API did not answer.");
+  const tab = tabForSlug(screens, (await params).kind);
+  if (!tab) notFound();
+  const first = (await isClientNavigation())
+    ? null
+    : await serverGet<Page>(`/v1/catalogue?kind=${tab.kind}&sort=${defaultSort(screens)}&page=1`, 60);
+  return <CatalogueView kind={tab.kind} initial={first ?? undefined} />;
 }

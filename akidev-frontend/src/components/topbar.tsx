@@ -6,9 +6,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { CATALOGUES } from "@/constants/site";
 import { ROUTES } from "@/constants/routes";
 import { cameFrom, visit } from "@/lib/trail";
+import { useScreens } from "@/providers/screens";
 import { cn } from "@/lib/utils";
 
 import { IconButton } from "./button";
@@ -21,20 +21,20 @@ const SOLID_AFTER = 40;
 
 const ICONS: Record<string, LucideIcon> = { anime: Sparkles, series: Tv, films: Clapperboard };
 
-const TABS: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Home", href: ROUTES.HOME, icon: House },
-  ...CATALOGUES.map((page) => ({
-    label: page.label,
-    href: `/${page.slug}`,
-    icon: ICONS[page.slug] ?? Clapperboard,
-  })),
-];
-
 /**
  * Home, the three catalogues and search, in one bar that floats over the artwork. On a phone the
  * catalogues move to a bar at the foot of the screen, where a thumb reaches them.
  */
 export default function TopBar() {
+  const screens = useScreens();
+  const tabs: { label: string; href: string; icon: LucideIcon }[] = [
+    { label: "Home", href: ROUTES.HOME, icon: House },
+    ...(screens?.tabs ?? []).map((tab) => ({
+      label: tab.label,
+      href: `/${tab.slug}`,
+      icon: ICONS[tab.slug] ?? Clapperboard,
+    })),
+  ];
   const pathname = usePathname();
   const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
@@ -102,7 +102,7 @@ export default function TopBar() {
           </Link>
 
           <nav aria-label="Catalogues" className="no-scrollbar hidden min-w-0 flex-1 items-center gap-5 overflow-x-auto md:flex">
-            {TABS.map((tab) => (
+            {tabs.map((tab) => (
               <Link
                 key={tab.href}
                 href={tab.href}
@@ -130,7 +130,7 @@ export default function TopBar() {
 
       {!pathname.startsWith("/watch") && (
         <nav aria-label="Catalogues" className="material fixed inset-x-0 bottom-0 z-40 flex shadow-[0_-1px_0_rgb(var(--ink)/0.07)] md:hidden">
-          {TABS.map(({ label, href, icon: Icon }) => (
+          {tabs.map(({ label, href, icon: Icon }) => (
             <Link
               key={href}
               href={href}
