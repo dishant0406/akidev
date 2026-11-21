@@ -1,8 +1,8 @@
 name: Refresh trackers
 
 # Once a day, takes the best public trackers from ngosang/trackerslist, writes them into the
-# document that is live at sources.akidev.live, and publishes it signed, so running apps pick them
-# up. The live document is the one that counts: this starts from it and does not touch the
+# document that is live at sources.akidev.live (and the same document, schema 2, at /v2), and publishes
+# it signed, so running apps pick them up. The live document is the one that counts: this starts from it and does not touch the
 # repository, so indexers published by hand are kept.
 #
 # Needs these repository secrets:
@@ -44,6 +44,9 @@ jobs:
           mkdir -p "$work"
           curl -fsS --retry 3 "$FEED/sources.json" -o "$work/sources.json"
           echo "live version $(jq .version "$work/sources.json")"
+          # The schema 2 document, if it is live: it may hold what the other cannot, so it is kept and only
+          # its trackers and version are taken from the refreshed one.
+          curl -fsS --retry 3 "$FEED/v2/sources.json" -o "$work/sources-v2.json" || rm -f "$work/sources-v2.json"
           result="$(FILE="$work/sources.json" ./scripts/refresh-trackers.sh | tail -n 1)"
           echo "$result"
           echo "work=$work" >> "$GITHUB_OUTPUT"
@@ -76,6 +79,21 @@ jobs:
             aws s3 cp "$2" "s3://$BUCKET/$1" --content-type "$3" \
               --endpoint-url "https://$ACCOUNT.r2.cloudflarestorage.com"
           }
+          # The schema 2 feed has the same trackers and the same version, so a build that knows it and one that
+          # does not follow the same trackers. It is the live schema 2 document with those two taken from the
+          # refreshed one, or, when there is none yet, the refreshed document with the number changed.
+          if [ -f "$WORK/sources-v2.json" ]; then
+            jq --slurpfile refreshed "$WORK/sources.json" \
+              '.trackers = $refreshed[0].trackers | .version = $refreshed[0].version' \
+              "$WORK/sources-v2.json" > "$WORK/sources-v2.next"
+            mv "$WORK/sources-v2.next" "$WORK/sources-v2.json"
+          else
+            jq '.schema = 2' "$WORK/sources.json" > "$WORK/sources-v2.json"
+          fi
+          "${tool[@]}" sign "$WORK/sources.key" "$WORK/sources-v2.json" "$WORK/sources-v2.sig"
+          "${tool[@]}" check "$WORK/sources-v2.json" "$WORK/sources-v2.sig"
+          put v2/sources.json "$WORK/sources-v2.json" application/json
+          put v2/sources.sig "$WORK/sources-v2.sig" text/plain
           put sources.json "$WORK/sources.json" application/json
           put sources.sig "$WORK/sources.sig" text/plain
           echo "Published version $(jq .version "$WORK/sources.json")"
