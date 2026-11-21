@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "akidev"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "akidev-core",
  "akidev-library",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-core"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "anyhow",
  "axum",
@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-library"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "akidev-core",
  "anyhow",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-manga"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "aes",
  "akidev-core",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-manga-ffi"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "akidev-core",
  "akidev-manga",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-party"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "akidev-server"
-version = "0.1.26"
+version = "0.1.27"
 dependencies = [
  "akidev-core",
  "akidev-party",
