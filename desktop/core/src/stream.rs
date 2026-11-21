@@ -695,6 +695,15 @@ fn known_names(media: &crate::model::Media) -> Vec<String> {
     names
 }
 
+/// AniList uses `MOVIE`, while Anime Kitsu uses `movie`; both need film discovery and ranking.
+fn is_film(media: &crate::model::Media) -> bool {
+    media.kind == Kind::Movie
+        || media
+            .format
+            .as_deref()
+            .is_some_and(|format| format.eq_ignore_ascii_case("movie"))
+}
+
 /// Whether the anime `candidate` (with these `names`) is `media`: one of its names is the title,
 /// and the years, when both are known, are no more than a year apart.
 fn is_same_title(
@@ -775,7 +784,7 @@ async fn find_releases_named(
             let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all, outcome.sources, outcome.live)
         }
-        (Kind::Anime, Some(_)) if media.format.as_deref() == Some("movie") => {
+        (Kind::Anime, Some(_)) if is_film(media) => {
             // Anime films are still addressed as `anime-...-ep1`, but discovery and ranking are
             // film searches, not episode searches. Kitsu uses the movie route above as well.
             let terms = movie_search_terms(titles, year);
@@ -934,9 +943,7 @@ impl Plan {
         let mut plan = self.clone();
         // Keep late uncommon rows, not just those admitted by the initial codec filter.
         let extras = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie
-                || self.detail.media.format.as_deref() == Some("movie") =>
-            {
+            _ if is_film(&self.detail.media) => {
                 rank_movie_releases_by(&filtered, year, &self.detail.media.title, &names, false)
             }
             Some(episode) => rank_releases_by(
@@ -961,9 +968,7 @@ impl Plan {
         .collect::<Vec<_>>();
         plan.extra.extend(extras);
         let ranked = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie
-                || self.detail.media.format.as_deref() == Some("movie") =>
-            {
+            _ if is_film(&self.detail.media) => {
                 rank_movie_releases(&filtered, year, &self.detail.media.title, &names)
             }
             Some(episode) => rank_releases(
@@ -986,9 +991,7 @@ impl Plan {
         }
         // Re-rank unattempted evidence, not merely append in arrival order.
         let mut reranked = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie
-                || self.detail.media.format.as_deref() == Some("movie") =>
-            {
+            _ if is_film(&self.detail.media) => {
                 rank_movie_releases(&plan.ranked, year, &self.detail.media.title, &names)
             }
             Some(episode) => rank_releases(
@@ -1996,6 +1999,18 @@ mod tests {
         media.title_variants = variants.iter().map(|v| v.to_string()).collect();
         media.year = year;
         media
+    }
+
+    #[test]
+    fn anilist_movie_format_uses_film_discovery_regardless_of_case() {
+        let mut media = card("Rascal Does Not Dream of a Dear Friend", &[], Some(2026));
+        media.kind = Kind::Anime;
+        media.format = Some("MOVIE".into());
+        assert!(is_film(&media));
+        media.format = Some("movie".into());
+        assert!(is_film(&media));
+        media.format = Some("TV".into());
+        assert!(!is_film(&media));
     }
 
     #[test]
