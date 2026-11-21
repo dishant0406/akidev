@@ -102,11 +102,12 @@ pub struct Mapped {
     pub movie: bool,
 }
 
-/// The indexers that serve this kind, in the order the definitions list them.
-fn serving(indexers: &[IndexerDef], kind: Kind) -> Vec<&IndexerDef> {
+/// The indexers that serve this kind, in the order the definitions list them. A `server_only` one
+/// is left out unless this is the server.
+fn serving(indexers: &[IndexerDef], kind: Kind, on_server: bool) -> Vec<&IndexerDef> {
     indexers
         .iter()
-        .filter(|indexer| indexer.kinds.contains(&kind))
+        .filter(|indexer| indexer.kinds.contains(&kind) && (on_server || !indexer.server_only))
         .collect()
 }
 
@@ -965,7 +966,7 @@ pub async fn search_all_report(
     enough: impl Fn(&[Release]) -> bool,
 ) -> SearchOutcome {
     let sources = sources::current();
-    let chosen = serving(&sources.indexers, options.kind);
+    let chosen = serving(&sources.indexers, options.kind, config.on_server);
     search_in(&sources, &chosen, config, terms, options, enough).await
 }
 
@@ -1211,10 +1212,26 @@ pub(crate) mod tests {
         sources::current()
     }
 
+    #[test]
+    fn a_server_only_indexer_is_asked_by_the_server_and_by_no_desktop_app() {
+        let sources = definitions();
+        let ids = |on_server: bool| -> Vec<String> {
+            serving(&sources.indexers, Kind::Movie, on_server)
+                .iter()
+                .map(|indexer| indexer.id.clone())
+                .collect()
+        };
+        assert!(ids(true).contains(&"prowlarr".to_string()));
+        assert!(!ids(false).contains(&"prowlarr".to_string()));
+        // Everything else is asked by both.
+        assert_eq!(ids(true).len(), ids(false).len() + 1);
+    }
+
     /// The ids the plan would ask, and the term each is asked.
     fn planned(kind: Kind, terms: &[&str], only: &[&str]) -> Vec<(String, String)> {
         let sources = definitions();
-        let chosen: Vec<&IndexerDef> = serving(&sources.indexers, kind)
+        // As the server sees them: it asks every indexer, `server_only` ones included.
+        let chosen: Vec<&IndexerDef> = serving(&sources.indexers, kind, true)
             .into_iter()
             .filter(|indexer| only.is_empty() || only.contains(&indexer.id.as_str()))
             .collect();
@@ -1755,7 +1772,7 @@ pub(crate) mod tests {
         assert!(sources::use_plugins(&[plugin]).iter().all(Result::is_ok));
 
         let current = sources::current();
-        let chosen = serving(&current.indexers, Kind::Series);
+        let chosen = serving(&current.indexers, Kind::Series, false);
         let ours: Vec<&IndexerDef> = chosen
             .iter()
             .copied()

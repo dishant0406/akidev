@@ -7,7 +7,7 @@
 //! The desktop app keeps plugins in `<data dir>/plugins`. A file `name.json` is switched on and
 //! `name.json.off` is switched off. The server never loads them: it uses only the signed document.
 
-use crate::definition::{IndexerDef, ProviderDef, SubtitleDef};
+use crate::definition::{IndexerDef, MapperDef, ProviderDef, SubtitleDef};
 use crate::model::{Kind, Shape};
 use crate::screens::{HomeRow, Tab};
 use crate::sources::{self, Sources};
@@ -43,6 +43,10 @@ pub struct Plugin {
     /// Rows for the home page, each drawn from one of the plugin's own providers.
     #[serde(default)]
     pub home: Vec<HomeRow>,
+    /// Id mappers, so the plugin's indexers can be asked by another catalogue's ids, the way the
+    /// built-in Kitsu mapper does it. An indexer of the plugin names one in `map`.
+    #[serde(default)]
+    pub mappers: Vec<MapperDef>,
 }
 
 impl PluginKind {
@@ -149,6 +153,7 @@ impl Plugin {
         );
         ensure!(
             !self.indexers.is_empty()
+                || !self.mappers.is_empty()
                 || !self.subtitles.is_empty()
                 || !self.providers.is_empty()
                 || !self.kinds.is_empty(),
@@ -178,6 +183,7 @@ impl Plugin {
         ensure!(self.indexers.len() <= 16, "too many indexers (16 at most)");
         ensure!(self.providers.len() <= 4, "too many catalogues (4 at most)");
         ensure!(self.home.len() <= 8, "too many home rows (8 at most)");
+        ensure!(self.mappers.len() <= 2, "too many mappers (2 at most)");
         ensure!(
             self.subtitles.len() <= 4,
             "too many subtitle sources (4 at most)"
@@ -215,6 +221,16 @@ impl Plugin {
                 .with_context(|| format!("catalogue {}", provider.id))?;
             for host in &provider.image_hosts {
                 check_public_host(host).with_context(|| format!("catalogue {}", provider.id))?;
+            }
+        }
+        for mapper in &self.mappers {
+            mapper
+                .check()
+                .with_context(|| format!("mapper {}", mapper.id))?;
+            check_public_url(&mapper.provider.base_url)
+                .with_context(|| format!("mapper {}", mapper.id))?;
+            for host in &mapper.provider.image_hosts {
+                check_public_host(host).with_context(|| format!("mapper {}", mapper.id))?;
             }
         }
         for row in &self.home {
@@ -321,6 +337,14 @@ pub fn merge(base: &Sources, plugin: &Plugin) -> anyhow::Result<Sources> {
             indexer.id
         );
         merged.indexers.push(indexer.clone());
+    }
+    for mapper in &plugin.mappers {
+        ensure!(
+            merged.mapper(&mapper.id).is_none(),
+            "a mapper called {} is already there",
+            mapper.id
+        );
+        merged.mappers.push(mapper.clone());
     }
     for source in &plugin.subtitles {
         ensure!(
@@ -611,6 +635,48 @@ mod tests {
         let mut clash = plugin("example");
         clash["indexers"][0]["id"] = json!(base.indexers[0].id);
         assert!(merge(&base, &parse(&bytes(&clash)).unwrap()).is_err());
+    }
+
+    #[test]
+    fn a_plugin_can_bring_a_mapper_and_an_indexer_that_asks_through_it() {
+        let _guard = sources::definitions_change_lock().blocking_lock();
+        let base = sources::current();
+        // A copy of the built-in Kitsu mapper under another name, and an indexer asked by its ids.
+        let document: Value =
+            serde_json::from_str(include_str!("../../sources/sources.json")).unwrap();
+        let mut mapper = document["mappers"][0].clone();
+        assert_eq!(mapper["id"], "kitsu");
+        mapper["id"] = json!("mymap");
+        let mut example = indexer("anime-by-id");
+        example["kinds"] = json!(["anime"]);
+        example["map"] = json!("mymap");
+        example["request"] = json!({ "path": "/stream/{mymap_kind}/{mymap}.json" });
+        let mut brought = plugin("example");
+        brought["indexers"] = json!([example]);
+        brought["mappers"] = json!([mapper.clone()]);
+
+        let merged = merge(&base, &parse(&bytes(&brought)).unwrap()).unwrap();
+        assert_eq!(merged.mapper("mymap").unwrap().id, "mymap");
+        assert_eq!(
+            merged.indexer("anime-by-id").unwrap().mapper_id(),
+            Some("mymap")
+        );
+
+        // The mapper alone is enough to make a plugin.
+        let mut alone = plugin("example");
+        alone.as_object_mut().unwrap().remove("indexers");
+        alone["mappers"] = json!([mapper.clone()]);
+        assert!(parse(&bytes(&alone)).is_ok());
+
+        // Not one that is already there, and not one on a private address.
+        let mut clash = brought.clone();
+        clash["mappers"][0]["id"] = json!("kitsu");
+        clash["indexers"][0]["map"] = json!("kitsu");
+        clash["indexers"][0]["request"] = json!({ "path": "/stream/{kitsu_kind}/{kitsu}.json" });
+        assert!(merge(&base, &parse(&bytes(&clash)).unwrap()).is_err());
+        let mut private = brought;
+        private["mappers"][0]["provider"]["base_url"] = json!("https://127.0.0.1/api");
+        assert!(parse(&bytes(&private)).is_err());
     }
 
     #[test]

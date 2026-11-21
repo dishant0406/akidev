@@ -16,6 +16,9 @@ pub struct Config {
     /// once there is something to play and a moment has passed. What is still out is not lost: it
     /// finishes in the background and the next search finds it cached.
     pub search_ceiling_ms: u64,
+    /// True only on the server that serves the website. An indexer marked `server_only` in the sources
+    /// document is asked there and nowhere else, so the desktop app never calls the server for it.
+    pub on_server: bool,
     /// How long the fallback indexers, asked only when the others found nothing, are given: for one
     /// request and for all of them.
     pub fallback_timeout_ms: u64,
@@ -53,6 +56,7 @@ impl Default for Config {
         Config {
             indexer_timeout_ms: 5_000,
             search_ceiling_ms: 4_000,
+            on_server: false,
             fallback_timeout_ms: 15_000,
             cache_dir: None,
             max_cache_bytes: 8 * 1024 * 1024 * 1024,

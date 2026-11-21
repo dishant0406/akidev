@@ -153,6 +153,7 @@ impl Settings {
     pub fn core(&self) -> akidev_core::config::Config {
         akidev_core::config::Config {
             indexer_timeout_ms: self.indexer_timeout_ms,
+            on_server: true,
             cache_dir: Some(self.cache_dir.clone()),
             max_cache_bytes: self.max_cache_bytes,
             max_torrents: self.max_torrents,

@@ -230,6 +230,10 @@ pub struct IndexerDef {
     /// `{kitsu_kind}` for the mapper `kitsu`. Absent: the indexer needs no mapping.
     #[serde(default)]
     pub map: Option<String>,
+    /// Asked by the server that serves the website and by no desktop app, for a source that needs the
+    /// server's own secrets (Prowlarr). The desktop app does not call the server for it.
+    #[serde(default)]
+    pub server_only: bool,
     /// Asked only when the other indexers found nothing worth opening, and given longer to answer.
     /// For a slow service that should not be paid for on every search.
     #[serde(default)]
