@@ -293,6 +293,7 @@ impl Streamer {
         let config = self.config.lock().unwrap().clone();
         let id = plan.id.as_str();
         let parsed = &plan.parsed;
+        let episode = plan.playback_episode();
         let started = Instant::now();
         let deadline = deadline.min(started + Duration::from_millis(config.resolve_deadline_ms));
         race_plan(
@@ -309,7 +310,7 @@ impl Streamer {
                     match engine
                         .open_for_identity(
                             &release,
-                            parsed.episode,
+                            episode,
                             parsed.season,
                             left,
                             fresh,
@@ -1006,6 +1007,15 @@ impl Plan {
         reranked.truncate(OFFERED * 2);
         plan.ranked = reranked;
         plan
+    }
+
+    /// Anime films keep an `ep1` address for compatibility, but their files are selected as films.
+    pub fn playback_episode(&self) -> Option<u32> {
+        if is_film(&self.detail.media) {
+            None
+        } else {
+            self.parsed.episode
+        }
     }
 
     /// Rechecks public/mutable plans at delivery, including the parsed identity.
@@ -2002,15 +2012,21 @@ mod tests {
     }
 
     #[test]
-    fn anilist_movie_format_uses_film_discovery_regardless_of_case() {
+    fn anilist_movie_format_uses_film_discovery_and_file_selection() {
         let mut media = card("Rascal Does Not Dream of a Dear Friend", &[], Some(2026));
         media.kind = Kind::Anime;
         media.format = Some("MOVIE".into());
         assert!(is_film(&media));
+        let mut plan = plan_with(Vec::new(), Vec::new());
+        plan.parsed = media_id::parse("anime-199340-ep1").unwrap();
+        plan.detail.media = media.clone();
+        assert_eq!(plan.playback_episode(), None);
         media.format = Some("movie".into());
         assert!(is_film(&media));
         media.format = Some("TV".into());
         assert!(!is_film(&media));
+        plan.detail.media = media;
+        assert_eq!(plan.playback_episode(), Some(1));
     }
 
     #[test]

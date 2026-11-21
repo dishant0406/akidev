@@ -372,7 +372,8 @@ impl Player {
         // What costs this server least is tried first: a release a browser can play without a
         // re-encode (10-bit H.264 is the common one it cannot), and one light enough to download
         // faster than it plays (a REMUX is not). The order is otherwise the library's own.
-        let movie = plan.parsed.kind == akidev_core::model::Kind::Movie;
+        let episode = plan.playback_episode();
+        let movie = episode.is_none();
         plan.ranked
             .sort_by_key(|release| (needs_encode_by_name(&release.title), heavy(release, movie)));
         let failure_scope = FailureScope {
@@ -381,7 +382,6 @@ impl Player {
         };
         plan = plan.demote_recent_failures_scoped(streamer.failure_memory(), false, &failure_scope);
 
-        let episode = plan.parsed.episode;
         let season = plan.parsed.season;
         let mut reasons: Vec<String> = Vec::new();
         let expected_seconds = plan
