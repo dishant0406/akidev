@@ -5,7 +5,7 @@ Each entry says what we chose, why, what we turned down, and what it costs. New 
 ## The skins only draw (2026-11-21)
 
 **Chosen.** The desktop app and the website do not hold lists of tabs, sorts, genres or home rows. They read a
-`screens` section of the signed sources document (`desktop/sources/sources.json`). Core reads it
+`screens` section of the signed sources document (`sources.json`, now in the akidev-sources repo). Core reads it
 (`core/src/screens.rs`, `sources::screens()`). The server sends it at `GET /v1/screens`. The desktop app calls
 core directly. The website asks the server.
 
@@ -87,7 +87,7 @@ has declared (a plugin that was removed) still reads, as a series.
 the kind what it is like.
 
 **Turned down.** A `kinds` section in the signed document. An old app refuses a document with a kind it does not
-know, so it would have to be in the schema 2 feed (`sources/sources-v2.json`, see "Two feeds, one version"). Nothing
+know, so it would have to be in the schema 2 feed (`sources-v2.json` (in the akidev-sources repo), see "Two feeds, one version"). Nothing
 needs it yet: plugins load only in new builds.
 
 **Costs.** The registry is global and keeps its names for the life of the program (at most 32, each 1 to 16
@@ -126,7 +126,7 @@ HTTP client also refuses to follow a redirect to a private address.
 every installed app reads) and schema 2 under `/v2` (`sources::refresh_from` tries it first, and falls back to
 the root when `/v2` is missing, forged or in a format it cannot read). `SCHEMA` is 2, and a build reads 1 and 2.
 Today the two documents are the same apart from the number. The publish script derives `/v2` from the root document,
-or uses `sources/sources-v2.json` when there is one, and the daily tracker job refreshes both.
+or uses `sources-v2.json` (in the akidev-sources repo) when there is one, and the daily tracker job refreshes both.
 
 **Why.** An installed app refuses a whole document for a value it does not know, and a refused document also stops
 tracker updates and `min_version`. With two feeds, a value only newer builds can read has somewhere to go that old
@@ -179,3 +179,19 @@ downloads and party links) and a key format for all providers (the same reason).
 
 **Costs.** A key can be long with a UUID in it (each dash becomes `_2d`). A plugin's provider id cannot have a
 dash, because a key is split at the first one after the provider.
+
+## The data lives in its own repo (2026-11-21)
+
+**Chosen.** `sources.json` and its README moved to a public repo, `dishant0406/akidev-sources`. This repo keeps only code.
+`desktop/core/build.rs` downloads the file to `desktop/sources/sources.json` (git-ignored) when it is missing, so every
+build, local or CI, gets a built-in copy without any workflow step. `publish-sources.sh` needs `SOURCES_DIR`, a checkout of
+the new repo, so what gets published is always what is committed there.
+
+**Why.** Changing a source should not mean touching the code repo, and the code repo should be only the skeleton.
+
+**Turned down.** A git submodule (reproducible, but every data change needs a pin commit here). A download step in each
+workflow (six places to forget; `build.rs` covers all of them, plus the iOS and Android engine builds).
+
+**Trade-off.** A build needs the network once, and it is not reproducible: it reads the newest `main` of the sources repo.
+A bad commit there can break this repo's tests (`read_tests.rs`, `screens.test.ts` read the document). To pin an older copy,
+put your own file at `desktop/sources/sources.json`. The old copies stay in this repo's git history.

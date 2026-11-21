@@ -16,7 +16,7 @@ Decisions: parties are private (the code is shared with friends, there is no pub
 always plays the host's stream and never falls back to another; a host that reloads resumes the same
 party; a desktop host on a network that blocks direct connections is told to host from the website
 (no TCP/TLS TURN work in the desktop stack); everything is additive so old apps keep working, and the
-published sources can say which versions may run (`min_version`, see `desktop/sources/README.md`).
+published sources can say which versions may run (`min_version`, see the akidev-sources README).
 
 **Done** (code and tests, both apps where it applies): L1 goodbye on quit and `pagehide`, L2 liveness
 (heartbeat while paused, silence watchdogs), L3 guest rejoin, L4 web host resume, L5 re-register and

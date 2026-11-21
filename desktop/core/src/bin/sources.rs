@@ -1,4 +1,4 @@
-//! Publishing tool for the definitions in `sources/sources.json`.
+//! Publishing tool for the definitions in `sources.json` (akidev-sources repo).
 //!
 //!   akidev-sources keygen <key-file>                    make the signing key, print its public half
 //!   akidev-sources sign <key-file> <json> <sig-file>    sign a document

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Replaces the public trackers in a sources document (sources/sources.json, or the file FILE names)
+# Replaces the public trackers in a sources document (sources.json in the akidev-sources repo, or the file FILE names)
 # with the first ones of ngosang/trackerslist
 # (trackers_all.txt, which is ranked best first) and raises "version". Prints "changed" or
 # "unchanged" on its last line and touches nothing when the list is the same.
@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 LIMIT="${LIMIT:-32}"
 LIST="${LIST:-https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt}"
-FILE="${FILE:-sources/sources.json}"
+FILE="${FILE:?Set FILE to a sources.json}"
 
 fetched="$(curl -fsS --retry 3 "$LIST")"
 trackers="$(printf '%s\n' "$fetched" | tr -d '\r' | grep -E '^(udp|https?)://[^[:space:]]+$' | awk '!seen[$0]++' | head -n "$LIMIT")"

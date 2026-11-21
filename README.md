@@ -63,13 +63,13 @@ must agree.
 ## Adding a provider or an indexer
 
 Both are *data*, not code: signed JSON definitions that the engine in `desktop/core` follows, so a
-change to what is asked of an upstream does not need a release. They are in `desktop/sources/`;
-see [desktop/sources/README.md](desktop/sources/README.md) for the format and for how they are
+change to what is asked of an upstream does not need a release. They are in the [akidev-sources](https://github.com/dishant0406/akidev-sources) repo;
+see [the akidev-sources repo](https://github.com/dishant0406/akidev-sources) for the format and for how they are
 signed and published. The server and the app both load the signed copy from
 `https://sources.akidev.live` and keep the last good one on disk.
 
 **Torrentio is already one of the indexers.** For a film or series with an IMDb id,
-`desktop/sources/sources.json` asks its Stremio addon once and reads each result's validated
+`sources.json` (in the akidev-sources repo) asks its Stremio addon once and reads each result's validated
 `infoHash`, optional `fileIdx`, file name and optional size. For anime, the bundled Anime Kitsu
 metadata provider maps an AniList id to a Kitsu episode only when its episode number exactly matches
 the requested one; Torrentio is then asked for that Kitsu episode. Kitsu movies use Torrentio's

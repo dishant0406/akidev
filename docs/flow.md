@@ -4,7 +4,7 @@ How data moves, which file does each step, and what the user sees when it goes w
 
 ## The sources document
 
-1. `desktop/sources/sources.json` is built into every app and server (`core/src/sources.rs`, `EMBEDDED`).
+1. `sources.json` (in the akidev-sources repo) is built into every app and server (`core/src/sources.rs`, `EMBEDDED`). `core/build.rs` downloads it to `desktop/sources/sources.json` when that file is missing.
 2. At start, `load_saved` reads the copy saved by an earlier run. `keep_fresh` fetches a newer signed copy
    every 6 hours. A copy is used only if it is signed, has a higher `version`, and passes `validate`.
 3. The desktop app then calls `plugin::load` (`app/src/main.rs`), which puts the switched-on plugins on top.
@@ -84,7 +84,7 @@ Edge cases and what the person sees:
    the live one) and raise `version`.
 2. `cargo test -p akidev-core` and `akidev-sources check` validate it.
 3. `publish-sources.sh` runs `check-old-apps.sh` (old app, new document), signs, and uploads.
-4. The script derives the schema 2 document (the same one with `"schema": 2`, or `sources/sources-v2.json`), signs
+4. The script derives the schema 2 document (the same one with `"schema": 2`, or `sources-v2.json` in the akidev-sources repo), signs
    both, and uploads `/v2` first and the root second. The daily tracker job refreshes the trackers and the version of
    both, and keeps what the live schema 2 document holds that the other does not.
 5. An app asks `/v2` first (`sources::refresh_from`). If that has nothing, is not signed by our key, or has a format

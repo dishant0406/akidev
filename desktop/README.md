@@ -127,7 +127,7 @@ pass when those are missing).
 ## Indexers and providers update without a build
 
 Which indexers and providers exist, their addresses, how each is asked and how its reply is read,
-and the public trackers are data in [`sources/sources.json`](sources/README.md),
+and the public trackers are data in [`sources.json`](https://github.com/dishant0406/akidev-sources),
 not code. The app has one copy built in, uses the last good copy it saved, and fetches the
 published one in the background (at start and every six hours). A downloaded copy is used only
 if its ed25519 signature is valid, its version is higher than the one in use and it passes the

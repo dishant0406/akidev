@@ -1,7 +1,7 @@
 //! Plugins: one JSON file a developer shares and a user adds, which brings sources of its own.
 //!
 //! A plugin holds indexers (a list of torrents), subtitle sources, and catalogues (providers, with the
-//! home rows that show them), in the same shape as the signed document (see `sources/README.md`). Nobody signed it, so it is held to stricter rules: every address
+//! home rows that show them), in the same shape as the signed document (see the README of the akidev-sources repo). Nobody signed it, so it is held to stricter rules: every address
 //! must be a public https address, and it can add sources but never replace one that is there.
 //!
 //! The desktop app keeps plugins in `<data dir>/plugins`. A file `name.json` is switched on and

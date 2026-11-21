@@ -46,6 +46,8 @@ Release order that matters: publish the new `sources.json` (it carries `empty_wh
 
 ## How to publish this work (recipe, checked 2026-11-21)
 
+*Since 2026-11-21 `sources.json` lives in the akidev-sources repo, so `sources/sources.json` below means that repo's `sources.json`, and `publish-sources.sh` is run with `SOURCES_DIR=<checkout of it>`.*
+
 The repo copy of `sources.json` also holds the unreleased Kitsu change, which the old-app gate refuses for
 every release up to v0.1.24 (check v0.1.25). So there are two ways:
 

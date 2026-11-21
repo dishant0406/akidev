@@ -1,7 +1,7 @@
 //! Where titles and releases come from, as data.
 //!
 //! Indexers move, change their address or die often, so what is searched and how is a JSON
-//! document (`sources/sources.json` in the repository) rather than code. The app ships with
+//! document (`sources.json` in the akidev-sources repo, downloaded by `core/build.rs` when missing) rather than code. The app ships with
 //! one copy and fetches a newer one in the background. A downloaded copy is used only if it
 //! carries a valid signature, a higher version than the one in use, and passes `validate`;
 //! otherwise the app keeps what it has. Nothing here runs downloaded code: a definition only
