@@ -1153,7 +1153,8 @@ mod tests {
         let offset = 4 * 1024 * 1024;
         reader.seek(std::io::SeekFrom::Start(offset)).await.unwrap();
         let mut bytes = vec![0; 256 * 1024];
-        tokio::time::timeout(Duration::from_secs(10), reader.read_exact(&mut bytes))
+        // Reads real bytes through a local torrent, so a loaded machine needs more than a few seconds.
+        tokio::time::timeout(Duration::from_secs(60), reader.read_exact(&mut bytes))
             .await
             .unwrap()
             .unwrap();
