@@ -233,3 +233,26 @@ owner picked WebAssembly.
 **Not built.** Stream services as plugins: the desktop app has no way to turn a release into a playable URL except its own
 torrent engine (debrid and the Internet Archive are code in the server), so it needs a new playback path in the app. A
 Settings field for a plugin's login or key. Plugins on the website: the server does not turn the feature on.
+
+## Stream services: a plugin turns a release into a link (2026-11-22)
+
+**Chosen.** A plugin's `services` entry names a module export that wraps a debrid-style service's API. The app calls it
+for `files` (what the service holds for the release) and then for `link` (the file the app picked). A module that needs time
+answers `retry`, and the app does the waiting. The app tries enabled services before the torrent engine, for the best four
+releases of the plan, within 20 seconds, and falls back to the torrent engine when none has the release. The link plays in
+mpv as it is, so the player needed no change (it already shows no torrent stats when there are none).
+
+**Why.** The desktop app could turn a release into a URL only through its own torrent engine, so a user could not bring a
+service of their own. The module does only the service-specific calls; everything that needs judgement stays in the app.
+
+**Choices inside it.** The app, not the module, picks the episode's file, with `releases::pick_for_identity`, which moved out
+of the server so both use one copy. A module has no clock, so the app owns polling and the deadline. The link must be https,
+public and on a host the plugin named (`media_hosts`). The key is typed in Settings, kept in the settings file (now readable
+only by its owner) and given only to the module. Tried first by default, because it starts at once.
+
+**Turned down.** Letting the module pick the file (it would have to reimplement the episode rules, and a wrong pick plays the
+wrong episode). A Keychain for the key (a new dependency; the settings file is private enough for now). Request headers on
+the link (TorBox's link carries its own token; add them when a service needs them).
+
+**Not built.** Downloads to the library and Watch party from a service link. The server keeps its own TorBox and
+Internet Archive code.

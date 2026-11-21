@@ -2,8 +2,9 @@
 
 Status (2026-11-22, branch `wasm-plugins`): the engine, its limits and rules, plugin files (module, hash, install,
 remove, download) and the first slice, an indexer whose requests are made by code, are built and tested, with a real
-module (`desktop/plugins/code-indexer`). Not built: code for catalogues and mappers, stream services, and a field
-in Settings for a plugin's login or key. Read this first if you pick the work up.
+module (`desktop/plugins/code-indexer`). Code for catalogues and mappers is built too. Stream services are built on branch `stream-services` (section at the end):
+the service entry, the app's resolve step, a key field in Settings and TorBox as a real plugin. Read this first if you
+pick the work up.
 
 ## What this is for
 
@@ -66,3 +67,36 @@ downloaded from the same host as the JSON, and it is refused if the hash does no
 ## Secrets
 
 A login or an API key needs a field per plugin in Settings. Not in the first slice.
+
+## Stream services (started 2026-11-22, branch `stream-services`)
+
+A plugin's `services` entry turns a release into a playable https link, the way a debrid service does. The module only
+wraps the service's API. The app keeps the judgement.
+
+```json
+"services": [{ "id": "torbox", "name": "TorBox", "export": "resolve",
+               "base": "https://api.torbox.app/v1/api/torrents", "hosts": ["api.torbox.app"], "media_hosts": ["torbox.app"], "key_label": "TorBox API key" }]
+```
+
+`base` is the address of the API, given to the module. `hosts` are the hosts the module may call (as `akidev.http`), and `media_hosts` the hosts the link it returns may be
+on. The key is typed in Settings, kept in the settings file (`service_keys`) and given only to the module.
+
+**The calls.** The app calls the export with `{want, release, media, key, state}`. `want` is `files` and then `link`:
+
+1. `want: "files"`: the module answers `{status:"files", files:[{id, name, size}], state}` (the release is cached and
+   these are its files), or `{status:"unavailable", reason}` (not cached; the torrent engine is tried).
+2. The **app** picks the episode's file from that list, with `releases::pick_for_identity`, the same code the
+   server's debrid source uses. A module never decides which file is the episode.
+3. `want: "link"`, `file: {id}`: the module answers `{status:"ready", url}`.
+
+At any step a module may answer `{status:"retry", after_ms, state}`. The app waits and calls again with the `state` it
+was given back, until the deadline. A module cannot sleep (it has no clock), so the app owns the waiting.
+
+**The link** must be https, on a public host, on one of `media_hosts`, and is handed to mpv as it is (no headers: a
+link that carries its own token, as TorBox's does, is what is supported first). It is never stored.
+
+**Order.** Enabled services are tried first, in the order the plugins are listed, for the best few releases of the
+plan, within a third of the resolve time. When none answers, the torrent engine runs as before.
+
+**Not in this step:** downloads to the library and Watch party use the same link later; a Keychain for the key; a link
+that needs request headers.

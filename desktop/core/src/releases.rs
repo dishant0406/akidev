@@ -1586,6 +1586,52 @@ pub fn pick_video_file_for_release<'a>(
     files.iter().find(|file| **file == *selected)
 }
 
+/// The file of a release's listing that is the episode or film asked for. Both a debrid listing and a
+/// plugin service's listing pass through it, so a service never decides which file is the episode.
+pub fn pick_for_identity<'a>(
+    files: &'a [VideoFile],
+    release: &Release,
+    episode: Option<u32>,
+    season: Option<u32>,
+    title: &str,
+    titles: &[String],
+    year: Option<u32>,
+) -> Option<&'a VideoFile> {
+    let derived;
+    let title = if title.trim().is_empty() && titles.is_empty() {
+        derived = release_title_name(&release.title);
+        derived.as_str()
+    } else {
+        title
+    };
+    if release.file_idx.is_some() {
+        // The addon names a particular actual file, but the index never bypasses the
+        // catalogue, episode or season metadata checks.
+        pick_selected_video_file_for_release_with_min(
+            files,
+            episode,
+            0,
+            season,
+            &release.title,
+            title,
+            titles,
+            year,
+            release.file_idx,
+        )
+    } else {
+        pick_video_file_for_release(
+            files,
+            episode,
+            0,
+            season,
+            &release.title,
+            title,
+            titles,
+            year,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

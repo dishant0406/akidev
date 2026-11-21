@@ -103,3 +103,26 @@ Edge cases and what the person sees:
    when no release was found at all, the reason for that.
 5. Edge cases: a name in `STREAM_SOURCES` that is not a source answers "Unknown stream source"; a file that failed
    is remembered for a while and not tried first next time; a file that played clears that note.
+
+## Playing through a stream service (2026-11-22)
+
+1. The viewer opens Settings, adds a plugin that brings a service (a link or a file), and types the service's key under
+   Stream services, then Save key. The key goes to `Config.service_keys` and the settings file (readable only by its owner).
+   Files: `app/src/settings.rs` (`services_section`, `save_key`), `core/src/config.rs`.
+2. The viewer presses play. `app/src/watch.rs` makes a plan and calls `Streamer::resolve_plan` (`core/src/stream.rs`).
+3. `resolve_plan` first calls `from_services_in`. For the best four releases, for each enabled service (`sources::current().services`):
+   - a service that needs a key and has none is skipped;
+   - `services::resolve_with` calls the module for `files` until it answers (`retry` waits, at most 5 s a time, 40 calls, inside
+     20 s for all services);
+   - `releases::pick_for_identity` picks the episode's file from the list;
+   - the module is called for `link`, and the link is checked: https, public host, on one of the plugin's `media_hosts`.
+4. The first link wins: `Resolution::Ready` with that url. `watch.rs` hands it to mpv. There are no torrent stats, so none show.
+5. When no service has it, `resolve_plan` goes on to the torrent engine as before.
+
+Edge cases and what the viewer sees:
+- No key, wrong key, release not cached, service down, or a link on an unnamed host: the service gives nothing, the torrent
+  engine runs, and the viewer sees no difference except a slower start. The reason is logged at debug level (`[service]`).
+- The module crashes, loops or exceeds a limit (`core/src/code.rs`): the same.
+- A service that keeps asking to retry: stops at the 20 s budget or after 40 calls.
+- A plugin removed or switched off: its service leaves `sources::current().services` at once, and its key stays in the file.
+- A module file missing or changed: the plugin shows its problem in Settings and is not used (`plugin::load`).

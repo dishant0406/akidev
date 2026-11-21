@@ -11,6 +11,7 @@ use crate::definition::{IndexerDef, MapperDef, ProviderDef, SubtitleDef};
 use crate::model::Kind;
 use crate::plugin::Plugin;
 use crate::screens::Screens;
+use crate::services::ServiceDef;
 use anyhow::{Context, ensure};
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
@@ -58,6 +59,10 @@ pub struct Sources {
     /// Where subtitle files come from. Absent in a document from before there were any.
     #[serde(default)]
     pub subtitles: Vec<SubtitleDef>,
+    /// Services that turn a release into a playable link. Only a plugin brings one: a signed document
+    /// that did is refused, and in use this holds the plugins' own.
+    #[serde(default)]
+    pub services: Vec<ServiceDef>,
     /// Which providers answer for each kind, in order.
     pub chains: BTreeMap<Kind, Vec<String>>,
     /// What the screens show. Absent in a document from before there were any: the built-in ones are used.
@@ -140,6 +145,19 @@ impl Sources {
             indexer
                 .check()
                 .with_context(|| format!("indexer {}", indexer.id))?;
+        }
+        ensure!(self.services.len() <= 8, "too many services");
+        for (index, service) in self.services.iter().enumerate() {
+            service
+                .check()
+                .with_context(|| format!("service {}", service.id))?;
+            ensure!(
+                self.services[..index]
+                    .iter()
+                    .all(|other| other.id != service.id),
+                "two services are called {}",
+                service.id
+            );
         }
         ensure!(self.mappers.len() <= 8, "too many mappers");
         for (index, mapper) in self.mappers.iter().enumerate() {
@@ -268,6 +286,10 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Sources> {
                 .chain(sources.mappers.iter().map(|mapper| &mapper.provider))
                 .all(|provider| provider.code.is_none()),
         "a signed document cannot bring code"
+    );
+    ensure!(
+        sources.services.is_empty(),
+        "a signed document cannot bring a service"
     );
     sources.validate()?;
     Ok(sources)

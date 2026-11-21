@@ -10,6 +10,7 @@
 use crate::definition::{IndexerDef, MapperDef, Module, ProviderDef, SubtitleDef};
 use crate::model::{Kind, Shape};
 use crate::screens::{HomeRow, Tab};
+use crate::services::ServiceDef;
 use crate::sources::{self, Sources};
 use anyhow::{Context, ensure};
 use serde::Deserialize;
@@ -44,6 +45,9 @@ pub struct Plugin {
     /// Rows for the home page, each drawn from one of the plugin's own providers.
     #[serde(default)]
     pub home: Vec<HomeRow>,
+    /// Services that turn a release into a playable link. They need the module.
+    #[serde(default)]
+    pub services: Vec<ServiceDef>,
     /// The WebAssembly module that makes the requests of the plugin's indexers that name an export in
     /// `code`. It is kept next to the plugin as `<id>.wasm` and must match this hash.
     #[serde(default)]
@@ -161,6 +165,9 @@ impl Plugin {
         {
             indexer.module = Some(shared.clone());
         }
+        for service in &mut self.services {
+            service.module = Some(shared.clone());
+        }
         let mappers = self.mappers.iter_mut().map(|mapper| &mut mapper.provider);
         for provider in self.providers.iter_mut().chain(mappers) {
             if provider.code.is_some() {
@@ -206,6 +213,7 @@ impl Plugin {
         ensure!(
             !self.indexers.is_empty()
                 || !self.mappers.is_empty()
+                || !self.services.is_empty()
                 || !self.subtitles.is_empty()
                 || !self.providers.is_empty()
                 || !self.kinds.is_empty(),
@@ -255,6 +263,17 @@ impl Plugin {
                 .iter()
                 .filter_map(|each| Some((each.id.as_str(), each.provider.code.as_ref()?))),
         );
+        exports.extend(
+            self.services
+                .iter()
+                .map(|each| (each.id.as_str(), &each.export)),
+        );
+        ensure!(self.services.len() <= 2, "too many services (2 at most)");
+        for service in &self.services {
+            service
+                .check()
+                .with_context(|| format!("service {}", service.id))?;
+        }
         let codes = exports.len();
         match &self.module {
             Some(module) => {
@@ -445,6 +464,14 @@ pub fn merge(base: &Sources, plugin: &Plugin) -> anyhow::Result<Sources> {
             indexer.id
         );
         merged.indexers.push(indexer.clone());
+    }
+    for service in &plugin.services {
+        ensure!(
+            merged.services.iter().all(|other| other.id != service.id),
+            "a service called {} is already there",
+            service.id
+        );
+        merged.services.push(service.clone());
     }
     for mapper in &plugin.mappers {
         ensure!(
@@ -1504,6 +1531,44 @@ mod tests {
         assert!(parse(&bytes(&idle)).is_err());
         let mut signed = document.clone();
         signed["providers"][0]["code"] = json!("fetch_signed");
+        assert!(sources::parse(&bytes(&signed)).is_err());
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[test]
+    fn a_plugin_can_bring_a_stream_service_and_only_with_its_module() {
+        let _guard = sources::definitions_change_lock().blocking_lock();
+        let module = include_bytes!("../tests/fixtures/torbox.wasm").to_vec();
+        let service = json!({
+            "id": "torbox", "name": "TorBox", "base": "https://api.torbox.app/v1/api/torrents",
+            "hosts": ["api.torbox.app"], "media_hosts": ["tb-cdn.io"], "key_label": "TorBox API key",
+        });
+        let brought = json!({
+            "plugin": 1, "id": "torbox", "name": "TorBox", "version": 1,
+            "module": { "file": "torbox.wasm",
+                        "sha256": sources::encode_hex(&sha2::Sha256::digest(&module)) },
+            "services": [service],
+        });
+        let mut plugin = parse(&bytes(&brought)).unwrap();
+        plugin.attach(&module).unwrap();
+        let merged = merge(&sources::current(), &plugin).unwrap();
+        assert!(merged.services[0].module.is_some());
+
+        // Not twice with one id, and not when it is in use already.
+        let mut twice = brought.clone();
+        twice["services"] = json!([service.clone(), service.clone()]);
+        assert!(parse(&bytes(&twice)).is_ok() && merge(&merged, &plugin).is_err());
+        // A service needs the module, and a base on one of its hosts.
+        let mut bare = brought.clone();
+        bare.as_object_mut().unwrap().remove("module");
+        assert!(parse(&bytes(&bare)).is_err());
+        let mut elsewhere = brought.clone();
+        elsewhere["services"][0]["base"] = json!("https://elsewhere.example.com/api");
+        assert!(parse(&bytes(&elsewhere)).is_err());
+        // Nothing in a signed document.
+        let mut signed: Value =
+            serde_json::from_str(include_str!("../../sources/sources.json")).unwrap();
+        signed["services"] = json!([service]);
         assert!(sources::parse(&bytes(&signed)).is_err());
     }
 }

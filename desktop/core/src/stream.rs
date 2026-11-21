@@ -126,6 +126,9 @@ impl FailureMemory {
     }
 }
 
+/// How many of a plan's best releases the stream services are asked about.
+const MOST_SERVICE_RELEASES: usize = 4;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Resolution {
     Ready {
@@ -203,6 +206,11 @@ impl Streamer {
 
     /// Opens the best of a plan's releases and says where to play it.
     pub async fn resolve_plan(&self, plan: &Plan, fresh: bool) -> Resolution {
+        // A stream service a plugin brings is asked first: it plays at once, and when it has nothing the
+        // torrent engine runs as before.
+        if let Some(found) = self.try_services(plan).await {
+            return found;
+        }
         match self.open_best(plan, fresh).await {
             Ok((release, playable)) => {
                 let selection = release.selection_id();
@@ -223,6 +231,19 @@ impl Streamer {
             }
             Err(reason) => unavailable(&reason),
         }
+    }
+
+    /// A playable link from one of the stream services, for the best few releases of the plan, or `None`.
+    async fn try_services(&self, plan: &Plan) -> Option<Resolution> {
+        let config = self.config.lock().unwrap().clone();
+        let sources = crate::sources::current();
+        from_services_in(
+            &sources.services,
+            &config,
+            plan,
+            crate::plugin::check_public_url,
+        )
+        .await
     }
 
     /// The title and the ranked releases for one episode or film, before any is opened.
@@ -507,6 +528,60 @@ fn candidates(ranked: &[Release]) -> Vec<&Release> {
         .into_iter()
         .partition(|release| release.seeders.is_none());
     seeded.into_iter().chain(unknown).chain(dead).collect()
+}
+
+/// Asks `services` about the best few releases of `plan`, and says where to play the first link. A service that
+/// needs a key and has none in `config` is left alone.
+async fn from_services_in(
+    services: &[crate::services::ServiceDef],
+    config: &Config,
+    plan: &Plan,
+    public: fn(&str) -> anyhow::Result<()>,
+) -> Option<Resolution> {
+    if services.is_empty() || plan.validate_request().is_err() {
+        return None;
+    }
+    let deadline = Instant::now() + Duration::from_millis(config.service_timeout_ms);
+    let media = &plan.detail.media;
+    let wanted = crate::services::Wanted {
+        title: media.title.clone(),
+        titles: media.title_variants.clone(),
+        year: media.year.and_then(|year| u32::try_from(year).ok()),
+        season: plan.parsed.season,
+        episode: plan.playback_episode(),
+    };
+    for release in candidates(&plan.ranked)
+        .into_iter()
+        .take(MOST_SERVICE_RELEASES)
+    {
+        for service in services {
+            let key = config.service_keys.get(&service.id);
+            if service.key_label.is_some() && key.is_none_or(|key| key.trim().is_empty()) {
+                continue;
+            }
+            let key = key.map(String::as_str).unwrap_or_default();
+            match crate::services::resolve_with_public(
+                service, key, release, &wanted, deadline, public,
+            )
+            .await
+            {
+                Ok(Some(url)) => {
+                    return Some(Resolution::Ready {
+                        url,
+                        release: release.title.clone(),
+                        stream: StreamId {
+                            info_hash: release.info_hash.clone(),
+                            file_index: release.file_idx.unwrap_or(0),
+                            selection: Some(release.selection_id()),
+                        },
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => tracing::debug!("[service] {}: {error:#}", service.id),
+            }
+        }
+    }
+    None
 }
 
 fn unavailable(reason: &str) -> Resolution {
@@ -2295,5 +2370,44 @@ mod tests {
             plan.only(&"a".repeat(40)).unwrap().ranked[0].file_idx,
             Some(0)
         );
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[tokio::test]
+    async fn a_stream_service_with_its_key_gives_the_link_the_player_opens_and_one_without_a_key_is_left_alone()
+     {
+        use crate::services::tests::{
+            Fake, HASH, KEY, LENIENT, release as service_release, service, torbox,
+        };
+        let fake = std::sync::Arc::new(Mutex::new(Fake {
+            cached: true,
+            ..Fake::default()
+        }));
+        let base = torbox(fake.clone()).await;
+        let services = [service(&base, &["127.0.0.1"])];
+        let plan = plan_with(vec![service_release()], Vec::new());
+
+        // No key: the service is not asked at all.
+        let nothing = from_services_in(&services, &Config::default(), &plan, LENIENT).await;
+        assert!(nothing.is_none());
+        assert!(!fake.lock().unwrap().added);
+
+        // With its key: the link for this episode, named like any other resolution.
+        let mut config = Config::default();
+        config.service_keys.insert("torbox".into(), KEY.into());
+        let found = from_services_in(&services, &config, &plan, LENIENT).await;
+        match found {
+            Some(Resolution::Ready {
+                url,
+                release,
+                stream,
+            }) => {
+                assert!(url.ends_with("/cdn/4.mkv"), "{url}");
+                assert_eq!(release, "Show S01 1080p WEB");
+                assert_eq!(stream.info_hash, HASH);
+                assert_eq!(stream.selection.as_deref(), Some(HASH));
+            }
+            other => panic!("expected a link, got {other:?}"),
+        }
     }
 }

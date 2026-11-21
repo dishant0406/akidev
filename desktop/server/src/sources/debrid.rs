@@ -13,10 +13,7 @@
 use crate::origin::{BoxRead, Origin};
 use akidev_core::cache;
 use akidev_core::model::Release;
-use akidev_core::releases::{
-    VideoFile, pick_selected_video_file_for_release_with_min, pick_video_file_for_release,
-    release_title_name,
-};
+use akidev_core::releases::{VideoFile, pick_for_identity};
 use anyhow::{Context, bail};
 use futures::TryStreamExt;
 use serde::Deserialize;
@@ -615,51 +612,6 @@ impl Debrid {
             length: file.size,
             name,
         }))
-    }
-}
-
-/// Both provider file lists pass the same catalogue/listing validation boundary.
-fn pick_for_identity<'a>(
-    files: &'a [VideoFile],
-    release: &Release,
-    episode: Option<u32>,
-    season: Option<u32>,
-    title: &str,
-    titles: &[String],
-    year: Option<u32>,
-) -> Option<&'a VideoFile> {
-    let derived;
-    let title = if title.trim().is_empty() && titles.is_empty() {
-        derived = release_title_name(&release.title);
-        derived.as_str()
-    } else {
-        title
-    };
-    if release.file_idx.is_some() {
-        // The addon names a particular actual file, but the index never bypasses the
-        // catalogue, episode or season metadata checks.
-        pick_selected_video_file_for_release_with_min(
-            files,
-            episode,
-            0,
-            season,
-            &release.title,
-            title,
-            titles,
-            year,
-            release.file_idx,
-        )
-    } else {
-        pick_video_file_for_release(
-            files,
-            episode,
-            0,
-            season,
-            &release.title,
-            title,
-            titles,
-            year,
-        )
     }
 }
 

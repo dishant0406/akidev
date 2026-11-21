@@ -21,6 +21,7 @@ pub mod screens;
 pub mod search;
 #[cfg(feature = "streaming")]
 pub mod serve;
+pub mod services;
 pub mod sources;
 #[cfg(feature = "streaming")]
 pub mod stream;

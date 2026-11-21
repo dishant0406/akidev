@@ -21,6 +21,11 @@ pub struct Config {
     /// Never read from or written to the app's settings file: only the server sets it.
     #[serde(skip)]
     pub on_server: bool,
+    /// The key for each stream service a plugin brings, by the service's id. Given only to that service's
+    /// module. Kept in this file, so it is as private as the file is.
+    pub service_keys: std::collections::BTreeMap<String, String>,
+    /// How long the stream services are given, all together, before the torrent engine is tried.
+    pub service_timeout_ms: u64,
     /// How long the fallback indexers, asked only when the others found nothing, are given: for one
     /// request and for all of them.
     pub fallback_timeout_ms: u64,
@@ -59,6 +64,8 @@ impl Default for Config {
             indexer_timeout_ms: 5_000,
             search_ceiling_ms: 4_000,
             on_server: false,
+            service_keys: Default::default(),
+            service_timeout_ms: 20_000,
             fallback_timeout_ms: 15_000,
             cache_dir: None,
             max_cache_bytes: 8 * 1024 * 1024 * 1024,
@@ -92,6 +99,12 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, toml::to_string_pretty(self)?)?;
+        // The file can hold the key of a stream service, so only its owner may read it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        }
         Ok(())
     }
 }
@@ -147,5 +160,25 @@ mod tests {
         let result = Config::load(&path);
         std::fs::remove_file(&path).unwrap();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn the_key_of_a_stream_service_is_kept_in_the_file_and_the_file_is_private() {
+        let dir = std::env::temp_dir().join(format!("akidev-config-keys-{}", std::process::id()));
+        let path = dir.join("config.toml");
+        let mut config = Config::default();
+        config.service_keys.insert("torbox".into(), "abc".into());
+        config.save(&path).unwrap();
+        assert_eq!(Config::load(&path).unwrap().service_keys["torbox"], "abc");
+        // An old file has no keys.
+        let old: Config = toml::from_str("max_torrents = 2").unwrap();
+        assert!(old.service_keys.is_empty());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

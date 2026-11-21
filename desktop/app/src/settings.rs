@@ -77,6 +77,9 @@ pub struct SettingsPage {
     note: Option<(String, bool)>,
     /// The field is emptied the next time the page is drawn.
     clear_link: bool,
+    /// The field for the key of each stream service a plugin brings, by the service's id. Made when
+    /// the page is drawn, like the one above.
+    keys: std::collections::BTreeMap<String, Entity<InputState>>,
 }
 
 impl SettingsPage {
@@ -101,6 +104,7 @@ impl SettingsPage {
             adding: false,
             note: None,
             clear_link: false,
+            keys: Default::default(),
         }
     }
 
@@ -187,6 +191,20 @@ impl SettingsPage {
             },
         );
         cx.notify();
+    }
+
+    /// Keeps the key typed for a stream service, or forgets it when the field is empty.
+    fn save_key(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(input) = self.keys.get(id) else {
+            return;
+        };
+        let typed = input.read(cx).value().trim().to_string();
+        if typed.is_empty() {
+            self.config.service_keys.remove(id);
+        } else {
+            self.config.service_keys.insert(id.to_string(), typed);
+        }
+        self.commit(cx);
     }
 
     /// Takes in the plugin files that were put in the folder by hand.
@@ -351,12 +369,122 @@ impl SettingsPage {
             )
     }
 
+    /// The stream services the plugins bring, each with a field for its key. Nothing is drawn when no
+    /// plugin brings one.
+    fn services_section(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let services = akidev_core::sources::current().services.clone();
+        if services.is_empty() {
+            return div();
+        }
+        let quiet = |text: String, tone: u32| {
+            div()
+                .text_size(px(13.))
+                .line_height(relative(1.35))
+                .text_color(color(tone))
+                .child(text)
+        };
+        let mut rows = Vec::new();
+        for service in &services {
+            let id = service.id.clone();
+            let saved = self
+                .config
+                .service_keys
+                .get(&id)
+                .cloned()
+                .unwrap_or_default();
+            let label = service.key_label.clone();
+            let input = self
+                .keys
+                .entry(id.clone())
+                .or_insert_with(|| {
+                    cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .placeholder(label.clone().unwrap_or_default())
+                            .masked(true)
+                    })
+                })
+                .clone();
+            let save_id = id.clone();
+            let has_key = !saved.is_empty();
+            let mut row = div().flex().flex_col().gap_2().child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .text_color(color(TEXT_DIM))
+                            .child(service.name.clone()),
+                    )
+                    .child(quiet(
+                        if label.is_none() {
+                            "No key needed".to_string()
+                        } else if has_key {
+                            "A key is saved".to_string()
+                        } else {
+                            "No key yet".to_string()
+                        },
+                        TEXT_FAINT,
+                    )),
+            );
+            if label.is_some() {
+                row = row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .rounded(px(radius::BUTTON))
+                                .border_1()
+                                .border_color(color(LINE))
+                                .child(Input::new(&input).appearance(false).mask_toggle()),
+                        )
+                        .child(secondary_button(
+                            SharedString::from(format!("service-key-{id}")),
+                            "Save key",
+                            None,
+                            cx.listener(move |page, _, _, cx| page.save_key(&save_id, cx)),
+                        )),
+                );
+            }
+            rows.push(row);
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(color(TEXT_DIM))
+                            .child("Stream services"),
+                    )
+                    .child(quiet(
+                        "A service from a plugin plays a title from its own servers when it has it, and the torrent engine is used when it does not. The key is kept in your settings file and given only to that service. An empty field and Save key forgets it.".into(),
+                        TEXT_FAINT,
+                    )),
+            )
+            .children(rows)
+    }
+
     fn restore(&mut self, cx: &mut Context<Self>) {
         self.config = Config {
             cache_dir: self.config.cache_dir.clone(),
             // Restoring the limits leaves the update choice as it was.
             check_for_updates: self.config.check_for_updates,
             analytics_id: self.config.analytics_id.clone(),
+            // The keys are what the viewer typed, not a limit: restoring the limits leaves them.
+            service_keys: self.config.service_keys.clone(),
             ..Config::default()
         };
         self.commit(cx);
@@ -565,6 +693,7 @@ impl SettingsPage {
 impl Render for SettingsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let plugins = self.plugins_section(window, cx);
+        let services = self.services_section(window, cx);
         let started = &cx.global::<Backend>().started_with;
         let restart = self.config.max_cache_bytes != started.max_cache_bytes
             || self.config.max_torrents != started.max_torrents;
@@ -638,6 +767,7 @@ impl Render for SettingsPage {
                             )),
                     )
                     .child(plugins)
+                    .child(services)
                     .child(
                         div()
                             .flex()
