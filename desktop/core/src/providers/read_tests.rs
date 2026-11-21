@@ -101,6 +101,7 @@ fn bocchi() -> Value {
     json!({
         "id": 130003,
         "title": { "romaji": "Bocchi the Rock!", "english": null, "native": "ぼっち・ざ・ろっく！" },
+        "synonyms": ["Bocchi the Rock"],
         "coverImage": { "extraLarge": "https://img/xl.jpg", "large": "https://img/l.jpg" },
         "bannerImage": "https://img/banner.jpg",
         "format": "TV", "seasonYear": null, "startDate": { "year": 2022 },
@@ -118,7 +119,11 @@ fn an_anilist_card_prefers_english_then_romaji_then_native() {
     assert_eq!(card.title, "Bocchi the Rock!");
     assert_eq!(
         card.title_variants,
-        vec!["Bocchi the Rock!", "ぼっち・ざ・ろっく！"]
+        vec![
+            "Bocchi the Rock!",
+            "ぼっち・ざ・ろっく！",
+            "Bocchi the Rock"
+        ]
     );
     assert_eq!(card.poster.as_deref(), Some("https://img/xl.jpg"));
     assert_eq!(

@@ -1979,6 +1979,29 @@ mod tests {
     }
 
     #[test]
+    fn a_stremio_episode_with_catalogue_aliases_and_a_bare_number_is_accepted() {
+        let row = release(
+            "Paul no Miracle Dai Sakusen - 34 [ARR]",
+            1,
+            "850f08d9993917d123fd60f682c958d03122fdc5",
+        );
+        let ranked = rank_releases(
+            &[row],
+            34,
+            "Paul's Miracle Strategy Plan",
+            &[
+                "Paul no Miracle Daisakusen".into(),
+                "Paul no Miracle Dai Sakusen".into(),
+                "Paul's Miracle War".into(),
+                "Paul's Miraculous Adventures".into(),
+                "Il fantastico mondo di Paul".into(),
+            ],
+            None,
+        );
+        assert_eq!(ranked.len(), 1);
+    }
+
+    #[test]
     fn strict_health_is_unknown_not_zero_and_ties_are_deterministic() {
         let mut unknown = release("Show S01E01 1080p", 0, "unknown");
         unknown.seeders = None;

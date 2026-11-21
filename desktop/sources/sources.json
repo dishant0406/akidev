@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 37,
+  "version": 38,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -754,7 +754,8 @@
         "title_variants": [
           "title.english",
           "title.romaji",
-          "title.native"
+          "title.native",
+          "synonyms"
         ],
         "poster": {
           "coalesce": [
