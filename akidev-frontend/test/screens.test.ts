@@ -5,8 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { CONTENT_TYPES } from "../src/constants/site.ts";
-import { defaultSort, genresFor, tabForSlug } from "../src/lib/screens.ts";
+import { defaultSort, genresFor, tabForSlug, tagFor } from "../src/lib/screens.ts";
 import type { Screens } from "../src/types/media.ts";
 
 const screens: Screens = JSON.parse(
@@ -28,7 +27,7 @@ test("the three catalogues are all offered, in the top bar's order", () => {
   );
   assert.deepEqual(
     screens.tabs.map((tab) => tab.kind),
-    CONTENT_TYPES,
+    ["anime", "series", "movie"],
   );
 });
 
@@ -56,4 +55,16 @@ test("every home row is for a catalogue that has a tab", () => {
   for (const row of screens.home) {
     assert.ok(screens.tabs.some((tab) => tab.kind === row.kind), row.title);
   }
+});
+
+test("the label over a title comes from its tab, and is empty when the screens are missing", () => {
+  assert.equal(tagFor(screens, "movie"), "FILM");
+  assert.equal(tagFor(screens, "anime"), "ANIME");
+  assert.equal(tagFor(null, "movie"), "");
+});
+
+test("the credits name the catalogues the footer and the privacy page list", () => {
+  assert.match(screens.about.attribution, /AniList/);
+  assert.ok(screens.about.catalogues.length > 0);
+  assert.ok(screens.about.subtitles.includes("OpenSubtitles"));
 });

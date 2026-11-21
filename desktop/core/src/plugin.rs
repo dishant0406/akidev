@@ -309,6 +309,7 @@ pub fn merge(base: &Sources, plugin: &Plugin) -> anyhow::Result<Sources> {
                 kind,
                 slug: each.id.clone(),
                 label: each.label.clone(),
+                tag: singular.to_uppercase(),
             });
         }
         merged.screens = Some(screens);

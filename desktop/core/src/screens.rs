@@ -24,6 +24,20 @@ pub struct Screens {
     pub genres: BTreeMap<String, Vec<String>>,
     /// The rows of the home page, in order.
     pub home: Vec<HomeRow>,
+    /// The credits the website shows.
+    pub about: About,
+}
+
+/// What the website says about where its data comes from, so adding or dropping a source is a
+/// change to the document and not to the site.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct About {
+    /// The line in the footer: the credit the catalogues require, and that nothing is stored.
+    pub attribution: String,
+    /// The catalogues, by name, as the privacy page lists them.
+    pub catalogues: Vec<String>,
+    /// The subtitle sources, by name, as the privacy page lists them.
+    pub subtitles: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,6 +47,8 @@ pub struct Tab {
     pub slug: String,
     /// The tab in the top bar and the heading of the page.
     pub label: String,
+    /// The small label over a title of this kind: "FILM".
+    pub tag: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -87,7 +103,10 @@ impl Screens {
                 "the tab slug {:?} is already a page of the site",
                 tab.slug
             );
-            ensure!(!tab.label.is_empty(), "a tab has no label");
+            ensure!(
+                !tab.label.is_empty() && !tab.tag.is_empty(),
+                "a tab has no label or tag"
+            );
             ensure!(
                 self.tabs[..index].iter().all(|other| other.slug != tab.slug
                     && other.kind != tab.kind
@@ -111,6 +130,21 @@ impl Screens {
             );
             ensure!(genres.len() <= 64, "too many genres for {name}");
         }
+        let about = &self.about;
+        ensure!(
+            !about.attribution.is_empty() && about.attribution.len() <= 1000,
+            "the attribution is empty or too long"
+        );
+        ensure!(
+            about.catalogues.len() <= 32
+                && about.subtitles.len() <= 32
+                && about
+                    .catalogues
+                    .iter()
+                    .chain(&about.subtitles)
+                    .all(|name| !name.is_empty() && name.len() <= 64),
+            "the credits are out of range"
+        );
         ensure!(
             (1..=32).contains(&self.home.len()),
             "the home rows are out of range"

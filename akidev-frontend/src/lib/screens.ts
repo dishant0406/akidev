@@ -16,3 +16,8 @@ export function genresFor(screens: Screens, kind: Kind | null): string[] {
 export function defaultSort(screens: Screens): string {
   return screens.sorts[0].sort;
 }
+
+/** The small label over a title of this kind ("FILM"), from the tab that shows it. */
+export function tagFor(screens: Screens | null, kind: Kind): string {
+  return screens?.tabs.find((tab) => tab.kind === kind)?.tag ?? "";
+}

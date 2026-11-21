@@ -4,7 +4,8 @@ import { Info, Play } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
-import { KIND_LABEL } from "@/constants/site";
+import { tagFor } from "@/lib/screens";
+import { useScreens } from "@/providers/screens";
 import { titlePath } from "@/constants/routes";
 import { facts, type Card } from "@/lib/media";
 import { stripTags } from "@/lib/text";
@@ -19,6 +20,7 @@ const ROTATE_EVERY = 9000;
 
 /** The billboard at the top of the home page: a featured title over its own artwork. */
 export default function Hero({ items, loading }: { items: Card[]; loading: boolean }) {
+  const screens = useScreens();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = items.length;
@@ -54,7 +56,7 @@ export default function Hero({ items, loading }: { items: Card[]; loading: boole
 
         <div className="gutter absolute inset-x-0 bottom-[72px] flex max-w-[calc(580px+5rem)] flex-col items-start gap-3">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-accent">{KIND_LABEL[media.kind]}</span>
+            <span className="text-xs font-semibold text-accent">{tagFor(screens, media.kind)}</span>
             <MetaLine parts={facts(media)} />
           </div>
           <h1 className="line-clamp-2 font-title text-4xl font-semibold leading-[1.18] tracking-[-0.02em] text-ink sm:text-5xl md:text-[56px]">

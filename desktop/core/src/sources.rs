@@ -83,14 +83,9 @@ impl Sources {
         })
     }
 
-    /// A mapper by id: the document's own, or the built-in one when the document predates them.
+    /// A mapper by id.
     pub fn mapper(&self, id: &str) -> Option<&MapperDef> {
-        // The built-in document is only read when this one lacks the mapper, which also keeps the
-        // built-in document from being read while it is itself being checked.
-        self.mappers
-            .iter()
-            .find(|mapper| mapper.id == id)
-            .or_else(|| built_in().mappers.iter().find(|mapper| mapper.id == id))
+        self.mappers.iter().find(|mapper| mapper.id == id)
     }
 
     pub fn indexer(&self, id: &str) -> Option<&IndexerDef> {
@@ -605,10 +600,6 @@ mod tests {
         assert!(!sources.providers.is_empty());
         assert!(!sources.trackers.is_empty());
         let mut older = embedded_json();
-        older["indexers"][5]
-            .as_object_mut()
-            .unwrap()
-            .remove("anime_kitsu");
         older["indexers"][5]["response"]["fields"]
             .as_object_mut()
             .unwrap()
@@ -743,26 +734,6 @@ mod tests {
     }
 
     #[test]
-    fn a_document_from_before_mappers_still_finds_the_built_in_one_for_an_indexer_that_asks_for_it()
-    {
-        let older = changed(|d| {
-            let document = d.as_object_mut().unwrap();
-            document.remove("mappers");
-            for indexer in document["indexers"].as_array_mut().unwrap() {
-                // The way a document said it before `map` existed.
-                if indexer.as_object_mut().unwrap().remove("map").is_some() {
-                    indexer["anime_kitsu"] = json!(true);
-                }
-            }
-        });
-        let older = parse(&older).unwrap();
-        assert!(older.mappers.is_empty());
-        let torrentio = older.indexer("torrentio").unwrap();
-        assert_eq!(torrentio.mapper_id(), Some("kitsu"));
-        assert_eq!(older.mapper("kitsu").unwrap().id, "kitsu");
-    }
-
-    #[test]
     fn an_indexer_asked_through_a_mapper_that_is_not_there_or_maps_none_of_its_kinds_is_refused() {
         let refused = |what: &str, change: fn(&mut Value)| {
             assert!(parse(&changed(change)).is_err(), "{what} was accepted");
@@ -771,7 +742,6 @@ mod tests {
             for indexer in d["indexers"].as_array_mut().unwrap() {
                 if indexer["id"] == "torrentio" {
                     indexer["map"] = json!("nothing");
-                    indexer.as_object_mut().unwrap().remove("anime_kitsu");
                 }
             }
         });
@@ -826,6 +796,15 @@ mod tests {
         });
         refused("a slug that is a page of the site", |d| {
             d["screens"]["tabs"][1]["slug"] = json!("search")
+        });
+        refused("a tab with no tag", |d| {
+            d["screens"]["tabs"][0]["tag"] = json!("")
+        });
+        refused("no attribution", |d| {
+            d["screens"]["about"]["attribution"] = json!("")
+        });
+        refused("an empty credit name", |d| {
+            d["screens"]["about"]["catalogues"] = json!([""])
         });
         refused("no sorts", |d| d["screens"]["sorts"] = json!([]));
         refused("an unknown sort", |d| {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { Page, Section } from "@/components/prose";
 import { REPO_URL } from "@/constants/site";
+import { getScreens } from "@/lib/api-server";
 
 export const metadata: Metadata = {
   title: "Privacy policy | Akidev",
@@ -10,7 +11,13 @@ export const metadata: Metadata = {
 
 const link = "text-ink underline decoration-ink/30 underline-offset-4 transition-colors hover:decoration-ink";
 
-export default function PrivacyPage() {
+/** "A, B and C". */
+function list(names: string[] = []): string {
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+}
+
+export default async function PrivacyPage() {
+  const about = (await getScreens())?.about;
   return (
     <Page
       title="Privacy."
@@ -44,9 +51,8 @@ export default function PrivacyPage() {
 
       <Section title="The desktop app">
         <p>
-          The app makes the requests that its features need, and only those: it asks the catalogue providers (AniList,
-          Cinemeta, TVMaze, YTS) for titles and artwork, searches public torrent indexers and subtitle providers
-          (OpenSubtitles through its public addon) for what you chose to watch, and checks{" "}
+          The app makes the requests that its features need, and only those: it asks the catalogue providers ({list(about?.catalogues)}) for titles and artwork, searches public torrent indexers and subtitle providers
+          ({list(about?.subtitles)} through its public addon) for what you chose to watch, and checks{" "}
           <code>sources.akidev.live</code> for updated source definitions. Apart from that it sends nothing about you.
         </p>
         <p>

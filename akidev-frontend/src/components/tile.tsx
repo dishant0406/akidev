@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useQueryClient } from "react-query";
 
-import { KIND_LABEL } from "@/constants/site";
+import { tagFor } from "@/lib/screens";
+import { useScreens } from "@/providers/screens";
 import { titlePath, watchPath } from "@/constants/routes";
 import { facts, type Card } from "@/lib/media";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,7 @@ export default function Tile({
   className?: string;
 }) {
   const router = useRouter();
+  const screens = useScreens();
   // Set once the pointer has rested on the tile. A link is fetched ahead in full only then: fetching
   // all two hundred on the page would be a request each for pages almost none will be opened.
   const [hot, setHot] = useState(false);
@@ -103,7 +105,7 @@ export default function Tile({
         <Link href={click} prefetch={hot} aria-label={card.title} className="absolute inset-0" />
 
         <div className="pointer-events-none absolute inset-0 flex flex-col justify-end gap-1.5 bg-gradient-to-t from-canvas/95 via-canvas/0 via-80% to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100">
-          <span className="caps text-[10px] text-accent">{KIND_LABEL[card.kind]}</span>
+          <span className="caps text-[10px] text-accent">{tagFor(screens, card.kind)}</span>
           <span className="line-clamp-2 text-sm font-semibold leading-tight text-ink">{card.title}</span>
           <MetaLine parts={facts(card)} className="text-[11px]" />
           <div className="pointer-events-auto flex gap-2 pt-1">

@@ -124,11 +124,13 @@ export interface HomeRow {
 
 /** What the apps draw, from GET /v1/screens: the tabs, sorts, genres and home rows. */
 export interface Screens {
-  tabs: { kind: Kind; slug: string; label: string }[];
+  tabs: { kind: Kind; slug: string; label: string; tag: string }[];
   sorts: { sort: string; label: string }[];
   /** By kind name, and `all` for the page that shows every catalogue. */
   genres: Record<string, string[]>;
   home: { title: string; kind: Kind; sort: string; genre?: string }[];
+  /** The credits: the footer line and the names the privacy page lists. */
+  about: { attribution: string; catalogues: string[]; subtitles: string[] };
 }
 
 export interface HomeResponse {

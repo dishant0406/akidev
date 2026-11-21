@@ -195,3 +195,16 @@ workflow (six places to forget; `build.rs` covers all of them, plus the iOS and 
 **Trade-off.** A build needs the network once, and it is not reproducible: it reads the newest `main` of the sources repo.
 A bad commit there can break this repo's tests (`read_tests.rs`, `screens.test.ts` read the document). To pin an older copy,
 put your own file at `desktop/sources/sources.json`. The old copies stay in this repo's git history.
+
+## Credits and kind labels are data; the old flag is gone (2026-11-21)
+
+**Chosen.** The footer credit, the names on the privacy page and the small label over a title ("FILM") now come from the
+`screens` section (`about`, and `tag` on each tab), so the website has no list of sources or kinds of its own. The
+`anime_kitsu` flag, and the built-in fallback for a document without mappers, were removed: `map` is the only way.
+
+**Why.** Adding or dropping a catalogue should be one change to `sources.json`. There are no users on old documents, so
+the compatibility code had no job left.
+
+**Left in code on purpose.** The three shapes (anime, series, movie) are behaviour: how episodes are keyed and played.
+The Prowlarr route and its URL and key are server secrets, which cannot live in a public document. The `schema 1`/`/v2`
+feeds and the old-app check are still there; they only matter while old apps exist.

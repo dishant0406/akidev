@@ -9,7 +9,8 @@ import Episodes from "@/components/episodes";
 import { stripTags } from "@/lib/text";
 import MediaRow from "@/components/row";
 import { ErrorState, MetaLine, SectionTitle, Skeleton } from "@/components/states";
-import { KIND_LABEL } from "@/constants/site";
+import { tagFor } from "@/lib/screens";
+import { useScreens } from "@/providers/screens";
 import { watchPath } from "@/constants/routes";
 import { ApiError } from "@/lib/api";
 import { episodeCount, firstPlayable } from "@/lib/episodes";
@@ -24,6 +25,7 @@ const HEIGHT = "h-[min(700px,max(480px,70vh))]";
 const MIN_HEIGHT = "md:min-h-[min(700px,max(480px,70vh))]";
 
 export default function TitleView({ id: key, initial }: { id: string; initial?: Detail }) {
+  const screens = useScreens();
   const parsed = parseMediaId(key);
   const detail = useDetail(key, initial);
   const recent = useRecent();
@@ -96,7 +98,7 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
             instead of climbing under the bar. */}
         <div className="gutter relative -mt-20 flex max-w-[calc(640px+5rem)] flex-col items-start gap-3 pb-10 md:mt-0 md:pb-12 md:pt-28">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-accent">{KIND_LABEL[parsed.contentType]}</span>
+            <span className="text-xs font-semibold text-accent">{tagFor(screens, parsed.contentType)}</span>
             {!!score && <span className="text-sm font-semibold text-accent">★ {score}%</span>}
           </div>
           <h1 className="line-clamp-3 font-title text-4xl font-semibold leading-[1.18] tracking-[-0.02em] text-ink sm:text-5xl md:text-[56px]">{title}</h1>

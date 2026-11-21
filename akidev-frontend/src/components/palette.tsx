@@ -5,7 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { KIND_LABEL } from "@/constants/site";
+import { tagFor } from "@/lib/screens";
+import { useScreens } from "@/providers/screens";
 import { searchPath, titlePath } from "@/constants/routes";
 import { facts } from "@/lib/media";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ interface Item {
  */
 export default function Palette({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const screens = useScreens();
   const input = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState("");
   const [term, setTerm] = useState("");
@@ -61,7 +63,7 @@ export default function Palette({ onClose }: { onClose: () => void }) {
   const results: Item[] = videos.results.map((card) => ({
     key: card.id,
     title: card.title,
-    label: KIND_LABEL[card.kind],
+    label: tagFor(screens, card.kind),
     facts: facts(card),
     picture: card.poster ?? null,
     open: () => go(titlePath(card.id)),

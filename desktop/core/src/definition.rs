@@ -230,10 +230,6 @@ pub struct IndexerDef {
     /// `{kitsu_kind}` for the mapper `kitsu`. Absent: the indexer needs no mapping.
     #[serde(default)]
     pub map: Option<String>,
-    /// How a document from before `map` said it, for the one mapper there was. Read, never needed in a
-    /// new document, and kept in the signed one for the apps that still use it.
-    #[serde(default)]
-    pub anime_kitsu: bool,
     /// Asked only when the other indexers found nothing worth opening, and given longer to answer.
     /// For a slow service that should not be paid for on every search.
     #[serde(default)]
@@ -391,7 +387,7 @@ impl IndexerDef {
 
     /// The mapper this indexer is asked through, if any.
     pub fn mapper_id(&self) -> Option<&str> {
-        self.map.as_deref().or(self.anime_kitsu.then_some("kitsu"))
+        self.map.as_deref()
     }
 
     /// Whether its request has the hole `{name}` anywhere: in the path, a query value or the body.
