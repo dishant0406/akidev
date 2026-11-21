@@ -274,13 +274,23 @@ impl Hls {
                         sessions.remove(&victim.key);
                         self.retire(&victim);
                     }
-                    None => return Err(StartError::Busy),
+                    None => {
+                        tracing::warn!(
+                            "[hls] busy: {} sessions are open, and none has been idle for {}s",
+                            sessions.len(),
+                            EVICTABLE_AFTER.as_secs()
+                        );
+                        return Err(StartError::Busy);
+                    }
                 }
             }
             let permit = if video == VideoMode::Encode {
                 match self.encode_slots.clone().try_acquire_owned() {
                     Ok(permit) => Some(permit),
-                    Err(_) => return Err(StartError::Busy),
+                    Err(_) => {
+                        tracing::warn!("[hls] busy: the video conversion slot is held");
+                        return Err(StartError::Busy);
+                    }
                 }
             } else {
                 None

@@ -663,6 +663,7 @@ impl Player {
         let Ok(Ok(_slot)) =
             tokio::time::timeout(QUEUE_FOR, self.slots.clone().acquire_owned()).await
         else {
+            tracing::warn!("[play] busy: all {CONCURRENT_RESOLVES} search slots are in use");
             return Outcome::Busy;
         };
 
