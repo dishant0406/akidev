@@ -143,34 +143,49 @@ fn plan<'a>(indexers: &[&'a IndexerDef], terms: &[String]) -> Vec<(&'a IndexerDe
         return Vec::new();
     };
 
-    let mut pairs = Vec::new();
-    for &indexer in indexers.iter().take(MAX_PLANNED_REQUESTS) {
-        match indexer.fanout {
-            Fanout::Once => pairs.push((indexer, (*first).clone())),
-            Fanout::PerTitle => {
-                let mut seen = HashSet::new();
-                for term in &queries {
-                    let title = title_of(term);
-                    if seen.insert(title.clone()) {
-                        pairs.push((indexer, title));
-                        if pairs.len() == MAX_PLANNED_REQUESTS {
-                            return pairs;
-                        }
-                    }
+    // Each indexer's own requests, in the order it would ask them.
+    let wanted: Vec<Vec<(&'a IndexerDef, String)>> = indexers
+        .iter()
+        .take(MAX_PLANNED_REQUESTS)
+        .map(|&indexer| {
+            let terms: Vec<String> = match indexer.fanout {
+                Fanout::Once => vec![(*first).clone()],
+                Fanout::PerTitle => {
+                    let mut seen = HashSet::new();
+                    queries
+                        .iter()
+                        .map(|term| title_of(term))
+                        .filter(|title| seen.insert(title.clone()))
+                        .collect()
+                }
+                Fanout::PerTerm => queries.iter().map(|term| (*term).clone()).collect(),
+            };
+            terms.into_iter().map(|term| (indexer, term)).collect()
+        })
+        .collect();
+
+    // When everything fits, the order is the indexers' own, one after another. When the cap would cut it,
+    // the cap is shared out one request at a time across the indexers, so a title with dozens of names
+    // cannot give all of it to the first indexer that asks per name and leave the others unasked.
+    let mut taken = vec![0usize; wanted.len()];
+    let mut total = 0;
+    let longest = wanted.iter().map(Vec::len).max().unwrap_or(0);
+    'share: for round in 0..longest {
+        for (at, requests) in wanted.iter().enumerate() {
+            if round < requests.len() {
+                taken[at] += 1;
+                total += 1;
+                if total == MAX_PLANNED_REQUESTS {
+                    break 'share;
                 }
             }
-            Fanout::PerTerm => pairs.extend(
-                queries
-                    .iter()
-                    .take(MAX_PLANNED_REQUESTS - pairs.len())
-                    .map(|term| (indexer, (*term).clone())),
-            ),
-        }
-        if pairs.len() == MAX_PLANNED_REQUESTS {
-            break;
         }
     }
-    pairs
+    wanted
+        .into_iter()
+        .zip(taken)
+        .flat_map(|(requests, count)| requests.into_iter().take(count))
+        .collect()
 }
 
 /// Whether a definition's request can be filled in for every kind it serves. Catches a
@@ -1998,6 +2013,25 @@ pub(crate) mod tests {
                 pair("eztv", "Breaking Bad"),
             ]
         );
+    }
+
+    #[test]
+    fn a_title_with_many_names_does_not_leave_the_later_indexers_unasked() {
+        // An anime can have dozens of names. One indexer that asks per name used to take all 96 requests
+        // of the cap, so the indexers after it were never asked at all.
+        let names: Vec<String> = (0..120).map(|n| format!("Title name {n}")).collect();
+        let terms: Vec<&str> = names.iter().map(String::as_str).collect();
+        let planned = planned(Kind::Anime, &terms, &[]);
+        assert_eq!(planned.len(), MAX_PLANNED_REQUESTS);
+        let asked: HashSet<&str> = planned.iter().map(|(id, _)| id.as_str()).collect();
+        let sources = definitions();
+        for indexer in serving(&sources.indexers, Kind::Anime, true) {
+            assert!(
+                asked.contains(indexer.id.as_str()),
+                "{} was never asked",
+                indexer.id
+            );
+        }
     }
 
     #[test]

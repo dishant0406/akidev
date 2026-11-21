@@ -256,3 +256,18 @@ the link (TorBox's link carries its own token; add them when a service needs the
 
 **Not built.** Downloads to the library and Watch party from a service link. The server keeps its own TorBox and
 Internet Archive code.
+
+## The request cap is shared across indexers (2026-11-22)
+
+**Chosen.** A search plans at most 96 requests (`MAX_PLANNED_REQUESTS`). When everything fits, nothing changed: the indexers'
+requests stay in their own order. When the cap would cut the list, it is now shared out one request at a time across the indexers,
+and each indexer keeps its requests in their own order.
+
+**Why.** Before, the cap was filled one indexer at a time. A title with dozens of names (an anime with many AniList synonyms)
+gave 76 requests to `nyaa` and 20 to `subsplease`, so the eight indexers after them were never asked, and a popular anime such as
+`anime-16498-ep1` found no releases at all, on the website and in the app. Found while testing before the 0.1.28 release.
+
+**Turned down.** Raising the cap (more load on every indexer) and cutting the number of names per title (fewer ways to match).
+
+**Not changed.** For anime, releases named like TV episodes (`S04E01`) can rank above the first season's, because an anime's
+episode number is matched without its season. That is a matching rule in `releases.rs`, not planning, and it is a separate fix.
