@@ -220,7 +220,7 @@ fn request_json(request: &super::fetch::Prepared) -> Value {
 fn anilist_detail_requests_synonyms_for_release_matching() {
     let provider = def("anilist");
     let mut asking = Asking::new(&provider, Kind::Anime);
-    asking.id = Some("4013".into());
+    asking.id = Some("4013");
     let request = asking.prepare(&provider.detail.request).unwrap();
     let body = request_json(&request);
     assert!(body.to_string().contains("synonyms"));
