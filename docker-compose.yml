@@ -87,6 +87,8 @@ services:
       MAX_STREAM_BYTES_PER_DAY: ${MAX_STREAM_BYTES_PER_DAY:-0}
       # Slow debrid/CDN responses get a bounded chance to prepare the selected file.
       RESOLVE_DEADLINE_MS: ${RESOLVE_DEADLINE_MS:-180000}
+      # A few conversions can share the host; the swap-backed deploy target has room for six.
+      MAX_HLS_SESSIONS: ${MAX_HLS_SESSIONS:-6}
       # The browser calls the API from the site, so that origin must be allowed.
       CORS_ORIGINS: https://${NEXT_PUBLIC_SITE_DOMAIN:-akidev.live}
       CACHE_DIR: /data
