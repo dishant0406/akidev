@@ -2,6 +2,8 @@
 pub mod audius;
 pub mod cache;
 pub mod calendar;
+#[cfg(feature = "code-plugins")]
+pub mod code;
 pub mod config;
 pub mod definition;
 pub mod expression;

@@ -120,7 +120,7 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Plugin> {
 }
 
 /// Headers a plugin may not set, because they decide where a request goes or how it is framed.
-const FORBIDDEN_HEADERS: [&str; 8] = [
+pub(crate) const FORBIDDEN_HEADERS: [&str; 8] = [
     "host",
     "content-length",
     "transfer-encoding",

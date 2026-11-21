@@ -18,6 +18,8 @@ pub struct Config {
     pub search_ceiling_ms: u64,
     /// True only on the server that serves the website. An indexer marked `server_only` in the sources
     /// document is asked there and nowhere else, so the desktop app never calls the server for it.
+    /// Never read from or written to the app's settings file: only the server sets it.
+    #[serde(skip)]
     pub on_server: bool,
     /// How long the fallback indexers, asked only when the others found nothing, are given: for one
     /// request and for all of them.
