@@ -725,7 +725,7 @@ async fn find_releases_named(
     // episode. An absent or mismatched mapping is simply no addon result.
     // A shared opt-in is the only way to make the mapping request. Kitsu is a metadata source;
     // streams are still discovered from the actual addon's own endpoint.
-    let kitsu_id = match parsed {
+    let (kitsu_id, kitsu_movie) = match parsed {
         MediaId {
             kind: Kind::Anime,
             episode: Some(episode),
@@ -736,14 +736,18 @@ async fn find_releases_named(
                 && indexer.request.path.to_string().contains("{kitsu}")
         }) =>
         {
-            providers::anime_kitsu_episode(&parsed.provider_id, *episode).await
+            providers::anime_kitsu_episode(&parsed.provider_id, *episode)
+                .await
+                .map(|(id, movie)| (Some(id), movie))
+                .unwrap_or((None, false))
         }
-        _ => None,
+        _ => (None, false),
     };
     let options = SearchOptions {
         kind: parsed.kind,
         imdb_id: detail.imdb_id.clone(),
         kitsu_id,
+        kitsu_movie,
         season: parsed.season,
         episode: parsed.episode,
     };
@@ -769,6 +773,19 @@ async fn find_releases_named(
             let found = outcome.releases;
             let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
             let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
+            (terms, ranked, all, outcome.sources, outcome.live)
+        }
+        (Kind::Anime, Some(_)) if media.format.as_deref() == Some("movie") => {
+            // Anime films are still addressed as `anime-...-ep1`, but discovery and ranking are
+            // film searches, not episode searches. Kitsu uses the movie route above as well.
+            let terms = movie_search_terms(titles, year);
+            let outcome = search_all_report(config, &terms, &options, |found| {
+                !rank_movie_releases(found, year, &media.title, titles).is_empty()
+            })
+            .await;
+            let found = outcome.releases;
+            let ranked = rank_movie_releases(&found, year, &media.title, titles);
+            let all = rank_movie_releases_by(&found, year, &media.title, titles, false);
             (terms, ranked, all, outcome.sources, outcome.live)
         }
         (Kind::Anime, Some(episode)) => {
@@ -917,7 +934,9 @@ impl Plan {
         let mut plan = self.clone();
         // Keep late uncommon rows, not just those admitted by the initial codec filter.
         let extras = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie => {
+            _ if self.parsed.kind == Kind::Movie
+                || self.detail.media.format.as_deref() == Some("movie") =>
+            {
                 rank_movie_releases_by(&filtered, year, &self.detail.media.title, &names, false)
             }
             Some(episode) => rank_releases_by(
@@ -942,7 +961,9 @@ impl Plan {
         .collect::<Vec<_>>();
         plan.extra.extend(extras);
         let ranked = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie => {
+            _ if self.parsed.kind == Kind::Movie
+                || self.detail.media.format.as_deref() == Some("movie") =>
+            {
                 rank_movie_releases(&filtered, year, &self.detail.media.title, &names)
             }
             Some(episode) => rank_releases(
@@ -965,7 +986,9 @@ impl Plan {
         }
         // Re-rank unattempted evidence, not merely append in arrival order.
         let mut reranked = match self.parsed.episode {
-            _ if self.parsed.kind == Kind::Movie => {
+            _ if self.parsed.kind == Kind::Movie
+                || self.detail.media.format.as_deref() == Some("movie") =>
+            {
                 rank_movie_releases(&plan.ranked, year, &self.detail.media.title, &names)
             }
             Some(episode) => rank_releases(
@@ -1191,6 +1214,7 @@ mod tests {
             kind: Kind::Series,
             imdb_id: None,
             kitsu_id: None,
+            kitsu_movie: false,
             season: Some(1),
             episode: Some(1),
         };

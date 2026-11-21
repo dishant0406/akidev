@@ -84,6 +84,8 @@ pub struct SearchOptions {
     pub imdb_id: Option<String>,
     /// A Kitsu episode id obtained through Anime Kitsu, with the same episode number.
     pub kitsu_id: Option<String>,
+    /// Kitsu movies use `/stream/movie/<id>` and have no episode suffix.
+    pub kitsu_movie: bool,
     pub season: Option<u32>,
     pub episode: Option<u32>,
 }
@@ -172,6 +174,7 @@ pub fn check(def: &IndexerDef) -> anyhow::Result<()> {
             kind,
             imdb_id: Some("tt1234567".into()),
             kitsu_id: Some("kitsu:1:1".into()),
+            kitsu_movie: false,
             season: Some(1),
             episode: Some(1),
         };
@@ -202,6 +205,7 @@ impl Request {
             "imdb" => imdb.clone(),
             "imdb_digits" => imdb.as_ref().map(|id| id[2..].to_string()),
             "kitsu" => kitsu(options),
+            "kitsu_kind" => kitsu_kind(options),
             // For an indexer that can look a title up by its id and otherwise by its name.
             "imdb_or_term" => imdb
                 .clone()
@@ -259,17 +263,39 @@ fn imdb(options: &SearchOptions) -> Option<String> {
 }
 
 /// A mapped Kitsu id is valid only for the exact requested episode, so an alias cannot
-/// select a different season or episode.
+/// select a different season or episode. Kitsu movies have no episode suffix.
 fn kitsu(options: &SearchOptions) -> Option<String> {
-    static ID: OnceLock<Regex> = OnceLock::new();
+    static EPISODE_ID: OnceLock<Regex> = OnceLock::new();
+    static MOVIE_ID: OnceLock<Regex> = OnceLock::new();
     let value = options.kitsu_id.as_deref()?.to_lowercase();
-    let found = ID
+    if options.kitsu_movie {
+        let found = MOVIE_ID
+            .get_or_init(|| Regex::new(r"^kitsu:([1-9][0-9]*)$").unwrap())
+            .captures(&value)?;
+        return (options.kind == Kind::Anime
+            && options.episode == Some(1)
+            && found[1].parse::<u32>().ok()? > 0)
+            .then_some(value);
+    }
+    let found = EPISODE_ID
         .get_or_init(|| Regex::new(r"^kitsu:([1-9][0-9]*):([1-9][0-9]*)$").unwrap())
         .captures(&value)?;
     (options.kind == Kind::Anime
         && found[1].parse::<u32>().ok()? > 0
         && found[2].parse::<u32>().ok()? == options.episode?)
         .then_some(value)
+}
+
+fn kitsu_kind(options: &SearchOptions) -> Option<String> {
+    kitsu(options)?;
+    Some(
+        if options.kitsu_movie {
+            "movie"
+        } else {
+            "series"
+        }
+        .into(),
+    )
 }
 
 /// A host that just failed is not asked again for every search term: a search fans out over
@@ -1166,6 +1192,7 @@ pub(crate) mod tests {
             kind,
             imdb_id: Some("tt0903747".into()),
             kitsu_id: None,
+            kitsu_movie: false,
             season: Some(1),
             episode: Some(5),
         }
@@ -1942,6 +1969,36 @@ pub(crate) mod tests {
             );
         }
         mapped.kitsu_id = None;
+        assert!(request("torrentio", "", &mapped).is_none());
+    }
+
+    #[test]
+    fn a_mapped_anime_movie_uses_the_movie_route_without_an_episode_suffix() {
+        let mut mapped = options(Kind::Anime);
+        mapped.kitsu_id = Some("kitsu:50192".into());
+        mapped.kitsu_movie = true;
+        mapped.episode = Some(1);
+        let built = request("torrentio", "", &mapped).unwrap();
+        assert_eq!(built.path, "/stream/movie/kitsu:50192.json");
+        assert_eq!(kitsu_kind(&mapped), Some("movie".into()));
+        for bad in [
+            "kitsu:50192:1",
+            "kitsu:50192:1:2",
+            " kitsu:50192 ",
+            "kitsu:050192",
+            "kitsu:4294967296",
+            "k1:p",
+            "kitsu:nope",
+            "https://localhost",
+        ] {
+            mapped.kitsu_id = Some(bad.into());
+            assert!(
+                request("torrentio", "", &mapped).is_none(),
+                "{bad} was sent"
+            );
+        }
+        mapped.kitsu_id = Some("kitsu:50192".into());
+        mapped.episode = Some(2);
         assert!(request("torrentio", "", &mapped).is_none());
     }
 

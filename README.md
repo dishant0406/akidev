@@ -72,8 +72,10 @@ signed and published. The server and the app both load the signed copy from
 `desktop/sources/sources.json` asks its Stremio addon once and reads each result's validated
 `infoHash`, optional `fileIdx`, file name and optional size. For anime, the bundled Anime Kitsu
 metadata provider maps an AniList id to a Kitsu episode only when its episode number exactly matches
-the requested one; Torrentio is then asked for that Kitsu episode. A missing or mismatched mapping
-skips Torrentio rather than substituting another episode. Kitsu supplies metadata, never streams.
+the requested one; Torrentio is then asked for that Kitsu episode. Kitsu movies use Torrentio's
+`/stream/movie/<id>` route without an episode suffix, while series use `/stream/series/<id>:<episode>`.
+A missing or mismatched mapping skips Torrentio rather than substituting another episode. Kitsu
+supplies metadata, never streams.
 
 Those releases use exactly the same identity checks, swarm playback and debrid cache checks as every
 other indexer's results: the desktop joins the swarm on the viewer's device; the website's server

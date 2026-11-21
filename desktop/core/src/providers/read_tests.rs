@@ -49,12 +49,13 @@ fn day(text: &str) -> i64 {
 fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
     let def = sources::anime_kitsu();
     let body = json!({"meta": {
-        "id":"kitsu:7442", "kitsu_id":"7442", "name":"Attack on Titan", "releaseInfo":"2013",
+        "id":"kitsu:7442", "kitsu_id":"7442", "type":"series", "name":"Attack on Titan", "releaseInfo":"2013",
         "videos":[{"id":"kitsu:7442:1", "season":1, "episode":1},
                   {"id":"kitsu:7442:2", "season":1, "episode":2}]
     }});
     let detail = read_for_test(&def, Kind::Anime, &body, [None, None]).unwrap();
     assert_eq!(detail.media.id, "anime-7442");
+    assert_eq!(detail.media.format.as_deref(), Some("series"));
     assert_eq!(detail.episodes[0].id, "kitsu:7442:1");
     assert_eq!(detail.episodes[1].number, 2);
     let mut incomplete = body;
@@ -76,6 +77,20 @@ fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
             .count()
             == 1
     );
+}
+
+#[test]
+fn anime_kitsu_reads_a_movie_and_its_unsuffixed_video_id() {
+    let def = sources::anime_kitsu();
+    let body = json!({"meta": {
+        "id":"kitsu:50192", "kitsu_id":"50192", "type":"movie",
+        "name":"Rascal Does Not Dream of a Dear Friend", "releaseInfo":"2026",
+        "videos":[{"id":"kitsu:50192", "season":1, "episode":1}]
+    }});
+    let detail = read_for_test(&def, Kind::Anime, &body, [None, None]).unwrap();
+    assert_eq!(detail.media.id, "anime-50192");
+    assert_eq!(detail.media.format.as_deref(), Some("movie"));
+    assert_eq!(detail.episodes[0].id, "kitsu:50192");
 }
 
 // ---------------------------------------------------------------------------------------------

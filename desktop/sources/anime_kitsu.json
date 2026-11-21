@@ -5,6 +5,7 @@
   "card": {
     "id": "kitsu_id",
     "title": "name",
+    "format": "type",
     "year": { "year": "releaseInfo" }
   },
   "detail": {

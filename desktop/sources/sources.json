@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 36,
+  "version": 37,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -257,7 +257,7 @@
           "$kind": {
             "movie": "/stream/movie/{imdb}.json",
             "series": "/stream/series/{imdb}:{season}:{episode}.json",
-            "anime": "/stream/series/{kitsu}.json"
+            "anime": "/stream/{kitsu_kind}/{kitsu}.json"
           }
         }
       },

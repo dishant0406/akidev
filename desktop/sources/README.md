@@ -109,9 +109,10 @@ it again, publish a document without the field (or with a lower one) and a highe
   one torrent as distinct choices without bypassing title/episode checks. Only a validated torrent
   `infoHash` is used, never an addon's credential-bearing direct-play URL.
 - `anime_kitsu: true` opts an anime-capable indexer into the bundled Anime Kitsu metadata bridge.
-  Its request must use `{kitsu}` for anime. The bridge accepts only an exact same-number Kitsu
-  episode; a missing or mismatched mapping skips that indexer instead of falling back to IMDb or
-  playing another episode.
+  Its request must use `{kitsu}` for anime and may use `{kitsu_kind}` for the route kind. The bridge
+  accepts only an exact same-number Kitsu episode; a Kitsu movie instead uses its exact unsuffixed
+  title id and the `movie` route. A missing or mismatched mapping skips that indexer instead of
+  falling back to IMDb or playing another episode.
 - `seeders` is optional observation data: missing, malformed, negative, fractional or out-of-range
   values stay unknown (`null` in API output); an explicit valid `0` remains observed zero. Do not
   define a default zero for providers that omit health. Counts are upstream reports, not live
