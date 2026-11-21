@@ -413,38 +413,45 @@ async fn ask(
         .map_err(|_| LocalCongestion)?
         .map_err(|_| LocalCongestion)?;
     sent.store(true, std::sync::atomic::Ordering::SeqCst);
-    let url = format!("{host}{}", request.path);
-    anyhow::ensure!(
-        crate::http::stays_on(host, &url),
-        "the request would leave its host"
-    );
-    let builder = match def.request.method {
-        Method::Get => client().get(url),
-        Method::Post => client().post(url),
-    };
-    let mut builder = builder.query(&request.query);
-    for (name, value) in &def.request.headers {
-        builder = builder.header(name, value);
-    }
-    if let Some(body) = &request.json {
-        builder = builder.json(body);
-    }
-    // The limit covers the whole exchange, so a mirror that hangs costs one limit and the
-    // next mirror is still tried.
-    let body = tokio::time::timeout_at(deadline, async {
-        let response = builder.send().await?.error_for_status()?;
-        crate::http::read_capped(response, MAX_RESPONSE_BYTES)
+    let body = if let Some(export) = &def.code {
+        // The plugin's own code makes the request and answers with the JSON its `response` reads.
+        tokio::time::timeout_at(deadline, code_body(def, export, host, request))
             .await
-            .map_err(|error| {
-                if error.downcast_ref::<reqwest::Error>().is_some() {
-                    error
-                } else {
-                    RequestOutcome::BadResponse.into()
-                }
-            })
-    })
-    .await
-    .map_err(|_| RequestOutcome::Timeout)??;
+            .map_err(|_| RequestOutcome::Timeout)??
+    } else {
+        let url = format!("{host}{}", request.path);
+        anyhow::ensure!(
+            crate::http::stays_on(host, &url),
+            "the request would leave its host"
+        );
+        let builder = match def.request.method {
+            Method::Get => client().get(url),
+            Method::Post => client().post(url),
+        };
+        let mut builder = builder.query(&request.query);
+        for (name, value) in &def.request.headers {
+            builder = builder.header(name, value);
+        }
+        if let Some(body) = &request.json {
+            builder = builder.json(body);
+        }
+        // The limit covers the whole exchange, so a mirror that hangs costs one limit and the
+        // next mirror is still tried.
+        tokio::time::timeout_at(deadline, async {
+            let response = builder.send().await?.error_for_status()?;
+            crate::http::read_capped(response, MAX_RESPONSE_BYTES)
+                .await
+                .map_err(|error| {
+                    if error.downcast_ref::<reqwest::Error>().is_some() {
+                        error
+                    } else {
+                        RequestOutcome::BadResponse.into()
+                    }
+                })
+        })
+        .await
+        .map_err(|_| RequestOutcome::Timeout)??
+    };
     extract::releases(
         def,
         &String::from_utf8_lossy(&body),
@@ -453,6 +460,53 @@ async fn ask(
         trackers,
     )
     .map_err(|_| RequestOutcome::BadResponse.into())
+}
+
+/// What the plugin's code answers for this request: the host it is asked on, the filled path, query and
+/// body as hints, and the term.
+#[cfg(feature = "code-plugins")]
+async fn code_body(
+    def: &IndexerDef,
+    export: &str,
+    host: &str,
+    request: &Request,
+) -> anyhow::Result<Vec<u8>> {
+    let module = def
+        .module
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("its module is not loaded"))?;
+    let hosts = def
+        .hosts
+        .iter()
+        .filter_map(|each| Some(reqwest::Url::parse(each).ok()?.host_str()?.to_string()))
+        .collect();
+    let input = serde_json::json!({
+        "host": host,
+        "kind": request.kind.as_str(),
+        "path": request.path,
+        "query": request.query,
+        "json": request.json,
+    });
+    // The tests run a server on this machine, which the public address rules rightly refuse.
+    #[cfg(test)]
+    let allowed: fn(&str) -> anyhow::Result<()> = |_| Ok(());
+    #[cfg(not(test))]
+    let allowed: fn(&str) -> anyhow::Result<()> = crate::plugin::check_public_url;
+    let answer = crate::code::run_with(
+        module.0.to_vec(),
+        export,
+        input,
+        hosts,
+        crate::code::Limits::default(),
+        allowed,
+    )
+    .await?;
+    Ok(serde_json::to_vec(&answer)?)
+}
+
+#[cfg(not(feature = "code-plugins"))]
+async fn code_body(_: &IndexerDef, _: &str, _: &str, _: &Request) -> anyhow::Result<Vec<u8>> {
+    anyhow::bail!("this build cannot run a plugin's code")
 }
 
 /// One indexer asked about one term. The hosts are tried in order and the first that answers
@@ -1254,6 +1308,82 @@ pub(crate) mod tests {
                           "fields": { "title": "title", "hash": "hash" } }
         }))
         .unwrap()
+    }
+
+    /// A plugin that brings code, built from `plugins/code-indexer` (see its README): it signs its request
+    /// and reads an HTML page into rows. Here it runs against a page served from this machine.
+    #[cfg(feature = "code-plugins")]
+    #[tokio::test]
+    async fn an_indexer_whose_requests_are_made_by_a_plugins_code_finds_releases() {
+        use axum::{Router, extract::Query, http::HeaderMap, routing::get};
+        use sha2::Digest;
+        let app = Router::new().route(
+            "/list",
+            get(
+                |headers: HeaderMap,
+                 Query(query): Query<std::collections::HashMap<String, String>>| async move {
+                    let term = query.get("q").cloned().unwrap_or_default();
+                    let wanted =
+                        sources::encode_hex(&sha2::Sha256::digest(format!("secret:{term}")));
+                    // Only a request signed the way the service wants is answered.
+                    if headers.get("x-sign").and_then(|value| value.to_str().ok()) != Some(&wanted)
+                    {
+                        return "<p>forbidden</p>".to_string();
+                    }
+                    format!(
+                        "<ul><li data-hash=\"{}\" data-seeders=\"7\">{term} S01E05 1080p</li>\
+                         <li data-hash=\"{}\" data-seeders=\"2\">{term} S01E05 720p</li></ul>",
+                        "a".repeat(40),
+                        "b".repeat(40)
+                    )
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let mut def: IndexerDef = serde_json::from_value(json!({
+            "id": "signed", "name": "signed", "kinds": ["series"], "hosts": [base], "code": "search",
+            "request": { "path": "/list", "query": { "q": "{term}" } },
+            "response": { "format": "json", "rows": "items",
+                          "fields": { "title": "title", "hash": "hash", "seeders": "seeders" } }
+        }))
+        .unwrap();
+        def.module = Some(crate::definition::Module(Arc::new(
+            include_bytes!("../../tests/fixtures/code-indexer.wasm").to_vec(),
+        )));
+
+        let found = search_one(
+            &def,
+            "Show",
+            &options(Kind::Series),
+            &[],
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert_eq!(found.len(), 2);
+        assert!(
+            found
+                .iter()
+                .any(|release| release.title == "Show S01E05 1080p")
+        );
+        assert!(found.iter().any(|release| release.seeders == Some(7)));
+
+        // The same indexer without the module cannot be asked.
+        def.module = None;
+        assert!(
+            search_one(
+                &def,
+                "Other",
+                &options(Kind::Series),
+                &[],
+                Duration::from_secs(5)
+            )
+            .await
+            .is_err()
+        );
     }
 
     /// A server with `/empty`, `/one` (a release) and `/broken`, and how many times `/one` was asked.

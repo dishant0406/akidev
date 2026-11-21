@@ -208,3 +208,28 @@ the compatibility code had no job left.
 **Left in code on purpose.** The three shapes (anime, series, movie) are behaviour: how episodes are keyed and played.
 The Prowlarr route and its URL and key are server secrets, which cannot live in a public document. The `schema 1`/`/v2`
 feeds and the old-app check are still there; they only matter while old apps exist.
+
+## Plugins can bring code, as WebAssembly (2026-11-22)
+
+**Chosen.** A plugin may bring a `.wasm` file (named in the plugin JSON with its sha256). An indexer, a catalogue or a
+mapper names an export in `code`. The module replaces only the *transport step*: it makes the requests (through one host
+function, `akidev.http`) and answers with JSON. The source's own `response`/`card`/`list` definitions read that JSON, so
+every check that exists (hash, episode and ranking rules) stays and a module cannot get a release past them. The engine is
+`wasmi` (a pure Rust interpreter) behind the cargo feature `code-plugins`, which only the desktop app turns on.
+
+**Why.** JSON cannot sign a request, log in or read a page. The owner wanted people to add their own service without a
+code change in the app. WebAssembly because the owner chose it: authors can use any language, and it isolates well.
+`wasmi`, not `wasmtime`, because a JIT is not allowed on iOS and the interpreter is small.
+
+**Rules.** Fuel (300 million instructions), a memory limit, a wall clock, a request cap, an answer cap and a module size cap,
+each tested with hand-written modules that loop, grow memory or flood requests. Every request is held to the public https
+rules of a JSON plugin, to the hosts the source declared, and to the forbidden-header list. A signed document can never
+carry `code`.
+
+**Turned down.** Putting the module inside the JSON (base64, large) and giving the host crypto and HTML parser functions
+(a bigger host surface; signing and parsing compile into the module instead). A scripting language (Rhai, QuickJS): the
+owner picked WebAssembly.
+
+**Not built.** Stream services as plugins: the desktop app has no way to turn a release into a playable URL except its own
+torrent engine (debrid and the Internet Archive are code in the server), so it needs a new playback path in the app. A
+Settings field for a plugin's login or key. Plugins on the website: the server does not turn the feature on.

@@ -7,12 +7,13 @@
 //! The desktop app keeps plugins in `<data dir>/plugins`. A file `name.json` is switched on and
 //! `name.json.off` is switched off. The server never loads them: it uses only the signed document.
 
-use crate::definition::{IndexerDef, MapperDef, ProviderDef, SubtitleDef};
+use crate::definition::{IndexerDef, MapperDef, Module, ProviderDef, SubtitleDef};
 use crate::model::{Kind, Shape};
 use crate::screens::{HomeRow, Tab};
 use crate::sources::{self, Sources};
 use anyhow::{Context, ensure};
 use serde::Deserialize;
+use sha2::Digest;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
@@ -43,11 +44,27 @@ pub struct Plugin {
     /// Rows for the home page, each drawn from one of the plugin's own providers.
     #[serde(default)]
     pub home: Vec<HomeRow>,
+    /// The WebAssembly module that makes the requests of the plugin's indexers that name an export in
+    /// `code`. It is kept next to the plugin as `<id>.wasm` and must match this hash.
+    #[serde(default)]
+    pub module: Option<ModuleRef>,
     /// Id mappers, so the plugin's indexers can be asked by another catalogue's ids, the way the
     /// built-in Kitsu mapper does it. An indexer of the plugin names one in `map`.
     #[serde(default)]
     pub mappers: Vec<MapperDef>,
 }
+
+/// Where a plugin's module is, and what it must hash to.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModuleRef {
+    /// The file name, next to the plugin's JSON when it is downloaded: `example.wasm`.
+    pub file: String,
+    /// The SHA-256 of the file, as 64 lower case hex digits.
+    pub sha256: String,
+}
+
+/// The largest module a plugin may bring.
+pub const MAX_MODULE_BYTES: usize = 4 << 20;
 
 impl PluginKind {
     fn check(&self) -> anyhow::Result<()> {
@@ -119,6 +136,41 @@ pub fn parse(bytes: &[u8]) -> anyhow::Result<Plugin> {
     Ok(plugin)
 }
 
+impl Plugin {
+    /// Checks the bytes of the module against the hash the plugin names, and hands them to the
+    /// indexers that use them.
+    pub fn attach(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
+        let Some(module) = &self.module else {
+            return Ok(());
+        };
+        ensure!(bytes.len() <= MAX_MODULE_BYTES, "the module is too large");
+        ensure!(
+            bytes.starts_with(b"\0asm"),
+            "the module is not a WebAssembly file"
+        );
+        let hash = crate::sources::encode_hex(&sha2::Sha256::digest(bytes));
+        ensure!(
+            hash == module.sha256,
+            "the module is not the one the plugin names (its hash is {hash})"
+        );
+        let shared = Module(std::sync::Arc::new(bytes.to_vec()));
+        for indexer in self
+            .indexers
+            .iter_mut()
+            .filter(|indexer| indexer.code.is_some())
+        {
+            indexer.module = Some(shared.clone());
+        }
+        let mappers = self.mappers.iter_mut().map(|mapper| &mut mapper.provider);
+        for provider in self.providers.iter_mut().chain(mappers) {
+            if provider.code.is_some() {
+                provider.module = Some(shared.clone());
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Headers a plugin may not set, because they decide where a request goes or how it is framed.
 pub(crate) const FORBIDDEN_HEADERS: [&str; 8] = [
     "host",
@@ -188,6 +240,62 @@ impl Plugin {
             self.subtitles.len() <= 4,
             "too many subtitle sources (4 at most)"
         );
+        let mut exports: Vec<(&str, &String)> = self
+            .indexers
+            .iter()
+            .filter_map(|each| Some((each.id.as_str(), each.code.as_ref()?)))
+            .collect();
+        exports.extend(
+            self.providers
+                .iter()
+                .filter_map(|each| Some((each.id.as_str(), each.code.as_ref()?))),
+        );
+        exports.extend(
+            self.mappers
+                .iter()
+                .filter_map(|each| Some((each.id.as_str(), each.provider.code.as_ref()?))),
+        );
+        let codes = exports.len();
+        match &self.module {
+            Some(module) => {
+                ensure!(
+                    cfg!(feature = "code-plugins"),
+                    "this app cannot run a plugin that brings code"
+                );
+                ensure!(
+                    (6..=60).contains(&module.file.len())
+                        && module.file.ends_with(".wasm")
+                        && module.file.bytes().all(|byte| byte.is_ascii_lowercase()
+                            || byte.is_ascii_digit()
+                            || matches!(byte, b'-' | b'_' | b'.'))
+                        && !module.file.starts_with('.'),
+                    "the module file {:?} must be a plain lower case name ending in .wasm",
+                    module.file
+                );
+                ensure!(
+                    module.sha256.len() == 64
+                        && module
+                            .sha256
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                    "the module hash must be 64 lower case hex digits"
+                );
+                ensure!(codes > 0, "the plugin brings a module that no indexer uses");
+            }
+            None => ensure!(
+                codes == 0,
+                "an indexer asks for code, and the plugin brings no module"
+            ),
+        }
+        for (id, export) in &exports {
+            ensure!(
+                (1..=32).contains(&export.len())
+                    && export.bytes().all(|byte| byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || byte == b'_'),
+                "{id} names the export {export:?}, which must be 1 to 32 lower case letters, digits or _"
+            );
+        }
         for indexer in &self.indexers {
             indexer
                 .check()
@@ -427,7 +535,13 @@ pub fn load(dir: &Path) -> Vec<Installed> {
                 catalogues: plugin.providers.len(),
                 problem: Some(format!("the file must be called {}.json", plugin.id)),
             }),
-            Ok(plugin) => {
+            Ok(mut plugin) => {
+                let problem = std::fs::read(folder(dir).join(format!("{}.wasm", plugin.id)))
+                    .map_err(|_| anyhow::anyhow!("its module {}.wasm is missing", plugin.id))
+                    .and_then(|bytes| plugin.attach(&bytes))
+                    .err()
+                    .filter(|_| plugin.module.is_some())
+                    .map(|error| format!("{error:#}"));
                 listed.push(Installed {
                     id: plugin.id.clone(),
                     name: plugin.name.clone(),
@@ -436,9 +550,9 @@ pub fn load(dir: &Path) -> Vec<Installed> {
                     indexers: plugin.indexers.len(),
                     subtitles: plugin.subtitles.len(),
                     catalogues: plugin.providers.len(),
-                    problem: None,
+                    problem: problem.clone(),
                 });
-                if enabled {
+                if enabled && problem.is_none() {
                     in_use.push((listed.len() - 1, plugin));
                 }
             }
@@ -465,8 +579,29 @@ pub fn load(dir: &Path) -> Vec<Installed> {
 /// be used, or that would stop another one working (a clash over a source's id), is not kept, and
 /// what was there before is put back.
 pub fn install(dir: &Path, bytes: &[u8]) -> anyhow::Result<Vec<Installed>> {
+    install_with_module(dir, bytes, None)
+}
+
+/// Like `install`, for a plugin that brings a module: the module is checked against the hash the plugin
+/// names before anything is written, and it is kept next to the plugin as `<id>.wasm`.
+pub fn install_with_module(
+    dir: &Path,
+    bytes: &[u8],
+    module: Option<&[u8]>,
+) -> anyhow::Result<Vec<Installed>> {
     let plugin = parse(bytes)?;
+    match (&plugin.module, module) {
+        (Some(_), Some(module)) => plugin.clone().attach(module)?,
+        (Some(_), None) => anyhow::bail!("the plugin brings a module, and none was given"),
+        (None, Some(_)) => anyhow::bail!("a module was given, and the plugin names none"),
+        (None, None) => {}
+    }
     std::fs::create_dir_all(folder(dir))?;
+    let wasm = folder(dir).join(format!("{}.wasm", plugin.id));
+    let wasm_before = std::fs::read(&wasm).ok();
+    if let Some(module) = module {
+        std::fs::write(&wasm, module)?;
+    }
     let on = folder(dir).join(format!("{}.json", plugin.id));
     let off = folder(dir).join(format!("{}.json.off", plugin.id));
     // The old copy, and whether it was switched off. Installing switches it on.
@@ -491,6 +626,11 @@ pub fn install(dir: &Path, bytes: &[u8]) -> anyhow::Result<Vec<Installed>> {
         } else {
             format!("it would stop {} working", broken.name)
         };
+        match (&wasm_before, module.is_some()) {
+            (Some(old), true) => std::fs::write(&wasm, old)?,
+            (None, true) => std::fs::remove_file(&wasm)?,
+            _ => {}
+        }
         match before {
             Some(old) if was_off => {
                 std::fs::remove_file(&on)?;
@@ -501,6 +641,9 @@ pub fn install(dir: &Path, bytes: &[u8]) -> anyhow::Result<Vec<Installed>> {
         }
         load(dir);
         anyhow::bail!(problem);
+    }
+    if plugin.module.is_none() {
+        let _ = std::fs::remove_file(&wasm);
     }
     Ok(listed)
 }
@@ -523,7 +666,19 @@ async fn download_and_install(dir: &Path, url: &str) -> anyhow::Result<Vec<Insta
         .build()?;
     let response = client.get(url).send().await?.error_for_status()?;
     let bytes = crate::http::read_capped(response, MAX_BYTES).await?;
-    install(dir, &bytes)
+    let Some(module) = parse(&bytes)?.module else {
+        return install(dir, &bytes);
+    };
+    // The module is asked for from the same place as the plugin, one level of the address, never elsewhere.
+    let base = reqwest::Url::parse(url)?;
+    let location = base.join(&module.file)?;
+    anyhow::ensure!(
+        location.host_str() == base.host_str() && location.scheme() == base.scheme(),
+        "the module is not on the plugin's own host"
+    );
+    let response = client.get(location).send().await?.error_for_status()?;
+    let wasm = crate::http::read_capped(response, MAX_MODULE_BYTES).await?;
+    install_with_module(dir, &bytes, Some(&wasm))
 }
 
 /// Switches a plugin on or off.
@@ -541,7 +696,11 @@ pub fn set_enabled(dir: &Path, id: &str, enabled: bool) -> anyhow::Result<Vec<In
 
 /// Deletes a plugin.
 pub fn remove(dir: &Path, id: &str) -> anyhow::Result<Vec<Installed>> {
-    for name in [format!("{id}.json"), format!("{id}.json.off")] {
+    for name in [
+        format!("{id}.json"),
+        format!("{id}.json.off"),
+        format!("{id}.wasm"),
+    ] {
         let _ = std::fs::remove_file(folder(dir).join(name));
     }
     Ok(load(dir))
@@ -1153,5 +1312,198 @@ mod tests {
         }
         assert!(!dir.join("plugins").exists());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A plugin that brings the example module, whose hash is right unless a test changes it.
+    #[cfg(feature = "code-plugins")]
+    fn code_plugin(id: &str) -> (Value, Vec<u8>) {
+        let module = include_bytes!("../tests/fixtures/code-indexer.wasm").to_vec();
+        let mut brought = plugin(id);
+        brought["indexers"][0]["code"] = json!("search");
+        brought["module"] = json!({
+            "file": "code-indexer.wasm",
+            "sha256": sources::encode_hex(&sha2::Sha256::digest(&module)),
+        });
+        (brought, module)
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[test]
+    fn a_plugin_that_brings_code_is_installed_only_with_the_module_it_names() {
+        let _guard = sources::definitions_change_lock().blocking_lock();
+        let dir = scratch("code");
+        let (brought, module) = code_plugin("coded");
+        let json = bytes(&brought);
+
+        // No module, the wrong module, and something that is not a module at all: nothing is kept.
+        assert!(install_with_module(&dir, &json, None).is_err());
+        let mut other = module.clone();
+        other.push(0);
+        let wrong = install_with_module(&dir, &json, Some(&other)).unwrap_err();
+        assert!(wrong.to_string().contains("not the one the plugin names"));
+        assert!(install_with_module(&dir, &json, Some(b"text")).is_err());
+        assert!(!dir.join("plugins/coded.json").exists());
+        assert!(!dir.join("plugins/coded.wasm").exists());
+
+        // The right one: it is kept next to the plugin, and its indexer has the module.
+        let listed = install_with_module(&dir, &json, Some(&module)).unwrap();
+        assert!(
+            listed[0].enabled && listed[0].problem.is_none(),
+            "{listed:?}"
+        );
+        assert!(dir.join("plugins/coded.wasm").exists());
+        let current = sources::current();
+        let indexer = current.indexer("example-torrents").unwrap();
+        assert_eq!(indexer.code.as_deref(), Some("search"));
+        assert!(indexer.module.is_some());
+
+        // A module that goes missing is a problem the viewer sees, and the plugin is not used.
+        std::fs::remove_file(dir.join("plugins/coded.wasm")).unwrap();
+        let listed = load(&dir);
+        assert!(listed[0].problem.as_deref().unwrap().contains("module"));
+        assert!(sources::current().indexer("example-torrents").is_none());
+
+        // Removing it removes the module too.
+        install_with_module(&dir, &json, Some(&module)).unwrap();
+        assert!(remove(&dir, "coded").unwrap().is_empty());
+        assert!(!dir.join("plugins/coded.wasm").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[test]
+    fn the_rules_about_a_plugins_module_are_kept() {
+        let (brought, _) = code_plugin("coded");
+        assert!(parse(&bytes(&brought)).is_ok());
+        let refused = |change: fn(&mut Value)| {
+            let mut changed = brought.clone();
+            change(&mut changed);
+            assert!(parse(&bytes(&changed)).is_err());
+        };
+        refused(|p| p["module"]["file"] = json!("../evil.wasm"));
+        refused(|p| p["module"]["file"] = json!("module.exe"));
+        refused(|p| p["module"]["sha256"] = json!("abc"));
+        refused(|p| p["indexers"][0]["code"] = json!("Bad Name"));
+        refused(|p| {
+            p.as_object_mut().unwrap().remove("module");
+        });
+        // A module nobody uses.
+        refused(|p| {
+            p["indexers"][0].as_object_mut().unwrap().remove("code");
+        });
+    }
+
+    #[test]
+    fn a_signed_document_cannot_bring_code() {
+        let mut document: Value =
+            serde_json::from_str(include_str!("../../sources/sources.json")).unwrap();
+        assert!(sources::parse(&bytes(&document)).is_ok());
+        document["indexers"][0]["code"] = json!("search");
+        assert!(
+            sources::parse(&bytes(&document))
+                .unwrap_err()
+                .to_string()
+                .contains("cannot bring code")
+        );
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[tokio::test]
+    async fn a_plugin_downloads_its_module_from_its_own_host_and_only_with_the_right_hash() {
+        use axum::{Router, routing::get};
+        let _guard = sources::definitions_change_lock().lock().await;
+        let (brought, module) = code_plugin("linked");
+        let json = bytes(&brought);
+        let mut bad = module.clone();
+        bad.push(1);
+        let app = Router::new()
+            .route(
+                "/ok/linked.json",
+                get({
+                    let json = json.clone();
+                    move || async move { json }
+                }),
+            )
+            .route(
+                "/ok/code-indexer.wasm",
+                get({
+                    let module = module.clone();
+                    move || async move { module }
+                }),
+            )
+            .route("/bad/linked.json", get(move || async move { json }))
+            .route("/bad/code-indexer.wasm", get(move || async move { bad }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let dir = scratch("module-download");
+
+        let wrong = download_and_install(&dir, &format!("{base}/bad/linked.json")).await;
+        assert!(
+            wrong
+                .unwrap_err()
+                .to_string()
+                .contains("not the one the plugin names")
+        );
+        assert!(!dir.join("plugins/linked.wasm").exists());
+
+        let listed = download_and_install(&dir, &format!("{base}/ok/linked.json"))
+            .await
+            .unwrap();
+        assert!(listed[0].problem.is_none(), "{listed:?}");
+        assert!(dir.join("plugins/linked.wasm").exists());
+        remove(&dir, "linked").unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(not(feature = "code-plugins"))]
+    #[test]
+    fn a_build_without_the_engine_refuses_a_plugin_that_brings_code() {
+        let mut brought = plugin("coded");
+        brought["indexers"][0]["code"] = json!("search");
+        brought["module"] = json!({ "file": "m.wasm", "sha256": "a".repeat(64) });
+        assert!(
+            parse(&bytes(&brought))
+                .unwrap_err()
+                .to_string()
+                .contains("cannot run a plugin that brings code")
+        );
+    }
+
+    #[cfg(feature = "code-plugins")]
+    #[test]
+    fn a_catalogue_and_a_mapper_can_use_the_plugins_code_too() {
+        let _guard = sources::definitions_change_lock().blocking_lock();
+        let (_, module) = code_plugin("coded");
+        let document: Value =
+            serde_json::from_str(include_str!("../../sources/sources.json")).unwrap();
+        let mut mapper = document["mappers"][0].clone();
+        mapper["id"] = json!("mymap");
+        mapper["provider"]["code"] = json!("fetch_signed");
+        let mut mine = catalogue("mine", "https://catalogue.example.com/api");
+        mine["code"] = json!("fetch_signed");
+        let brought = json!({
+            "plugin": 1, "id": "coded", "name": "Coded", "version": 1,
+            "module": { "file": "code-indexer.wasm",
+                        "sha256": sources::encode_hex(&sha2::Sha256::digest(&module)) },
+            "providers": [mine], "mappers": [mapper],
+        });
+        let mut plugin = parse(&bytes(&brought)).unwrap();
+        plugin.attach(&module).unwrap();
+        let merged = merge(&sources::current(), &plugin).unwrap();
+        assert!(merged.provider("mine").unwrap().module.is_some());
+        assert!(merged.mapper("mymap").unwrap().provider.module.is_some());
+
+        // A module nobody asks for is refused, and so is code in a signed document.
+        let mut idle = brought.clone();
+        idle["providers"][0].as_object_mut().unwrap().remove("code");
+        idle["mappers"][0]["provider"]
+            .as_object_mut()
+            .unwrap()
+            .remove("code");
+        assert!(parse(&bytes(&idle)).is_err());
+        let mut signed = document.clone();
+        signed["providers"][0]["code"] = json!("fetch_signed");
+        assert!(sources::parse(&bytes(&signed)).is_err());
     }
 }

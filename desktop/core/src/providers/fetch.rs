@@ -107,6 +107,18 @@ impl<'a> Asking<'a> {
             query,
             json,
             timeout: None,
+            code: self.def.code.as_ref().and_then(|export| {
+                Some(Code {
+                    module: self.def.module.clone()?,
+                    export: export.clone(),
+                    hosts: vec![
+                        reqwest::Url::parse(&self.def.base_url)
+                            .ok()?
+                            .host_str()?
+                            .to_string(),
+                    ],
+                })
+            }),
         })
     }
 }
@@ -119,6 +131,18 @@ pub struct Prepared {
     json: Option<Value>,
     /// Gives up sooner than the client's own limit. Not part of what is asked, so not of the key.
     timeout: Option<Duration>,
+    /// Set when the provider's plugin brings code to make the request: its module and export, and the
+    /// host the module may ask.
+    code: Option<Code>,
+}
+
+/// A provider's code, as `send` needs it.
+#[derive(Clone)]
+#[cfg_attr(not(feature = "code-plugins"), allow(dead_code))]
+struct Code {
+    module: crate::definition::Module,
+    export: String,
+    hosts: Vec<String>,
 }
 
 impl Prepared {
@@ -257,23 +281,32 @@ async fn send(
     check: Option<Check>,
     kind: Kind,
 ) -> anyhow::Result<Option<Arc<Value>>> {
-    let builder = match request.method {
-        Method::Get => client().get(&request.url),
-        Method::Post => client().post(&request.url),
+    let (status, bytes) = if let Some(code) = &request.code {
+        // The plugin's own code makes the request and answers with the JSON the definitions read.
+        let within = request.timeout.unwrap_or(Duration::from_secs(25));
+        let answer = tokio::time::timeout(within, run_code(code, &request))
+            .await
+            .map_err(|_| anyhow::anyhow!("the plugin's code took too long"))??;
+        (reqwest::StatusCode::OK, answer)
+    } else {
+        let builder = match request.method {
+            Method::Get => client().get(&request.url),
+            Method::Post => client().post(&request.url),
+        };
+        let mut builder = builder.query(&request.query);
+        if let Some(body) = &request.json {
+            builder = builder.json(body);
+        }
+        if let Some(timeout) = request.timeout {
+            builder = builder.timeout(timeout);
+        }
+        let response = builder.send().await?;
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        (status, read_capped(response, MAX_BYTES).await?)
     };
-    let mut builder = builder.query(&request.query);
-    if let Some(body) = &request.json {
-        builder = builder.json(body);
-    }
-    if let Some(timeout) = request.timeout {
-        builder = builder.timeout(timeout);
-    }
-    let response = builder.send().await?;
-    let status = response.status();
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-    let bytes = read_capped(response, MAX_BYTES).await?;
     // A service that reports an error in its own words is read before the status is, so the
     // words are what is shown.
     let body: Option<Value> = serde_json::from_slice(&bytes).ok();
@@ -283,6 +316,37 @@ async fn send(
     anyhow::ensure!(status.is_success(), "HTTP status {status}");
     body.map(|body| Some(Arc::new(body)))
         .ok_or_else(|| anyhow::anyhow!("not a JSON response"))
+}
+
+/// What the provider's code answers for a request: the filled address, query and body.
+#[cfg(feature = "code-plugins")]
+async fn run_code(code: &Code, request: &Prepared) -> anyhow::Result<Vec<u8>> {
+    let input = serde_json::json!({
+        "method": match request.method { Method::Get => "GET", Method::Post => "POST" },
+        "url": request.url,
+        "query": request.query,
+        "json": request.json,
+    });
+    // The tests run a server on this machine, which the public address rules rightly refuse.
+    #[cfg(test)]
+    let allowed: fn(&str) -> anyhow::Result<()> = |_| Ok(());
+    #[cfg(not(test))]
+    let allowed: fn(&str) -> anyhow::Result<()> = crate::plugin::check_public_url;
+    let answer = crate::code::run_with(
+        code.module.0.to_vec(),
+        &code.export,
+        input,
+        code.hosts.clone(),
+        crate::code::Limits::default(),
+        allowed,
+    )
+    .await?;
+    Ok(serde_json::to_vec(&answer)?)
+}
+
+#[cfg(not(feature = "code-plugins"))]
+async fn run_code(_: &Code, _: &Prepared) -> anyhow::Result<Vec<u8>> {
+    anyhow::bail!("this build cannot run a plugin's code")
 }
 
 /// An error if the answer says it failed.
@@ -375,6 +439,7 @@ mod tests {
             query: vec![("t".to_string(), url.to_string())],
             json: None,
             timeout: None,
+            code: None,
         }
     }
 
@@ -397,7 +462,7 @@ mod tests {
         let _held = crate::sources::definitions_change_lock().lock().await;
         let (url, _) = counting_server(r#"{"rows":[1]}"#).await;
         let started = std::time::Instant::now();
-        let answer = get(
+        let answer = super::get(
             "test-short",
             Kind::Movie,
             request(&url).within(Duration::from_millis(40)),
@@ -488,5 +553,67 @@ mod tests {
         );
         assert_eq!(stale_hits.load(Ordering::SeqCst), 1);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A catalogue whose requests are made by a plugin's code, which signs each address: a server that
+    /// answers only a signed request is read through the real module.
+    #[cfg(feature = "code-plugins")]
+    #[tokio::test]
+    async fn a_request_made_by_a_plugins_code_is_signed_and_its_answer_is_read() {
+        use axum::{Router, extract::Request, routing::get};
+        use sha2::Digest;
+        let app = Router::new().route(
+            "/rows",
+            get(|request: Request| async move {
+                // The address the module signed is the one this server was asked on, with its query.
+                let host = request
+                    .headers()
+                    .get("host")
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                let url = format!("http://{host}{}", request.uri());
+                let wanted =
+                    crate::sources::encode_hex(&sha2::Sha256::digest(format!("secret:{url}")));
+                let signed = request
+                    .headers()
+                    .get("x-sign")
+                    .and_then(|value| value.to_str().ok())
+                    == Some(wanted.as_str());
+                if signed {
+                    r#"{"items":[{"id":"1","name":"Signed"}]}"#
+                } else {
+                    r#"{"items":[]}"#
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let module = crate::definition::Module(Arc::new(
+            include_bytes!("../../tests/fixtures/code-indexer.wasm").to_vec(),
+        ));
+        let mut asked = request(&format!("http://{address}/rows"));
+        asked.query = vec![("page".to_string(), "1".to_string())];
+        asked.code = Some(Code {
+            module,
+            export: "fetch_signed".into(),
+            hosts: vec!["127.0.0.1".into()],
+        });
+        let answer = super::get(
+            "coded",
+            Kind::Series,
+            asked,
+            None,
+            Duration::from_secs(60),
+            "items",
+            false,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(answer["items"][0]["name"], "Signed");
     }
 }

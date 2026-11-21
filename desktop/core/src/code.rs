@@ -43,8 +43,7 @@ impl Default for Limits {
     }
 }
 
-/// The largest `.wasm` file a plugin may bring.
-pub const MAX_MODULE_BYTES: usize = 4 << 20;
+use crate::plugin::MAX_MODULE_BYTES;
 
 /// One request a module asks the host to make.
 #[derive(Deserialize)]

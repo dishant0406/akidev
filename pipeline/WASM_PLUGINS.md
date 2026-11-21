@@ -1,6 +1,9 @@
 # Plugins that bring code (WebAssembly)
 
-Status: started 2026-11-22, on the branch `wasm-plugins`. Read this first if you pick the work up.
+Status (2026-11-22, branch `wasm-plugins`): the engine, its limits and rules, plugin files (module, hash, install,
+remove, download) and the first slice, an indexer whose requests are made by code, are built and tested, with a real
+module (`desktop/plugins/code-indexer`). Not built: code for catalogues and mappers, stream services, and a field
+in Settings for a plugin's login or key. Read this first if you pick the work up.
 
 ## What this is for
 

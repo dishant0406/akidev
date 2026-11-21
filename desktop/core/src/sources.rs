@@ -256,6 +256,19 @@ impl Sources {
 pub fn parse(bytes: &[u8]) -> anyhow::Result<Sources> {
     ensure!(bytes.len() <= MAX_BYTES, "the document is too large");
     let sources: Sources = serde_json::from_slice(bytes).context("reading the definitions")?;
+    // Only a plugin brings code. A signed document that did would hand it to every app.
+    ensure!(
+        sources
+            .indexers
+            .iter()
+            .all(|indexer| indexer.code.is_none())
+            && sources
+                .providers
+                .iter()
+                .chain(sources.mappers.iter().map(|mapper| &mapper.provider))
+                .all(|provider| provider.code.is_none()),
+        "a signed document cannot bring code"
+    );
     sources.validate()?;
     Ok(sources)
 }

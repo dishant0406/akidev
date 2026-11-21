@@ -213,6 +213,16 @@ pub enum Fanout {
     Once,
 }
 
+/// The bytes of a plugin's WebAssembly module, shared by everything of the plugin that uses it.
+#[derive(Clone)]
+pub struct Module(pub std::sync::Arc<Vec<u8>>);
+
+impl std::fmt::Debug for Module {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Module({} bytes)", self.0.len())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct IndexerDef {
     /// The name the viewer sees in Settings and the `source` of each release.
@@ -230,6 +240,13 @@ pub struct IndexerDef {
     /// `{kitsu_kind}` for the mapper `kitsu`. Absent: the indexer needs no mapping.
     #[serde(default)]
     pub map: Option<String>,
+    /// The export of the plugin's module that makes this indexer's requests and answers with the JSON its
+    /// `response` reads (see `code.rs`). Only a plugin can bring one: a signed document is refused if it does.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// The plugin's module, put here when the plugin is put to use. Not in the JSON.
+    #[serde(skip)]
+    pub module: Option<Module>,
     /// Asked by the server that serves the website and by no desktop app, for a source that needs the
     /// server's own secrets (Prowlarr). The desktop app does not call the server for it.
     #[serde(default)]
@@ -608,6 +625,13 @@ pub struct ProviderDef {
     /// these hosts (an entry matches that host and its subdomains), because the address comes from an answer.
     #[serde(default)]
     pub image_hosts: Vec<String>,
+    /// The export of the plugin's module that makes this provider's requests and answers with the JSON its
+    /// definitions read (see `code.rs`). Only a plugin can bring one.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// The plugin's module, put here when the plugin is put to use. Not in the JSON.
+    #[serde(skip)]
+    pub module: Option<Module>,
     /// Its titles say which provider they came from (see `media_id`). Not in the JSON: a plugin's
     /// providers are marked when the plugin is added, because the built-in chain could not tell their
     /// ids from its own.
