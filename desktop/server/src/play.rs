@@ -15,7 +15,7 @@ use crate::media::{self, Delivery as Plan};
 use crate::origin::Origin;
 use crate::sources::{archive, debrid::Debrid};
 use akidev_core::model::Release;
-use akidev_core::stream::{Choice, FailureScope, Streamer};
+use akidev_core::stream::{Choice, FailureMemory, FailureScope, Plan as ReleasePlan, Streamer};
 use futures::FutureExt;
 use futures::future::{BoxFuture, Shared};
 use regex::Regex;
@@ -187,6 +187,8 @@ pub struct Player {
     /// Absent in tests, which stand a file in for a swarm and must not bind the DHT port.
     streamer: Option<Arc<Streamer>>,
     debrid: Option<Arc<Debrid>>,
+    /// The sources the settings name, in order.
+    sources: Vec<Arc<dyn StreamSource>>,
     hls: Arc<Hls>,
     registry: Arc<Registry>,
     slots: Arc<Semaphore>,
@@ -201,6 +203,329 @@ pub(crate) enum Miss {
     Busy,
 }
 
+/// What the sources are given for one search: what was found and what was asked.
+pub(crate) struct Search<'a> {
+    pub id: &'a str,
+    pub hevc: bool,
+    pub start: Option<f64>,
+    /// The releases found. A source drops the ones that failed, so the next does not try them again.
+    pub plan: ReleasePlan,
+    /// Absent in tests, which have no torrent engine.
+    pub streamer: Option<&'a Arc<Streamer>>,
+    pub failures: &'a FailureMemory,
+    pub failure_scope: FailureScope,
+    pub episode: Option<u32>,
+    pub season: Option<u32>,
+    pub movie: bool,
+    pub expected_seconds: Option<f64>,
+}
+
+/// Somewhere a playable file can come from. `Player::try_sources` asks them in the order the settings give.
+pub(crate) trait StreamSource: Send + Sync {
+    /// The name the settings use for it: `debrid`.
+    fn name(&self) -> &str;
+
+    /// Whether it can serve the release a viewer picked. One that finds its own file cannot.
+    fn honors_pick(&self) -> bool {
+        true
+    }
+
+    /// A playable file, or why there is none. `deadline` is this source's share of the time.
+    fn find<'a>(
+        &'a self,
+        player: &'a Player,
+        search: &'a mut Search<'_>,
+        deadline: Instant,
+    ) -> BoxFuture<'a, Result<Ready, Miss>>;
+}
+
+/// A debrid service, if one is set up.
+struct DebridSource(Option<Arc<Debrid>>);
+
+impl StreamSource for DebridSource {
+    fn name(&self) -> &str {
+        "debrid"
+    }
+
+    fn find<'a>(
+        &'a self,
+        player: &'a Player,
+        search: &'a mut Search<'_>,
+        deadline: Instant,
+    ) -> BoxFuture<'a, Result<Ready, Miss>> {
+        async move {
+            let Some(debrid) = &self.0 else {
+                return Err(Miss::Reason("The debrid source is not configured.".into()));
+            };
+            let mut candidates = search.plan.latest().ranked;
+            let mut checked = HashSet::new();
+            let mut attempt = Err(Miss::Reason("No cached release could be played.".into()));
+            let mut prepared = 0;
+            loop {
+                candidates.retain(|candidate| !checked.contains(&candidate.selection_id()));
+                if Instant::now() >= deadline
+                    || prepared >= TORRENT_TRIES
+                    || checked.len() >= akidev_core::stream::OFFERED
+                {
+                    break;
+                }
+                for candidate in &candidates {
+                    checked.insert(candidate.selection_id());
+                }
+                match debrid
+                    .find_for_identity(
+                        &candidates,
+                        search.episode,
+                        search.season,
+                        &search.plan.detail.media.title,
+                        &search.plan.detail.media.title_variants,
+                        search
+                            .plan
+                            .detail
+                            .media
+                            .year
+                            .and_then(|year| u32::try_from(year).ok()),
+                        player.settings.max_candidates,
+                        deadline,
+                    )
+                    .await
+                {
+                    Ok(found) => {
+                        prepared += 1;
+                        let hash = found.info_hash;
+                        let selection = found.selection_id;
+                        attempt = player
+                            .deliver_checked(
+                                found.origin,
+                                found.release,
+                                Some(selection.clone()),
+                                "debrid",
+                                search.hevc,
+                                search.start,
+                                search.expected_seconds,
+                                deadline,
+                            )
+                            .await;
+                        match &attempt {
+                            Err(Miss::Reason(_)) => {
+                                search.failures.record_failure_scoped(
+                                    search.id,
+                                    &hash,
+                                    &search.failure_scope,
+                                );
+                                search.plan = search.plan.without(std::slice::from_ref(&selection));
+                            }
+                            _ => break,
+                        }
+                    }
+                    Err(reason) => {
+                        attempt = Err(Miss::Reason(reason));
+                    }
+                }
+                let latest = search.plan.latest();
+                candidates = latest
+                    .ranked
+                    .iter()
+                    .filter(|candidate| !checked.contains(&candidate.selection_id()))
+                    .cloned()
+                    .collect();
+                search.plan = latest;
+                if candidates.is_empty() {
+                    match tokio::time::timeout_at(deadline.into(), search.plan.wait_for_late())
+                        .await
+                    {
+                        Ok(Some(next)) => {
+                            candidates = next.ranked.clone();
+                            search.plan = next;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            attempt
+        }
+        .boxed()
+    }
+}
+
+/// The torrent engine this server runs.
+struct TorrentSource;
+
+impl StreamSource for TorrentSource {
+    fn name(&self) -> &str {
+        "torrent"
+    }
+
+    fn find<'a>(
+        &'a self,
+        player: &'a Player,
+        search: &'a mut Search<'_>,
+        deadline: Instant,
+    ) -> BoxFuture<'a, Result<Ready, Miss>> {
+        async move {
+            let Some(streamer) = search.streamer else {
+                return Err(Miss::Reason("This server has no torrent engine.".into()));
+            };
+            // A release whose file turns out to be unreadable or unplayable is dropped and
+            // the next is tried, a few times, instead of giving up on the source.
+            let mut attempt = Err(Miss::Reason("No torrent could be played.".into()));
+            for _ in 0..TORRENT_TRIES {
+                if Instant::now() >= deadline {
+                    break;
+                }
+                match streamer
+                    .open_best_until(&search.plan, false, deadline)
+                    .await
+                {
+                    Ok((release, playable)) => {
+                        let selection = release.selection_id();
+                        let origin = Origin::Torrent {
+                            engine: streamer.engine(),
+                            info_hash: playable.info_hash.clone(),
+                            file_index: playable.file_index,
+                            length: playable.length,
+                            name: playable.file_name,
+                        };
+                        attempt = player
+                            .deliver_checked(
+                                origin,
+                                release.title,
+                                Some(selection.clone()),
+                                "torrent",
+                                search.hevc,
+                                search.start,
+                                search.expected_seconds,
+                                deadline,
+                            )
+                            .await;
+                        match &attempt {
+                            Err(Miss::Reason(_)) => {
+                                search.failures.record_failure_scoped(
+                                    search.id,
+                                    &playable.info_hash,
+                                    &search.failure_scope,
+                                );
+                                search.plan = search.plan.without(std::slice::from_ref(&selection));
+                            }
+                            _ => break,
+                        }
+                    }
+                    Err(reason) => {
+                        attempt = Err(Miss::Reason(reason));
+                        break;
+                    }
+                }
+            }
+            attempt
+        }
+        .boxed()
+    }
+}
+
+/// The Internet Archive, whose files are sent to the browser as they are.
+struct ArchiveSource {
+    base: String,
+}
+
+impl StreamSource for ArchiveSource {
+    fn name(&self) -> &str {
+        "archive-org"
+    }
+
+    fn honors_pick(&self) -> bool {
+        false
+    }
+
+    fn find<'a>(
+        &'a self,
+        _player: &'a Player,
+        search: &'a mut Search<'_>,
+        deadline: Instant,
+    ) -> BoxFuture<'a, Result<Ready, Miss>> {
+        async move {
+            let titles = if search.plan.detail.media.title_variants.is_empty() {
+                vec![search.plan.detail.media.title.clone()]
+            } else {
+                search.plan.detail.media.title_variants.clone()
+            };
+            match archive::find_with_identity(
+                &self.base,
+                &titles,
+                &search.plan.terms,
+                search.episode,
+                search.season,
+                search.expected_seconds,
+                if search.movie {
+                    search
+                        .plan
+                        .detail
+                        .media
+                        .year
+                        .and_then(|year| u32::try_from(year).ok())
+                } else {
+                    None
+                },
+                deadline,
+            )
+            .await
+            {
+                Ok(found) => Ok(Ready {
+                    available: true,
+                    url: found.url,
+                    stream_type: "file",
+                    release: found.title,
+                    release_id: None,
+                    source: "archive-org",
+                    duration: None,
+                    subtitles: Vec::new(),
+                }),
+                Err(reason) => Err(Miss::Reason(reason)),
+            }
+        }
+        .boxed()
+    }
+}
+
+/// A name in `STREAM_SOURCES` that is not a source: it answers with that, so the settings can be corrected.
+struct UnknownSource(String);
+
+impl StreamSource for UnknownSource {
+    fn name(&self) -> &str {
+        &self.0
+    }
+
+    fn find<'a>(
+        &'a self,
+        _player: &'a Player,
+        _search: &'a mut Search<'_>,
+        _deadline: Instant,
+    ) -> BoxFuture<'a, Result<Ready, Miss>> {
+        let reason = format!("Unknown stream source \"{}\".", self.0);
+        async move { Err(Miss::Reason(reason)) }.boxed()
+    }
+}
+
+/// The sources the settings name, in their order.
+pub(crate) fn sources_named(
+    names: &[String],
+    debrid: &Option<Arc<Debrid>>,
+    archive_base: &str,
+) -> Vec<Arc<dyn StreamSource>> {
+    names
+        .iter()
+        .map(|name| -> Arc<dyn StreamSource> {
+            match name.as_str() {
+                "debrid" => Arc::new(DebridSource(debrid.clone())),
+                "torrent" => Arc::new(TorrentSource),
+                "archive-org" => Arc::new(ArchiveSource {
+                    base: archive_base.to_string(),
+                }),
+                other => Arc::new(UnknownSource(other.to_string())),
+            }
+        })
+        .collect()
+}
+
 impl Player {
     pub fn new(
         settings: Arc<Settings>,
@@ -210,6 +535,11 @@ impl Player {
         registry: Arc<Registry>,
     ) -> Arc<Player> {
         Arc::new(Player {
+            sources: sources_named(
+                &settings.stream_sources,
+                &debrid,
+                &settings.archive_org_base,
+            ),
             settings,
             streamer,
             debrid,
@@ -383,18 +713,50 @@ impl Player {
         plan = plan.demote_recent_failures_scoped(streamer.failure_memory(), false, &failure_scope);
 
         let season = plan.parsed.season;
-        let mut reasons: Vec<String> = Vec::new();
         let expected_seconds = plan
             .detail
             .media
             .runtime_minutes
             .filter(|minutes| *minutes > 0)
             .map(|minutes| f64::from(minutes) * 60.0);
-        let sources: Vec<&String> = self
-            .settings
-            .stream_sources
+        let mut search = Search {
+            id,
+            hevc,
+            start,
+            plan,
+            streamer: Some(streamer),
+            failures: streamer.failure_memory(),
+            failure_scope,
+            episode,
+            season,
+            movie,
+            expected_seconds,
+        };
+        self.try_sources(
+            &self.sources,
+            &mut search,
+            release.is_some(),
+            started,
+            deadline,
+        )
+        .await
+    }
+
+    /// Asks the sources in turn until one gives a playable file. A viewer who picked a release is not given
+    /// a source that finds its own file. Each source gets an equal share of the time that is left, so a slow
+    /// one cannot use it all.
+    pub(crate) async fn try_sources(
+        &self,
+        all: &[Arc<dyn StreamSource>],
+        search: &mut Search<'_>,
+        pinned: bool,
+        started: Instant,
+        deadline: Instant,
+    ) -> Outcome {
+        let mut reasons: Vec<String> = Vec::new();
+        let sources: Vec<&Arc<dyn StreamSource>> = all
             .iter()
-            .filter(|source| release.is_none() || source.as_str() != "archive-org")
+            .filter(|source| !pinned || source.honors_pick())
             .collect();
 
         for (index, source) in sources.iter().enumerate() {
@@ -407,208 +769,25 @@ impl Player {
             let source_deadline = Instant::now()
                 + deadline.saturating_duration_since(Instant::now()) / remaining_sources as u32;
             Metrics::increment(&self.metrics.attempts);
-            let attempt = match source.as_str() {
-                "debrid" => match &self.debrid {
-                    None => Err(Miss::Reason("The debrid source is not configured.".into())),
-                    Some(debrid) => {
-                        let mut candidates = plan.latest().ranked;
-                        let mut checked = HashSet::new();
-                        let mut attempt =
-                            Err(Miss::Reason("No cached release could be played.".into()));
-                        let mut prepared = 0;
-                        loop {
-                            candidates
-                                .retain(|candidate| !checked.contains(&candidate.selection_id()));
-                            if Instant::now() >= source_deadline
-                                || prepared >= TORRENT_TRIES
-                                || checked.len() >= akidev_core::stream::OFFERED
-                            {
-                                break;
-                            }
-                            for candidate in &candidates {
-                                checked.insert(candidate.selection_id());
-                            }
-                            match debrid
-                                .find_for_identity(
-                                    &candidates,
-                                    episode,
-                                    season,
-                                    &plan.detail.media.title,
-                                    &plan.detail.media.title_variants,
-                                    plan.detail
-                                        .media
-                                        .year
-                                        .and_then(|year| u32::try_from(year).ok()),
-                                    self.settings.max_candidates,
-                                    source_deadline,
-                                )
-                                .await
-                            {
-                                Ok(found) => {
-                                    prepared += 1;
-                                    let hash = found.info_hash;
-                                    let selection = found.selection_id;
-                                    attempt = self
-                                        .deliver_checked(
-                                            found.origin,
-                                            found.release,
-                                            Some(selection.clone()),
-                                            "debrid",
-                                            hevc,
-                                            start,
-                                            expected_seconds,
-                                            source_deadline,
-                                        )
-                                        .await;
-                                    match &attempt {
-                                        Err(Miss::Reason(_)) => {
-                                            streamer.failure_memory().record_failure_scoped(
-                                                id,
-                                                &hash,
-                                                &failure_scope,
-                                            );
-                                            plan = plan.without(std::slice::from_ref(&selection));
-                                        }
-                                        _ => break,
-                                    }
-                                }
-                                Err(reason) => {
-                                    attempt = Err(Miss::Reason(reason));
-                                }
-                            }
-                            let latest = plan.latest();
-                            candidates = latest
-                                .ranked
-                                .iter()
-                                .filter(|candidate| !checked.contains(&candidate.selection_id()))
-                                .cloned()
-                                .collect();
-                            plan = latest;
-                            if candidates.is_empty() {
-                                match tokio::time::timeout_at(
-                                    source_deadline.into(),
-                                    plan.wait_for_late(),
-                                )
-                                .await
-                                {
-                                    Ok(Some(next)) => {
-                                        candidates = next.ranked.clone();
-                                        plan = next;
-                                    }
-                                    _ => break,
-                                }
-                            }
-                        }
-                        attempt
-                    }
-                },
-                "torrent" => {
-                    // A release whose file turns out to be unreadable or unplayable is dropped and
-                    // the next is tried, a few times, instead of giving up on the source.
-                    let mut attempt = Err(Miss::Reason("No torrent could be played.".into()));
-                    for _ in 0..TORRENT_TRIES {
-                        if Instant::now() >= source_deadline {
-                            break;
-                        }
-                        match streamer
-                            .open_best_until(&plan, false, source_deadline)
-                            .await
-                        {
-                            Ok((release, playable)) => {
-                                let selection = release.selection_id();
-                                let origin = Origin::Torrent {
-                                    engine: streamer.engine(),
-                                    info_hash: playable.info_hash.clone(),
-                                    file_index: playable.file_index,
-                                    length: playable.length,
-                                    name: playable.file_name,
-                                };
-                                attempt = self
-                                    .deliver_checked(
-                                        origin,
-                                        release.title,
-                                        Some(selection.clone()),
-                                        "torrent",
-                                        hevc,
-                                        start,
-                                        expected_seconds,
-                                        source_deadline,
-                                    )
-                                    .await;
-                                match &attempt {
-                                    Err(Miss::Reason(_)) => {
-                                        streamer.failure_memory().record_failure_scoped(
-                                            id,
-                                            &playable.info_hash,
-                                            &failure_scope,
-                                        );
-                                        plan = plan.without(std::slice::from_ref(&selection));
-                                    }
-                                    _ => break,
-                                }
-                            }
-                            Err(reason) => {
-                                attempt = Err(Miss::Reason(reason));
-                                break;
-                            }
-                        }
-                    }
-                    attempt
-                }
-                "archive-org" => {
-                    let titles = if plan.detail.media.title_variants.is_empty() {
-                        vec![plan.detail.media.title.clone()]
-                    } else {
-                        plan.detail.media.title_variants.clone()
-                    };
-                    match archive::find_with_identity(
-                        &self.settings.archive_org_base,
-                        &titles,
-                        &plan.terms,
-                        episode,
-                        season,
-                        expected_seconds,
-                        if movie {
-                            plan.detail
-                                .media
-                                .year
-                                .and_then(|year| u32::try_from(year).ok())
-                        } else {
-                            None
-                        },
-                        source_deadline,
-                    )
-                    .await
-                    {
-                        Ok(found) => Ok(Ready {
-                            available: true,
-                            url: found.url,
-                            stream_type: "file",
-                            release: found.title,
-                            release_id: None,
-                            source: "archive-org",
-                            duration: None,
-                            subtitles: Vec::new(),
-                        }),
-                        Err(reason) => Err(Miss::Reason(reason)),
-                    }
-                }
-                other => Err(Miss::Reason(format!("Unknown stream source \"{other}\"."))),
-            };
+            let attempt = source.find(self, search, source_deadline).await;
             match attempt {
                 Ok(ready) => {
                     Metrics::increment(&self.metrics.successes);
                     if let Some(selection) = &ready.release_id
                         && let Some((hash, _)) = Release::parse_selection_id(selection)
                     {
-                        streamer
-                            .failure_memory()
-                            .clear_failure_scoped(id, &hash, &failure_scope);
+                        search.failures.clear_failure_scoped(
+                            search.id,
+                            &hash,
+                            &search.failure_scope,
+                        );
                     }
                     tracing::info!(
-                        "[play] {id}: ready from {source} after {:?} ({} releases found)",
+                        "[play] {}: ready from {} after {:?} ({} releases found)",
+                        search.id,
+                        source.name(),
                         started.elapsed(),
-                        plan.ranked.len()
+                        search.plan.ranked.len()
                     );
                     return Outcome::Ready(ready);
                 }
@@ -618,7 +797,7 @@ impl Player {
                     if Instant::now() >= source_deadline {
                         Metrics::increment(&self.metrics.deadlines);
                     }
-                    tracing::info!("[play] {id}: {source}: {reason}");
+                    tracing::info!("[play] {}: {}: {reason}", search.id, source.name());
                     reasons.push(reason);
                 }
             }
@@ -627,8 +806,8 @@ impl Player {
         // When no indexer found anything at all, say so: the sources' own "nothing here" reasons
         // are true but describe the fallbacks, not the actual problem. The reason names the first
         // term, because that is what a person would search for by hand to check.
-        if plan.ranked.is_empty() {
-            return Outcome::Unavailable(plan.no_sources_reason().into());
+        if search.plan.ranked.is_empty() {
+            return Outcome::Unavailable(search.plan.no_sources_reason().into());
         }
         // The last reason is from the source that got furthest: a source is only asked when the
         // ones before it declined.
@@ -799,6 +978,472 @@ pub fn needs_encode_by_name(title: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use akidev_core::media_id;
+    use akidev_core::model::{Detail, Kind, Media};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// What a stand-in source answers.
+    #[derive(Clone)]
+    enum Answer {
+        Ready(Option<String>),
+        Reason(&'static str),
+        Busy,
+    }
+
+    /// A source that answers as told, and keeps what it was asked and how long it was given.
+    struct Fake {
+        name: &'static str,
+        pins: bool,
+        answer: Answer,
+        asked: AtomicUsize,
+        shares: Mutex<Vec<Duration>>,
+        /// How many releases the search held each time it was asked.
+        seen: Mutex<Vec<usize>>,
+        /// Drops the first release of the search, as a source does when a file fails.
+        drops_first: bool,
+    }
+
+    impl Fake {
+        fn new(name: &'static str, answer: Answer) -> Arc<Fake> {
+            Arc::new(Fake {
+                name,
+                pins: true,
+                answer,
+                asked: AtomicUsize::new(0),
+                shares: Mutex::new(Vec::new()),
+                seen: Mutex::new(Vec::new()),
+                drops_first: false,
+            })
+        }
+
+        fn asked(&self) -> usize {
+            self.asked.load(Ordering::SeqCst)
+        }
+    }
+
+    impl StreamSource for Fake {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn honors_pick(&self) -> bool {
+            self.pins
+        }
+
+        fn find<'a>(
+            &'a self,
+            _player: &'a Player,
+            search: &'a mut Search<'_>,
+            deadline: Instant,
+        ) -> BoxFuture<'a, Result<Ready, Miss>> {
+            self.asked.fetch_add(1, Ordering::SeqCst);
+            self.seen.lock().unwrap().push(search.plan.ranked.len());
+            if self.drops_first
+                && let Some(first) = search.plan.ranked.first()
+            {
+                let selection = first.selection_id();
+                search.plan = search.plan.without(&[selection]);
+            }
+            self.shares
+                .lock()
+                .unwrap()
+                .push(deadline.saturating_duration_since(Instant::now()));
+            let answer = self.answer.clone();
+            let name = self.name;
+            async move {
+                match answer {
+                    Answer::Ready(release_id) => Ok(Ready {
+                        available: true,
+                        url: format!("/{name}"),
+                        stream_type: "file",
+                        release: "Release".into(),
+                        release_id,
+                        source: "fake",
+                        duration: None,
+                        subtitles: Vec::new(),
+                    }),
+                    Answer::Reason(reason) => Err(Miss::Reason(reason.into())),
+                    Answer::Busy => Err(Miss::Busy),
+                }
+            }
+            .boxed()
+        }
+    }
+
+    fn found_release(hash_digit: char) -> Release {
+        Release {
+            title: format!("Show S01E01 {hash_digit}"),
+            info_hash: hash_digit.to_string().repeat(40),
+            file_idx: None,
+            magnet: String::new(),
+            size_bytes: None,
+            seeders: Some(5),
+            source: "stand-in".into(),
+            sources: Vec::new(),
+        }
+    }
+
+    fn plan(ranked: Vec<Release>) -> ReleasePlan {
+        let media = Media {
+            id: "series-1".into(),
+            kind: Kind::Series,
+            title: "Show".into(),
+            title_variants: vec![],
+            poster: None,
+            banner: None,
+            description: None,
+            format: None,
+            year: None,
+            episodes: None,
+            runtime_minutes: None,
+            status: None,
+            score: None,
+            popularity: 0,
+            genres: vec![],
+            is_adult: false,
+        };
+        ReleasePlan {
+            id: "series-1-s1e1".into(),
+            parsed: media_id::parse("series-1-s1e1").unwrap(),
+            detail: Detail {
+                media,
+                studios: vec![],
+                trailer: None,
+                episodes: vec![],
+                cast: vec![],
+                related: vec![],
+                recommended: vec![],
+                imdb_id: None,
+            },
+            terms: vec!["Show S01E01".into()],
+            source_reports: vec![],
+            ranked,
+            extra: vec![],
+            live: None,
+        }
+    }
+
+    fn search<'a>(plan: ReleasePlan, failures: &'a FailureMemory) -> Search<'a> {
+        Search {
+            id: "series-1-s1e1",
+            hevc: false,
+            start: None,
+            plan,
+            streamer: None,
+            failures,
+            failure_scope: FailureScope::default(),
+            episode: Some(1),
+            season: Some(1),
+            movie: false,
+            expected_seconds: None,
+        }
+    }
+
+    fn player() -> Arc<Player> {
+        // Its own folder: building the player clears `<cache_dir>/hls`, which must never be a real one.
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let mut settings = Settings::from_env();
+        settings.cache_dir = std::env::temp_dir().join(format!(
+            "akidev-play-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::SeqCst)
+        ));
+        let settings = Arc::new(settings);
+        let hls = Hls::new(settings.clone(), vec![]);
+        Player::new(settings, None, None, hls, Arc::new(Registry::default()))
+    }
+
+    fn all(sources: &[&Arc<Fake>]) -> Vec<Arc<dyn StreamSource>> {
+        sources
+            .iter()
+            .map(|source| (*source).clone() as Arc<dyn StreamSource>)
+            .collect()
+    }
+
+    async fn run(
+        sources: &[&Arc<Fake>],
+        plan: ReleasePlan,
+        pinned: bool,
+        total: Duration,
+    ) -> Outcome {
+        let (player, failures) = (player(), FailureMemory::default());
+        let started = Instant::now();
+        player
+            .try_sources(
+                &all(sources),
+                &mut search(plan, &failures),
+                pinned,
+                started,
+                started + total,
+            )
+            .await
+    }
+
+    const LONG: Duration = Duration::from_secs(30);
+
+    #[tokio::test]
+    async fn the_first_source_that_gives_a_file_ends_the_search() {
+        let (first, second) = (
+            Fake::new("first", Answer::Ready(None)),
+            Fake::new("second", Answer::Ready(None)),
+        );
+        let outcome = run(
+            &[&first, &second],
+            plan(vec![found_release('a')]),
+            false,
+            LONG,
+        )
+        .await;
+        assert!(matches!(outcome, Outcome::Ready(ready) if ready.url == "/first"));
+        assert_eq!((first.asked(), second.asked()), (1, 0));
+    }
+
+    #[tokio::test]
+    async fn a_source_that_has_nothing_hands_on_to_the_next_in_the_order_given() {
+        let (first, second, third) = (
+            Fake::new("first", Answer::Reason("nothing cached")),
+            Fake::new("second", Answer::Ready(None)),
+            Fake::new("third", Answer::Ready(None)),
+        );
+        let outcome = run(
+            &[&first, &second, &third],
+            plan(vec![found_release('a')]),
+            false,
+            LONG,
+        )
+        .await;
+        assert!(matches!(outcome, Outcome::Ready(ready) if ready.url == "/second"));
+        assert_eq!((first.asked(), second.asked(), third.asked()), (1, 1, 0));
+    }
+
+    #[tokio::test]
+    async fn when_every_source_declines_the_answer_is_the_reason_of_the_last() {
+        let (first, second) = (
+            Fake::new("first", Answer::Reason("first reason")),
+            Fake::new("second", Answer::Reason("last reason")),
+        );
+        let outcome = run(
+            &[&first, &second],
+            plan(vec![found_release('a')]),
+            false,
+            LONG,
+        )
+        .await;
+        assert!(matches!(outcome, Outcome::Unavailable(reason) if reason == "last reason"));
+    }
+
+    #[tokio::test]
+    async fn when_no_release_was_found_the_answer_says_so_and_not_what_the_sources_said() {
+        let only = Fake::new("only", Answer::Reason("a source's own reason"));
+        let empty = plan(vec![]);
+        let expected = empty.no_sources_reason();
+        let outcome = run(&[&only], empty, false, LONG).await;
+        assert!(matches!(outcome, Outcome::Unavailable(reason) if reason == expected));
+    }
+
+    #[tokio::test]
+    async fn a_busy_source_ends_the_search_at_once() {
+        let (first, second) = (
+            Fake::new("first", Answer::Busy),
+            Fake::new("second", Answer::Ready(None)),
+        );
+        let outcome = run(
+            &[&first, &second],
+            plan(vec![found_release('a')]),
+            false,
+            LONG,
+        )
+        .await;
+        assert!(matches!(outcome, Outcome::Busy));
+        assert_eq!(second.asked(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_release_the_viewer_picked_is_never_given_to_a_source_that_finds_its_own_file() {
+        let own_file = Arc::new(Fake {
+            pins: false,
+            ..Arc::try_unwrap(Fake::new("archive", Answer::Ready(None)))
+                .ok()
+                .unwrap()
+        });
+        let torrent = Fake::new("torrent", Answer::Reason("not playable"));
+        let picked = run(
+            &[&torrent, &own_file],
+            plan(vec![found_release('a')]),
+            true,
+            LONG,
+        )
+        .await;
+        assert!(matches!(picked, Outcome::Unavailable(_)));
+        assert_eq!((torrent.asked(), own_file.asked()), (1, 0));
+        // Without a pick it is asked, and it is the one that plays.
+        let free = run(
+            &[&torrent, &own_file],
+            plan(vec![found_release('a')]),
+            false,
+            LONG,
+        )
+        .await;
+        assert!(matches!(free, Outcome::Ready(ready) if ready.url == "/archive"));
+        assert_eq!(own_file.asked(), 1);
+    }
+
+    #[tokio::test]
+    async fn each_source_is_given_one_share_of_the_time_that_is_left_for_every_source_still_to_ask()
+    {
+        let sources: Vec<Arc<Fake>> = ["a", "b", "c"]
+            .into_iter()
+            .map(|name| Fake::new(name, Answer::Reason("no")))
+            .collect();
+        let refs: Vec<&Arc<Fake>> = sources.iter().collect();
+        run(
+            &refs,
+            plan(vec![found_release('a')]),
+            false,
+            Duration::from_secs(30),
+        )
+        .await;
+        // Each declines at once, so 30 seconds are left each time: a third, then a half, then all.
+        for (source, expected) in sources.iter().zip([10.0, 15.0, 30.0]) {
+            let share = source.shares.lock().unwrap()[0].as_secs_f64();
+            assert!(
+                (expected - 1.0..=expected + 0.1).contains(&share),
+                "{}: {share}",
+                source.name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_name_in_the_settings_that_is_not_a_source_says_so_and_the_source_after_it_still_plays()
+     {
+        let names: Vec<String> = ["nonsense", "torrent"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let built = sources_named(&names, &None, "https://archive.example");
+        assert_eq!(
+            built.iter().map(|source| source.name()).collect::<Vec<_>>(),
+            ["nonsense", "torrent"]
+        );
+        let (player, failures) = (player(), FailureMemory::default());
+        let started = Instant::now();
+        // Alone, the unknown name's reason is the answer.
+        let alone = player
+            .try_sources(
+                &built[..1],
+                &mut search(plan(vec![found_release('a')]), &failures),
+                false,
+                started,
+                started + LONG,
+            )
+            .await;
+        assert!(
+            matches!(alone, Outcome::Unavailable(reason) if reason == "Unknown stream source \"nonsense\".")
+        );
+        // With a working source after it, that one is asked and plays.
+        let working = Fake::new("working", Answer::Ready(None));
+        let mixed = vec![built[0].clone(), working.clone() as Arc<dyn StreamSource>];
+        let outcome = player
+            .try_sources(
+                &mixed,
+                &mut search(plan(vec![found_release('a')]), &failures),
+                false,
+                started,
+                started + LONG,
+            )
+            .await;
+        assert!(matches!(outcome, Outcome::Ready(ready) if ready.url == "/working"));
+        assert_eq!(working.asked(), 1);
+
+        let names: Vec<String> = ["debrid", "torrent", "archive-org"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let built = sources_named(&names, &None, "https://archive.example");
+        assert_eq!(
+            built
+                .iter()
+                .map(|source| (source.name(), source.honors_pick()))
+                .collect::<Vec<_>>(),
+            [("debrid", true), ("torrent", true), ("archive-org", false)]
+        );
+    }
+
+    #[tokio::test]
+    async fn once_the_time_is_up_no_source_is_asked_and_the_answer_says_so() {
+        let source = Fake::new("only", Answer::Ready(None));
+        let outcome = run(
+            &[&source],
+            plan(vec![found_release('a')]),
+            false,
+            Duration::ZERO,
+        )
+        .await;
+        assert!(
+            matches!(outcome, Outcome::Unavailable(reason) if reason == "Timed out looking for a playable source.")
+        );
+        assert_eq!(source.asked(), 0);
+    }
+
+    #[tokio::test]
+    async fn the_releases_one_source_dropped_are_not_offered_to_the_next() {
+        let dropper = Arc::new(Fake {
+            drops_first: true,
+            ..Arc::try_unwrap(Fake::new("dropper", Answer::Reason("failed")))
+                .ok()
+                .unwrap()
+        });
+        let next = Fake::new("next", Answer::Reason("failed too"));
+        let ranked = vec![found_release('a'), found_release('b'), found_release('c')];
+        run(&[&dropper, &next], plan(ranked), false, LONG).await;
+        assert_eq!(*dropper.seen.lock().unwrap(), [3]);
+        assert_eq!(
+            *next.seen.lock().unwrap(),
+            [2],
+            "the dropped release went on to the next source"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_file_that_played_clears_the_note_that_it_failed_before() {
+        let (first, second) = (found_release('a'), found_release('b'));
+        let scope = FailureScope::default();
+        let failures = FailureMemory::default();
+        failures.record_failure_scoped("series-1-s1e1", &first.info_hash, &scope);
+        let order = |memory: &FailureMemory| -> Vec<String> {
+            plan(vec![first.clone(), second.clone()])
+                .demote_recent_failures_scoped(memory, false, &scope)
+                .ranked
+                .iter()
+                .map(|release| release.info_hash.clone())
+                .collect()
+        };
+        assert_eq!(
+            order(&failures)[0],
+            second.info_hash,
+            "the failed one waits"
+        );
+
+        let source = Fake::new("only", Answer::Ready(Some(first.selection_id())));
+        let player = player();
+        let started = Instant::now();
+        let outcome = player
+            .try_sources(
+                &all(&[&source]),
+                &mut search(plan(vec![first.clone(), second.clone()]), &failures),
+                false,
+                started,
+                started + LONG,
+            )
+            .await;
+        assert!(matches!(outcome, Outcome::Ready(_)));
+        assert_eq!(
+            order(&failures)[0],
+            first.info_hash,
+            "it plays, so it is first again"
+        );
+    }
 
     /// A search that holds a slot until `done` is told, and says 7.
     fn holding(

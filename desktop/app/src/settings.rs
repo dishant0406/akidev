@@ -1,17 +1,21 @@
-//! Settings: how much disk the torrents may use, and how many are kept. Two sliders that
-//! snap to a few sensible stops, saved as soon as they are let go.
+//! Settings: how much disk the torrents may use, and how many are kept (two sliders that
+//! snap to a few sensible stops, saved as soon as they are let go), and the plugins.
 
 use crate::backend::Backend;
-use crate::design::button::ghost_button;
+use crate::design::button::{ghost_button, secondary_button};
 use crate::design::toggle::toggle;
 use crate::design::tokens::{
-    ACCENT, DANGER, GUTTER, TEXT, TEXT_DIM, TEXT_FAINT, TOP_BAR, WASH_2, color, font, size,
+    ACCENT, DANGER, GUTTER, LINE, TEXT, TEXT_DIM, TEXT_FAINT, TOP_BAR, WASH_2, color, font, radius,
+    size,
 };
 use crate::updates::{Shared, Status};
 use akidev_core::config::Config;
+use akidev_core::plugin::{self, Installed};
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -49,6 +53,11 @@ impl Limit {
     }
 }
 
+/// "1 indexer", "2 indexers".
+fn counted(count: usize, what: &str) -> String {
+    format!("{count} {what}{}", if count == 1 { "" } else { "s" })
+}
+
 pub struct SettingsPage {
     config: Config,
     /// Where each slider was last drawn, so a click can be turned into a stop.
@@ -56,6 +65,18 @@ pub struct SettingsPage {
     torrents_bar: Rc<Cell<Bounds<Pixels>>>,
     /// The slider being dragged.
     dragging: Option<Limit>,
+    /// Where the plugins are kept, and what is there.
+    plugin_dir: PathBuf,
+    plugins: Vec<Installed>,
+    /// The field for the link of a plugin to add. Made when the page is first drawn, which is when
+    /// there is a window to make it in.
+    link: Option<Entity<InputState>>,
+    /// A plugin is being downloaded.
+    adding: bool,
+    /// What the last add or change came to, and whether it failed.
+    note: Option<(String, bool)>,
+    /// The field is emptied the next time the page is drawn.
+    clear_link: bool,
 }
 
 impl SettingsPage {
@@ -63,11 +84,23 @@ impl SettingsPage {
         // The About row follows the update as it downloads.
         let updates = cx.global::<Shared>().0.clone();
         cx.observe(&updates, |_, _, cx| cx.notify()).detach();
+        let plugin_dir = cx
+            .global::<Backend>()
+            .config_path
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_default();
         SettingsPage {
             config: cx.global::<Backend>().config.clone(),
             disk_bar: Rc::new(Cell::new(Bounds::default())),
             torrents_bar: Rc::new(Cell::new(Bounds::default())),
             dragging: None,
+            plugins: plugin::load(&plugin_dir),
+            plugin_dir,
+            link: None,
+            adding: false,
+            note: None,
+            clear_link: false,
         }
     }
 
@@ -121,6 +154,201 @@ impl SettingsPage {
     fn toggle_updates(&mut self, cx: &mut Context<Self>) {
         self.config.check_for_updates = !self.config.check_for_updates;
         self.commit(cx);
+    }
+
+    /// Downloads the plugin at the link in the field and adds it.
+    fn add_plugin(&mut self, cx: &mut Context<Self>) {
+        let Some(link) = &self.link else { return };
+        let link = link.read(cx).value().trim().to_string();
+        if link.is_empty() || self.adding {
+            return;
+        }
+        self.adding = true;
+        self.note = None;
+        let dir = self.plugin_dir.clone();
+        crate::task::load(
+            cx,
+            async move {
+                plugin::install_from_link(&dir, &link)
+                    .await
+                    .map_err(|error| format!("{error:#}"))
+            },
+            |page, result, cx| {
+                page.adding = false;
+                match result {
+                    Ok(plugins) => {
+                        page.plugins = plugins;
+                        page.note = Some(("Plugin added.".into(), false));
+                        page.clear_link = true;
+                    }
+                    Err(error) => page.note = Some((error, true)),
+                }
+                cx.notify();
+            },
+        );
+        cx.notify();
+    }
+
+    /// Takes in the plugin files that were put in the folder by hand.
+    fn reload_plugins(&mut self, cx: &mut Context<Self>) {
+        self.plugins = plugin::load(&self.plugin_dir);
+        self.note = None;
+        cx.notify();
+    }
+
+    fn switch_plugin(&mut self, id: &str, on: bool, cx: &mut Context<Self>) {
+        match plugin::set_enabled(&self.plugin_dir, id, on) {
+            Ok(plugins) => self.plugins = plugins,
+            Err(error) => self.note = Some((format!("{error:#}"), true)),
+        }
+        cx.notify();
+    }
+
+    fn remove_plugin(&mut self, id: &str, cx: &mut Context<Self>) {
+        match plugin::remove(&self.plugin_dir, id) {
+            Ok(plugins) => self.plugins = plugins,
+            Err(error) => self.note = Some((format!("{error:#}"), true)),
+        }
+        cx.notify();
+    }
+
+    /// The plugins: the ones that are added, and a field to add another from a link.
+    fn plugins_section(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+        let input = self
+            .link
+            .get_or_insert_with(|| {
+                cx.new(|cx| {
+                    InputState::new(window, cx).placeholder("https://example.com/plugin.json")
+                })
+            })
+            .clone();
+        if self.clear_link {
+            self.clear_link = false;
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        let quiet = |text: String, tone: u32| {
+            div()
+                .text_size(px(13.))
+                .line_height(relative(1.35))
+                .text_color(color(tone))
+                .child(text)
+        };
+        let rows = self.plugins.iter().map(|each| {
+            let (id, on) = (each.id.clone(), each.enabled);
+            let (toggle_id, remove_id) = (id.clone(), id.clone());
+            let detail = match &each.problem {
+                Some(problem) => quiet(problem.clone(), DANGER),
+                None => quiet(
+                    format!(
+                        "Version {} · {} · {} · {}",
+                        each.version,
+                        counted(each.indexers, "indexer"),
+                        counted(each.subtitles, "subtitle source"),
+                        counted(each.catalogues, "catalogue")
+                    ),
+                    TEXT_FAINT,
+                ),
+            };
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_6()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(color(TEXT))
+                                .child(each.name.clone()),
+                        )
+                        .child(detail),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .child(ghost_button(
+                            SharedString::from(format!("plugin-remove-{remove_id}")),
+                            "Remove",
+                            cx.listener(move |page, _, _, cx| page.remove_plugin(&remove_id, cx)),
+                        ))
+                        .child(toggle(
+                            SharedString::from(format!("plugin-{toggle_id}")),
+                            on,
+                            cx.listener(move |page, _, _, cx| page.switch_plugin(&id, !on, cx)),
+                        )),
+                )
+        });
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                div().flex().flex_col().gap_1().child(
+                    div()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(color(TEXT_DIM))
+                        .child("Plugins"),
+                ).child(quiet(
+                    "Sources made by other people: more torrents, more subtitles and more catalogues. Akidev does not check what they find, so add only ones you trust.".into(),
+                    TEXT_FAINT,
+                )),
+            )
+            .children(rows)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .rounded(px(radius::BUTTON))
+                            .border_1()
+                            .border_color(color(LINE))
+                            .child(Input::new(&input).appearance(false)),
+                    )
+                    .child(secondary_button(
+                        "plugin-add",
+                        if self.adding { "Adding…" } else { "Add" },
+                        None,
+                        cx.listener(|page, _, _, cx| page.add_plugin(cx)),
+                    )),
+            )
+            .children(
+                self.note
+                    .as_ref()
+                    .map(|(text, failed)| quiet(text.clone(), if *failed { DANGER } else { TEXT_DIM })),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_6()
+                    .child(quiet(
+                        format!(
+                            "Or put a .json file in {} and reload.",
+                            self.plugin_dir.join("plugins").display()
+                        ),
+                        TEXT_FAINT,
+                    ))
+                    .child(ghost_button(
+                        "plugin-reload",
+                        "Reload",
+                        cx.listener(|page, _, _, cx| page.reload_plugins(cx)),
+                    )),
+            )
     }
 
     fn restore(&mut self, cx: &mut Context<Self>) {
@@ -335,7 +563,8 @@ impl SettingsPage {
 }
 
 impl Render for SettingsPage {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let plugins = self.plugins_section(window, cx);
         let started = &cx.global::<Backend>().started_with;
         let restart = self.config.max_cache_bytes != started.max_cache_bytes
             || self.config.max_torrents != started.max_torrents;
@@ -408,6 +637,7 @@ impl Render for SettingsPage {
                                 cx.listener(|page, _, _, cx| page.toggle_updates(cx)),
                             )),
                     )
+                    .child(plugins)
                     .child(
                         div()
                             .flex()

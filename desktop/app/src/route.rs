@@ -1,7 +1,7 @@
 //! Where the app is, and how to get somewhere else.
 
 use akidev_core::media_id;
-use akidev_core::model::Kind;
+use akidev_core::model::{Kind, Shape};
 use gpui_kit::{App, Global, WeakEntity};
 
 /// What the links from the website start with.
@@ -110,7 +110,7 @@ impl Route {
     /// The route a media id belongs to: an episode or film plays, a title key is a detail page.
     pub fn for_media_id(id: &str) -> Route {
         match media_id::parse(id) {
-            Some(parsed) if parsed.episode.is_some() || parsed.kind == Kind::Movie => {
+            Some(parsed) if parsed.episode.is_some() || parsed.kind.shape() == Shape::Movie => {
                 Route::Watch { id: id.to_string() }
             }
             _ => Route::Title { id: id.to_string() },

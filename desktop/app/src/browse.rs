@@ -10,6 +10,7 @@ use crate::task::load;
 use crate::tile::poster_tile;
 use akidev_core::model::{Filters, Kind, Media, Sort};
 use akidev_core::providers;
+use akidev_core::screens::Screens;
 use akidev_core::search::{interleave, search};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, Sizable as _};
@@ -17,74 +18,6 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 const PER_PAGE: u32 = 24;
-
-/// The genres worth offering, in the providers' own spellings. AniList and Cinemeta name
-/// their genres differently, and a genre the catalogue lacks would only ever return nothing.
-fn genres_for(kind: Option<Kind>) -> &'static [&'static str] {
-    match kind {
-        Some(Kind::Anime) => &[
-            "Action",
-            "Adventure",
-            "Comedy",
-            "Drama",
-            "Ecchi",
-            "Fantasy",
-            "Horror",
-            "Mahou Shoujo",
-            "Mecha",
-            "Music",
-            "Mystery",
-            "Psychological",
-            "Romance",
-            "Sci-Fi",
-            "Slice of Life",
-            "Sports",
-            "Supernatural",
-            "Thriller",
-        ],
-        Some(_) => &[
-            "Action",
-            "Adventure",
-            "Animation",
-            "Biography",
-            "Comedy",
-            "Crime",
-            "Documentary",
-            "Drama",
-            "Family",
-            "Fantasy",
-            "History",
-            "Horror",
-            "Music",
-            "Mystery",
-            "Romance",
-            "Sci-Fi",
-            "Sport",
-            "Thriller",
-            "War",
-        ],
-        None => &[
-            "Action",
-            "Adventure",
-            "Comedy",
-            "Drama",
-            "Fantasy",
-            "Horror",
-            "Mystery",
-            "Romance",
-            "Sci-Fi",
-            "Thriller",
-        ],
-    }
-}
-
-const SORTS: [(Sort, &str); 5] = [
-    (Sort::Popularity, "Popular"),
-    (Sort::Trending, "Trending"),
-    (Sort::Score, "Top rated"),
-    (Sort::Recent, "Newest"),
-    (Sort::Title, "A–Z"),
-];
 
 enum State {
     Loading,
@@ -97,8 +30,10 @@ pub struct BrowsePage {
     /// the results already found.
     kind: Option<Kind>,
     term: String,
-    genre: Option<&'static str>,
+    genre: Option<String>,
     sort: Sort,
+    /// The tabs, sorts and genres, as the sources document says them.
+    screens: Screens,
     results: Vec<Media>,
     state: State,
     /// The last page that arrived.
@@ -114,11 +49,13 @@ pub struct BrowsePage {
 
 impl BrowsePage {
     pub fn new(kind: Option<Kind>, term: String, cx: &mut Context<Self>) -> BrowsePage {
+        let screens = akidev_core::sources::screens();
         let mut page = BrowsePage {
             kind,
             term,
             genre: None,
-            sort: Sort::Popularity,
+            sort: screens.sorts[0].sort,
+            screens,
             results: Vec::new(),
             state: State::Loading,
             page: 0,
@@ -139,7 +76,7 @@ impl BrowsePage {
     fn kinds(&self) -> Vec<Kind> {
         match (self.searching(), self.kind) {
             (false, Some(kind)) => vec![kind],
-            _ => Kind::ALL.to_vec(),
+            _ => self.screens.tabs.iter().map(|tab| tab.kind).collect(),
         }
     }
 
@@ -156,7 +93,7 @@ impl BrowsePage {
         let term = self.term.clone();
         let filters = Filters {
             sort: Some(self.sort),
-            genre: self.genre.map(str::to_string),
+            genre: self.genre.clone(),
             page,
             per_page: PER_PAGE,
             ..Default::default()
@@ -219,13 +156,11 @@ impl BrowsePage {
         if self.searching() {
             return format!("Results for “{}”", self.term);
         }
-        match self.kind {
-            Some(Kind::Anime) => "Anime",
-            Some(Kind::Series) => "Series",
-            Some(Kind::Movie) => "Films",
-            None => "Browse",
-        }
-        .to_string()
+        self.screens
+            .tabs
+            .iter()
+            .find(|tab| Some(tab.kind) == self.kind)
+            .map_or("Browse".to_string(), |tab| tab.label.clone())
     }
 }
 
@@ -238,16 +173,16 @@ impl Render for BrowsePage {
             .collect();
 
         let filters = if self.searching() {
-            let kinds = [
-                (None, "All"),
-                (Some(Kind::Anime), "Anime"),
-                (Some(Kind::Series), "Series"),
-                (Some(Kind::Movie), "Films"),
-            ];
+            let kinds = std::iter::once((None, "All".to_string())).chain(
+                self.screens
+                    .tabs
+                    .iter()
+                    .map(|tab| (Some(tab.kind), tab.label.clone())),
+            );
             div().flex().gap_5().children(kinds.map(|(kind, label)| {
                 tab(
                     SharedString::from(format!("kind-{label}")),
-                    label,
+                    &label,
                     self.kind == kind,
                     cx.listener(move |page, _, _, cx| {
                         page.kind = kind;
@@ -256,17 +191,21 @@ impl Render for BrowsePage {
                 )
             }))
         } else {
-            let sorts = div().flex().gap_5().children(SORTS.map(|(sort, label)| {
-                tab(
-                    SharedString::from(format!("sort-{label}")),
-                    label,
-                    self.sort == sort,
-                    cx.listener(move |page, _, _, cx| {
-                        page.sort = sort;
-                        page.fetch(1, cx);
-                    }),
-                )
-            }));
+            let sorts = div()
+                .flex()
+                .gap_5()
+                .children(self.screens.sorts.iter().map(|option| {
+                    let sort = option.sort;
+                    tab(
+                        SharedString::from(format!("sort-{}", option.label)),
+                        &option.label,
+                        self.sort == sort,
+                        cx.listener(move |page, _, _, cx| {
+                            page.sort = sort;
+                            page.fetch(1, cx);
+                        }),
+                    )
+                }));
             let genre = div()
                 .id("genres")
                 .flex()
@@ -289,7 +228,7 @@ impl Render for BrowsePage {
                             "All genres"
                         }),
                 )
-                .children(self.genre.map(|genre| {
+                .children(self.genre.clone().map(|genre| {
                     div()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(color(TEXT))
@@ -310,8 +249,9 @@ impl Render for BrowsePage {
                 .gap_x_6()
                 .gap_y_2()
                 .pt_5()
-                .children(genres_for(self.kind).iter().map(|&genre| {
-                    let active = self.genre == Some(genre);
+                .children(self.screens.genres(self.kind).iter().map(|genre| {
+                    let genre = genre.clone();
+                    let active = self.genre.as_ref() == Some(&genre);
                     div()
                         .id(SharedString::from(format!("genre-{genre}")))
                         .flex()
@@ -323,14 +263,17 @@ impl Render for BrowsePage {
                         .text_color(color(if active { TEXT } else { TEXT_DIM }))
                         .when(active, |item| item.font_weight(FontWeight::SEMIBOLD))
                         .hover(|style| style.text_color(color(TEXT)))
-                        .on_click(cx.listener(move |page, _, _, cx| {
-                            page.genre = if page.genre == Some(genre) {
-                                None
-                            } else {
-                                Some(genre)
-                            };
-                            page.fetch(1, cx);
-                        }))
+                        .on_click({
+                            let picked = genre.clone();
+                            cx.listener(move |page, _, _, cx| {
+                                page.genre = if page.genre.as_ref() == Some(&picked) {
+                                    None
+                                } else {
+                                    Some(picked.clone())
+                                };
+                                page.fetch(1, cx);
+                            })
+                        })
                         .child(
                             div()
                                 .size(px(5.))

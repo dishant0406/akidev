@@ -12,8 +12,10 @@ pub mod media_id;
 pub mod model;
 #[cfg(feature = "music")]
 pub mod music;
+pub mod plugin;
 pub mod providers;
 pub mod releases;
+pub mod screens;
 pub mod search;
 #[cfg(feature = "streaming")]
 pub mod serve;

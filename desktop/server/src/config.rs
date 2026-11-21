@@ -48,7 +48,7 @@ pub struct Settings {
     pub hls_session_ttl: Duration,
     /// Threads a video re-encode may use.
     pub transcode_threads: usize,
-    /// Hosts a picture may be fetched from. An entry matches that host and its subdomains.
+    /// Hosts a picture may be fetched from besides the ones the providers name. An entry matches that host and its subdomains.
     pub image_hosts: Vec<String>,
     /// The most the resized pictures may take on disk.
     pub image_cache_bytes: u64,
@@ -132,10 +132,7 @@ impl Settings {
             max_video_transcodes: number("MAX_VIDEO_TRANSCODES", 1),
             hls_session_ttl: Duration::from_secs(number("HLS_SESSION_TTL_MINUTES", 30u64) * 60),
             transcode_threads: number("TRANSCODE_THREADS", 2),
-            image_hosts: list(
-                "IMAGE_HOSTS",
-                "anilist.co,kitsu.app,tvmaze.com,metahub.space,media-amazon.com,tmdb.org,yts.gg,yts.mx",
-            ),
+            image_hosts: list("IMAGE_HOSTS", ""),
             image_cache_bytes: number("IMAGE_CACHE_BYTES", 768 * 1024 * 1024),
             play_limit: number("PLAY_LIMIT_PER_10_MIN", 20),
             api_limit: number("API_LIMIT_PER_MIN", 240),

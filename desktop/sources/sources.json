@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 39,
+  "version": 41,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -243,6 +243,7 @@
       "id": "torrentio",
       "name": "Torrentio (IMDb and mapped Anime Kitsu)",
       "anime_kitsu": true,
+      "map": "kitsu",
       "kinds": [
         "anime",
         "series",
@@ -366,6 +367,20 @@
         "format": "json",
         "rows": "data.movies",
         "children": "torrents",
+        "empty_when": [
+          {
+            "path": "status",
+            "equals": "ok"
+          },
+          {
+            "path": "data.movie_count",
+            "equals": "0"
+          },
+          {
+            "path": "data.movies",
+            "exists": false
+          }
+        ],
         "fields": {
           "title": {
             "template": "{^.title}{? ({^.year})?}{? {quality}?}{? {type}?}"
@@ -709,6 +724,9 @@
               "movie": ""
             }
           }
+        },
+        "headers": {
+          "x-akidev-fallback": "1"
         }
       },
       "response": {
@@ -940,7 +958,11 @@
         "recommended": {
           "rows": "recommendations.nodes.*.mediaRecommendation"
         }
-      }
+      },
+      "image_hosts": [
+        "anilist.co",
+        "kitsu.app"
+      ]
     },
     {
       "id": "cinemeta",
@@ -1160,7 +1182,12 @@
             }
           ]
         }
-      }
+      },
+      "image_hosts": [
+        "metahub.space",
+        "media-amazon.com",
+        "tmdb.org"
+      ]
     },
     {
       "id": "tvmaze",
@@ -1345,7 +1372,10 @@
             }
           ]
         }
-      }
+      },
+      "image_hosts": [
+        "tvmaze.com"
+      ]
     },
     {
       "id": "yts",
@@ -1547,6 +1577,46 @@
           "rows": "data.movies",
           "limit": 12
         }
+      },
+      "image_hosts": [
+        "yts.gg",
+        "yts.mx"
+      ]
+    }
+  ],
+  "mappers": [
+    {
+      "id": "kitsu",
+      "kinds": [
+        "anime"
+      ],
+      "provider": {
+        "id": "anime-kitsu",
+        "kinds": [
+          "anime"
+        ],
+        "base_url": "https://anime-kitsu.strem.fun",
+        "card": {
+          "id": "kitsu_id",
+          "title": "name",
+          "format": "type",
+          "year": {
+            "year": "releaseInfo"
+          }
+        },
+        "detail": {
+          "request": {
+            "url": "{base}/meta/anime/anilist:{id}.json"
+          },
+          "id_pattern": "^[0-9]+$",
+          "root": "meta",
+          "episodes": {
+            "rows": "videos",
+            "id": "id",
+            "season": "season",
+            "number": "episode"
+          }
+        }
       }
     }
   ],
@@ -1614,6 +1684,178 @@
     "movie": [
       "cinemeta",
       "yts"
+    ]
+  },
+  "screens": {
+    "tabs": [
+      {
+        "kind": "anime",
+        "slug": "anime",
+        "label": "Anime"
+      },
+      {
+        "kind": "series",
+        "slug": "series",
+        "label": "Series"
+      },
+      {
+        "kind": "movie",
+        "slug": "films",
+        "label": "Films"
+      }
+    ],
+    "sorts": [
+      {
+        "sort": "popularity",
+        "label": "Popular"
+      },
+      {
+        "sort": "trending",
+        "label": "Trending"
+      },
+      {
+        "sort": "score",
+        "label": "Top rated"
+      },
+      {
+        "sort": "recent",
+        "label": "Newest"
+      },
+      {
+        "sort": "title",
+        "label": "A–Z"
+      }
+    ],
+    "genres": {
+      "all": [
+        "Action",
+        "Adventure",
+        "Comedy",
+        "Drama",
+        "Fantasy",
+        "Horror",
+        "Mystery",
+        "Romance",
+        "Sci-Fi",
+        "Thriller"
+      ],
+      "anime": [
+        "Action",
+        "Adventure",
+        "Comedy",
+        "Drama",
+        "Ecchi",
+        "Fantasy",
+        "Horror",
+        "Mahou Shoujo",
+        "Mecha",
+        "Music",
+        "Mystery",
+        "Psychological",
+        "Romance",
+        "Sci-Fi",
+        "Slice of Life",
+        "Sports",
+        "Supernatural",
+        "Thriller"
+      ],
+      "movie": [
+        "Action",
+        "Adventure",
+        "Animation",
+        "Biography",
+        "Comedy",
+        "Crime",
+        "Documentary",
+        "Drama",
+        "Family",
+        "Fantasy",
+        "History",
+        "Horror",
+        "Music",
+        "Mystery",
+        "Romance",
+        "Sci-Fi",
+        "Sport",
+        "Thriller",
+        "War"
+      ],
+      "series": [
+        "Action",
+        "Adventure",
+        "Animation",
+        "Biography",
+        "Comedy",
+        "Crime",
+        "Documentary",
+        "Drama",
+        "Family",
+        "Fantasy",
+        "History",
+        "Horror",
+        "Music",
+        "Mystery",
+        "Romance",
+        "Sci-Fi",
+        "Sport",
+        "Thriller",
+        "War"
+      ]
+    },
+    "home": [
+      {
+        "title": "Trending Anime",
+        "kind": "anime",
+        "sort": "trending"
+      },
+      {
+        "title": "New Releases",
+        "kind": "movie",
+        "sort": "recent"
+      },
+      {
+        "title": "Popular Series",
+        "kind": "series",
+        "sort": "popularity"
+      },
+      {
+        "title": "Newly Released Anime",
+        "kind": "anime",
+        "sort": "recent"
+      },
+      {
+        "title": "Most Watched Films",
+        "kind": "movie",
+        "sort": "popularity"
+      },
+      {
+        "title": "New Series",
+        "kind": "series",
+        "sort": "recent"
+      },
+      {
+        "title": "Top Rated Anime",
+        "kind": "anime",
+        "sort": "score"
+      },
+      {
+        "title": "Action Films",
+        "kind": "movie",
+        "sort": "popularity",
+        "genre": "Action"
+      },
+      {
+        "title": "Drama Series",
+        "kind": "series",
+        "sort": "score",
+        "genre": "Drama"
+      },
+      {
+        "title": "Romance Anime",
+        "kind": "anime",
+        "sort": "popularity",
+        "genre": "Romance"
+      }
     ]
   }
 }

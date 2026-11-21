@@ -15,6 +15,14 @@ which fields to read.
 3. `./scripts/publish-sources.sh` signs it and uploads it. Running apps pick it up within six
    hours, and anyone who opens the app after that gets it at start.
 
+   It publishes **two feeds with one version number**: the document as it is, at the root of
+   `sources.akidev.live` (schema 1, which every app reads), and the same document with `"schema": 2` under `/v2`
+   (which only builds that know schema 2 read, and prefer: they fall back to the root feed when `/v2` has
+   nothing, or what it has is not genuine or not readable). An app that knows only schema 1 refuses a schema 2
+   document, so a value only schema 2 apps can read (a new kind of title in the document itself, a new hole name) goes
+   in `sources/sources-v2.json`, which is published as `/v2` when it exists. Its `version` must equal
+   `sources.json`'s. Until then the two are the same document. The daily tracker job refreshes the trackers and the version of both, and keeps what the live `/v2` document holds that the root one does not.
+
 The app uses a downloaded copy only if its signature is valid, its `version` is higher than
 the one in use and it passes the same validation as the built-in one (limits, addresses, regular
 expressions, requests that can be filled in, chains that name providers serving the kind).
@@ -84,9 +92,11 @@ it again, publish a document without the field (or with a lower one) and a highe
 - `fallback: true` makes an indexer a last resort: it is asked, with longer to answer (the
   `fallback_timeout_ms` setting), only when the others found nothing worth opening. For a slow service
   that should not be paid for on every search, such as the server's Prowlarr search
-  ([pipeline/PROWLARR_FALLBACK.md](../../pipeline/PROWLARR_FALLBACK.md)). Every request to one carries the
-  header `x-akidev-fallback`. An app that predates the flag asks it like any other indexer, without the
-  header, and the server's route turns that away at once.
+  ([pipeline/PROWLARR_FALLBACK.md](../../pipeline/PROWLARR_FALLBACK.md)). That entry sets the request header
+  `x-akidev-fallback` (see `headers` below). An app that predates the flag asks it like any other indexer,
+  without the header, and the server's route turns that away at once.
+- `request.headers` is a map of headers sent with every request, for a service that wants a key or a marker
+  in a header.
 - In `path`, `query` and `json`, `{term}`, `{imdb}` (`tt0903747`), `{imdb_digits}` (`0903747`), `{imdb_or_term}` (the id when the search has
   one, otherwise the term),
   `{season}` and `{episode}` are filled in. A request that needs a value the search lacks (an
@@ -108,15 +118,20 @@ it again, publish a document without the field (or with a lower one) and a highe
   its exact size. `file_idx` reads the addon's zero-based `fileIdx`, preserving distinct files within
   one torrent as distinct choices without bypassing title/episode checks. Only a validated torrent
   `infoHash` is used, never an addon's credential-bearing direct-play URL.
-- `anime_kitsu: true` opts an anime-capable indexer into the bundled Anime Kitsu metadata bridge.
-  Its request must use `{kitsu}` for anime and may use `{kitsu_kind}` for the route kind. The bridge
-  accepts only an exact same-number Kitsu episode; a Kitsu movie instead uses its exact unsuffixed
-  title id and the `movie` route. A missing or mismatched mapping skips that indexer instead of
-  falling back to IMDb or playing another episode.
+- `map` names a mapper (see Mappers below) that finds the id this indexer wants. For the mapper `kitsu` its
+  request fills the holes `{kitsu}` and `{kitsu_kind}`, wherever they are: in the path, a query value or the
+  body. The mapper accepts only an exact same-number episode (`kitsu:7442:1`); a film instead uses its exact
+  unsuffixed title id (`kitsu:50192`) and the `movie` route. A missing or mismatched mapping skips that indexer
+  instead of falling back to IMDb or playing another episode. `anime_kitsu: true` is the old way to say
+  `"map": "kitsu"`: it is still read, and the signed document still carries it for the apps that use it.
 - `seeders` is optional observation data: missing, malformed, negative, fractional or out-of-range
   values stay unknown (`null` in API output); an explicit valid `0` remains observed zero. Do not
   define a default zero for providers that omit health. Counts are upstream reports, not live
   measurements made by Akidev.
+- `empty_when` is a list of conditions (the same shape as `drop`) that read the whole body: when every one
+  holds, the answer is a successful answer with no rows. For a service that leaves the list out when nothing
+  was found, which would otherwise read as a bad answer. YTS says it like this:
+  `[{"path": "status", "equals": "ok"}, {"path": "data.movie_count", "equals": "0"}, {"path": "data.movies", "exists": false}]`.
 - `drop` removes rows (`{"path": ..., "equals": ...}` or `"starts_with"`); `must_contain_term`
   keeps only rows whose title holds the whole searched title; `dedupe` keeps one row per
   `(hash, file_idx)`. Across requests, duplicates of that pair merge before ranking: unique `sources`
@@ -159,6 +174,9 @@ scope, remaining hypotheses and verification limits.
   "detail": { "request": { "url": "{base}/shows/{id}" }, "root": "" } }
 ```
 
+- `image_hosts` are the hosts the provider's pictures are kept on (an entry matches that host and its
+  subdomains). The website's image proxy fetches a picture only from these hosts, from the
+  hosts other providers name, and from the ones the operator adds with the `IMAGE_HOSTS` setting.
 - `card` says how a title is read, once, wherever the service gives one (a page, a search, a title
   in full, the titles related to it). Its `id` is the service's own id; the title's key is made from
   the kind and that.
@@ -187,6 +205,27 @@ scope, remaining hypotheses and verification limits.
   `add`, `positive`, `map` and `plain_text`. A template reads the row with `{path}`, the row around
   it with `{^.path}` and the kind with `{@kind}`.
 
+### Mappers
+
+A mapper finds the id a title has in another service, so an indexer that knows titles by that id can be asked
+for it. `mappers` is a list of them, and an indexer names one with `map`.
+
+```json
+{ "id": "kitsu", "kinds": ["anime"],
+  "provider": { "id": "anime-kitsu", "kinds": ["anime"], "base_url": "https://anime-kitsu.strem.fun",
+                "card": { ... },
+                "detail": { "request": { "url": "{base}/meta/anime/anilist:{id}.json" },
+                            "id_pattern": "^[0-9]+$", "root": "meta",
+                            "episodes": { "rows": "videos", "id": "id", "season": "season", "number": "episode" } } } }
+```
+
+- `id` is lower case letters. It names the holes of an indexer's request (`{kitsu}`, `{kitsu_kind}`) and the
+  front of the ids the mapper's answer must hold: `kitsu:<title>:<episode>`, or `kitsu:<title>` for a film.
+- `provider` is asked for the detail of the title, by our own id (AniList's, digits). Its `episodes` give the
+  other service's id of each episode. An answer that does not hold exactly the requested episode, in exactly
+  that shape, is no mapping.
+- A document from before `mappers` gets the built-in ones.
+
 ### Subtitles
 
 ```json
@@ -209,6 +248,65 @@ scope, remaining hypotheses and verification limits.
 - `file_hosts` are the only hosts a subtitle file is fetched from, whatever a reply names:
   a host is allowed when it is one of them or a subdomain of one.
 - A subtitle is converted to WebVTT, which both the web player and mpv read.
+
+### Screens
+
+`screens` says what the apps draw, so the desktop app and the website show the same things from one
+place. Absent in a document from before there were any: the copy built into the app is used.
+
+```json
+{ "tabs":   [{ "kind": "anime", "slug": "anime", "label": "Anime" }],
+  "sorts":  [{ "sort": "popularity", "label": "Popular" }],
+  "genres": { "anime": ["Action"], "series": [], "movie": [], "all": [] },
+  "home":   [{ "title": "Trending Anime", "kind": "anime", "sort": "trending", "genre": "Action" }] }
+```
+
+- `tabs` are the catalogues, in the order of the top bar. `slug` is the address on the website (`/films`).
+- `sorts` are the ways a catalogue can be ordered. The first is the one it opens on.
+- `genres` are offered for one catalogue, by kind name, in the providers' own spellings. `all` is for the page
+  that shows every catalogue.
+- `home` are the rows of the home page, in order. `genre` is optional. A row's `kind` must have a tab.
+- The server sends it at `GET /v1/screens`.
+
+### Plugins
+
+A plugin is one JSON file that brings sources of its own. Nobody signs it, so it is held to stricter rules than
+the document above, and only the desktop app loads it: the server uses the signed document alone.
+
+```json
+{ "plugin": 1, "id": "my-torrents", "name": "My torrents", "version": 1,
+  "indexers": [ { "id": "my-torrents-api", "name": "My torrents", "kinds": ["series"],
+                  "hosts": ["https://torrents.example.com/api"],
+                  "request":  { "path": "/search", "query": { "q": "{term}" } },
+                  "response": { "format": "json", "rows": "items", "fields": { "title": "title", "hash": "hash" } } } ],
+  "subtitles": [] }
+```
+
+- `indexers`, `subtitles` and `providers` have the same shape as in the document. A plugin has at least one of
+  them, at most 16 indexers, 4 subtitle sources and 4 catalogues (providers).
+- `id` is 1 to 40 lower case letters, digits or dashes, and it is the name of the file the plugin is kept in.
+- Every address must be `https`, on a public name, with no login and no port. No IP address, no `localhost`,
+  no `.local` or `.internal` name. A public name that points at a private address is not caught.
+- A plugin adds its sources after the built-in ones. A source whose id is already taken is refused, so a plugin
+  can add but never replace.
+- The app keeps plugins in `<data folder>/plugins`. `name.json` is on and `name.json.off` is off. Settings lists
+  them, switches them, removes them, and adds one from a link (https, followed once, never redirected, 256 KB at
+  most). A link is fetched once: to update a plugin, add its link again.
+- A catalogue (a provider) of a plugin has an id of 1 to 24 lower case letters or digits, and every address in it
+  (its `base_url`, its `image_hosts`) follows the rule above. Its titles say which provider they came from:
+  `series-myprovider~abc_2d12` is the title `abc-12` of `myprovider` (every character of the service's own id that
+  is not a letter or a digit is written as `_` and two hex digits). So they never collide with the built-in
+  catalogues, and the episode ids are made by the app, not by the provider's `episodes.id`.
+- `kinds` brings kinds of title of its own, each with a tab: `{ "id": "documentary", "label": "Documentaries",
+  "singular": "Documentary", "shape": "series" }`. The `id` is 1 to 16 lower case letters and not one there is. The
+  `shape` says how its titles behave: `series` (seasons and episodes, keys like `documentary-…-s1e2`), `anime`
+  (episodes by number, `-ep3`) or `movie` (no episodes). A plugin's indexers, subtitle sources and catalogues can
+  serve a kind it brings, and nothing else it does not. A kind has no built-in catalogue, so its tab lists from
+  the plugin's own, and its titles show in search with the others. A kind that a plugin brought stays known after
+  the plugin is removed, so saved titles still read.
+- `home` rows are drawn from one catalogue of the plugin alone: `{ "title": "Community picks", "kind": "series",
+  "sort": "popularity", "provider": "myprovider" }`. They come after the built-in rows. The catalogue's titles are
+  also added to every search, after the built-in results. A catalogue is not part of a kind's chain and has no tab.
 
 A service that needs something these cannot say needs a change to the engine in
 `core/src/providers/`, and so a new build.

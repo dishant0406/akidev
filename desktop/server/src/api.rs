@@ -8,7 +8,6 @@ use crate::hls::Hls;
 use crate::limits::{Limiter, Usage, client_of};
 use crate::party;
 use crate::play::{Outcome, Player};
-use akidev_core::indexers::FALLBACK_HEADER;
 use akidev_core::media_id;
 use akidev_core::model::{Filters, Kind, Media, Release, Sort};
 use akidev_core::{providers, search};
@@ -52,78 +51,6 @@ const SEARCH_MAX: usize = 60;
 const CATALOGUE_CACHE: &str = "public, max-age=300, stale-while-revalidate=3600";
 const TITLE_CACHE: &str = "public, max-age=900, stale-while-revalidate=3600";
 
-struct Row {
-    title: &'static str,
-    kind: Kind,
-    sort: Sort,
-    genre: Option<&'static str>,
-}
-
-/// The home page's rows, in order. Each draws from one catalogue, so the page mixes all three.
-/// The same ones the desktop app shows.
-const ROWS: [Row; 10] = [
-    Row {
-        title: "Trending Anime",
-        kind: Kind::Anime,
-        sort: Sort::Trending,
-        genre: None,
-    },
-    Row {
-        title: "New Releases",
-        kind: Kind::Movie,
-        sort: Sort::Recent,
-        genre: None,
-    },
-    Row {
-        title: "Popular Series",
-        kind: Kind::Series,
-        sort: Sort::Popularity,
-        genre: None,
-    },
-    Row {
-        title: "Newly Released Anime",
-        kind: Kind::Anime,
-        sort: Sort::Recent,
-        genre: None,
-    },
-    Row {
-        title: "Most Watched Films",
-        kind: Kind::Movie,
-        sort: Sort::Popularity,
-        genre: None,
-    },
-    Row {
-        title: "New Series",
-        kind: Kind::Series,
-        sort: Sort::Recent,
-        genre: None,
-    },
-    Row {
-        title: "Top Rated Anime",
-        kind: Kind::Anime,
-        sort: Sort::Score,
-        genre: None,
-    },
-    Row {
-        title: "Action Films",
-        kind: Kind::Movie,
-        sort: Sort::Popularity,
-        genre: Some("Action"),
-    },
-    Row {
-        title: "Drama Series",
-        kind: Kind::Series,
-        sort: Sort::Score,
-        genre: Some("Drama"),
-    },
-    Row {
-        title: "Romance Anime",
-        kind: Kind::Anime,
-        sort: Sort::Popularity,
-        genre: Some("Romance"),
-    },
-];
-
 fn error(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({ "error": message }))).into_response()
 }
@@ -132,23 +59,12 @@ fn cached<T: serde::Serialize>(policy: &'static str, body: T) -> Response {
     ([(header::CACHE_CONTROL, policy)], Json(body)).into_response()
 }
 
-fn parse_sort(text: &str) -> Option<Sort> {
-    [
-        Sort::Trending,
-        Sort::Popularity,
-        Sort::Score,
-        Sort::Recent,
-        Sort::Title,
-    ]
-    .into_iter()
-    .find(|sort| sort.as_str() == text)
-}
-
 pub fn router(state: AppState) -> Router {
     // JSON is compressed. The video routes are not: compressing a range response would break its
     // length, and video does not compress anyway.
     let api = Router::new()
         .route("/health", get(health))
+        .route("/v1/screens", get(screens))
         .route("/v1/home", get(home))
         .route("/v1/catalogue", get(catalogue))
         .route("/v1/search", get(search_route))
@@ -376,6 +292,18 @@ async fn health(State(state): State<AppState>) -> Response {
     .into_response()
 }
 
+/// The tabs, sorts, genres and home rows the apps draw, as the sources document says them.
+async fn screens(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> Response {
+    if !within_api_limit(&state, &headers, peer) {
+        return too_many();
+    }
+    cached(CATALOGUE_CACHE, akidev_core::sources::screens())
+}
+
 async fn home(
     State(state): State<AppState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -384,32 +312,33 @@ async fn home(
     if !within_api_limit(&state, &headers, peer) {
         return too_many();
     }
-    let featured = futures::future::join_all(Kind::ALL.map(|kind| async move {
+    let screens = akidev_core::sources::screens();
+    let featured = futures::future::join_all(screens.tabs.iter().map(|tab| async move {
         let filters = Filters {
             sort: Some(Sort::Trending),
             page: 1,
             per_page: 6,
             ..Default::default()
         };
-        providers::list(kind, &filters)
+        providers::list(tab.kind, &filters)
             .await
             .map(|page| page.results)
             .unwrap_or_default()
     }));
-    let rows = futures::future::join_all(ROWS.iter().map(|row| async move {
+    let rows = futures::future::join_all(screens.home.iter().map(|row| async move {
         let filters = Filters {
             sort: Some(row.sort),
-            genre: row.genre.map(str::to_string),
+            genre: row.genre.clone(),
             page: 1,
             per_page: PER_PAGE,
             ..Default::default()
         };
-        let items = providers::list(row.kind, &filters)
+        let items = providers::list_row(row.kind, row.provider.as_deref(), &filters)
             .await
             .map(|page| page.results)
             .unwrap_or_default();
         RowOut {
-            title: row.title,
+            title: row.title.clone(),
             kind: row.kind,
             items: media_list(&items),
         }
@@ -453,7 +382,7 @@ async fn catalogue(
         return too_many();
     }
     let kinds: Vec<Kind> = match query.kind.as_deref().unwrap_or("all") {
-        "all" => Kind::ALL.to_vec(),
+        "all" => akidev_core::sources::screens().kinds(),
         other => match Kind::parse(other) {
             Some(kind) => vec![kind],
             None => {
@@ -466,7 +395,7 @@ async fn catalogue(
     };
     let sort = match query.sort.as_deref() {
         None => Sort::Popularity,
-        Some(text) => match parse_sort(text) {
+        Some(text) => match Sort::parse(text) {
             Some(sort) => sort,
             None => {
                 return error(
@@ -532,7 +461,7 @@ async fn search_route(
         return error(StatusCode::BAD_REQUEST, "q must be 1 to 100 characters.");
     }
     let limit = query.limit.unwrap_or(SEARCH_MAX).clamp(1, SEARCH_MAX);
-    match search::search(term, &Kind::ALL, limit).await {
+    match search::search(term, &akidev_core::sources::screens().kinds(), limit).await {
         Ok(results) => cached(CATALOGUE_CACHE, json!({ "results": media_list(&results) })),
         Err(_) => error(StatusCode::BAD_GATEWAY, "No catalogue answered."),
     }
@@ -544,6 +473,10 @@ struct FallbackQuery {
     season: Option<String>,
     episode: Option<String>,
 }
+
+/// The header a request to the fallback search must carry. The `prowlarr` entry in the sources document
+/// sets it, so an app that predates the `fallback` flag and asks every search is turned away at once.
+pub const FALLBACK_HEADER: &str = "x-akidev-fallback";
 
 /// What Prowlarr finds for a title, in the shape an indexer definition reads. The apps ask it only
 /// when the other indexers found nothing worth opening, and say so with a header: an app that predates

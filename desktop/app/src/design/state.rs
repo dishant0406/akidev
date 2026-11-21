@@ -169,10 +169,5 @@ pub fn sentence(text: &str) -> String {
 }
 
 pub fn kind_label(kind: akidev_core::model::Kind) -> String {
-    use akidev_core::model::Kind;
-    spaced(match kind {
-        Kind::Anime => "Anime",
-        Kind::Series => "Series",
-        Kind::Movie => "Film",
-    })
+    spaced(kind.singular())
 }

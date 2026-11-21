@@ -82,12 +82,24 @@ const HEDGE: Duration = Duration::from_millis(1000);
 pub struct SearchOptions {
     pub kind: Kind,
     pub imdb_id: Option<String>,
-    /// A Kitsu episode id obtained through Anime Kitsu, with the same episode number.
-    pub kitsu_id: Option<String>,
-    /// Kitsu movies use `/stream/movie/<id>` and have no episode suffix.
-    pub kitsu_movie: bool,
+    /// The id of the title or episode in another service, found through a mapper, for the indexers
+    /// that are asked through it.
+    pub mapped: Option<Mapped>,
     pub season: Option<u32>,
     pub episode: Option<u32>,
+}
+
+/// An id found through a mapper (see `definition::MapperDef`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mapped {
+    /// The mapper that found it: `kitsu`.
+    pub mapper: String,
+    /// The kind of the title it was found for.
+    pub kind: Kind,
+    /// `kitsu:7442:1` for an episode, `kitsu:50192` for a film.
+    pub id: String,
+    /// A film is asked for on the film route and has no episode suffix.
+    pub movie: bool,
 }
 
 /// The indexers that serve this kind, in the order the definitions list them.
@@ -97,11 +109,6 @@ fn serving(indexers: &[IndexerDef], kind: Kind) -> Vec<&IndexerDef> {
         .filter(|indexer| indexer.kinds.contains(&kind))
         .collect()
 }
-
-/// Sent with every request to a fallback indexer. The server's fallback search answers only requests
-/// that have it, so an app that predates the `fallback` flag, and asks every search, is turned away
-/// at once and costs nothing.
-pub const FALLBACK_HEADER: &str = "x-akidev-fallback";
 
 /// The show title without the episode or season token: "Show 001" -> "Show",
 /// "Show S01" -> "Show".
@@ -173,8 +180,12 @@ pub fn check(def: &IndexerDef) -> anyhow::Result<()> {
         let sample = SearchOptions {
             kind,
             imdb_id: Some("tt1234567".into()),
-            kitsu_id: Some("kitsu:1:1".into()),
-            kitsu_movie: false,
+            mapped: def.mapper_id().map(|mapper| Mapped {
+                mapper: mapper.into(),
+                kind,
+                id: format!("{mapper}:1:1"),
+                movie: false,
+            }),
             season: Some(1),
             episode: Some(1),
         };
@@ -200,12 +211,15 @@ impl Request {
     /// needs (an indexer that works by IMDb id has nothing to ask without one).
     fn new(def: &IndexerDef, term: &str, options: &SearchOptions) -> Option<Request> {
         let imdb = imdb(options);
+        let mapper = def.mapper_id();
         let hole = |name: &str| match name {
             "term" => Some(term.to_string()).filter(|term| !term.is_empty()),
             "imdb" => imdb.clone(),
             "imdb_digits" => imdb.as_ref().map(|id| id[2..].to_string()),
-            "kitsu" => kitsu(options),
-            "kitsu_kind" => kitsu_kind(options),
+            name if mapper == Some(name) => mapped(def, options),
+            name if mapper.is_some_and(|mapper| name.strip_suffix("_kind") == Some(mapper)) => {
+                mapped_kind(def, options)
+            }
             // For an indexer that can look a title up by its id and otherwise by its name.
             "imdb_or_term" => imdb
                 .clone()
@@ -244,11 +258,19 @@ impl Request {
         })
     }
 
-    /// Identifies the request, so an identical one is answered from the cache.
+    /// Identifies the request, so an identical one is answered from the cache. How the answer is read
+    /// and the headers are part of it, so a plugin that is updated is not answered from what the old one found.
     fn key(&self, def: &IndexerDef) -> String {
         format!(
-            "{}:{:?}:{:?}:{}:{:?}:{:?}",
-            def.id, def.hosts, self.kind, self.path, self.query, self.json
+            "{}:{:?}:{:?}:{}:{:?}:{:?}:{:?}:{:?}",
+            def.id,
+            def.hosts,
+            self.kind,
+            self.path,
+            self.query,
+            self.json,
+            def.request.headers,
+            def.response
         )
     }
 }
@@ -262,40 +284,32 @@ fn imdb(options: &SearchOptions) -> Option<String> {
     id.is_match(&value).then_some(value)
 }
 
-/// A mapped Kitsu id is valid only for the exact requested episode, so an alias cannot
-/// select a different season or episode. Kitsu movies have no episode suffix.
-fn kitsu(options: &SearchOptions) -> Option<String> {
-    static EPISODE_ID: OnceLock<Regex> = OnceLock::new();
-    static MOVIE_ID: OnceLock<Regex> = OnceLock::new();
-    let value = options.kitsu_id.as_deref()?.to_lowercase();
-    if options.kitsu_movie {
-        let found = MOVIE_ID
-            .get_or_init(|| Regex::new(r"^kitsu:([1-9][0-9]*)$").unwrap())
-            .captures(&value)?;
-        return (options.kind == Kind::Anime
-            && options.episode == Some(1)
-            && found[1].parse::<u32>().ok()? > 0)
-            .then_some(value);
+/// A mapped id is valid only for the exact requested episode, so an alias cannot select a different
+/// season or episode. A mapped film has no episode suffix. The ids look like `<mapper>:<title>:<episode>`.
+fn mapped(def: &IndexerDef, options: &SearchOptions) -> Option<String> {
+    let mapper = def.mapper_id()?;
+    let found = options
+        .mapped
+        .as_ref()
+        .filter(|found| found.mapper == mapper && found.kind == options.kind)?;
+    let value = found.id.to_lowercase();
+    let front = regex::escape(mapper);
+    if found.movie {
+        let id = Regex::new(&format!("^{front}:([1-9][0-9]*)$")).ok()?;
+        let title = id.captures(&value)?[1].parse::<u32>().ok()?;
+        return (options.episode == Some(1) && title > 0).then_some(value);
     }
-    let found = EPISODE_ID
-        .get_or_init(|| Regex::new(r"^kitsu:([1-9][0-9]*):([1-9][0-9]*)$").unwrap())
-        .captures(&value)?;
-    (options.kind == Kind::Anime
-        && found[1].parse::<u32>().ok()? > 0
-        && found[2].parse::<u32>().ok()? == options.episode?)
+    let id = Regex::new(&format!("^{front}:([1-9][0-9]*):([1-9][0-9]*)$")).ok()?;
+    let found = id.captures(&value)?;
+    (found[1].parse::<u32>().ok()? > 0 && found[2].parse::<u32>().ok()? == options.episode?)
         .then_some(value)
 }
 
-fn kitsu_kind(options: &SearchOptions) -> Option<String> {
-    kitsu(options)?;
-    Some(
-        if options.kitsu_movie {
-            "movie"
-        } else {
-            "series"
-        }
-        .into(),
-    )
+/// The route a mapped id is asked on: films have their own.
+fn mapped_kind(def: &IndexerDef, options: &SearchOptions) -> Option<String> {
+    mapped(def, options)?;
+    let movie = options.mapped.as_ref()?.movie;
+    Some(if movie { "movie" } else { "series" }.into())
 }
 
 /// A host that just failed is not asked again for every search term: a search fans out over
@@ -399,13 +413,17 @@ async fn ask(
         .map_err(|_| LocalCongestion)?;
     sent.store(true, std::sync::atomic::Ordering::SeqCst);
     let url = format!("{host}{}", request.path);
+    anyhow::ensure!(
+        crate::http::stays_on(host, &url),
+        "the request would leave its host"
+    );
     let builder = match def.request.method {
         Method::Get => client().get(url),
         Method::Post => client().post(url),
     };
     let mut builder = builder.query(&request.query);
-    if def.fallback {
-        builder = builder.header(FALLBACK_HEADER, "1");
+    for (name, value) in &def.request.headers {
+        builder = builder.header(name, value);
     }
     if let Some(body) = &request.json {
         builder = builder.json(body);
@@ -463,9 +481,6 @@ async fn search_one_report(
     let Some(request) = Request::new(def, term, options) else {
         return Ok(QueryAnswer::new(Vec::new(), RequestOutcome::Skipped));
     };
-    if options.kind == Kind::Anime && def.anime_kitsu && kitsu(options).is_none() {
-        return Ok(QueryAnswer::new(Vec::new(), RequestOutcome::Skipped));
-    }
     let key = format!(
         "indexers-v4:{}:{}:{term:?}:{trackers:?}",
         sources::current().version,
@@ -480,8 +495,6 @@ async fn search_one_report(
     let coalesced = slot.is_none();
     if let Some(slot) = slot {
         let (def, term, trackers) = (def.clone(), term.to_string(), trackers.to_vec());
-        let options = options.clone();
-        let anime_kitsu = options.kind == Kind::Anime && def.anime_kitsu;
         let flight = flight.clone();
         tokio::spawn(async move {
             let _slot = slot;
@@ -491,9 +504,6 @@ async fn search_one_report(
                 |answer: &QueryAnswer| list_ttl(TTL)(&answer.rows),
                 || async {
                     loaded.store(true, std::sync::atomic::Ordering::Relaxed);
-                    if anime_kitsu && kitsu(&options).is_none() {
-                        return Err(RequestOutcome::Skipped.into());
-                    }
                     // Cooldown only guards network misses, never valid cached answers.
                     let hosts: Vec<&String> =
                         def.hosts.iter().filter(|host| usable(host)).collect();
@@ -1191,8 +1201,7 @@ pub(crate) mod tests {
         SearchOptions {
             kind,
             imdb_id: Some("tt0903747".into()),
-            kitsu_id: None,
-            kitsu_movie: false,
+            mapped: None,
             season: Some(1),
             episode: Some(5),
         }
@@ -1223,7 +1232,7 @@ pub(crate) mod tests {
     fn local_indexer(id: &str, base: &str, path: &str, fallback: bool) -> IndexerDef {
         serde_json::from_value(json!({
             "id": id, "name": id, "kinds": ["series"], "hosts": [base], "fallback": fallback,
-            "request": { "path": path },
+            "request": { "path": path, "headers": if fallback { json!({ "x-marker": "1" }) } else { json!({}) } },
             "response": { "format": "json", "rows": "items",
                           "fields": { "title": "title", "hash": "hash" } }
         }))
@@ -1255,7 +1264,7 @@ pub(crate) mod tests {
             .route(
                 "/marked",
                 get(|headers: axum::http::HeaderMap| async move {
-                    if headers.contains_key(FALLBACK_HEADER) {
+                    if headers.contains_key("x-marker") {
                         Ok(json!({ "items": [{ "title": "Show S01E01", "hash": "b".repeat(40) }] })
                             .to_string())
                     } else {
@@ -1716,15 +1725,57 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn only_a_fallback_indexer_is_marked_as_one() {
+    async fn a_request_carries_the_headers_its_definition_names() {
         let _guard = NETWORK_TEST.lock().await;
         let (base, _) = local_server().await;
 
-        // The marked request is answered; the same address asked as an ordinary indexer is refused.
+        // The request with the header is answered; the same address asked without it is refused.
         let found = run_search(&[local_indexer("later", &base, "/marked", true)]).await;
         assert_eq!(found.len(), 1);
         let found = run_search(&[local_indexer("plain", &base, "/marked", false)]).await;
         assert!(found.is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_indexer_from_a_plugin_is_chosen_and_asked_like_a_built_in_one() {
+        let _definitions = sources::definitions_change_lock().lock().await;
+        let _guard = NETWORK_TEST.lock().await;
+        let (base, _) = local_server().await;
+        // Built straight from JSON, which skips the https rule a stand-in on this machine could not meet.
+        let plugin: crate::plugin::Plugin = serde_json::from_value(json!({
+            "plugin": 1, "id": "stand-in", "name": "Stand-in", "version": 1,
+            "indexers": [{
+                "id": "plugin-torrents", "name": "Plugin", "kinds": ["series"], "hosts": [base],
+                "request": { "path": "/one" },
+                "response": { "format": "json", "rows": "items",
+                              "fields": { "title": "title", "hash": "hash" } }
+            }]
+        }))
+        .unwrap();
+        assert!(sources::use_plugins(&[plugin]).iter().all(Result::is_ok));
+
+        let current = sources::current();
+        let chosen = serving(&current.indexers, Kind::Series);
+        let ours: Vec<&IndexerDef> = chosen
+            .iter()
+            .copied()
+            .filter(|def| def.id == "plugin-torrents")
+            .collect();
+        let found = search_in(
+            &current,
+            &ours,
+            &Config::default(),
+            &strings(&["Show S01E01"]),
+            &options(Kind::Series),
+            |found| !found.is_empty(),
+        )
+        .await
+        .releases;
+        sources::use_plugins(&[]);
+
+        assert_eq!(ours.len(), 1, "the search plan does not include the plugin");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].source, "plugin-torrents");
     }
 
     #[tokio::test]
@@ -1737,6 +1788,23 @@ pub(crate) mod tests {
         ])
         .await;
         assert!(found.is_empty());
+    }
+
+    #[test]
+    fn an_indexer_that_reads_its_answer_differently_does_not_share_cached_answers() {
+        let opts = options(Kind::Series);
+        let old = local_indexer("plugin", "https://torrents.example.com", "/search", false);
+        let mut new = old.clone();
+        new.response.fields.title = serde_json::from_value(json!("name")).unwrap();
+        let mut keyed = old.clone();
+        keyed
+            .request
+            .headers
+            .insert("x-key".into(), "secret".into());
+        let key = |def: &IndexerDef| Request::new(def, "Show", &opts).unwrap().key(def);
+        assert_ne!(key(&old), key(&new));
+        assert_ne!(key(&old), key(&keyed));
+        assert_eq!(key(&old), key(&old.clone()));
     }
 
     #[test]
@@ -1941,14 +2009,24 @@ pub(crate) mod tests {
         );
     }
 
+    fn kitsu_id(id: &str, movie: bool) -> Option<Mapped> {
+        Some(Mapped {
+            mapper: "kitsu".into(),
+            kind: Kind::Anime,
+            id: id.into(),
+            movie,
+        })
+    }
+
     #[test]
     fn a_mapped_anime_kitsu_episode_is_asked_by_its_exact_id() {
-        let mut mapped = options(Kind::Anime);
-        mapped.kitsu_id = Some("kitsu:7442:1".into());
-        mapped.episode = Some(1);
-        let built = request("torrentio", "", &mapped).unwrap();
+        let torrentio = definitions().indexer("torrentio").unwrap().clone();
+        let mut opts = options(Kind::Anime);
+        opts.mapped = kitsu_id("kitsu:7442:1", false);
+        opts.episode = Some(1);
+        let built = request("torrentio", "", &opts).unwrap();
         assert_eq!(built.path, "/stream/series/kitsu:7442:1.json");
-        assert_eq!(kitsu(&mapped).as_deref(), Some("kitsu:7442:1"));
+        assert_eq!(mapped(&torrentio, &opts).as_deref(), Some("kitsu:7442:1"));
         for bad in [
             "kitsu:7442:2",
             "kitsu:7442:1:2",
@@ -1962,25 +2040,33 @@ pub(crate) mod tests {
             "kitsu:nope:1",
             "https://localhost",
         ] {
-            mapped.kitsu_id = Some(bad.into());
-            assert!(
-                request("torrentio", "", &mapped).is_none(),
-                "{bad} was sent"
-            );
+            opts.mapped = kitsu_id(bad, false);
+            assert!(request("torrentio", "", &opts).is_none(), "{bad} was sent");
         }
-        mapped.kitsu_id = None;
-        assert!(request("torrentio", "", &mapped).is_none());
+        opts.mapped = None;
+        assert!(request("torrentio", "", &opts).is_none());
+        // Found for another kind, or by another mapper, is no mapping for this search.
+        opts.mapped = Some(Mapped {
+            kind: Kind::Series,
+            ..kitsu_id("kitsu:7442:1", false).unwrap()
+        });
+        assert!(request("torrentio", "", &opts).is_none());
+        opts.mapped = Some(Mapped {
+            mapper: "other".into(),
+            ..kitsu_id("kitsu:7442:1", false).unwrap()
+        });
+        assert!(request("torrentio", "", &opts).is_none());
     }
 
     #[test]
     fn a_mapped_anime_movie_uses_the_movie_route_without_an_episode_suffix() {
-        let mut mapped = options(Kind::Anime);
-        mapped.kitsu_id = Some("kitsu:50192".into());
-        mapped.kitsu_movie = true;
-        mapped.episode = Some(1);
-        let built = request("torrentio", "", &mapped).unwrap();
+        let torrentio = definitions().indexer("torrentio").unwrap().clone();
+        let mut opts = options(Kind::Anime);
+        opts.mapped = kitsu_id("kitsu:50192", true);
+        opts.episode = Some(1);
+        let built = request("torrentio", "", &opts).unwrap();
         assert_eq!(built.path, "/stream/movie/kitsu:50192.json");
-        assert_eq!(kitsu_kind(&mapped), Some("movie".into()));
+        assert_eq!(mapped_kind(&torrentio, &opts), Some("movie".into()));
         for bad in [
             "kitsu:50192:1",
             "kitsu:50192:1:2",
@@ -1991,15 +2077,26 @@ pub(crate) mod tests {
             "kitsu:nope",
             "https://localhost",
         ] {
-            mapped.kitsu_id = Some(bad.into());
-            assert!(
-                request("torrentio", "", &mapped).is_none(),
-                "{bad} was sent"
-            );
+            opts.mapped = kitsu_id(bad, true);
+            assert!(request("torrentio", "", &opts).is_none(), "{bad} was sent");
         }
-        mapped.kitsu_id = Some("kitsu:50192".into());
-        mapped.episode = Some(2);
-        assert!(request("torrentio", "", &mapped).is_none());
+        opts.mapped = kitsu_id("kitsu:50192", true);
+        opts.episode = Some(2);
+        assert!(request("torrentio", "", &opts).is_none());
+    }
+
+    #[test]
+    fn an_indexer_asked_through_a_mapper_has_its_hole_in_the_path_the_query_or_the_body() {
+        let mut def = definitions().indexer("torrentio").unwrap().clone();
+        assert!(def.request_uses("kitsu"));
+        assert!(!def.request_uses("nothing"));
+        def.request.path = json!("/search");
+        assert!(!def.request_uses("kitsu"));
+        def.request.query.insert("id".into(), json!("{kitsu}"));
+        assert!(def.request_uses("kitsu"));
+        def.request.query.clear();
+        def.request.json = Some(json!({ "id": "{kitsu}" }));
+        assert!(def.request_uses("kitsu"));
     }
 
     #[tokio::test]

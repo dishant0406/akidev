@@ -563,16 +563,13 @@ fn catalogue_acronyms(title: &str) -> Vec<String> {
 }
 
 // Torrentio appends a filename to its show label. Only catalogue-derived
-// acronyms with an immediate episode/metadata anchor or the bounded structured
-// hint fixture form are accepted, never arbitrary subtitles before SxxExx.
+// acronyms with an immediate episode/metadata anchor are accepted, never
+// arbitrary subtitles before SxxExx.
 fn structured_identity_tail(tail: &str, title: &str) -> bool {
-    static HINT: LazyLock<Regex> =
-        LazyLock::new(|| pattern(r"^hinted s\d{1,2}e\d{1,4} (?:mkv|mp4)$"));
-    HINT.is_match(tail)
-        || catalogue_acronyms(title).iter().any(|acronym| {
-            tail.strip_prefix(acronym)
-                .is_some_and(|rest| rest.starts_with(' ') && identity_tail(rest.trim_start()))
-        })
+    catalogue_acronyms(title).iter().any(|acronym| {
+        tail.strip_prefix(acronym)
+            .is_some_and(|rest| rest.starts_with(' ') && identity_tail(rest.trim_start()))
+    })
 }
 
 // A title prefix alone is not identity: the next token must introduce release
@@ -1493,7 +1490,7 @@ pub fn pick_video_file_for_release<'a>(
             pattern(
                 // Every token must be a known label or technical metadata. A numeric
                 // prefix alone cannot establish identity for "01 Other Show".
-                r"(?i)^(?:\d{1,4}(?:v\d+)?|(?:hinted\s+)?s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|tamil|telugu|proper|repack))*$",
+                r"(?i)^(?:\d{1,4}(?:v\d+)?|s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|tamil|telugu|proper|repack))*$",
             )
         });
         GENERIC.is_match(&text)
@@ -1697,7 +1694,6 @@ mod tests {
             "Fan Letter S01E01.mkv",
             "Shippuden S01E01.mkv",
             "Other Show S01E01.mkv",
-            "hinted Other Show S01E01.mkv",
             "IGL Other Show EP 01.mp4",
         ] {
             assert!(!is_relevant(&format!("Show {tail}"), "Show"), "{tail}");

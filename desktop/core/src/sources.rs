@@ -7,8 +7,10 @@
 //! otherwise the app keeps what it has. Nothing here runs downloaded code: a definition only
 //! says which requests to make and which fields to read.
 
-use crate::definition::{IndexerDef, ProviderDef, SubtitleDef};
+use crate::definition::{IndexerDef, MapperDef, ProviderDef, SubtitleDef};
 use crate::model::Kind;
+use crate::plugin::Plugin;
+use crate::screens::Screens;
 use anyhow::{Context, ensure};
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
@@ -16,9 +18,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, OnceLock, RwLock};
 
-/// The version of the definition format this build understands. A document with another
-/// number is ignored, so an old app is never fed definitions it would misread.
-pub const SCHEMA: u64 = 1;
+/// The newest version of the definition format this build understands. It reads that and the ones
+/// before it. A document with a higher number is ignored, so a build is never fed definitions it would
+/// misread. An app that knows only schema 1 refuses a document of schema 2, which is why the two are
+/// published as two feeds (see `refresh`).
+pub const SCHEMA: u64 = 2;
+
+/// Where the schema 2 document is, under the feed: the same files as the schema 1 feed, in `v2/`.
+const FEED_V2: &str = "v2";
 
 /// Where the signed document is published.
 const FEED_URL: &str = "https://sources.akidev.live";
@@ -28,7 +35,6 @@ const FEED_URL: &str = "https://sources.akidev.live";
 const PUBLIC_KEY: &str = "e0776a868d11f70f94e6aaee3a28205cdc15002c246e97811b3100c4d4a04bbe";
 
 const EMBEDDED: &str = include_str!("../../sources/sources.json");
-const ANIME_KITSU: &str = include_str!("../../sources/anime_kitsu.json");
 
 /// A document is a few tens of kilobytes; anything much larger is not one.
 const MAX_BYTES: usize = 1 << 20;
@@ -45,11 +51,18 @@ pub struct Sources {
     pub trackers: Vec<String>,
     pub indexers: Vec<IndexerDef>,
     pub providers: Vec<ProviderDef>,
+    /// Where the ids an indexer wants are found. Absent in a document from before there were any: the
+    /// built-in ones are used.
+    #[serde(default)]
+    pub mappers: Vec<MapperDef>,
     /// Where subtitle files come from. Absent in a document from before there were any.
     #[serde(default)]
     pub subtitles: Vec<SubtitleDef>,
     /// Which providers answer for each kind, in order.
     pub chains: BTreeMap<Kind, Vec<String>>,
+    /// What the screens show. Absent in a document from before there were any: the built-in ones are used.
+    #[serde(default)]
+    pub screens: Option<Screens>,
     /// The oldest version of the app that may run (`0.1.17`). An older one shows an update screen and
     /// nothing else. Absent: any version may.
     #[serde(default)]
@@ -60,12 +73,39 @@ pub struct Sources {
 }
 
 impl Sources {
+    /// The document's screens, or the built-in ones when it predates them.
+    pub(crate) fn screens_or_built_in(&self) -> Screens {
+        self.screens.clone().unwrap_or_else(|| {
+            built_in()
+                .screens
+                .clone()
+                .expect("the embedded definitions have screens")
+        })
+    }
+
+    /// A mapper by id: the document's own, or the built-in one when the document predates them.
+    pub fn mapper(&self, id: &str) -> Option<&MapperDef> {
+        // The built-in document is only read when this one lacks the mapper, which also keeps the
+        // built-in document from being read while it is itself being checked.
+        self.mappers
+            .iter()
+            .find(|mapper| mapper.id == id)
+            .or_else(|| built_in().mappers.iter().find(|mapper| mapper.id == id))
+    }
+
     pub fn indexer(&self, id: &str) -> Option<&IndexerDef> {
         self.indexers.iter().find(|indexer| indexer.id == id)
     }
 
     pub fn provider(&self, id: &str) -> Option<&ProviderDef> {
         self.providers.iter().find(|provider| provider.id == id)
+    }
+
+    /// The hosts the providers keep their pictures on.
+    pub fn image_hosts(&self) -> impl Iterator<Item = &str> {
+        self.providers
+            .iter()
+            .flat_map(|provider| provider.image_hosts.iter().map(String::as_str))
     }
 
     pub fn chain(&self, kind: Kind) -> &[String] {
@@ -77,10 +117,10 @@ impl Sources {
 
     /// Rejects a document that parses but would break a search: the cheapest place to
     /// notice a typo is before it is installed.
-    fn validate(&self) -> anyhow::Result<()> {
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
         ensure!(
-            self.schema == SCHEMA,
-            "definitions use format {}, this app reads {SCHEMA}",
+            (1..=SCHEMA).contains(&self.schema),
+            "definitions use format {}, this app reads up to {SCHEMA}",
             self.schema
         );
         // A version near the top of the range could never be replaced.
@@ -105,6 +145,31 @@ impl Sources {
             indexer
                 .check()
                 .with_context(|| format!("indexer {}", indexer.id))?;
+        }
+        ensure!(self.mappers.len() <= 8, "too many mappers");
+        for (index, mapper) in self.mappers.iter().enumerate() {
+            ensure!(
+                self.mappers[..index]
+                    .iter()
+                    .all(|other| other.id != mapper.id),
+                "mapper {} appears twice",
+                mapper.id
+            );
+            mapper
+                .check()
+                .with_context(|| format!("mapper {}", mapper.id))?;
+        }
+        for indexer in &self.indexers {
+            if let Some(id) = indexer.mapper_id() {
+                ensure!(
+                    self.mapper(id).is_some_and(|mapper| indexer
+                        .kinds
+                        .iter()
+                        .any(|kind| mapper.kinds.contains(kind))),
+                    "indexer {} is asked through a mapper {id} that is not there or maps none of its kinds",
+                    indexer.id
+                );
+            }
         }
         for (index, provider) in self.providers.iter().enumerate() {
             ensure!(
@@ -144,7 +209,21 @@ impl Sources {
                 .check()
                 .with_context(|| format!("subtitle source {}", source.id))?;
         }
-        for kind in Kind::ALL {
+        if let Some(screens) = &self.screens {
+            screens.check().context("the screens")?;
+            for row in &screens.home {
+                if let Some(id) = &row.provider {
+                    ensure!(
+                        self.provider(id)
+                            .is_some_and(|provider| provider.kinds.contains(&row.kind)),
+                        "the row {:?} names a provider that does not serve {}",
+                        row.title,
+                        row.kind.as_str()
+                    );
+                }
+            }
+        }
+        for kind in Kind::BUILT_IN {
             let chain = self.chain(kind);
             ensure!(
                 (1..=8).contains(&chain.len()),
@@ -175,10 +254,6 @@ impl Sources {
         }
         Ok(())
     }
-}
-
-pub fn anime_kitsu() -> ProviderDef {
-    serde_json::from_str(ANIME_KITSU).expect("the bundled Anime Kitsu definition is valid")
 }
 
 /// Parses and validates a document. Used for the embedded copy, a downloaded one and the
@@ -226,27 +301,116 @@ fn verify_with(key_hex: &str, bytes: &[u8], signature_hex: &str) -> anyhow::Resu
         .map_err(|_| anyhow::anyhow!("the signature does not match"))
 }
 
-fn in_use() -> &'static RwLock<Arc<Sources>> {
-    static IN_USE: OnceLock<RwLock<Arc<Sources>>> = OnceLock::new();
+/// What is in use: the document (built in, or downloaded and newer), the plugins switched on, and the
+/// two put together, which is what a search reads.
+struct InUse {
+    document: Arc<Sources>,
+    plugins: Vec<Plugin>,
+    merged: Arc<Sources>,
+}
+
+fn in_use() -> &'static RwLock<InUse> {
+    static IN_USE: OnceLock<RwLock<InUse>> = OnceLock::new();
     IN_USE.get_or_init(|| {
-        RwLock::new(Arc::new(
-            parse(EMBEDDED.as_bytes()).expect("the embedded definitions are valid"),
-        ))
+        let document =
+            Arc::new(parse(EMBEDDED.as_bytes()).expect("the embedded definitions are valid"));
+        RwLock::new(InUse {
+            merged: document.clone(),
+            document,
+            plugins: Vec::new(),
+        })
     })
+}
+
+/// The document with the plugins added, each in turn. A plugin that cannot be added (it clashes with
+/// a source that is there) is left out, and its problem is the answer for it.
+fn put_together(
+    document: &Arc<Sources>,
+    plugins: &[Plugin],
+) -> (Arc<Sources>, Vec<Plugin>, Vec<Result<(), String>>) {
+    let mut merged = (**document).clone();
+    let mut kept = Vec::new();
+    let mut results = Vec::new();
+    for plugin in plugins {
+        match crate::plugin::merge(&merged, plugin) {
+            Ok(next) => {
+                merged = next;
+                kept.push(plugin.clone());
+                results.push(Ok(()));
+            }
+            Err(error) => results.push(Err(format!("{error:#}"))),
+        }
+    }
+    (Arc::new(merged), kept, results)
+}
+
+/// Held while the sources in use are changed, so two changes do not build on the same old state. The
+/// work of putting them together is done under this and not under the lock that every search reads
+/// through, which is only taken to swap the result in.
+fn changing() -> std::sync::MutexGuard<'static, ()> {
+    static CHANGING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    CHANGING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Puts these plugins to use in place of the ones that were. Gives, for each, whether it could be.
+pub(crate) fn use_plugins(plugins: &[Plugin]) -> Vec<Result<(), String>> {
+    let _changing = changing();
+    let document = in_use().read().unwrap().document.clone();
+    let (merged, kept, results) = put_together(&document, plugins);
+    let mut slot = in_use().write().unwrap();
+    slot.merged = merged;
+    slot.plugins = kept;
+    results
+}
+
+/// The document built into this build.
+fn built_in() -> &'static Sources {
+    static BUILT_IN: OnceLock<Sources> = OnceLock::new();
+    BUILT_IN.get_or_init(|| parse(EMBEDDED.as_bytes()).expect("the embedded definitions are valid"))
+}
+
+/// The screens in use: the document's own, or the built-in ones when it predates them.
+pub fn screens() -> Screens {
+    current().screens_or_built_in()
+}
+
+/// The hosts a picture may come from: those the document in use names, and those the built-in one
+/// names. A document published before the providers named any must not leave the site with no pictures.
+pub fn image_hosts() -> Vec<String> {
+    let current = current();
+    current
+        .image_hosts()
+        .chain(built_in().image_hosts())
+        .map(str::to_string)
+        .collect()
 }
 
 /// The definitions in use right now.
 pub fn current() -> Arc<Sources> {
-    in_use().read().unwrap().clone()
+    in_use().read().unwrap().merged.clone()
 }
 
 /// Makes a downloaded document the one in use, if it is newer. Returns whether it was.
 fn adopt(sources: Sources) -> bool {
-    let mut slot = in_use().write().unwrap();
-    if sources.version <= slot.version {
+    let _changing = changing();
+    let (document, plugins) = {
+        let slot = in_use().read().unwrap();
+        (slot.document.clone(), slot.plugins.clone())
+    };
+    if !newer(&sources, &document) {
         return false;
     }
-    *slot = Arc::new(sources);
+    let document = Arc::new(sources);
+    let (merged, kept, results) = put_together(&document, &plugins);
+    for problem in results.iter().filter_map(|result| result.as_ref().err()) {
+        tracing::warn!("[sources] a plugin no longer fits the new document: {problem}");
+    }
+    let mut slot = in_use().write().unwrap();
+    slot.document = document;
+    slot.merged = merged;
+    slot.plugins = kept;
     true
 }
 
@@ -337,7 +501,16 @@ pub async fn refresh(dir: &Path) -> anyhow::Result<u64> {
     refresh_from(FEED_URL, PUBLIC_KEY, dir).await
 }
 
-async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> {
+/// Whether `candidate` should replace `in_use`: a higher version, or the same version in a newer schema (the
+/// two feeds carry one version number, and a build that could only reach the schema 1 feed for a while
+/// should move to schema 2 when it can).
+fn newer(candidate: &Sources, in_use: &Sources) -> bool {
+    candidate.version > in_use.version
+        || (candidate.version == in_use.version && candidate.schema > in_use.schema)
+}
+
+/// The document of one feed, the signature checked and the document read.
+async fn fetch_signed(feed: &str, key: &str) -> anyhow::Result<(Vec<u8>, String, Sources)> {
     let client = crate::http::client();
     let fetch = |name: &'static str| async move {
         let response = client
@@ -349,13 +522,48 @@ async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> 
     };
     let (document, signature) =
         futures::future::try_join(fetch(DOCUMENT), fetch(SIGNATURE)).await?;
-    let signature = std::str::from_utf8(&signature).context("the signature is not text")?;
-    verify_with(key, &document, signature)?;
+    let signature = std::str::from_utf8(&signature)
+        .context("the signature is not text")?
+        .to_string();
+    verify_with(key, &document, &signature)?;
     let sources = parse(&document)?;
+    Ok((document, signature, sources))
+}
+
+/// Looks first in the schema 2 feed, which only builds that know schema 2 read, and in the schema 1 feed
+/// when there is nothing newer there: nothing at all, or something that is not genuine, not readable or not
+/// newer than what is in use. Both are signed by the same key and published with one version number.
+async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> {
+    let in_use = current();
+    let (document, signature, sources) = match fetch_signed(&format!("{feed}/{FEED_V2}"), key).await
+    {
+        Ok(found) if newer(&found.2, &in_use) => found,
+        // A genuine schema 2 document that is not newer: the schema 1 feed may still be.
+        Ok(_) => match fetch_signed(feed, key).await {
+            Ok(found) if newer(&found.2, &in_use) => found,
+            _ => return Ok(in_use.version),
+        },
+        Err(error) => {
+            // No schema 2 feed yet is the usual case (404). Anything else is worth a line in the log.
+            let missing = error
+                .downcast_ref::<reqwest::Error>()
+                .and_then(reqwest::Error::status)
+                == Some(reqwest::StatusCode::NOT_FOUND);
+            if missing {
+                tracing::debug!("[sources] no schema 2 feed: using schema 1");
+            } else {
+                tracing::warn!(
+                    "[sources] the schema 2 feed is not usable ({error:#}): using schema 1"
+                );
+            }
+            let found = fetch_signed(feed, key).await?;
+            if !newer(&found.2, &in_use) {
+                return Ok(in_use.version);
+            }
+            found
+        }
+    };
     let version = sources.version;
-    if version <= current().version {
-        return Ok(current().version);
-    }
     // Saved before it is used, so what is in use is always what the next run will find.
     std::fs::create_dir_all(dir)?;
     save(&dir.join(DOCUMENT), &document)?;
@@ -393,8 +601,8 @@ mod tests {
     #[test]
     fn the_embedded_definitions_are_valid_and_complete() {
         let sources = parse(EMBEDDED.as_bytes()).unwrap();
-        assert_eq!(sources.indexers.len(), 16);
-        assert_eq!(sources.providers.len(), 4);
+        assert!(!sources.indexers.is_empty());
+        assert!(!sources.providers.is_empty());
         assert!(!sources.trackers.is_empty());
         let mut older = embedded_json();
         older["indexers"][5]
@@ -406,14 +614,21 @@ mod tests {
             .unwrap()
             .remove("file_idx");
         assert!(parse(&serde_json::to_vec(&older).unwrap()).is_ok());
-        assert!(anime_kitsu().base_url.starts_with("https://"));
+        assert!(
+            sources
+                .mapper("kitsu")
+                .unwrap()
+                .provider
+                .base_url
+                .starts_with("https://")
+        );
         assert!(
             sources
                 .providers
                 .iter()
                 .all(|provider| provider.id != "anime-kitsu")
         );
-        for kind in Kind::ALL {
+        for kind in Kind::BUILT_IN {
             assert!(!sources.chain(kind).is_empty());
         }
         // The public key is a real one and not a placeholder.
@@ -424,11 +639,213 @@ mod tests {
     }
 
     #[test]
+    fn the_embedded_providers_name_the_image_hosts_the_server_always_allowed() {
+        let sources = parse(EMBEDDED.as_bytes()).unwrap();
+        let mut hosts: Vec<&str> = sources.image_hosts().collect();
+        hosts.sort_unstable();
+        assert_eq!(
+            hosts,
+            [
+                "anilist.co",
+                "kitsu.app",
+                "media-amazon.com",
+                "metahub.space",
+                "tmdb.org",
+                "tvmaze.com",
+                "yts.gg",
+                "yts.mx",
+            ]
+        );
+        let with_a_path = changed(|d| d["providers"][0]["image_hosts"] = json!(["anilist.co/a"]));
+        assert!(parse(&with_a_path).is_err());
+    }
+
+    #[test]
+    fn the_embedded_screens_are_what_the_apps_have_always_shown() {
+        let screens = parse(EMBEDDED.as_bytes()).unwrap().screens.unwrap();
+        let tabs: Vec<_> = screens
+            .tabs
+            .iter()
+            .map(|tab| (tab.kind, tab.slug.as_str(), tab.label.as_str()))
+            .collect();
+        assert_eq!(
+            tabs,
+            [
+                (Kind::Anime, "anime", "Anime"),
+                (Kind::Series, "series", "Series"),
+                (Kind::Movie, "films", "Films"),
+            ]
+        );
+        let sorts: Vec<_> = screens
+            .sorts
+            .iter()
+            .map(|option| (option.sort.as_str(), option.label.as_str()))
+            .collect();
+        assert_eq!(
+            sorts,
+            [
+                ("popularity", "Popular"),
+                ("trending", "Trending"),
+                ("score", "Top rated"),
+                ("recent", "Newest"),
+                ("title", "A–Z"),
+            ]
+        );
+        let rows: Vec<_> = screens
+            .home
+            .iter()
+            .map(|row| {
+                (
+                    row.title.as_str(),
+                    row.kind,
+                    row.sort.as_str(),
+                    row.genre.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("Trending Anime", Kind::Anime, "trending", None),
+                ("New Releases", Kind::Movie, "recent", None),
+                ("Popular Series", Kind::Series, "popularity", None),
+                ("Newly Released Anime", Kind::Anime, "recent", None),
+                ("Most Watched Films", Kind::Movie, "popularity", None),
+                ("New Series", Kind::Series, "recent", None),
+                ("Top Rated Anime", Kind::Anime, "score", None),
+                ("Action Films", Kind::Movie, "popularity", Some("Action")),
+                ("Drama Series", Kind::Series, "score", Some("Drama")),
+                ("Romance Anime", Kind::Anime, "popularity", Some("Romance")),
+            ]
+        );
+        assert_eq!(screens.genres(Some(Kind::Anime)).len(), 18);
+        assert_eq!(screens.genres(Some(Kind::Anime))[7], "Mahou Shoujo");
+        assert_eq!(
+            screens.genres(Some(Kind::Series)),
+            screens.genres(Some(Kind::Movie))
+        );
+        assert_eq!(screens.genres(Some(Kind::Movie)).len(), 19);
+        assert_eq!(screens.genres(None).len(), 10);
+    }
+
+    #[test]
+    fn a_document_from_before_image_hosts_leaves_the_built_in_hosts_allowed() {
+        let older = changed(|d| {
+            for provider in d["providers"].as_array_mut().unwrap() {
+                provider.as_object_mut().unwrap().remove("image_hosts");
+            }
+        });
+        let older = parse(&older).unwrap();
+        assert_eq!(older.image_hosts().count(), 0);
+        // What is in use is the built-in document here, so the union is its hosts.
+        assert!(image_hosts().iter().any(|host| host == "anilist.co"));
+        assert!(image_hosts().iter().any(|host| host == "metahub.space"));
+    }
+
+    #[test]
+    fn a_document_from_before_mappers_still_finds_the_built_in_one_for_an_indexer_that_asks_for_it()
+    {
+        let older = changed(|d| {
+            let document = d.as_object_mut().unwrap();
+            document.remove("mappers");
+            for indexer in document["indexers"].as_array_mut().unwrap() {
+                // The way a document said it before `map` existed.
+                if indexer.as_object_mut().unwrap().remove("map").is_some() {
+                    indexer["anime_kitsu"] = json!(true);
+                }
+            }
+        });
+        let older = parse(&older).unwrap();
+        assert!(older.mappers.is_empty());
+        let torrentio = older.indexer("torrentio").unwrap();
+        assert_eq!(torrentio.mapper_id(), Some("kitsu"));
+        assert_eq!(older.mapper("kitsu").unwrap().id, "kitsu");
+    }
+
+    #[test]
+    fn an_indexer_asked_through_a_mapper_that_is_not_there_or_maps_none_of_its_kinds_is_refused() {
+        let refused = |what: &str, change: fn(&mut Value)| {
+            assert!(parse(&changed(change)).is_err(), "{what} was accepted");
+        };
+        refused("an unknown mapper", |d| {
+            for indexer in d["indexers"].as_array_mut().unwrap() {
+                if indexer["id"] == "torrentio" {
+                    indexer["map"] = json!("nothing");
+                    indexer.as_object_mut().unwrap().remove("anime_kitsu");
+                }
+            }
+        });
+        refused("a mapper that maps none of the indexer's kinds", |d| {
+            d["mappers"][0]["kinds"] = json!(["anime"]);
+            for indexer in d["indexers"].as_array_mut().unwrap() {
+                if indexer["id"] == "yts" {
+                    indexer["map"] = json!("kitsu");
+                }
+            }
+        });
+        refused("a mapper with a capital in its id", |d| {
+            d["mappers"][0]["id"] = json!("Kitsu")
+        });
+        refused("two mappers with one id", |d| {
+            let first = d["mappers"][0].clone();
+            d["mappers"].as_array_mut().unwrap().push(first);
+        });
+    }
+
+    #[test]
+    fn a_mapper_cannot_take_the_name_of_a_hole_a_request_already_has() {
+        for name in ["term", "imdb", "season", "episode", "imdb_or_term"] {
+            let bad = changed(|d| d["mappers"][0]["id"] = json!(name));
+            assert!(parse(&bad).is_err(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_document_from_before_screens_is_still_accepted() {
+        let older = changed(|d| {
+            d.as_object_mut().unwrap().remove("screens");
+        });
+        assert!(parse(&older).unwrap().screens.is_none());
+        assert!(!screens().tabs.is_empty());
+    }
+
+    #[test]
+    fn screens_that_would_show_nothing_or_break_a_page_are_refused() {
+        let refused = |what: &str, change: fn(&mut Value)| {
+            assert!(parse(&changed(change)).is_err(), "{what} was accepted");
+        };
+        refused("no tabs", |d| d["screens"]["tabs"] = json!([]));
+        refused("a slug with a slash", |d| {
+            d["screens"]["tabs"][0]["slug"] = json!("a/b")
+        });
+        refused("a repeated slug", |d| {
+            d["screens"]["tabs"][1]["slug"] = json!("anime")
+        });
+        refused("a repeated label", |d| {
+            d["screens"]["tabs"][1]["label"] = json!("Anime")
+        });
+        refused("a slug that is a page of the site", |d| {
+            d["screens"]["tabs"][1]["slug"] = json!("search")
+        });
+        refused("no sorts", |d| d["screens"]["sorts"] = json!([]));
+        refused("an unknown sort", |d| {
+            d["screens"]["sorts"][0]["sort"] = json!("loudest")
+        });
+        refused("genres for no kind", |d| {
+            d["screens"]["genres"]["books"] = json!(["Poetry"])
+        });
+        refused("no home rows", |d| d["screens"]["home"] = json!([]));
+        refused("a row for a kind with no tab", |d| {
+            d["screens"]["tabs"] = json!([{ "kind": "anime", "slug": "anime", "label": "Anime" }]);
+        });
+    }
+
+    #[test]
     fn a_document_that_would_break_a_search_is_refused() {
         let refused = |what: &str, bytes: Vec<u8>| {
             assert!(parse(&bytes).is_err(), "{what} was accepted");
         };
-        refused("a newer format", changed(|d| d["schema"] = json!(2)));
+        refused("a newer format", changed(|d| d["schema"] = json!(3)));
         refused(
             "a repeated indexer id",
             changed(|d| d["indexers"][1]["id"] = json!("subsplease")),
@@ -574,6 +991,131 @@ mod tests {
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         format!("http://{address}")
+    }
+
+    /// Serves two feeds: schema 1 at the root and, when there is one, schema 2 under `v2/`.
+    async fn feeds(older: (Vec<u8>, String), newer: Option<(Vec<u8>, String)>) -> String {
+        use axum::{Router, routing::get};
+        let mut app = Router::new()
+            .route("/sources.json", get(move || async move { older.0 }))
+            .route("/sources.sig", get(move || async move { older.1 }));
+        if let Some((document, signature)) = newer {
+            app = app
+                .route("/v2/sources.json", get(move || async move { document }))
+                .route("/v2/sources.sig", get(move || async move { signature }));
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{address}")
+    }
+
+    fn signed(document: Vec<u8>) -> (Vec<u8>, String) {
+        let signature = encode_hex(&signing_key().sign(&document).to_bytes());
+        (document, signature)
+    }
+
+    #[test]
+    fn schema_1_and_2_documents_are_read_and_a_newer_one_is_not() {
+        for schema in [1, 2] {
+            assert!(
+                parse(&changed(|d| d["schema"] = json!(schema))).is_ok(),
+                "{schema}"
+            );
+        }
+        assert!(parse(&changed(|d| d["schema"] = json!(3))).is_err());
+        assert!(parse(&changed(|d| d["schema"] = json!(0))).is_err());
+    }
+
+    #[tokio::test]
+    async fn the_schema_2_feed_is_used_when_there_is_one_and_the_schema_1_feed_when_there_is_not_or_it_is_bad()
+     {
+        let _held = definitions_change_lock().lock().await;
+        let in_use = current().version;
+        let at = |plus: u64, schema: u64, trackers: &str| {
+            let trackers = trackers.to_string();
+            changed(move |d| {
+                d["version"] = json!(in_use + plus);
+                d["schema"] = json!(schema);
+                d["trackers"] = json!([trackers]);
+            })
+        };
+        let key = key_hex();
+
+        // Only the schema 1 feed is published: it is used.
+        let dir = temp_dir("feeds-1");
+        let base = feeds(signed(at(100, 1, "udp://one.example:1")), None).await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 100);
+        assert_eq!(current().trackers, ["udp://one.example:1"]);
+
+        // Both are published with one version: the schema 2 one is used.
+        let base = feeds(
+            signed(at(200, 1, "udp://old.example:1")),
+            Some(signed(at(200, 2, "udp://new.example:2"))),
+        )
+        .await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 200);
+        assert_eq!(current().trackers, ["udp://new.example:2"]);
+        assert!(
+            std::fs::read_to_string(dir.join(DOCUMENT))
+                .unwrap()
+                .contains("\"schema\": 2")
+                || std::fs::read_to_string(dir.join(DOCUMENT))
+                    .unwrap()
+                    .contains("\"schema\":2")
+        );
+
+        // The schema 1 feed was all there was for a while, at version N. When the schema 2 feed appears at the
+        // same version, a build moves to it: the same version in a newer schema counts as newer.
+        let base = feeds(signed(at(250, 1, "udp://same.example:1")), None).await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 250);
+        assert_eq!(current().schema, 1);
+        let base = feeds(
+            signed(at(250, 1, "udp://same.example:1")),
+            Some(signed(at(250, 2, "udp://same.example:2"))),
+        )
+        .await;
+        refresh_from(&base, &key, &dir).await.unwrap();
+        assert_eq!(
+            (current().schema, current().trackers.clone()),
+            (2, vec!["udp://same.example:2".to_string()])
+        );
+
+        // A genuine schema 2 feed that is older than what is in use does not hide a newer schema 1 feed.
+        let base = feeds(
+            signed(at(260, 1, "udp://root-newer.example:1")),
+            Some(signed(at(240, 2, "udp://v2-stale.example:2"))),
+        )
+        .await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 260);
+        assert_eq!(current().trackers, ["udp://root-newer.example:1"]);
+
+        // A schema 2 feed that is not genuine (signed by another key) is left alone, and the schema 1 one is used.
+        let other = SigningKey::from_bytes(&[9; 32]);
+        let forged = {
+            let document = at(300, 2, "udp://forged.example:3");
+            let signature = encode_hex(&other.sign(&document).to_bytes());
+            (document, signature)
+        };
+        let base = feeds(signed(at(300, 1, "udp://honest.example:3")), Some(forged)).await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 300);
+        assert_eq!(current().trackers, ["udp://honest.example:3"]);
+
+        // A schema 2 feed that holds a format this build does not read is left alone too.
+        let base = feeds(
+            signed(at(400, 1, "udp://fallback.example:4")),
+            Some(signed(at(400, 3, "udp://future.example:4"))),
+        )
+        .await;
+        assert_eq!(refresh_from(&base, &key, &dir).await.unwrap(), in_use + 400);
+        assert_eq!(current().trackers, ["udp://fallback.example:4"]);
+
+        // Neither feed is there: nothing changes and it is an error, as before.
+        let nothing = feeds(signed(at(500, 1, "udp://x.example:5")), None).await;
+        let broken = nothing.replace("127.0.0.1", "127.0.0.1:1/nowhere");
+        assert!(refresh_from(&broken, &key, &dir).await.is_err());
+        assert_eq!(current().version, in_use + 400);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

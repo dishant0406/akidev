@@ -6,7 +6,7 @@
 use crate::config::Config;
 use crate::indexers::{LiveResults, SearchOptions, SourceReport, search_all_report};
 use crate::media_id::{self, MediaId};
-use crate::model::{Detail, Kind, Release};
+use crate::model::{Detail, Kind, Release, Shape};
 use crate::releases::{
     Audio, Codec, is_batch, is_playable_codec, movie_search_terms, normalize_title, parse_audio,
     parse_codec, parse_resolution, rank_movie_releases, rank_movie_releases_by, rank_releases,
@@ -237,7 +237,7 @@ impl Streamer {
         };
         // A title without an episode is a detail page. A film is the exception: it has
         // no episode by definition.
-        if parsed.kind != Kind::Movie && parsed.episode.is_none() {
+        if parsed.kind.shape() != Shape::Movie && parsed.episode.is_none() {
             return Err("No episode was requested.".into());
         }
         let started = Instant::now();
@@ -523,7 +523,7 @@ fn validate_request_at(id: &str, detail: &Detail, now_ms: i64) -> Result<MediaId
     if parsed.kind != detail.media.kind || parsed.key() != detail.media.id {
         return Err("Unknown title.".into());
     }
-    if parsed.kind == Kind::Movie {
+    if parsed.kind.shape() == Shape::Movie {
         return Ok(parsed);
     }
     let number = parsed.episode.ok_or("No episode was requested.")?;
@@ -545,7 +545,7 @@ fn validate_request_at(id: &str, detail: &Detail, now_ms: i64) -> Result<MediaId
         .find(|episode| episode.number == number && episode.season == parsed.season);
     // A populated series catalogue with season coordinates establishes which
     // season/episode pairs exist. Empty or coordinate-incomplete data cannot.
-    if parsed.kind == Kind::Series
+    if parsed.kind.shape() == Shape::Series
         && !detail.episodes.is_empty()
         && detail
             .episodes
@@ -581,7 +581,7 @@ async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -
         media.title_variants.clone()
     };
     let found = find_releases_named(config, parsed, detail, &titles).await;
-    if !found.1.is_empty() || parsed.kind == Kind::Anime {
+    if !found.1.is_empty() || parsed.kind.shape() == Shape::Anime {
         return found;
     }
     // A catalogue of films and series knows a Japanese show by one spelling, and releases are
@@ -698,7 +698,7 @@ fn known_names(media: &crate::model::Media) -> Vec<String> {
 
 /// AniList uses `MOVIE`, while Anime Kitsu uses `movie`; both need film discovery and ranking.
 fn is_film(media: &crate::model::Media) -> bool {
-    media.kind == Kind::Movie
+    media.kind.shape() == Shape::Movie
         || media
             .format
             .as_deref()
@@ -731,39 +731,41 @@ async fn find_releases_named(
     let year = media.year.and_then(|year| u32::try_from(year).ok());
     // Torrentio and EZTV are searched by IMDb id rather than by text, and Torrentio
     // takes the season and episode in its path. Indexers that need none of it ignore it.
-    // Kitsu episodes keep the catalogue's number only when the addon says it is the same
-    // episode. An absent or mismatched mapping is simply no addon result.
-    // A shared opt-in is the only way to make the mapping request. Kitsu is a metadata source;
-    // streams are still discovered from the actual addon's own endpoint.
-    let (kitsu_id, kitsu_movie) = match parsed {
+    // An id from a mapper (Kitsu, for Torrentio) keeps the catalogue's number only when the mapper says it
+    // is the same episode. An absent or mismatched mapping is simply no result from that indexer. Only
+    // an indexer that names the mapper and has its hole somewhere in its request makes the mapping
+    // request; the streams are still found at the indexer's own address.
+    let mapped = match parsed {
         MediaId {
-            kind: Kind::Anime,
             episode: Some(episode),
             ..
-        } if sources::current().indexers.iter().any(|indexer| {
-            indexer.anime_kitsu
-                && indexer.kinds.contains(&Kind::Anime)
-                && indexer.request.path.to_string().contains("{kitsu}")
-        }) =>
-        {
-            providers::anime_kitsu_episode(&parsed.provider_id, *episode)
-                .await
-                .map(|(id, movie)| (Some(id), movie))
-                .unwrap_or((None, false))
+        } => {
+            let sources = sources::current();
+            let mapper = sources.indexers.iter().find_map(|indexer| {
+                let mapper = indexer.mapper_id()?;
+                (indexer.kinds.contains(&parsed.kind) && indexer.request_uses(mapper))
+                    .then(|| mapper.to_string())
+            });
+            match mapper {
+                Some(mapper) => {
+                    providers::mapped_episode(&mapper, parsed.kind, &parsed.provider_id, *episode)
+                        .await
+                }
+                None => None,
+            }
         }
-        _ => (None, false),
+        _ => None,
     };
     let options = SearchOptions {
         kind: parsed.kind,
         imdb_id: detail.imdb_id.clone(),
-        kitsu_id,
-        kitsu_movie,
+        mapped,
         season: parsed.season,
         episode: parsed.episode,
     };
 
-    let (terms, mut ranked, mut all, reports, live) = match (parsed.kind, parsed.episode) {
-        (Kind::Movie, _) => {
+    let (terms, mut ranked, mut all, reports, live) = match (parsed.kind.shape(), parsed.episode) {
+        (Shape::Movie, _) => {
             let terms = movie_search_terms(titles, year);
             let outcome = search_all_report(config, &terms, &options, |found| {
                 !rank_movie_releases(found, year, &media.title, titles).is_empty()
@@ -774,7 +776,7 @@ async fn find_releases_named(
             let all = rank_movie_releases_by(&found, year, &media.title, titles, false);
             (terms, ranked, all, outcome.sources, outcome.live)
         }
-        (Kind::Series, Some(episode)) => {
+        (Shape::Series, Some(episode)) => {
             let terms = series_search_terms(titles, parsed.season, Some(episode));
             let outcome = search_all_report(config, &terms, &options, |found| {
                 !rank_releases(found, episode, &media.title, titles, parsed.season).is_empty()
@@ -785,7 +787,7 @@ async fn find_releases_named(
             let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
             (terms, ranked, all, outcome.sources, outcome.live)
         }
-        (Kind::Anime, Some(_)) if is_film(media) => {
+        (Shape::Anime, Some(_)) if is_film(media) => {
             // Anime films are still addressed as `anime-...-ep1`, but discovery and ranking are
             // film searches, not episode searches. Kitsu uses the movie route above as well.
             let terms = movie_search_terms(titles, year);
@@ -798,7 +800,7 @@ async fn find_releases_named(
             let all = rank_movie_releases_by(&found, year, &media.title, titles, false);
             (terms, ranked, all, outcome.sources, outcome.live)
         }
-        (Kind::Anime, Some(episode)) => {
+        (Shape::Anime, Some(episode)) => {
             let terms = search_terms(titles, Some(episode));
             let outcome = search_all_report(config, &terms, &options, |found| {
                 !rank_releases(found, episode, &media.title, titles, parsed.season).is_empty()
@@ -1226,8 +1228,7 @@ mod tests {
         let options = SearchOptions {
             kind: Kind::Series,
             imdb_id: None,
-            kitsu_id: None,
-            kitsu_movie: false,
+            mapped: None,
             season: Some(1),
             episode: Some(1),
         };

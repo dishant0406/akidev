@@ -47,7 +47,7 @@ fn day(text: &str) -> i64 {
 
 #[test]
 fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
-    let def = sources::anime_kitsu();
+    let def = sources::current().mapper("kitsu").unwrap().provider.clone();
     let body = json!({"meta": {
         "id":"kitsu:7442", "kitsu_id":"7442", "type":"series", "name":"Attack on Titan", "releaseInfo":"2013",
         "videos":[{"id":"kitsu:7442:1", "season":1, "episode":1},
@@ -73,7 +73,7 @@ fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
         sources::current()
             .indexers
             .iter()
-            .filter(|indexer| indexer.anime_kitsu)
+            .filter(|indexer| indexer.mapper_id() == Some("kitsu"))
             .count()
             == 1
     );
@@ -81,7 +81,7 @@ fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
 
 #[test]
 fn anime_kitsu_reads_a_movie_and_its_unsuffixed_video_id() {
-    let def = sources::anime_kitsu();
+    let def = sources::current().mapper("kitsu").unwrap().provider.clone();
     let body = json!({"meta": {
         "id":"kitsu:50192", "kitsu_id":"50192", "type":"movie",
         "name":"Rascal Does Not Dream of a Dear Friend", "releaseInfo":"2026",
@@ -1095,7 +1095,7 @@ fn yts_is_asked_for_the_genre_in_lower_case_and_the_sort_by_its_name() {
 #[test]
 fn each_kind_has_a_chain_of_providers_that_serve_it() {
     let sources = sources::current();
-    for kind in Kind::ALL {
+    for kind in Kind::BUILT_IN {
         let chain = super::chain(&sources, kind);
         assert!(!chain.is_empty());
         assert!(chain.iter().all(|provider| provider.kinds.contains(&kind)));

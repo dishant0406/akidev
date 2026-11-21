@@ -198,12 +198,13 @@ impl Palette {
         self.stale = !self.results.is_empty();
         self.searching = true;
         self.failed = false;
-        self.pending = Kind::ALL.len();
+        let kinds = akidev_core::sources::screens().kinds();
+        self.pending = kinds.len();
         cx.notify();
 
         // One search per catalogue, each shown when it arrives: one that is slow, or has to try
         // several providers, does not hold back the others.
-        for kind in Kind::ALL {
+        for kind in kinds {
             let (latest, wanted) = (self.latest.clone(), term.clone());
             crate::task::load(
                 cx,
@@ -295,7 +296,8 @@ impl Palette {
         self.answers.push((kind, answer));
         self.pending = self.pending.saturating_sub(1);
         // In the order of the catalogues, so a late answer slots in and does not shuffle the rest.
-        let lists = Kind::ALL
+        let lists = akidev_core::sources::screens()
+            .kinds()
             .iter()
             .filter_map(|kind| {
                 self.answers

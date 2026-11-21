@@ -270,12 +270,14 @@ impl AkidevApp {
             )
         };
 
-        let tabs = [
-            ("Home", None),
-            ("Anime", Some(Kind::Anime)),
-            ("Series", Some(Kind::Series)),
-            ("Films", Some(Kind::Movie)),
-        ];
+        let tabs: Vec<(String, Option<Kind>)> = std::iter::once(("Home".to_string(), None))
+            .chain(
+                akidev_core::sources::screens()
+                    .tabs
+                    .into_iter()
+                    .map(|tab| (tab.label, Some(tab.kind))),
+            )
+            .collect();
         let can_go_back = self.history.can_go_back();
 
         // `occlude`: a click on the bar must not also reach the page scrolled under it.
@@ -327,15 +329,15 @@ impl AkidevApp {
                                     .child("AKIDEV")
                                     .on_click(|_, _, cx| navigate(Route::Home, cx)),
                             )
-                            .child(div().flex().items_center().gap_5().children(tabs.map(
-                                |(label, kind)| {
+                            .child(div().flex().items_center().gap_5().children(
+                                tabs.into_iter().map(|(label, kind)| {
                                     let active = match kind {
                                         None => matches!(route, Route::Home),
                                         kind => browsing(kind),
                                     };
                                     tab(
                                         SharedString::from(format!("tab-{label}")),
-                                        label,
+                                        &label,
                                         active,
                                         move |_, _, cx| match kind {
                                             None => navigate(Route::Home, cx),
@@ -348,8 +350,8 @@ impl AkidevApp {
                                             ),
                                         },
                                     )
-                                },
-                            )))
+                                }),
+                            ))
                             .child(div().flex().items_center().child(tab(
                                 "tab-Music",
                                 "Music",

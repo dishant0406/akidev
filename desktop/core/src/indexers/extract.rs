@@ -29,7 +29,7 @@ pub fn releases(
             if !(document.is_object() || document.is_array()) {
                 bail!("not a JSON response");
             }
-            validate_json(def, &document)?;
+            validate_json(def, &document, kind)?;
             document
         }
         // A blocked or replaced host answers 200 with an HTML page. A real feed is RSS, so
@@ -91,7 +91,7 @@ pub fn releases(
 }
 
 /// Validate the envelope before permissive extraction can cache failures as empty answers.
-fn validate_json(def: &IndexerDef, document: &Value) -> anyhow::Result<()> {
+fn validate_json(def: &IndexerDef, document: &Value, kind: Kind) -> anyhow::Result<()> {
     if let Some(object) = document.as_object() {
         for key in ["error", "errors"] {
             if let Some(value) = object.get(key)
@@ -122,16 +122,7 @@ fn validate_json(def: &IndexerDef, document: &Value) -> anyhow::Result<()> {
             }
         }
     }
-    // YTS documents a successful zero-count response without a movies array.
-    if def.id == "yts"
-        && def.response.rows == "data.movies"
-        && document.get("status").and_then(Value::as_str) == Some("ok")
-        && document
-            .pointer("/data/movie_count")
-            .and_then(Value::as_u64)
-            == Some(0)
-        && document.pointer("/data/movies").is_none()
-    {
+    if is_empty_answer(def, document, kind) {
         return Ok(());
     }
     let rows = collection(document, &def.response.rows)?;
@@ -145,6 +136,24 @@ fn validate_json(def: &IndexerDef, document: &Value) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Whether the definition says this body is a successful answer with no rows.
+fn is_empty_answer(def: &IndexerDef, document: &Value, kind: Kind) -> bool {
+    let conditions = &def.response.empty_when;
+    let env = Env {
+        now_ms: now_ms(),
+        active: &[],
+    };
+    let body = Row {
+        value: document,
+        parent: None,
+        kind,
+    };
+    !conditions.is_empty()
+        && conditions
+            .iter()
+            .all(|condition| matches(condition, body, &env))
 }
 
 fn collection<'a>(document: &'a Value, path: &str) -> anyhow::Result<Vec<&'a Value>> {
@@ -355,14 +364,14 @@ mod tests {
 
         let body = json!({"streams": [
             {"infoHash": A, "title": "India's Got Latent\nIGL_EP_01_ft_RaftaarMusic.mp4\n👤 47 💾 473.25 MB ⚙️ ThePirateBay"},
-            {"infoHash": B, "title": "Show\nfallback.mkv\n👤 1 💾 1 GB ⚙️ X", "behaviorHints": {"filename": "hinted.S01E01.mkv"}}
+            {"infoHash": B, "title": "Show\nfallback.mkv\n👤 1 💾 1 GB ⚙️ X", "behaviorHints": {"filename": "S01E01.mkv"}}
         ]});
         // Use the actual extractor and its production magnet/merge helpers.
         let found = run("torrentio", &body, "x");
         assert_eq!(found.len(), 2);
         for (i, title, filename, hash) in [
             (0, "India's Got Latent", "IGL_EP_01_ft_RaftaarMusic.mp4", A),
-            (1, "Show", "hinted.S01E01.mkv", B),
+            (1, "Show", "S01E01.mkv", B),
         ] {
             let ranked = rank_releases(&found, 1, title, &[], Some(1));
             assert_eq!(ranked.len(), 1, "{}", found[i].title);
@@ -867,7 +876,7 @@ mod tests {
               "title": "Indias Got Latent (2026)-MovieLinkHub.com-S02 Bouns E01-E01\n👤 3 💾 1.41 GB ⚙️ EXT" },
             { "infoHash": "cccccccccccccccccccccccccccccccccccccccc",
               "title": "Show\nfallback.mkv\n👤 1 💾 1 GB ⚙️ X",
-              "behaviorHints": { "filename": "hinted.S01E01.mkv" } },
+              "behaviorHints": { "filename": "S01E01.mkv" } },
             { "title": "no hash\nfile.mkv" }
         ] });
         let found = run("torrentio", &body, "x");
@@ -891,7 +900,7 @@ mod tests {
             Some((1.41 * (1u64 << 30) as f64).round() as u64)
         );
         // The structured file name wins over the second line.
-        assert_eq!(found[2].title, "Show hinted.S01E01.mkv");
+        assert_eq!(found[2].title, "Show S01E01.mkv");
     }
 
     #[test]

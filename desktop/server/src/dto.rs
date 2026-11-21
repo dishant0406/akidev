@@ -59,7 +59,7 @@ pub struct PageOut {
 
 #[derive(Debug, Serialize)]
 pub struct RowOut {
-    pub title: &'static str,
+    pub title: String,
     pub kind: Kind,
     pub items: Vec<MediaOut>,
 }

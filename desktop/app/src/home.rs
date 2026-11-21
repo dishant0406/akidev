@@ -7,48 +7,9 @@ use crate::row::{MediaRow, RowSpec};
 use crate::task::load;
 use akidev_core::model::{Filters, Kind, Media, Sort};
 use akidev_core::providers;
+use akidev_core::screens::HomeRow;
 use akidev_core::search::interleave;
 use gpui_kit::*;
-
-fn row(title: &'static str, kind: Kind, sort: Sort, genre: Option<&str>) -> RowSpec {
-    RowSpec {
-        title,
-        kind,
-        filters: Filters {
-            sort: Some(sort),
-            genre: genre.map(str::to_string),
-            page: 1,
-            per_page: 24,
-            ..Default::default()
-        },
-    }
-}
-
-/// The rows, in order. Each draws from one catalogue, so the page mixes all three.
-fn rows() -> Vec<RowSpec> {
-    vec![
-        row("Trending Anime", Kind::Anime, Sort::Trending, None),
-        row("New Releases", Kind::Movie, Sort::Recent, None),
-        row("Popular Series", Kind::Series, Sort::Popularity, None),
-        row("Newly Released Anime", Kind::Anime, Sort::Recent, None),
-        row("Most Watched Films", Kind::Movie, Sort::Popularity, None),
-        row("New Series", Kind::Series, Sort::Recent, None),
-        row("Top Rated Anime", Kind::Anime, Sort::Score, None),
-        row(
-            "Action Films",
-            Kind::Movie,
-            Sort::Popularity,
-            Some("Action"),
-        ),
-        row("Drama Series", Kind::Series, Sort::Score, Some("Drama")),
-        row(
-            "Romance Anime",
-            Kind::Anime,
-            Sort::Popularity,
-            Some("Romance"),
-        ),
-    ]
-}
 
 /// The front of one catalogue, for the banner.
 async fn featured_from(kind: Kind) -> Vec<Media> {
@@ -64,14 +25,47 @@ async fn featured_from(kind: Kind) -> Vec<Media> {
         .unwrap_or_default()
 }
 
+/// The rows of the home screen, as the sources document lists them.
+fn rows() -> Vec<RowSpec> {
+    specs(akidev_core::sources::screens().home)
+}
+
+fn specs(home: Vec<HomeRow>) -> Vec<RowSpec> {
+    home.into_iter()
+        .map(|row| RowSpec {
+            title: row.title,
+            kind: row.kind,
+            provider: row.provider,
+            filters: Filters {
+                sort: Some(row.sort),
+                genre: row.genre,
+                page: 1,
+                per_page: 24,
+                ..Default::default()
+            },
+        })
+        .collect()
+}
+
+/// The catalogues the banner draws from, one for each tab.
+fn kinds() -> Vec<Kind> {
+    akidev_core::sources::screens()
+        .tabs
+        .iter()
+        .map(|tab| tab.kind)
+        .collect()
+}
+
 /// Starts asking for what the home screen shows, before there is a window to show it in. The
 /// screen then finds the requests already on their way instead of making them itself.
 pub fn prefetch() {
-    for kind in Kind::ALL {
+    for kind in kinds() {
         crate::runtime::spawn(featured_from(kind));
     }
     for spec in rows() {
-        crate::runtime::spawn(async move { providers::list(spec.kind, &spec.filters).await });
+        crate::runtime::spawn(async move {
+            providers::list_row(spec.kind, spec.provider.as_deref(), &spec.filters).await
+        });
     }
 }
 
@@ -80,6 +74,8 @@ pub struct HomePage {
     /// What the viewer was part way through when the "Continue watching" row was last built.
     watching: Vec<Entry>,
     continuing: Option<Entity<MediaRow>>,
+    /// The rows the page was built from, so a plugin that is switched on or off changes them.
+    home: Vec<HomeRow>,
     rows: Vec<Entity<MediaRow>>,
 }
 
@@ -88,10 +84,8 @@ impl HomePage {
         let hero = cx.new(|_| Hero::new());
         let watching = cx.global::<Backend>().progress.recent().to_vec();
         let continuing = Self::continuing(&watching, cx);
-        let rows = rows()
-            .into_iter()
-            .map(|spec| cx.new(|cx| MediaRow::loading(spec, cx)))
-            .collect();
+        let home = akidev_core::sources::screens().home;
+        let rows = Self::build_rows(&home, cx);
 
         // The banner draws from the front of each catalogue, so it features all three.
         let hero_handle = hero.clone();
@@ -99,7 +93,9 @@ impl HomePage {
             cx,
             async {
                 let lists = futures::future::join_all(
-                    Kind::ALL.map(|kind| async move { featured_from(kind).await }),
+                    kinds()
+                        .into_iter()
+                        .map(|kind| async move { featured_from(kind).await }),
                 )
                 .await;
                 interleave(lists, 9)
@@ -115,8 +111,16 @@ impl HomePage {
             hero,
             watching,
             continuing,
+            home,
             rows,
         }
+    }
+
+    fn build_rows(home: &[HomeRow], cx: &mut Context<Self>) -> Vec<Entity<MediaRow>> {
+        specs(home.to_vec())
+            .into_iter()
+            .map(|spec| cx.new(|cx| MediaRow::loading(spec, cx)))
+            .collect()
     }
 
     fn continuing(watching: &[Entry], cx: &mut Context<Self>) -> Option<Entity<MediaRow>> {
@@ -131,6 +135,11 @@ impl Render for HomePage {
         if cx.global::<Backend>().progress.recent() != self.watching.as_slice() {
             self.watching = cx.global::<Backend>().progress.recent().to_vec();
             self.continuing = Self::continuing(&self.watching, cx);
+        }
+        let home = akidev_core::sources::screens().home;
+        if home != self.home {
+            self.rows = Self::build_rows(&home, cx);
+            self.home = home;
         }
         div()
             .pb_16()

@@ -73,10 +73,17 @@ pub fn snap_quality(asked: u8) -> u8 {
         .unwrap_or(75)
 }
 
-fn host_ok(host: &str, allowed: &[String]) -> bool {
-    allowed
-        .iter()
-        .any(|domain| host == domain || host.ends_with(&format!(".{domain}")))
+fn host_ok<S: AsRef<str>>(host: &str, allowed: impl IntoIterator<Item = S>) -> bool {
+    allowed.into_iter().any(|domain| {
+        let domain = domain.as_ref();
+        host == domain || host.ends_with(&format!(".{domain}"))
+    })
+}
+
+/// A picture comes only from a host a provider names in the sources document, or one the operator
+/// added with IMAGE_HOSTS.
+fn host_listed(host: &str, extra: &[String]) -> bool {
+    host_ok(host, extra) || host_ok(host, akidev_core::sources::image_hosts())
 }
 
 /// What a file is, from its first bytes.
@@ -175,7 +182,7 @@ impl Images {
                 let allowed = attempt
                     .url()
                     .host_str()
-                    .is_some_and(|host| host_ok(host, &on_list));
+                    .is_some_and(|host| host_listed(host, &on_list));
                 if attempt.previous().len() >= 3 || !allowed {
                     attempt.stop()
                 } else {
@@ -204,7 +211,7 @@ impl Images {
         if !scheme_ok || !url.username().is_empty() || url.password().is_some() {
             return None;
         }
-        host_ok(url.host_str()?, &self.hosts).then_some(url)
+        host_listed(url.host_str()?, &self.hosts).then_some(url)
     }
 
     fn path(&self, url: &str, width: u32, quality: u8) -> PathBuf {
@@ -426,6 +433,18 @@ mod tests {
         let decoded = image::load_from_memory(&made.bytes).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (352, 352));
         assert!(decoded.color().has_alpha());
+    }
+
+    #[test]
+    fn the_providers_in_the_sources_document_name_the_hosts_a_picture_may_come_from() {
+        let images = Images::new(std::env::temp_dir().join("akidev-img-sources"), vec![]);
+        assert!(images.allowed("https://s4.anilist.co/file/a.jpg").is_some());
+        assert!(
+            images
+                .allowed("https://images.metahub.space/a.jpg")
+                .is_some()
+        );
+        assert!(images.allowed("https://evil.com/a.jpg").is_none());
     }
 
     #[test]

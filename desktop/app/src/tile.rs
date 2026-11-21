@@ -5,7 +5,7 @@ use crate::design::tokens::{
     ACCENT, CANVAS, RAISED, TEXT, TEXT_DIM, TILE_HEIGHT, TILE_WIDTH, WASH_3, color, radius,
 };
 use crate::route::{Route, navigate};
-use akidev_core::model::{Kind, Media};
+use akidev_core::model::{Media, Shape};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -21,7 +21,7 @@ pub fn poster_tile(key: &str, media: &Media, resume: Option<(f32, Route)>) -> St
     // A film plays straight away. A show needs its episode list first, so it opens the title.
     let play_route = match &resume {
         Some((_, route)) => route.clone(),
-        None if media.kind == Kind::Movie => Route::Watch {
+        None if media.kind.shape() == Shape::Movie => Route::Watch {
             id: media.id.clone(),
         },
         None => title_route.clone(),

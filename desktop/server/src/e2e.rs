@@ -579,7 +579,7 @@ async fn fallback_get(
 ) -> (StatusCode, serde_json::Value) {
     let mut request = Request::builder().uri(format!("/v1/fallback/search{query}"));
     if marked {
-        request = request.header(akidev_core::indexers::FALLBACK_HEADER, "1");
+        request = request.header(crate::api::FALLBACK_HEADER, "1");
     }
     let mut request = request.body(Body::empty()).unwrap();
     request
@@ -759,6 +759,51 @@ async fn an_answer_does_not_depend_on_who_asked_so_the_edge_may_keep_it() {
             .join(",");
         assert!(!vary.contains("origin"), "vary: {vary}");
     }
+}
+
+#[test]
+fn the_prowlarr_entry_sets_the_header_the_fallback_route_requires() {
+    let sources = akidev_core::sources::current();
+    let prowlarr = sources
+        .indexer("prowlarr")
+        .expect("the document has a prowlarr entry");
+    assert!(prowlarr.fallback);
+    assert_eq!(
+        prowlarr
+            .request
+            .headers
+            .get(crate::api::FALLBACK_HEADER)
+            .map(String::as_str),
+        Some("1")
+    );
+}
+
+#[tokio::test]
+async fn the_screens_route_sends_the_tabs_sorts_genres_and_home_rows() {
+    let Some(rig) = rig("screens", |_| {}).await else {
+        return;
+    };
+    let (status, headers, body) = get(&rig.router, "/v1/screens", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        headers[header::CACHE_CONTROL]
+            .to_str()
+            .unwrap()
+            .contains("max-age=300")
+    );
+    let screens: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let slugs: Vec<_> = screens["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tab| tab["slug"].as_str().unwrap())
+        .collect();
+    assert_eq!(slugs, ["anime", "series", "films"]);
+    assert_eq!(screens["sorts"][0]["sort"], "popularity");
+    assert_eq!(screens["home"].as_array().unwrap().len(), 10);
+    assert_eq!(screens["home"][7]["genre"], "Action");
+    assert_eq!(screens["genres"]["anime"][7], "Mahou Shoujo");
+    assert!(screens["genres"]["all"].is_array());
 }
 
 #[tokio::test]

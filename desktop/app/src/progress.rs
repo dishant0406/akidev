@@ -62,10 +62,23 @@ impl Progress {
     /// since losing a watch history is better than refusing to start.
     pub fn load(path: PathBuf) -> Progress {
         let entries = match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|error| {
-                tracing::warn!("[progress] ignoring unreadable {}: {error}", path.display());
-                Vec::new()
-            }),
+            // One entry that cannot be read (a kind from a plugin that is gone, say) is left out, not the rest.
+            Ok(text) => match serde_json::from_str::<Vec<serde_json::Value>>(&text) {
+                Ok(items) => items
+                    .into_iter()
+                    .filter_map(|item| match serde_json::from_value::<Entry>(item) {
+                        Ok(entry) => Some(entry),
+                        Err(error) => {
+                            tracing::warn!("[progress] leaving out an unreadable entry: {error}");
+                            None
+                        }
+                    })
+                    .collect(),
+                Err(error) => {
+                    tracing::warn!("[progress] ignoring unreadable {}: {error}", path.display());
+                    Vec::new()
+                }
+            },
             Err(_) => Vec::new(),
         };
         Progress { path, entries }

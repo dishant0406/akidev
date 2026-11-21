@@ -22,9 +22,25 @@ A film is played by its own title id.
 `resolving` is how many source searches are running (out of 4), and `video_bytes_sent` is the video
 this server has sent since it started, which is what to watch to know what the bandwidth costs.
 
+## `GET /v1/screens`
+
+What the apps draw, as the sources document says it: the tabs, the sorts, the genres and the home
+page's rows. The site reads it to build its top bar, its filters and its routes, so adding a row or a
+genre is a publish and not a deploy.
+
+```json
+{ "tabs":   [{ "kind": "anime", "slug": "anime", "label": "Anime" }],
+  "sorts":  [{ "sort": "popularity", "label": "Popular" }],
+  "genres": { "anime": ["Action"], "series": [], "movie": [], "all": [] },
+  "home":   [{ "title": "Trending Anime", "kind": "anime", "sort": "trending", "genre": "Action" }] }
+```
+
+`genres.all` is for the page that shows every catalogue. A row's `genre` is optional. The first sort is
+the one a catalogue opens on. Kept by the edge for 5 minutes, like a catalogue.
+
 ## `GET /v1/home`
 
-The whole home page in one request.
+The whole home page in one request. Its rows are the `home` rows of `/v1/screens`, in that order.
 
 ```json
 { "featured": [Media],

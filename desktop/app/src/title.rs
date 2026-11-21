@@ -13,7 +13,7 @@ use crate::route::{Route, navigate};
 use crate::row::MediaRow;
 use crate::task::load;
 use akidev_core::media_id::{self, anime_episode_id};
-use akidev_core::model::{Detail, Kind, Media, Person};
+use akidev_core::model::{Detail, Media, Person, Shape};
 use akidev_core::providers;
 use gpui_kit::assets::IconName;
 use gpui_kit::*;
@@ -79,14 +79,14 @@ fn row(title: &str, items: &[Media], cx: &mut Context<TitlePage>) -> Option<Enti
 fn first_playable(detail: &Detail) -> Option<String> {
     let media = &detail.media;
     let parsed = media_id::parse(&media.id)?;
-    match media.kind {
-        Kind::Movie => Some(media.id.clone()),
-        Kind::Series => detail
+    match media.kind.shape() {
+        Shape::Movie => Some(media.id.clone()),
+        Shape::Series => detail
             .episodes
             .iter()
             .min_by_key(|e| (e.season, e.number))
             .map(|e| e.id.clone()),
-        Kind::Anime => Some(anime_episode_id(&parsed.provider_id, 1)),
+        Shape::Anime => Some(anime_episode_id(parsed.kind, &parsed.provider_id, 1)),
     }
 }
 
@@ -128,7 +128,7 @@ impl Render for TitlePage {
                 .map(|s| crate::design::state::sentence(&s.replace('_', " "))),
             media
                 .episodes
-                .filter(|_| media.kind != Kind::Movie)
+                .filter(|_| media.kind.shape() != Shape::Movie)
                 .map(|n| format!("{n} episodes")),
         ];
         // Carry on where the viewer left off, if they have started this title.
@@ -143,7 +143,7 @@ impl Render for TitlePage {
             Some(id) => Some((id, "Resume")),
             None => first_playable(detail).map(|id| (id, "Play")),
         };
-        let film = media.kind == Kind::Movie;
+        let film = media.kind.shape() == Shape::Movie;
         let trailer = detail
             .trailer
             .as_ref()

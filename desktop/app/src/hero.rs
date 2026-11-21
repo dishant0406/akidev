@@ -5,7 +5,7 @@ use crate::design::button::{primary_button, secondary_button};
 use crate::design::state::{kind_label, meta_line, skeleton};
 use crate::design::tokens::{ACCENT, CANVAS, GUTTER, TEXT, TEXT_DIM, WASH_3, color, font, size};
 use crate::route::{Route, navigate};
-use akidev_core::model::{Kind, Media};
+use akidev_core::model::{Media, Shape};
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -92,7 +92,7 @@ impl Render for Hero {
             .map(|entry| entry.episode_id.clone());
         let play_route = match resume {
             Some(id) => Route::Watch { id },
-            None if media.kind == Kind::Movie => Route::Watch {
+            None if media.kind.shape() == Shape::Movie => Route::Watch {
                 id: media.id.clone(),
             },
             None => Route::Title {

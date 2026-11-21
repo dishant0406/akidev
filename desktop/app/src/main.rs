@@ -76,10 +76,12 @@ fn main() {
     let ytdlp_dir = dirs.cache_dir().join("yt-dlp");
     let library_dir = dirs.data_dir().join("library");
     akidev_core::providers::keep_answers_in(dirs.cache_dir().join("catalog"));
-    let first = Route::from_args(std::env::args().skip(1));
-    // The definitions saved by an earlier run are used at once. What the home screen needs is
-    // asked for now, while the window is still being made.
+    // The definitions saved by an earlier run are used at once, with the plugins on top (a plugin can
+    // bring a kind that the first screen is named after). What the home screen needs is asked for now,
+    // while the window is still being made.
     akidev_core::sources::load_saved(&sources_dir);
+    akidev_core::plugin::load(dirs.config_dir());
+    let first = Route::from_args(std::env::args().skip(1));
     if first == Route::Home {
         home::prefetch();
     }

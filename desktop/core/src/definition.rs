@@ -5,7 +5,7 @@
 //! `Expression`, which both engines share (`expression.rs`).
 
 use crate::model::Kind;
-use anyhow::ensure;
+use anyhow::{Context, ensure};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -226,7 +226,12 @@ pub struct IndexerDef {
     pub hosts: Vec<String>,
     #[serde(default = "a_minute")]
     pub cooldown_secs: u64,
-    /// Use the def-configured Anime Kitsu metadata bridge to fill the `kitsu` request hole.
+    /// The id mapper (see `MapperDef`) whose id fills this indexer's request: the holes `{kitsu}` and
+    /// `{kitsu_kind}` for the mapper `kitsu`. Absent: the indexer needs no mapping.
+    #[serde(default)]
+    pub map: Option<String>,
+    /// How a document from before `map` said it, for the one mapper there was. Read, never needed in a
+    /// new document, and kept in the signed one for the apps that still use it.
     #[serde(default)]
     pub anime_kitsu: bool,
     /// Asked only when the other indexers found nothing worth opening, and given longer to answer.
@@ -257,6 +262,9 @@ pub struct RequestDef {
     /// A JSON body, for POST.
     #[serde(default)]
     pub json: Option<Value>,
+    /// Sent with every request: for a service that wants a key or a marker in a header.
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
 }
 
 fn no_text() -> Value {
@@ -294,6 +302,10 @@ pub struct ResponseDef {
     /// A row matching any of these is dropped.
     #[serde(default)]
     pub drop: Vec<Condition>,
+    /// The answer has no rows when every one of these holds for the whole body. For a service that
+    /// leaves the list out of a successful empty answer, which would otherwise read as a bad answer.
+    #[serde(default)]
+    pub empty_when: Vec<Condition>,
     /// The row's title must contain the whole searched title. For an index with no
     /// category to filter on, so unrelated rows are not returned.
     #[serde(default)]
@@ -318,7 +330,7 @@ impl ResponseDef {
         {
             expression.check()?;
         }
-        for condition in &self.drop {
+        for condition in self.drop.iter().chain(&self.empty_when) {
             condition.check()?;
         }
         if let Some(Dedupe { avoid }) = &self.dedupe {
@@ -367,14 +379,80 @@ impl IndexerDef {
         for host in &self.hosts {
             check_url(host)?;
         }
-        if self.anime_kitsu {
-            ensure!(
-                self.kinds.contains(&Kind::Anime),
-                "an anime bridge serves no anime"
-            );
+        for (name, value) in &self.request.headers {
+            reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .with_context(|| format!("\"{name}\" is not a header name"))?;
+            reqwest::header::HeaderValue::from_str(value)
+                .with_context(|| format!("the value of header {name} is not allowed"))?;
         }
         self.response.check()?;
         crate::indexers::check(self)
+    }
+
+    /// The mapper this indexer is asked through, if any.
+    pub fn mapper_id(&self) -> Option<&str> {
+        self.map.as_deref().or(self.anime_kitsu.then_some("kitsu"))
+    }
+
+    /// Whether its request has the hole `{name}` anywhere: in the path, a query value or the body.
+    pub fn request_uses(&self, name: &str) -> bool {
+        let hole = format!("{{{name}}}");
+        self.request.path.to_string().contains(&hole)
+            || self
+                .request
+                .query
+                .values()
+                .any(|value| value.to_string().contains(&hole))
+            || self
+                .request
+                .json
+                .as_ref()
+                .is_some_and(|body| body.to_string().contains(&hole))
+    }
+}
+
+/// Finds the id a title has in another service, so an indexer that knows titles by that id can be
+/// asked for it. `provider` answers the title's detail for our own id and lists the other service's
+/// ids of its episodes, which look like `<id>:<title>:<episode>` (`kitsu:7442:1`), or `<id>:<title>`
+/// for a film.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MapperDef {
+    /// Lower case letters. It names the holes of an indexer's request, and the front of the ids.
+    pub id: String,
+    /// The kinds it maps.
+    pub kinds: Vec<Kind>,
+    pub provider: ProviderDef,
+}
+
+impl MapperDef {
+    pub fn check(&self) -> anyhow::Result<()> {
+        ensure!(
+            !self.id.is_empty() && self.id.bytes().all(|byte| byte.is_ascii_lowercase()),
+            "the mapper id {:?} must be lower case letters",
+            self.id
+        );
+        ensure!(
+            ![
+                "term",
+                "imdb",
+                "imdb_digits",
+                "imdb_or_term",
+                "season",
+                "episode"
+            ]
+            .contains(&self.id.as_str()),
+            "the mapper id {:?} is the name of a hole an indexer's request already has",
+            self.id
+        );
+        ensure!(!self.kinds.is_empty(), "the mapper serves no kind");
+        self.provider.check().context("its provider")?;
+        ensure!(
+            self.kinds
+                .iter()
+                .all(|kind| self.provider.kinds.contains(kind)),
+            "its provider does not serve every kind it maps"
+        );
+        Ok(())
     }
 }
 
@@ -473,10 +551,7 @@ impl SubtitleDef {
             check_url(host)?;
         }
         for host in &self.file_hosts {
-            ensure!(
-                !host.is_empty() && !host.contains('/') && !host.contains(':'),
-                "\"{host}\" is not a bare host name"
-            );
+            check_bare_host(host)?;
         }
         let fields = &self.response.fields;
         for expression in [&fields.id, &fields.url, &fields.lang].into_iter().chain(
@@ -529,6 +604,15 @@ pub struct ProviderDef {
     #[serde(default)]
     pub search: Option<SearchDef>,
     pub detail: DetailDef,
+    /// Where this provider's pictures are kept. The website's image proxy fetches a picture only from
+    /// these hosts (an entry matches that host and its subdomains), because the address comes from an answer.
+    #[serde(default)]
+    pub image_hosts: Vec<String>,
+    /// Its titles say which provider they came from (see `media_id`). Not in the JSON: a plugin's
+    /// providers are marked when the plugin is added, because the built-in chain could not tell their
+    /// ids from its own.
+    #[serde(skip)]
+    pub qualified: bool,
 }
 
 /// A request to a provider. `url` is the whole address, and its holes are percent-encoded.
@@ -868,6 +952,10 @@ impl ProviderDef {
         ensure!(!self.id.is_empty(), "a provider has no id");
         ensure!(!self.kinds.is_empty(), "serves no kind");
         check_url(&self.base_url)?;
+        ensure!(self.image_hosts.len() <= 16, "has more than 16 image hosts");
+        for host in &self.image_hosts {
+            check_bare_host(host)?;
+        }
         // The base is put into a template, so it cannot hold template syntax.
         ensure!(
             !self.base_url.contains(['{', '}']),
@@ -1022,6 +1110,14 @@ fn check_when(tokens: &[String]) -> anyhow::Result<()> {
             "\"{token}\" is not something that can be asked for"
         );
     }
+    Ok(())
+}
+
+fn check_bare_host(host: &str) -> anyhow::Result<()> {
+    ensure!(
+        !host.is_empty() && !host.contains('/') && !host.contains(':'),
+        "\"{host}\" is not a bare host name"
+    );
     Ok(())
 }
 

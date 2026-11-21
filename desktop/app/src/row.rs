@@ -22,8 +22,10 @@ const OVERSCAN: i64 = 2;
 /// What a row shows, before it has loaded.
 #[derive(Clone)]
 pub struct RowSpec {
-    pub title: &'static str,
+    pub title: String,
     pub kind: Kind,
+    /// The provider the row draws from alone. Absent: the kind's chain answers.
+    pub provider: Option<String>,
     pub filters: Filters,
 }
 
@@ -82,7 +84,7 @@ impl MediaRow {
     /// A row that fetches its items from the provider chain.
     pub fn loading(spec: RowSpec, cx: &mut Context<Self>) -> MediaRow {
         let mut row = MediaRow {
-            title: spec.title.into(),
+            title: spec.title.clone().into(),
             spec: Some(spec),
             items: Items::Loading,
             resume: Vec::new(),
@@ -95,14 +97,20 @@ impl MediaRow {
     }
 
     fn fetch(&mut self, cx: &mut Context<Self>) {
-        let Some(RowSpec { kind, filters, .. }) = self.spec.clone() else {
+        let Some(RowSpec {
+            kind,
+            provider,
+            filters,
+            ..
+        }) = self.spec.clone()
+        else {
             return;
         };
         self.items = Items::Loading;
         cx.notify();
         crate::task::load(
             cx,
-            async move { providers::list(kind, &filters).await },
+            async move { providers::list_row(kind, provider.as_deref(), &filters).await },
             |row, page, cx| {
                 row.items = match page {
                     Ok(page) => Items::Loaded(page.results),

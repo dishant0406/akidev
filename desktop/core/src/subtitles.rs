@@ -295,9 +295,10 @@ async fn ask(def: &SubtitleDef, query: &Query, limit: Duration) -> anyhow::Resul
         return Ok(Vec::new());
     }
     let key = format!(
-        "v{}:subtitles:{}:{path}:{params:?}",
+        "v{}:subtitles:{}:{path}:{params:?}:{:?}",
         sources::current().version,
-        def.id
+        def.id,
+        def.response
     );
     let document = cached(
         &key,
@@ -309,6 +310,10 @@ async fn ask(def: &SubtitleDef, query: &Query, limit: Duration) -> anyhow::Resul
             let mut last = None;
             for host in &hosts {
                 let url = format!("{host}{path}");
+                if !crate::http::stays_on(host, &url) {
+                    last = Some(anyhow::anyhow!("the request would leave its host"));
+                    continue;
+                }
                 let builder = match def.request.method {
                     Method::Get => client().get(&url),
                     Method::Post => client().post(&url),

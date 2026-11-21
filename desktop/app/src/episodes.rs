@@ -9,7 +9,7 @@ use crate::design::tokens::{
 use crate::downloads;
 use crate::route::{Route, navigate, replace};
 use akidev_core::media_id::{self, anime_episode_id};
-use akidev_core::model::{Detail, Episode, Kind};
+use akidev_core::model::{Detail, Episode, Kind, Shape};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -70,9 +70,9 @@ impl Render for EpisodeList {
                 .child(text.to_string())
         };
 
-        match self.kind {
-            Kind::Movie => div().into_any_element(),
-            Kind::Series => {
+        match self.kind.shape() {
+            Shape::Movie => div().into_any_element(),
+            Shape::Series => {
                 let seasons = self.seasons();
                 if seasons.is_empty() {
                     return section
@@ -116,7 +116,7 @@ impl Render for EpisodeList {
                     )
                     .into_any_element()
             }
-            Kind::Anime => {
+            Shape::Anime => {
                 if self.count == 0 {
                     return section
                         .child(section_title("Episodes"))
@@ -185,7 +185,7 @@ impl EpisodeList {
 
     /// One anime episode as a number tile.
     fn tile(&self, number: u32, compact: bool) -> Stateful<Div> {
-        let id = anime_episode_id(&self.provider_id, number);
+        let id = anime_episode_id(self.kind, &self.provider_id, number);
         let selected = self.current_number() == Some(number);
         let (width, height) = if compact { (52., 40.) } else { (56., 44.) };
         div()
@@ -243,9 +243,9 @@ impl EpisodeList {
             .restrict_scroll_to_axis()
             .track_scroll(&self.scroll);
 
-        match self.kind {
-            Kind::Movie => root,
-            Kind::Series => {
+        match self.kind.shape() {
+            Shape::Movie => root,
+            Shape::Series => {
                 let seasons = self.seasons();
                 if seasons.is_empty() {
                     return root.child(note("No episode list is available."));
@@ -291,7 +291,7 @@ impl EpisodeList {
                     ),
                 )
             }
-            Kind::Anime => {
+            Shape::Anime => {
                 if self.count == 0 {
                     return root.child(note("No episodes have been released yet."));
                 }

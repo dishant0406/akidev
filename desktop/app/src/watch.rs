@@ -17,7 +17,7 @@ use crate::progress::Entry;
 use crate::route::{Route, replace};
 use crate::runtime;
 use akidev_core::media_id::{self, MediaId, anime_episode_id};
-use akidev_core::model::{Detail, Kind};
+use akidev_core::model::{Detail, Shape};
 use akidev_core::providers;
 use akidev_core::stream::{Choice, Plan, Resolution, StreamId};
 use akidev_core::subtitles::{self, Subtitle};
@@ -324,7 +324,7 @@ impl WatchPage {
                 move |page, detail, cx| {
                     if let Some(detail) = detail
                         .as_ref()
-                        .filter(|detail| detail.media.kind != Kind::Movie)
+                        .filter(|detail| detail.media.kind.shape() != Shape::Movie)
                     {
                         page.episodes =
                             Some(cx.new(|_| EpisodeList::new(detail, Some(current), true)));
@@ -1402,15 +1402,15 @@ impl WatchPage {
         }
         let parsed = self.parsed.as_ref()?;
         let detail = self.detail.as_ref()?;
-        match parsed.kind {
-            Kind::Movie => None,
-            Kind::Anime => {
+        match parsed.kind.shape() {
+            Shape::Movie => None,
+            Shape::Anime => {
                 let next = i64::from(parsed.episode?) + i64::from(delta);
                 let count = i64::from(detail.media.episodes.unwrap_or(0));
                 (next >= 1 && next <= count)
-                    .then(|| anime_episode_id(&parsed.provider_id, next as u32))
+                    .then(|| anime_episode_id(parsed.kind, &parsed.provider_id, next as u32))
             }
-            Kind::Series => {
+            Shape::Series => {
                 let mut episodes: Vec<_> = detail.episodes.iter().collect();
                 episodes.sort_by_key(|e| (e.season, e.number));
                 let at = episodes.iter().position(|e| e.id == self.id)?;
