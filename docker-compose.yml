@@ -85,6 +85,8 @@ services:
       STREAM_URL: ${STREAM_URL:-}
       # Video one visitor may be sent in a day, in bytes. 0, the default, is no limit.
       MAX_STREAM_BYTES_PER_DAY: ${MAX_STREAM_BYTES_PER_DAY:-0}
+      # Slow debrid/CDN responses get a bounded chance to prepare the selected file.
+      RESOLVE_DEADLINE_MS: ${RESOLVE_DEADLINE_MS:-180000}
       # The browser calls the API from the site, so that origin must be allowed.
       CORS_ORIGINS: https://${NEXT_PUBLIC_SITE_DOMAIN:-akidev.live}
       CACHE_DIR: /data
