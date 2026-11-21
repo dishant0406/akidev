@@ -1981,7 +1981,7 @@ mod tests {
     #[test]
     fn a_stremio_episode_with_catalogue_aliases_and_a_bare_number_is_accepted() {
         let row = release(
-            "Paul no Miracle Dai Sakusen - 34 [ARR]",
+            "Paul no Miracle Dai Sakusen - 34 [ARR] Paul no Miracle Dai Sakusen - 34 [ARR].mkv 👤 1 💾 305.12 MB ⚙️ TokyoTosho 🇬🇧 / 🇮🇹",
             1,
             "850f08d9993917d123fd60f682c958d03122fdc5",
         );

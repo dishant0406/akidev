@@ -217,6 +217,16 @@ fn request_json(request: &super::fetch::Prepared) -> Value {
 }
 
 #[test]
+fn anilist_detail_requests_synonyms_for_release_matching() {
+    let provider = def("anilist");
+    let mut asking = Asking::new(&provider, Kind::Anime);
+    asking.id = Some("4013".into());
+    let request = asking.prepare(&provider.detail.request).unwrap();
+    let body = request_json(&request);
+    assert!(body.to_string().contains("synonyms"));
+}
+
+#[test]
 fn an_anilist_detail_carries_cast_studios_trailer_and_related_anime() {
     let mut title = bocchi();
     title["description"] = json!("Line one<br>Line two &amp; <i>more</i>");

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 38,
+  "version": 39,
   "trackers": [
     "udp://tracker.opentrackr.org:1337/announce",
     "http://tracker.opentrackr.org:1337/announce",
@@ -895,7 +895,7 @@
           "url": "{base}",
           "json": {
             "query": {
-              "$text": "query ($id: Int) { Media(id: $id, type: ANIME) { id title { romaji english native } coverImage { extraLarge large } bannerImage format season seasonYear episodes duration status averageScore meanScore popularity genres isAdult studios(isMain: true) { nodes { name } } nextAiringEpisode { episode } startDate { year } description(asHtml: false) trailer { id site } relations { edges { relationType node { id type format status episodes meanScore title { romaji english native } coverImage { extraLarge large } startDate { year } } } } recommendations(sort: RATING_DESC, perPage: 12) { nodes { mediaRecommendation { id format status episodes meanScore averageScore popularity genres title { romaji english native } coverImage { extraLarge large } startDate { year } } } } characters(sort: [ROLE, RELEVANCE], perPage: 12) { edges { role node { name { full } image { large } } } } } }"
+              "$text": "query ($id: Int) { Media(id: $id, type: ANIME) { id title { romaji english native } synonyms coverImage { extraLarge large } bannerImage format season seasonYear episodes duration status averageScore meanScore popularity genres isAdult studios(isMain: true) { nodes { name } } nextAiringEpisode { episode } startDate { year } description(asHtml: false) trailer { id site } relations { edges { relationType node { id type format status episodes meanScore title { romaji english native } coverImage { extraLarge large } startDate { year } } } } recommendations(sort: RATING_DESC, perPage: 12) { nodes { mediaRecommendation { id format status episodes meanScore averageScore popularity genres title { romaji english native } coverImage { extraLarge large } startDate { year } } } } characters(sort: [ROLE, RELEVANCE], perPage: 12) { edges { role node { name { full } image { large } } } } } }"
             },
             "variables": {
               "id": {
