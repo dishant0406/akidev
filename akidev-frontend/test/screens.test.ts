@@ -1,5 +1,6 @@
-// Tests for reading the screens. The data is the built-in sources document, the same one the
-// desktop app starts with and the server sends from GET /v1/screens.
+// Tests for reading the screens. The data is a copy of the screens of the sources document (the
+// akidev-sources repo), kept next to the test so the website's checks need nothing from another repo.
+// It is the shape GET /v1/screens sends.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,8 +10,8 @@ import { defaultSort, genresFor, tabForSlug, tagFor } from "../src/lib/screens.t
 import type { Screens } from "../src/types/media.ts";
 
 const screens: Screens = JSON.parse(
-  readFileSync(new URL("../../desktop/sources/sources.json", import.meta.url), "utf8"),
-).screens;
+  readFileSync(new URL("./screens.fixture.json", import.meta.url), "utf8"),
+);
 
 test("each catalogue page is found by its slug", () => {
   assert.equal(tabForSlug(screens, "anime")?.kind, "anime");
