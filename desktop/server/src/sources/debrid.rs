@@ -384,10 +384,11 @@ impl Debrid {
         if offset > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
         }
-        let response = request
-            .timeout(self.timeout)
-            .send()
+        // Bound the response headers, not the lifetime of the media body. reqwest's request
+        // timeout also covers streaming the body, which cuts off every video after a few seconds.
+        let response = tokio::time::timeout(self.timeout, request.send())
             .await
+            .map_err(|_| anyhow::anyhow!("the download service response headers timed out"))?
             .map_err(|error| anyhow::anyhow!(self.redact(error.without_url())))?;
         let status = response.status();
         if !(status.as_u16() == 200 && offset == 0 || status.as_u16() == 206) {
@@ -1349,6 +1350,53 @@ mod tests {
         let started = Instant::now();
         assert!(debrid.open(987654, 1, 0).await.is_err());
         assert!(started.elapsed() < Duration::from_millis(250));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_slow_media_body_is_not_cut_off_by_the_header_timeout() {
+        let _guard = TEST_LOCK.lock().await;
+        use axum::Router;
+        use axum::body::Body;
+        use axum::routing::get;
+        use tokio::io::AsyncReadExt;
+
+        let app = Router::new().route(
+            "/file",
+            get(|| async {
+                let chunks = futures::stream::unfold(0, |part| async move {
+                    match part {
+                        0 => Some((Ok::<_, std::io::Error>("a"), 1)),
+                        1 => {
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                            Some((Ok("b"), 2))
+                        }
+                        _ => None,
+                    }
+                });
+                Body::from_stream(chunks)
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut debrid = Debrid::with_base(
+            "secret-key".into(),
+            Duration::from_millis(80),
+            vec!["127.0.0.1".into()],
+            format!("http://127.0.0.1:{port}"),
+        )
+        .unwrap();
+        Arc::get_mut(&mut debrid).unwrap().require_https = false;
+        cache::put(
+            "torbox:dl:987654:1",
+            format!("http://127.0.0.1:{port}/file"),
+            LINK_TTL,
+        );
+        let mut body = debrid.open(987654, 1, 0).await.unwrap();
+        let mut bytes = Vec::new();
+        body.read_to_end(&mut bytes).await.unwrap();
+        assert_eq!(bytes, b"ab");
         server.abort();
     }
 
