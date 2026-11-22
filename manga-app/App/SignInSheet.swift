@@ -50,6 +50,9 @@ struct SignInSheet: View {
         do {
             _ = try await model.engine.signIn(source: source, fields: values)
             model.refresh()
+            // Empty the password before the sheet goes: iOS offers to save a password that is still in the field.
+            for field in form?.fields ?? [] where field.secret { values[field.id] = "" }
+            try? await Task.sleep(for: .milliseconds(150))
             onSignedIn()
             dismiss()
         } catch { problem = describe(error).message }
