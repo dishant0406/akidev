@@ -171,6 +171,20 @@ States: loading, empty ("No results"), source unreachable (Try again), source ne
 
 *Built:* all of it. *Missing:* tap zone presets in the reader sheet, a chapter jump list, a brightness hint, incognito.
 
+### 4.4a Sign in to a source with an account
+
+For a source with free titles and paid ones. The source's definition has an `auth` section; the app draws the sheet from it.
+
+1. **Sources**, tap the source: its settings page shows an **Account** row ("Not signed in", **Sign in**). A source with no account has no row.
+2. **Sign in** opens a sheet: "Sign in to <source>", one labelled field for each thing the definition asks for (the password hidden), the line "Sent to <host> only. Akidev keeps a session, not your password.", and **Sign in**. The button is off until every field has text.
+3. A refused sign-in says so under the fields ("<source> did not accept that sign-in: is the account right?") and the message goes as soon as a field changes. The password is never in a message.
+4. On success the sheet closes. The row shows the name the site gave and **Sign out**. Free titles never needed this; paid chapters now open.
+   A chapter the source flags as locked says **Locked** over its title while signed out; tapping it opens this sheet first and the chapter opens after sign-in.
+5. When the site stops accepting the session, the app asks it for a new one once and goes on. If that fails, the next read says "the session ended, sign in again".
+6. **Sign out** tells the site and removes the session. Removing the source removes it too.
+
+The session is kept in the Keychain (this device only), never in the library database and never in a backup. *Built:* all of it, on iPhone and Android.
+
 ### 4.5 Save, follow, get new chapters
 
 1. Bookmark on the series page saves it to **Library**.

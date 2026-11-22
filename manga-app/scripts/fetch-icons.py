@@ -23,12 +23,12 @@ ICONS = {
     "more": "menu-dots", "play": "play", "pause": "pause", "previous": "skip-previous", "next": "skip-next", "keyboard": "keyboard",
     "server": "server-2", "sparkles": "stars-minimalistic", "list": "list", "warning": "danger-triangle",
     "swap": "transfer-horizontal", "close": "close-circle", "zip": "file-zip", "image": "gallery", "book": "book-2",
-    "headphones": "headphones-round", "qr": "qr-code",
+    "headphones": "headphones-round", "qr": "qr-code", "lock": "lock",
 }
 STYLES = {"": "linear", "-solid": "bold"}
 # Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which
 # keeps the app smaller. Add a name here when the app starts to use "<name>-solid".
-SOLID = {"book", "bookmark", "check", "close", "home", "inbox", "library", "play", "server", "sources", "warning"}
+SOLID = {"book", "bookmark", "check", "close", "home", "inbox", "library", "lock", "play", "server", "sources", "warning"}
 root = pathlib.Path(__file__).resolve().parent.parent / "App" / "Assets.xcassets"
 root.mkdir(exist_ok=True)
 (root / "Contents.json").write_text(json.dumps({"info": {"author": "xcode", "version": 1}}, indent=2))

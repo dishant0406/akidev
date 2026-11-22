@@ -5,6 +5,10 @@ Serves the hand-written fixtures from desktop/manga/testdata/fixtures/madara-exa
 images replaced by generated pictures on this server, plus a repository under /_demo/repo/ (an index.json
 that lists the madara theme and a source called `local`). Start the app with
 `-demoRepo http://127.0.0.1:8770/_demo/repo/ -source local`.
+
+The repository also offers `paid`, a small JSON site with a sign-in (`-demoInstall local,paid`): its series are open, its
+chapter 2 needs an account. Any email works with the password `demo-pass`. DEMO_EXPIRE=1 makes the first access token stop
+working, so the app has to refresh the session; DEMO_LOG=1 shows each request with whether it carried a token.
 """
 import hashlib, json, os, struct, sys, time, zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -91,6 +95,32 @@ def fixture(name):
     return text.encode()
 
 
+# The paid demo site: tokens it accepts. `demo-access` is what a sign-in gives, `demo-access-2` what a refresh gives.
+PAID_TOKENS = {"demo-access", "demo-access-2"}
+
+
+def paid_source():
+    """The `paid` source: a JSON site whose open titles load for anyone and whose chapter 2 needs a sign-in."""
+    card = {"id": "slug", "title": "title", "cover": "cover"}
+    return json.dumps({
+        "schema": 1, "id": "paid", "name": "Paid demo", "version": 2, "lang": ["en"], "nsfw": False,
+        "base_url": f"{BASE}/paid", "rate_per_second": 20,
+        "auth": {
+            "fields": [{"id": "email", "name": "Email"}, {"id": "password", "name": "Password", "secret": True}],
+            "login": {"request": {"method": "POST", "url": "{base}/auth/login", "json": {"email": "{email}", "password": "{password}"}},
+                      "format": "json", "vars": {"access": "data.access_token", "refresh": "data.refresh_token", "user": "data.user.display_name"}},
+            "refresh": {"request": {"method": "POST", "url": "{base}/auth/refresh", "json": {"refresh_token": "{refresh}"}},
+                        "format": "json", "vars": {"access": "data.access_token"}},
+            "logout": {"method": "POST", "url": "{base}/auth/logout", "json": {"refresh_token": "{refresh}"}},
+            "headers": {"authorization": "Bearer {access}"},
+        },
+        "popular": {"request": {"url": "{base}/series"}, "format": "json", "rows": "data", "card": card},
+        "detail": {"request": {"url": "{base}/series/{id}"}, "format": "json", "title": "title", "cover": "cover", "description": "description"},
+        "chapters": {"request": {"url": "{base}/series/{id}/chapters"}, "format": "json", "rows": "data", "chapter": {"id": "slug", "number": "number", "title": "title", "locked": "premium"}},
+        "pages": {"request": {"url": "{base}/chapters/{series}/{id}"}, "format": "json", "images": "data.pages.*", "reading": "longstrip"},
+    }, indent=2).encode()
+
+
 ROUTES = {
     ("GET", "/manga/page/1/"): "popular.html",
     ("GET", "/page/1/"): "search.html",
@@ -123,16 +153,59 @@ class Handler(BaseHTTPRequestHandler):
             "sources": [entry("local", "Demo site", local), entry("second", "Second site", second)],
             "themes": [{"id": "madara", "version": json.loads(theme)["version"], "path": "themes/madara.json", "sha256": sha(theme)}],
         }
-        files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": local, "sources/second.json": second}
+        paid = paid_source()
+        index["sources"].append({"id": "paid", "name": "Paid demo", "version": 2, "path": "sources/paid.json", "sha256": sha(paid), "lang": ["en"]})
+        files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": local, "sources/second.json": second, "sources/paid.json": paid}
         if inside in files:
             return self.reply(files[inside], "application/json")
         self.send_response(404)
         self.end_headers()
 
+    def paid(self, method, path, body):
+        """The paid demo site. A sign-in with the password `demo-pass` gives tokens; chapter 2 needs one."""
+        token = (self.headers.get("authorization") or "").removeprefix("Bearer ")
+        if os.environ.get("DEMO_LOG"):
+            print(f"  paid {method} {path} token={token or 'none'}", flush=True)
+        send = lambda value, status=200: (self.send_response(status), self.send_header("content-type", "application/json"), self.send_header("content-length", str(len(value))), self.end_headers(), self.wfile.write(value))
+        data = lambda value: json.dumps(value).encode()
+        try:
+            asked = json.loads(body or b"{}")
+        except ValueError:
+            asked = {}
+        if (method, path) == ("POST", "/paid/auth/login"):
+            if asked.get("password") == "demo-pass":
+                return send(data({"data": {"access_token": "demo-access", "refresh_token": "demo-refresh", "user": {"display_name": "Demo Reader"}}}))
+            return send(data({"error": "wrong"}), 401)
+        if (method, path) == ("POST", "/paid/auth/refresh"):
+            if asked.get("refresh_token") == "demo-refresh":
+                PAID_TOKENS.discard("demo-access")
+                return send(data({"data": {"access_token": "demo-access-2"}}))
+            return send(data({"error": "expired"}), 401)
+        if (method, path) == ("POST", "/paid/auth/logout"):
+            return send(b"{}")
+        valid = token in PAID_TOKENS and not (os.environ.get("DEMO_EXPIRE") and token == "demo-access")
+        series = [{"slug": "open-door", "title": "The Open Door", "cover": f"{BASE}/wp-content/c/1.jpg"}, {"slug": "members-only", "title": "Members Only", "cover": f"{BASE}/wp-content/c/2.jpg"}]
+        if path == "/paid/series":
+            return send(data({"data": series}))
+        if path.startswith("/paid/series/") and path.endswith("/chapters"):
+            return send(data({"data": [{"slug": "chapter-2", "number": 2, "title": "Chapter 2", "premium": True}, {"slug": "chapter-1", "number": 1, "title": "Chapter 1", "premium": False}]}))
+        if path.startswith("/paid/series/"):
+            slug = path.split("/")[-1]
+            found = next((item for item in series if item["slug"] == slug), series[0])
+            return send(data({**found, "description": "Chapter 1 is open. Chapter 2 needs an account."}))
+        if path.startswith("/paid/chapters/"):
+            _, _, _, _, chapter = path.split("/")
+            if chapter == "chapter-2" and not valid:
+                return send(data({"error": "sign in"}), 401)
+            number = chapter.split("-")[-1]
+            return send(data({"data": {"pages": [f"{BASE}/solo/{number}/{n:03d}.png" for n in (1, 2, 3)]}}))
+        return send(b"{}", 404)
+
     def handle_any(self, method):
         path = self.path.split("?")[0]
-        if method == "POST":
-            self.rfile.read(int(self.headers.get("content-length") or 0))
+        body = self.rfile.read(int(self.headers.get("content-length") or 0)) if method == "POST" else b""
+        if path.startswith("/paid/"):
+            return self.paid(method, path, body)
         # DEMO_LATENCY=0.3 makes every page of the site (not its pictures or the repository) take 300 ms, like a real network.
         if not path.startswith(("/solo/", "/wp-content/", "/_demo/")):
             time.sleep(float(os.environ.get("DEMO_LATENCY", 0)))

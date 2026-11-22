@@ -41,6 +41,7 @@ final class AppModel {
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("AkiManga")
         engine = try! Engine(dataDir: base.path)
+        engine.setSessionKeeper(keeper: SessionKeychain())
         let prefs = prefs
         downloader = AutoDownloader(engine: engine, wifiOnly: { prefs.downloadOnWifiOnly })
         readAloud = ReadAloudModel(engine: engine, prefs: prefs)

@@ -189,12 +189,15 @@ struct SourceSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var settings: [SettingInfo] = []
     @State private var removing = false
+    @State private var signingIn = false
+    @State private var signedInAs: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 AkiBackHeader(title: model.name(of: source), subtitle: "Settings", back: { dismiss() })
-                if settings.isEmpty { AkiText("This source has no settings.", tone: .muted) }
+                if let info = model.sources.first(where: { $0.id == source }), info.hasSignIn { accountRow(signedIn: info.signedIn) }
+                if settings.isEmpty && !hasAccount { AkiText("This source has no settings.", tone: .muted) }
                 ForEach(settings, id: \.id) { setting in
                     AkiCard(padding: 16) {
                         AkiSelect(title: setting.name, selection: Binding(
@@ -219,6 +222,22 @@ struct SourceSettingsView: View {
             model.refresh()
             dismiss()
         }
+        .akiSheet(isPresented: $signingIn) { SignInSheet(source: source) }
         .onAppear { settings = (try? model.engine.sourceSettings(source: source)) ?? [] }
+        .task(id: model.sources.first { $0.id == source }?.signedIn) { signedInAs = try? model.engine.signedInAs(source: source) }
+    }
+
+    private var hasAccount: Bool { model.sources.first { $0.id == source }?.hasSignIn ?? false }
+
+    @ViewBuilder private func accountRow(signedIn: Bool) -> some View {
+        if signedIn {
+            AkiRow(title: signedInAs ?? "Signed in", subtitle: "Signed in") {
+                AkiButton("Sign out", size: .small) { Task { try? await model.engine.signOut(source: source); model.refresh() } }
+            }
+        } else {
+            AkiRow(title: "Account", subtitle: "Not signed in") {
+                AkiButton("Sign in", variant: .primary, size: .small) { signingIn = true }
+            }
+        }
     }
 }

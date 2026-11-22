@@ -26,6 +26,10 @@ struct SeriesView: View {
     @State private var loading = true
     @State private var error: (title: String, message: String)?
     @State private var target: ReaderTarget?
+    /// A locked chapter waiting for the person to sign in: opened as soon as they have.
+    @State private var waiting: ReaderTarget?
+    @State private var signingIn = false
+    @State private var afterSignIn: ReaderTarget?
     @State private var tab = SeriesTab.chapters
     @State private var expanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -81,6 +85,8 @@ struct SeriesView: View {
         .akiHaptic(.error, trigger: problem)
         .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiSheet(isPresented: $presented.equals(.move)) { MigrateSheet(ref: ref) { dismiss() } }
+        .akiSheet(isPresented: $signingIn) { SignInSheet(source: ref.source) { afterSignIn = waiting } }
+        .onChange(of: signingIn) { if !signingIn, let next = afterSignIn { afterSignIn = nil; target = next } }
         .akiPhotoPicker(isPresented: $presented.equals(.cover)) { jpeg in
             try? model.engine.setCustomCover(source: ref.source, series: ref.id, jpeg: jpeg)
             chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
@@ -183,7 +189,7 @@ struct SeriesView: View {
         LazyVStack(spacing: 12) {
             if chapters.isEmpty && loading { AkiSpinner().padding(40) }
             ForEach(chapters, id: \.id) { chapter in
-                AkiTap(action: { target = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0)) }) {
+                AkiTap(action: { open(chapter) }) {
                     AkiListCard(thumbnail: cover, label: label(chapter),
                                 title: chapterName(number: chapter.number, title: chapter.title),
                                 badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
@@ -223,11 +229,26 @@ struct SeriesView: View {
         }
     }
 
+    /// The source has an account the person has not signed in to.
+    private var needsAccount: Bool { model.sources.first { $0.id == ref.source }.map { $0.hasSignIn && !$0.signedIn } ?? false }
+
+    /// A locked chapter asks for the account first, when there is one to sign in to; any other opens at its place.
+    private func open(_ chapter: ChapterEntry) {
+        let next = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0))
+        if chapter.locked && needsAccount {
+            waiting = next
+            signingIn = true
+        } else {
+            target = next
+        }
+    }
+
     /// The small line over a chapter's title: where you are in it, or what it is.
     private func label(_ chapter: ChapterEntry) -> String {
         if chapter.finished { return kept.contains(chapter.id) ? "Read · Downloaded" : "Read" }
         if kept.contains(chapter.id) { return "Downloaded" }
         if let page = chapter.page { return "Page \(page + 1)" }
+        if chapter.locked && needsAccount { return "Locked" }
         let number = chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" }
         if let number, chapter.title.map({ !$0.localizedCaseInsensitiveContains(number) }) == true { return number }
         return "Unread"
