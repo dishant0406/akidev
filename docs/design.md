@@ -363,3 +363,11 @@ What this tells us: a Play start of 10 to 20 s on a 4K WEB-DL is limited by how 
 ## The arrows at the ends of a row fade the right way (2026-11-22)
 
 The fade behind a row's arrow was drawn backwards: solid on the side facing the posters and clear at the edge of the screen. That gave a hard vertical line across the poster, with a bare arrow on it. In `desktop/app/src/row.rs` the fade is now solid at the screen edge and clears toward the posters, 96 px wide instead of 64, and the arrow sits in a quiet disc (the same wash as the hover on a button) so it reads as a button. Checked on screen at both ends of a row. Not done: the website's rows, which were not looked at.
+
+## The search icon always ends on a page of titles, and the web palette opens at once (2026-11-22)
+
+The magnifier in the top bar now does the same in both apps. On a screen that is not a browse screen it goes to Browse (the app: `Route::Browse`, the site: `/search`, which with nothing typed shows every catalogue) and opens the Cmd-K panel on top, so closing the panel leaves the viewer on a page of titles and not on whatever screen they came from. On a browse screen (any catalogue tab or Browse) it just opens the panel. In the app the music screens keep their own panel, as before. The code is in `desktop/app/src/app.rs` and `akidev-frontend/src/components/topbar.tsx`.
+
+The site's panel felt slow for three reasons, all removed: the dimmed backdrop faded in over 0.7 s (now it appears at once), the panel animated for 0.16 s (now 0.08 s, in a new `snap` animation in `tailwind.config.ts`), and the panel's code was only downloaded on the first open (now it is fetched one second after the page loads). Measured in the browser: the panel is on screen about 6 to 8 ms after the click. The party panel keeps the 0.16 s animation.
+
+Checked on screen in the app from Home and from Browse, and in the browser on a title page. Not checked: a phone, or the music screens after this change.

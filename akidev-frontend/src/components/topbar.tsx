@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 import { IconButton } from "./button";
 import PartyButton from "./party";
 // Search is loaded the first time it is opened, not with every page.
-const Palette = dynamic(() => import("./palette"));
+const loadPalette = () => import("./palette");
+const Palette = dynamic(loadPalette);
 
 /** The bar turns solid once the page has moved this far. */
 const SOLID_AFTER = 40;
@@ -54,6 +55,12 @@ export default function TopBar() {
     setCanGoBack(cameFrom() !== null && pathname !== ROUTES.HOME);
   }, [pathname]);
 
+  // Fetched once the page is idle, so the first Cmd-K opens at once instead of waiting for the file.
+  useEffect(() => {
+    const id = window.setTimeout(loadPalette, 1000);
+    return () => window.clearTimeout(id);
+  }, []);
+
   // Cmd-K or Ctrl-K opens search from anywhere, as it does in the app.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -67,6 +74,14 @@ export default function TopBar() {
   }, []);
 
   const active = (href: string) => pathname === href;
+
+  // The magnifier opens the same panel as Cmd-K. From a page that is not a browse page it goes to
+  // the browse page first, so closing the panel leaves the viewer on a page of titles.
+  const onBrowse = pathname === ROUTES.SEARCH || tabs.some((tab) => tab.href !== ROUTES.HOME && tab.href === pathname);
+  const openSearch = () => {
+    if (!onBrowse) router.push(ROUTES.SEARCH);
+    setSearching(true);
+  };
 
   return (
     <>
@@ -122,7 +137,7 @@ export default function TopBar() {
 
           <div className="flex-1 md:hidden" />
           <PartyButton />
-          <IconButton label="Search" onClick={() => setSearching(true)} className={cn(searching && "bg-wash-2")}>
+          <IconButton label="Search" onClick={openSearch} className={cn(searching && "bg-wash-2")}>
             <Search className="size-[18px]" />
           </IconButton>
         </div>

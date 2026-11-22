@@ -377,17 +377,18 @@ impl AkidevApp {
                                 "search",
                                 IconName::Search,
                                 cx.listener(|app, _, window, cx| {
-                                    // On the music screens the magnifier opens the same panel as Cmd-K.
-                                    if matches!(
+                                    // The magnifier opens the same panel as Cmd-K. From a screen
+                                    // that is not a browse or music screen it goes to Browse first,
+                                    // so closing the panel leaves the viewer on a page of titles.
+                                    if !matches!(
                                         app.route(),
-                                        Route::Music { .. }
+                                        Route::Browse { .. }
+                                            | Route::Music { .. }
                                             | Route::MusicAlbum { .. }
                                             | Route::MusicArtist { .. }
                                     ) {
-                                        app.open_search(window, cx);
-                                    } else {
-                                        // Not `navigate`: this handler is already inside the window, which
-                                        // cannot be asked to update itself again.
+                                        // Not `navigate`: this handler is already inside the window,
+                                        // which cannot be asked to update itself again.
                                         app.go(
                                             Route::Browse {
                                                 kind: None,
@@ -396,6 +397,7 @@ impl AkidevApp {
                                             cx,
                                         );
                                     }
+                                    app.open_search(window, cx);
                                 }),
                             ))
                             .child(

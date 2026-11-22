@@ -47,6 +47,7 @@ const config: Config = {
 				fade: "fade 0.7s cubic-bezier(0.22,1,0.36,1) both",
 				pulse: "pulse 1.6s ease-in-out infinite",
 				pop: "pop 0.16s cubic-bezier(0.32,0.72,0,1) both",
+				snap: "pop 0.08s ease-out both",
 			},
 		}
 	},

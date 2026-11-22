@@ -104,12 +104,12 @@ export default function Palette({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Search"
-      className="fixed inset-0 z-50 flex items-start justify-center bg-canvas/60 px-4 pt-[72px] backdrop-blur-md sm:pt-[110px] animate-fade"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-canvas/60 px-4 pt-[72px] backdrop-blur-md sm:pt-[110px]"
       onClick={onClose}
       onKeyDown={onKeyDown}
     >
       <div
-        className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl material-panel shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_32px_80px_rgb(0_0_0/0.6)] animate-pop"
+        className="flex w-full max-w-[640px] flex-col overflow-hidden rounded-xl material-panel shadow-[0_0_0_1px_rgb(var(--ink)/0.08),0_32px_80px_rgb(0_0_0/0.6)] animate-snap"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3">
