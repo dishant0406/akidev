@@ -353,3 +353,9 @@ Now one page is asked for. If it comes up short after titles are left out (not o
 Not changed, on purpose:
 - Rows that read a window of 3 pages (the date sort and genre rows). Reading fewer would show older titles in "New Releases", and Cinemeta's own genre address did not give matching titles in a test.
 - Pressing Play takes about 13 s to the first frame, mostly torrent pieces (the file index at the far end of a 12 GB file, the resume jump). That needs a change in the torrent engine, so it was left for its own piece of work.
+
+## Tried and left out: fetching the end of the file at the same time as the start (2026-11-22)
+
+When Play is pressed, the torrent engine fetches the first 3 MB of the file and only then the last 3 MB, where an MKV keeps its index. mpv waited about 6 s for that index on a 4K file. We made the two fetches run together and compared old and new builds on the same release, alternating runs. The index was then local (mpv opened the file in 0.02 s), but the start of the file took about 6 s longer (2.2 s became 8.4 s) because both fetches share the same few peers. Total time to the first frame was about the same, with too few runs to tell. We reverted it.
+
+What this tells us: a Play start of 10 to 20 s on a 4K WEB-DL is limited by how fast the swarm sends, not by the order we ask. The release ranker puts the healthiest swarm first (50 or more seeders), and that is often a 4K file. Changing that trades startup speed against how many seeders the pick has, so it is a product choice, not a bug fix.
