@@ -518,6 +518,7 @@ pub struct Installed {
     pub indexers: usize,
     pub subtitles: usize,
     pub catalogues: usize,
+    pub services: usize,
     /// Why it is not in use, when it is switched on and still not working.
     pub problem: Option<String>,
 }
@@ -560,6 +561,7 @@ pub fn load(dir: &Path) -> Vec<Installed> {
                 indexers: plugin.indexers.len(),
                 subtitles: plugin.subtitles.len(),
                 catalogues: plugin.providers.len(),
+                services: plugin.services.len(),
                 problem: Some(format!("the file must be called {}.json", plugin.id)),
             }),
             Ok(mut plugin) => {
@@ -577,6 +579,7 @@ pub fn load(dir: &Path) -> Vec<Installed> {
                     indexers: plugin.indexers.len(),
                     subtitles: plugin.subtitles.len(),
                     catalogues: plugin.providers.len(),
+                    services: plugin.services.len(),
                     problem: problem.clone(),
                 });
                 if enabled && problem.is_none() {
@@ -591,6 +594,7 @@ pub fn load(dir: &Path) -> Vec<Installed> {
                 indexers: 0,
                 subtitles: 0,
                 catalogues: 0,
+                services: 0,
                 problem: Some(format!("{error:#}")),
             }),
         }

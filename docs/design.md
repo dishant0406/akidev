@@ -269,5 +269,25 @@ gave 76 requests to `nyaa` and 20 to `subsplease`, so the eight indexers after t
 
 **Turned down.** Raising the cap (more load on every indexer) and cutting the number of names per title (fewer ways to match).
 
-**Not changed.** For anime, releases named like TV episodes (`S04E01`) can rank above the first season's, because an anime's
-episode number is matched without its season. That is a matching rule in `releases.rs`, not planning, and it is a separate fix.
+**Not changed here.** The season problem for anime is fixed in the next entry.
+
+## Anime releases of another season go to the back (2026-11-22)
+
+**Chosen.** An anime entry has no season number to filter on (its episodes are a flat count), so `rank_releases_by` now reads the
+season the entry is from its titles ("Season 2", "2nd Season"; none means season 1). A release that names a different season
+("S02E01" for the first season's episode 1) is not thrown away, it is sent behind the others.
+
+**Why.** Found by watching the app: Frieren episode 1 started a Season 2 file, because it had more seeders. Same episode number,
+wrong season.
+
+**Turned down.** A hard filter. Some titles never say their season ("Jujutsu Kaisen 2nd Season" is written many ways), and a hard
+filter on a guess would hide the right file. Moving it behind keeps it as a fallback.
+
+## Plugins and stream services in Settings look like the rest (2026-11-22)
+
+**Chosen.** One hairline between rows, no boxes around boxes, one line under each heading, and the Add and Save buttons sit inside
+their field. A plugin row says what it brings and leaves out what it does not ("v2, 1 indexer", "v1, 1 stream service"). The
+folder path shows with `~`. The long explanations were cut to one line each.
+
+**Why.** The old section had paragraph help text, a button beside every field and a sentence about the folder. It read as
+generated. The new one says only what a person needs to act.

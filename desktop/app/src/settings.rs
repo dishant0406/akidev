@@ -2,7 +2,7 @@
 //! snap to a few sensible stops, saved as soon as they are let go), and the plugins.
 
 use crate::backend::Backend;
-use crate::design::button::{ghost_button, secondary_button};
+use crate::design::button::ghost_button;
 use crate::design::toggle::toggle;
 use crate::design::tokens::{
     ACCENT, DANGER, GUTTER, LINE, TEXT, TEXT_DIM, TEXT_FAINT, TOP_BAR, WASH_2, color, font, radius,
@@ -56,6 +56,68 @@ impl Limit {
 /// "1 indexer", "2 indexers".
 fn counted(count: usize, what: &str) -> String {
     format!("{count} {what}{}", if count == 1 { "" } else { "s" })
+}
+
+/// "v1.2, 2 indexers, 1 catalogue": what a plugin brings, leaving out what it does not.
+fn plugin_summary(plugin: &Installed) -> String {
+    let mut parts = vec![format!("v{}", plugin.version)];
+    for (count, what) in [
+        (plugin.indexers, "indexer"),
+        (plugin.subtitles, "subtitle source"),
+        (plugin.catalogues, "catalogue"),
+        (plugin.services, "stream service"),
+    ] {
+        if count > 0 {
+            parts.push(counted(count, what));
+        }
+    }
+    parts.join(", ")
+}
+
+fn small(text: String, tone: u32) -> Div {
+    div()
+        .text_size(px(12.))
+        .line_height(relative(1.4))
+        .text_color(color(tone))
+        .child(text)
+}
+
+/// A section's name with one line under it.
+fn heading(name: &'static str, line: &'static str) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .text_size(px(13.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(color(TEXT_DIM))
+                .child(name),
+        )
+        .child(small(line.to_string(), TEXT_FAINT))
+}
+
+/// One hairline box holding a text field with its button inside it.
+fn field(input: &Entity<InputState>, mask_toggle: bool, button: impl IntoElement) -> Div {
+    let input = Input::new(input).appearance(false);
+    let input = if mask_toggle {
+        input.mask_toggle()
+    } else {
+        input
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .pl_3()
+        .pr_1()
+        .py_1()
+        .rounded(px(radius::BUTTON))
+        .border_1()
+        .border_color(color(LINE))
+        .child(div().flex_1().min_w_0().child(input))
+        .child(button)
 }
 
 pub struct SettingsPage {
@@ -244,44 +306,31 @@ impl SettingsPage {
             self.clear_link = false;
             input.update(cx, |input, cx| input.set_value("", window, cx));
         }
-        let quiet = |text: String, tone: u32| {
-            div()
-                .text_size(px(13.))
-                .line_height(relative(1.35))
-                .text_color(color(tone))
-                .child(text)
-        };
         let rows = self.plugins.iter().map(|each| {
             let (id, on) = (each.id.clone(), each.enabled);
             let (toggle_id, remove_id) = (id.clone(), id.clone());
             let detail = match &each.problem {
-                Some(problem) => quiet(problem.clone(), DANGER),
-                None => quiet(
-                    format!(
-                        "Version {} · {} · {} · {}",
-                        each.version,
-                        counted(each.indexers, "indexer"),
-                        counted(each.subtitles, "subtitle source"),
-                        counted(each.catalogues, "catalogue")
-                    ),
-                    TEXT_FAINT,
-                ),
+                Some(problem) => small(problem.clone(), DANGER),
+                None => small(plugin_summary(each), TEXT_FAINT),
             };
             div()
                 .flex()
                 .items_center()
                 .justify_between()
                 .gap_6()
+                .py_3()
+                .border_t_1()
+                .border_color(color(LINE))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .gap_1()
+                        .gap(px(2.))
                         .child(
                             div()
-                                .text_size(px(13.))
+                                .text_size(px(14.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(color(TEXT))
                                 .child(each.name.clone()),
@@ -305,48 +354,33 @@ impl SettingsPage {
                         )),
                 )
         });
+        let folder = self.plugin_dir.join("plugins").display().to_string();
+        let folder = match std::env::var("HOME") {
+            Ok(home) => folder.replacen(&home, "~", 1),
+            Err(_) => folder,
+        };
         div()
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                div().flex().flex_col().gap_1().child(
-                    div()
-                        .text_size(px(13.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(color(TEXT_DIM))
-                        .child("Plugins"),
-                ).child(quiet(
-                    "Sources made by other people: more torrents, more subtitles and more catalogues. Akidev does not check what they find, so add only ones you trust.".into(),
-                    TEXT_FAINT,
-                )),
-            )
-            .children(rows)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .rounded(px(radius::BUTTON))
-                            .border_1()
-                            .border_color(color(LINE))
-                            .child(Input::new(&input).appearance(false)),
-                    )
-                    .child(secondary_button(
-                        "plugin-add",
-                        if self.adding { "Adding…" } else { "Add" },
-                        None,
-                        cx.listener(|page, _, _, cx| page.add_plugin(cx)),
-                    )),
-            )
+            .child(heading(
+                "Plugins",
+                "Add sources from people you trust. Akidev does not check what they find.",
+            ))
+            .child(div().flex().flex_col().children(rows))
+            .child(field(
+                &input,
+                false,
+                ghost_button(
+                    "plugin-add",
+                    if self.adding { "Adding…" } else { "Add" },
+                    cx.listener(|page, _, _, cx| page.add_plugin(cx)),
+                ),
+            ))
             .children(
-                self.note
-                    .as_ref()
-                    .map(|(text, failed)| quiet(text.clone(), if *failed { DANGER } else { TEXT_DIM })),
+                self.note.as_ref().map(|(text, failed)| {
+                    small(text.clone(), if *failed { DANGER } else { TEXT_DIM })
+                }),
             )
             .child(
                 div()
@@ -354,13 +388,7 @@ impl SettingsPage {
                     .items_center()
                     .justify_between()
                     .gap_6()
-                    .child(quiet(
-                        format!(
-                            "Or put a .json file in {} and reload.",
-                            self.plugin_dir.join("plugins").display()
-                        ),
-                        TEXT_FAINT,
-                    ))
+                    .child(small(folder, TEXT_FAINT))
                     .child(ghost_button(
                         "plugin-reload",
                         "Reload",
@@ -376,22 +404,14 @@ impl SettingsPage {
         if services.is_empty() {
             return div();
         }
-        let quiet = |text: String, tone: u32| {
-            div()
-                .text_size(px(13.))
-                .line_height(relative(1.35))
-                .text_color(color(tone))
-                .child(text)
-        };
         let mut rows = Vec::new();
         for service in &services {
             let id = service.id.clone();
-            let saved = self
+            let has_key = self
                 .config
                 .service_keys
                 .get(&id)
-                .cloned()
-                .unwrap_or_default();
+                .is_some_and(|key| !key.is_empty());
             let label = service.key_label.clone();
             let input = self
                 .keys
@@ -405,51 +425,51 @@ impl SettingsPage {
                 })
                 .clone();
             let save_id = id.clone();
-            let has_key = !saved.is_empty();
-            let mut row = div().flex().flex_col().gap_2().child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .text_color(color(TEXT_DIM))
-                            .child(service.name.clone()),
-                    )
-                    .child(quiet(
-                        if label.is_none() {
-                            "No key needed".to_string()
-                        } else if has_key {
-                            "A key is saved".to_string()
-                        } else {
-                            "No key yet".to_string()
-                        },
-                        TEXT_FAINT,
-                    )),
-            );
-            if label.is_some() {
-                row = row.child(
+            let status = match (&label, has_key) {
+                (None, _) => "No key needed",
+                (Some(_), true) => "Key saved",
+                (Some(_), false) => "No key",
+            };
+            let mut row = div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .py_3()
+                .border_t_1()
+                .border_color(color(LINE))
+                .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap_3()
+                        .justify_between()
                         .child(
                             div()
-                                .flex_1()
-                                .min_w_0()
-                                .rounded(px(radius::BUTTON))
-                                .border_1()
-                                .border_color(color(LINE))
-                                .child(Input::new(&input).appearance(false).mask_toggle()),
+                                .text_size(px(14.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(color(TEXT))
+                                .child(service.name.clone()),
                         )
-                        .child(secondary_button(
-                            SharedString::from(format!("service-key-{id}")),
-                            "Save key",
-                            None,
-                            cx.listener(move |page, _, _, cx| page.save_key(&save_id, cx)),
+                        .child(small(
+                            status.to_string(),
+                            if has_key { ACCENT } else { TEXT_FAINT },
                         )),
                 );
+            if label.is_some() {
+                row = row.child(field(
+                    &input,
+                    true,
+                    ghost_button(
+                        SharedString::from(format!("service-key-{id}")),
+                        "Save",
+                        cx.listener(move |page, _, _, cx| page.save_key(&save_id, cx)),
+                    ),
+                ));
+                if has_key {
+                    row = row.child(small(
+                        "Save an empty field to remove the key.".into(),
+                        TEXT_FAINT,
+                    ));
+                }
             }
             rows.push(row);
         }
@@ -457,24 +477,11 @@ impl SettingsPage {
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(color(TEXT_DIM))
-                            .child("Stream services"),
-                    )
-                    .child(quiet(
-                        "A service from a plugin plays a title from its own servers when it has it, and the torrent engine is used when it does not. The key is kept in your settings file and given only to that service. An empty field and Save key forgets it.".into(),
-                        TEXT_FAINT,
-                    )),
-            )
-            .children(rows)
+            .child(heading(
+                "Stream services",
+                "A service plays a title when it has it, and torrents play it when it does not. Keys stay on this computer.",
+            ))
+            .child(div().flex().flex_col().children(rows))
     }
 
     fn restore(&mut self, cx: &mut Context<Self>) {

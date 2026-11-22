@@ -970,6 +970,24 @@ fn score_all(releases: Vec<&Release>) -> Vec<&Release> {
     scored.into_iter().map(|(release, _)| release).collect()
 }
 
+static ORDINAL_SEASON: LazyLock<Regex> =
+    LazyLock::new(|| pattern(r"(?i)\b(\d{1,2})(?:st|nd|rd|th)\s+season\b"));
+
+/// The season an anime entry is, read from its titles ("Season 2", "2nd Season"). An entry
+/// that names none is the first season.
+fn wanted_anime_season(titles: &[String]) -> u32 {
+    titles
+        .iter()
+        .find_map(|title| {
+            parse_season(title).or_else(|| {
+                ORDINAL_SEASON
+                    .captures(title)
+                    .and_then(|found| found[1].parse().ok())
+            })
+        })
+        .unwrap_or(1)
+}
+
 /// Ranks releases for one episode: releases naming it first, then single-file
 /// fallbacks, then season packs. `season` is None on the anime path.
 ///
@@ -1053,6 +1071,12 @@ pub fn rank_releases_by(
     let packs: Vec<&Release> = usable.iter().copied().filter(|r| is_pack(r)).collect();
 
     let mut ranked = score_all(named);
+    // The anime path has no season to filter on, so a release naming another season
+    // ("S02E01" for the first season's episode 1) is not dropped but sent behind the rest.
+    if season.is_none() {
+        let wanted = wanted_anime_season(&titles);
+        ranked.sort_by_key(|release| parse_season(&release.title).is_some_and(|s| s != wanted));
+    }
     ranked.extend(score_all(fallback));
     ranked.extend(score_packs(packs));
     ranked.into_iter().cloned().collect()
@@ -3548,5 +3572,31 @@ mod tests {
             .map(health_tier),
             [4, 2, 2, 1, 1, 0, 0, 3]
         );
+    }
+
+    #[test]
+    fn anime_releases_of_another_season_rank_behind_the_right_one() {
+        let found = [
+            release("Frieren S02E01 1080p WEB-DL", 500, "a"),
+            release("Frieren S01E01 1080p WEB-DL", 5, "b"),
+        ];
+        let first = rank_releases(&found, 1, "Frieren", &strings(&["Frieren"]), None);
+        assert_eq!(first[0].info_hash, "b");
+        let second = rank_releases(
+            &found,
+            1,
+            "Frieren",
+            &strings(&["Frieren Season 2", "Frieren"]),
+            None,
+        );
+        assert_eq!(second[0].info_hash, "a");
+        let ordinal = rank_releases(
+            &found,
+            1,
+            "Frieren",
+            &strings(&["Frieren 2nd Season", "Frieren"]),
+            None,
+        );
+        assert_eq!(ordinal[0].info_hash, "a");
     }
 }
