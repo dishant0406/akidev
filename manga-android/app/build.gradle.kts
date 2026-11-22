@@ -14,7 +14,7 @@ android {
         applicationId = "live.akidev.manga"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
+        versionCode = 7
         versionName = "1.3"
         // The engine is built for 64-bit ARM phones only (and the emulator on an Apple-silicon Mac); JNA's own library comes for each of these.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

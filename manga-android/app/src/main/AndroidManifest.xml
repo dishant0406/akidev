@@ -5,6 +5,8 @@
     <!-- Only asked for when the person taps "Scan their code". -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- The Wi-Fi permissions below would make Wi-Fi required; sharing is optional, so devices without it can still install. -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <!-- Sharing with a phone on the same Wi-Fi: our address, whether we are on Wi-Fi, and LocalSend's multicast hello. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
