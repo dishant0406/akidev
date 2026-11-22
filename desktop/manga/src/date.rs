@@ -122,12 +122,20 @@ fn iso(text: &str) -> Option<i64> {
     )
     .ok()?
     .captures(text)?;
-    let number = |index: usize| found.get(index).and_then(|part| part.as_str().parse::<i64>().ok());
+    let number = |index: usize| {
+        found
+            .get(index)
+            .and_then(|part| part.as_str().parse::<i64>().ok())
+    };
     let (year, month, day) = (number(1)?, number(2)?, number(3)?);
     if !((1..=12).contains(&month) && (1..=31).contains(&day)) {
         return None;
     }
-    let (hour, minute, second) = (number(4).unwrap_or(0), number(5).unwrap_or(0), number(6).unwrap_or(0));
+    let (hour, minute, second) = (
+        number(4).unwrap_or(0),
+        number(5).unwrap_or(0),
+        number(6).unwrap_or(0),
+    );
     if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
@@ -139,10 +147,16 @@ fn iso(text: &str) -> Option<i64> {
         }
         let sign = if zone.starts_with('-') { -1 } else { 1 };
         let digits: String = zone.chars().filter(char::is_ascii_digit).collect();
-        let (hours, minutes) = (digits[..2].parse::<i64>().unwrap_or(0), digits[2..].parse::<i64>().unwrap_or(0));
+        let (hours, minutes) = (
+            digits[..2].parse::<i64>().unwrap_or(0),
+            digits[2..].parse::<i64>().unwrap_or(0),
+        );
         sign * (hours * 60 + minutes) * 60_000
     });
-    Some(days_from_civil(year, month, day) * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000 - offset_ms)
+    Some(
+        days_from_civil(year, month, day) * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000
+            - offset_ms,
+    )
 }
 
 /// "3 days ago", "an hour ago", "yesterday", "just now", relative to `now_ms`.
@@ -238,9 +252,18 @@ mod tests {
         );
         // The time and the zone count, fractions of a second do not, and a date alone is midnight.
         let day = days_from_civil(2024, 2, 29) * DAY_MS;
-        assert_eq!(parse("2024-02-29T10:14:32.215031Z", &formats(&["iso"]), NOW), Some(day + (10 * 3600 + 14 * 60 + 32) * 1000));
-        assert_eq!(parse("2024-02-29T10:00:00+05:30", &formats(&["iso"]), NOW), Some(day + 4 * 3_600_000 + 30 * 60_000));
-        assert_eq!(parse("2024-02-29T01:00:00-02:00", &formats(&["iso"]), NOW), Some(day + 3 * 3_600_000));
+        assert_eq!(
+            parse("2024-02-29T10:14:32.215031Z", &formats(&["iso"]), NOW),
+            Some(day + (10 * 3600 + 14 * 60 + 32) * 1000)
+        );
+        assert_eq!(
+            parse("2024-02-29T10:00:00+05:30", &formats(&["iso"]), NOW),
+            Some(day + 4 * 3_600_000 + 30 * 60_000)
+        );
+        assert_eq!(
+            parse("2024-02-29T01:00:00-02:00", &formats(&["iso"]), NOW),
+            Some(day + 3 * 3_600_000)
+        );
         assert_eq!(parse("2024-02-29", &formats(&["iso"]), NOW), Some(day));
         assert!(parse("2 weeks ago", &formats(&["MMM d, yyyy", "relative"]), NOW).is_some());
         assert!(parse("nonsense", &formats(&["relative", "iso"]), NOW).is_none());
