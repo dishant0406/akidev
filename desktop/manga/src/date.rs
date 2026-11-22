@@ -114,14 +114,35 @@ fn by_pattern(text: &str, format: &str) -> Option<i64> {
     Some(days_from_civil(year?, month, day) * DAY_MS)
 }
 
+/// `2024-02-29`, or with a time and a zone (`2024-02-29T10:14:32.215Z`, `...+05:30`). A date alone is midnight UTC, and a
+/// time with no zone is UTC. Seconds and what follows them are optional; fractions of a second are dropped.
 fn iso(text: &str) -> Option<i64> {
-    let found = Regex::new(r"(\d{4})-(\d{2})-(\d{2})")
-        .ok()?
-        .captures(text)?;
-    let number = |index: usize| found[index].parse::<i64>().ok();
+    let found = Regex::new(
+        r"(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?)?",
+    )
+    .ok()?
+    .captures(text)?;
+    let number = |index: usize| found.get(index).and_then(|part| part.as_str().parse::<i64>().ok());
     let (year, month, day) = (number(1)?, number(2)?, number(3)?);
-    ((1..=12).contains(&month) && (1..=31).contains(&day))
-        .then(|| days_from_civil(year, month, day) * DAY_MS)
+    if !((1..=12).contains(&month) && (1..=31).contains(&day)) {
+        return None;
+    }
+    let (hour, minute, second) = (number(4).unwrap_or(0), number(5).unwrap_or(0), number(6).unwrap_or(0));
+    if hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    // "+05:30" is five and a half hours ahead of UTC, so it is that much earlier in UTC.
+    let offset_ms = found.get(7).map_or(0, |zone| {
+        let zone = zone.as_str();
+        if zone == "Z" {
+            return 0;
+        }
+        let sign = if zone.starts_with('-') { -1 } else { 1 };
+        let digits: String = zone.chars().filter(char::is_ascii_digit).collect();
+        let (hours, minutes) = (digits[..2].parse::<i64>().unwrap_or(0), digits[2..].parse::<i64>().unwrap_or(0));
+        sign * (hours * 60 + minutes) * 60_000
+    });
+    Some(days_from_civil(year, month, day) * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000 - offset_ms)
 }
 
 /// "3 days ago", "an hour ago", "yesterday", "just now", relative to `now_ms`.
@@ -213,8 +234,14 @@ mod tests {
         );
         assert_eq!(
             parse("2024-02-29T10:00:00+00:00", &formats(&["iso"]), NOW),
-            Some(days_from_civil(2024, 2, 29) * DAY_MS)
+            Some(days_from_civil(2024, 2, 29) * DAY_MS + 10 * 3_600_000)
         );
+        // The time and the zone count, fractions of a second do not, and a date alone is midnight.
+        let day = days_from_civil(2024, 2, 29) * DAY_MS;
+        assert_eq!(parse("2024-02-29T10:14:32.215031Z", &formats(&["iso"]), NOW), Some(day + (10 * 3600 + 14 * 60 + 32) * 1000));
+        assert_eq!(parse("2024-02-29T10:00:00+05:30", &formats(&["iso"]), NOW), Some(day + 4 * 3_600_000 + 30 * 60_000));
+        assert_eq!(parse("2024-02-29T01:00:00-02:00", &formats(&["iso"]), NOW), Some(day + 3 * 3_600_000));
+        assert_eq!(parse("2024-02-29", &formats(&["iso"]), NOW), Some(day));
         assert!(parse("2 weeks ago", &formats(&["MMM d, yyyy", "relative"]), NOW).is_some());
         assert!(parse("nonsense", &formats(&["relative", "iso"]), NOW).is_none());
     }
