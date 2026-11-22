@@ -1,0 +1,1344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Akidev film</title>
+<!--
+  The Akidev launch film. One square 1440x1440 frame, everything a pure function of time: seek(t) sets every style.
+  The app is drawn as a 393x852 column in "world" units (points); the camera scales the world into the frame.
+  Timing is in beats (120 BPM, so a beat is 0.5 s). The beat map is BEAT_MAP.md next to this file.
+  Serve the repository root over http (fonts, icons and inputs are read by relative path).
+-->
+<style>
+@font-face { font-family: Nunito; src: url(../../design/src/main/res/font/nunito.ttf); font-weight: 200 1000; }
+@font-face { font-family: Lora; src: url(../../app/src/main/res/font/lora_roman.ttf); font-weight: 400 700; }
+:root {
+  /* The app's dark tokens (manga-app/App/UI/Tokens.swift). */
+  --bg: #0D0D0E; --card: #1B1B1D; --chip: #2C2C2F; --text: #F5F5F5; --muted: #A1A1A8;
+  --sheet: #1B1B1D; --menu: #232326; --line: #3A3A3E;
+  --y: #FFD21F; --on-y: #141414; --red: #E5484D;
+}
+html, body { margin: 0; background: #0D0D0E; }
+#frame { position: relative; width: 1440px; height: 1440px; overflow: hidden; background: var(--bg); font-family: Nunito, sans-serif; color: var(--text); }
+.glow { position: absolute; border-radius: 50%; filter: blur(140px); }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.a { position: absolute; }
+.scr { position: absolute; left: 0; top: 0; width: 393px; height: 852px; overflow: hidden; }
+.icon { position: absolute; background: currentColor; -webkit-mask: var(--src) center / contain no-repeat; mask: var(--src) center / contain no-repeat; }
+.pill { position: absolute; border-radius: 999px; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+.mask { position: absolute; overflow: hidden; }
+.glass { position: absolute; overflow: hidden; isolation: isolate; }
+.glass > .refr { position: absolute; left: 0; top: 0; }
+.glass > .tint { position: absolute; inset: 0; border-radius: inherit; }
+.glass > .face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.page { font-family: Lora, serif; hyphens: auto; -webkit-hyphens: auto; }
+.page p { margin: 0; text-align: justify; text-indent: 1.3em; }
+.label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.cover { position: absolute; object-fit: cover; border-radius: 18px; }
+.card { position: absolute; background: var(--card); border-radius: 28px; }
+.h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.6px; line-height: 1.15; }
+.menu { position: absolute; background: var(--menu); border-radius: 22px; box-shadow: 0 16px 44px rgba(0,0,0,.5), 0 0 0 .5px rgba(255,255,255,.08); }
+.menu .row { position: absolute; left: 0; width: 100%; height: 44px; display: flex; align-items: center; padding-left: 20px; box-sizing: border-box; font-size: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="frame">
+  <div class="glow" data-r="glowA" style="width:980px;height:980px;background:rgba(255,210,31,.26)"></div>
+  <div class="glow" data-r="glowB" style="width:900px;height:900px;background:rgba(255,210,31,.12)"></div>
+  <div id="world"></div>
+</div>
+<svg width="0" height="0" style="position:absolute">
+  <defs id="defs">
+    <!-- Goo: blur, then a hard alpha threshold, then the sharp shapes drawn back on top. -->
+    <filter id="goo" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="g"/>
+      <feComposite in="SourceGraphic" in2="g" operator="atop"/>
+    </filter>
+  </defs>
+</svg>
+<script>
+// ================= time and springs =================
+// The film runs on the song's beat: Digital Clouds (Mixkit) at 129 BPM, from its bar 8. 128 beats, about 59.5 s.
+const BPM = 129, BEAT = 60 / BPM;
+// The scenes are written in "story beats" (the 64-beat map). One story beat is exactly two film beats, so every
+// event lands on a beat of the song (quarter story beats on its eighth notes): the drop on film beat 32, the
+// breakdown on 96-112, the final drop on 112.
+const WARP = [[0, 0], [64, 128]];
+function warp(b) {
+  if (b <= 0) return b * 2;
+  for (let i = 1; i < WARP.length; i++) {
+    const [a0, b0] = WARP[i - 1], [a1, b1] = WARP[i];
+    if (b <= a1) return b0 + (b - a0) * (b1 - b0) / (a1 - a0);
+  }
+  return 128 + (b - 64) * 3;
+}
+const sec = beat => warp(beat) * BEAT;
+const RESPONSE = 0.35, W0 = 2 * Math.PI / RESPONSE;
+
+// The app's spring: critically damped step response, 0 -> 1.
+const crit = dt => dt <= 0 ? 0 : 1 - (1 + W0 * dt) * Math.exp(-W0 * dt);
+// A light bounce, only for pops from zero.
+const pop = dt => {
+  if (dt <= 0) return 0;
+  const z = 0.62, w = 2 * Math.PI / 0.42, wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * dt) * (Math.cos(wd * dt) + (z * w / wd) * Math.sin(wd * dt));
+};
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const inOut = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+// A flood: 0 -> 1 over `dur` seconds on an in-out curve.
+const flood = (t, beat, dur = 0.3) => inOut(clamp((t - sec(beat)) / dur));
+// Spring helpers in beats.
+const C = (t, b) => crit(t - sec(b));
+const P = (t, b) => pop(t - sec(b));
+// Press feedback: a 0.97 squeeze while the finger is down.
+const squeeze = (t, b) => 1 - 0.03 * (crit(t - sec(b) + 0.06) - crit(t - sec(b) - 0.1));
+
+// A value with many targets is the sum of one spring per change: keys = [[beat, value, 'pop'?], ...].
+function track(t, keys) {
+  let v = keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const [b, val, kind] = keys[i];
+    v += (val - keys[i - 1][1]) * (kind === 'pop' ? pop : crit)(t - sec(b));
+  }
+  return v;
+}
+const between = (t, b0, b1) => t >= sec(b0) && t < sec(b1);
+// A screen pushed sideways by tx stays clipped to the phone column.
+const push = (role, tx) => S(role, { transform: `translateX(${tx}px)`, clipPath: `inset(0 ${Math.max(0, tx)}px 0 ${Math.max(0, -tx)}px)` });
+
+// ================= DOM helpers =================
+const world = document.getElementById('world');
+const frameEl = document.getElementById('frame');
+const defs = document.getElementById('defs');
+const ASSETS = 'inputs/', WEB = 'inputs/web/';
+const ICON = name => `../../../manga-app/App/Assets.xcassets/solar-${name}.imageset/${name}.svg`;
+const icon = (name, size, x, y, extra = '') =>
+  `<div class="icon" style="--src:url(${ICON(name)});width:${size}px;height:${size}px;left:${x}px;top:${y}px;${extra}"></div>`;
+const face = (n, s = 22, extra = '') => `<div class="icon" style="--src:url(${ICON(n)});width:${s}px;height:${s}px;position:relative;${extra}"></div>`;
+// Text that rises out of a mask line: the mask is the box, the text slides up into it.
+const maskText = (role, x, y, w, h, style, text) =>
+  `<div class="mask" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"><div class="a" data-r="${role}" style="left:0;top:0;width:100%;${style}">${text}</div></div>`;
+const riseY = (t, b) => `translateY(${(1 - C(t, b)) * 110}%)`;
+const dropY = (t, b) => `translateY(${C(t, b) * 110}%)`;
+
+// Every element that changes over time carries data-r="<role>". Glass clones copy those nodes, so setting a role
+// updates the original and every clone of it in one call.
+const roleCache = new Map();
+const R = role => { let l = roleCache.get(role); if (!l) { l = [...document.querySelectorAll(`[data-r="${role}"]`)]; roleCache.set(role, l); } return l; };
+const S = (role, props) => { for (const el of R(role)) Object.assign(el.style, props); };
+const show = (role, on) => S(role, { visibility: on ? 'inherit' : 'hidden' });
+const original = role => R(role).find(el => !el.closest('[data-clone]'));
+
+// ================= liquid glass =================
+// Each glass element holds its own clone of the layers behind it, filtered through a displacement map made from a
+// rounded-rect distance field, three times at slightly different strengths (one per colour channel), plus a rim light.
+let glassCount = 0;
+const mapCache = new Map();
+function displacementMap(w, h, r) {
+  const key = `${w}x${h}x${r}`;
+  if (mapCache.has(key)) return mapCache.get(key);
+  const k = 2, c = document.createElement('canvas');
+  c.width = Math.ceil(w * k); c.height = Math.ceil(h * k);
+  const g = c.getContext('2d'), img = g.createImageData(c.width, c.height);
+  const hx = w / 2, hy = h / 2, bevel = Math.min(r, hy, hx) * 0.95;
+  for (let py = 0; py < c.height; py++) for (let px = 0; px < c.width; px++) {
+    const x = px / k - hx, y = py / k - hy;
+    const qx = Math.abs(x) - (hx - r), qy = Math.abs(y) - (hy - r);
+    const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
+    const depth = -(outside + Math.min(Math.max(qx, qy), 0) - r);   // 0 at the edge, grows inward
+    let nx = 0, ny = 0;
+    if (qx > 0 && qy > 0) { nx = qx / outside * Math.sign(x); ny = qy / outside * Math.sign(y); }
+    else if (qx > qy) nx = Math.sign(x); else ny = Math.sign(y);
+    const m = depth >= 0 && depth < bevel ? Math.pow(1 - depth / bevel, 2) : 0;
+    const i = (py * c.width + px) * 4;
+    img.data[i] = 128 + nx * m * 127; img.data[i + 1] = 128 + ny * m * 127; img.data[i + 2] = 128; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const url = c.toDataURL();
+  mapCache.set(key, url);
+  return url;
+}
+function glassFilter(w, h, r) {
+  const id = 'glass' + (glassCount++), s = Math.min(w, h) * 0.42;
+  const dm = (scale, out) => `<feDisplacementMap in="SourceGraphic" in2="m" scale="${scale}" xChannelSelector="R" yChannelSelector="G" result="${out}"/>`;
+  defs.insertAdjacentHTML('beforeend', `
+    <filter id="${id}" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feImage href="${displacementMap(w, h, r)}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none" result="m"/>
+      ${dm(s, 'dr')}${dm(s * 1.07, 'dg')}${dm(s * 1.14, 'db')}
+      <feColorMatrix in="dr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+      <feColorMatrix in="dg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+      <feColorMatrix in="db" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+      <feComposite in="r" in2="g" operator="arithmetic" k2="1" k3="1" result="rg"/>
+      <feComposite in="rg" in2="b" operator="arithmetic" k2="1" k3="1"/>
+    </filter>`);
+  return id;
+}
+// A glass element at (x, y) inside `parent`. `behind` lists the roles of the layers it refracts ('canvas' is the white
+// canvas with its yellow glows). `tone` is 'light' or 'dark'. `tint` colours the glass (only yellow, for a choice).
+function glass({ role, x, y, w, h, r = Math.min(w, h) / 2, behind, tone = 'dark', tint, face = '', parent }) {
+  const id = glassFilter(w, h, r);
+  const veil = tint || (tone === 'light' ? 'rgba(255,255,255,.42)' : 'rgba(44,44,47,.55)');
+  const rim = `box-shadow:inset 0 1.2px 1px rgba(255,255,255,${tone === 'light' ? .95 : .55}),inset 0 -1px 1px rgba(255,255,255,${tone === 'light' ? .45 : .22}),` +
+    `inset 0 0 0 .7px rgba(255,255,255,${tone === 'light' ? .65 : .28}),inset 0 0 10px rgba(255,255,255,${tone === 'light' ? .35 : .10})`;
+  const el = document.createElement('div');
+  el.className = 'glass'; el.dataset.r = role; el.dataset.glass = '1';
+  el.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px;box-shadow:0 6px 18px rgba(0,0,0,${tone === 'light' ? .10 : .25});`;
+  el.innerHTML = `<div class="refr" style="filter:url(#${id});width:${w}px;height:${h}px"><div class="a" data-off="1"></div></div>` +
+    `<div class="tint" style="background:${veil}"></div><div class="tint" style="${rim}"></div><div class="face" style="color:${tone === 'light' ? '#111' : '#fff'}">${face}</div>`;
+  el._behind = behind;
+  (parent || world).appendChild(el);
+  return el;
+}
+// Called once after every scene is built: copy the refracted layers into each glass.
+function fillGlass() {
+  for (const el of document.querySelectorAll('[data-glass]')) {
+    const off = el.querySelector('[data-off]');
+    for (const role of el._behind) {
+      if (role === 'canvas') {
+        off.insertAdjacentHTML('beforeend', `<div class="a" style="left:-4000px;top:-4000px;width:8393px;height:8852px;background:var(--bg)"></div>
+          <div class="a" data-r="wglowA" style="border-radius:50%;background:rgba(255,210,31,.26)"></div>
+          <div class="a" data-r="wglowB" style="border-radius:50%;background:rgba(255,210,31,.12)"></div>
+          <div class="a" data-r="screen" style="background:var(--bg)"></div>`);
+        continue;
+      }
+      for (const src of document.querySelectorAll(`[data-r="${role}"]:not([data-clone])`)) {
+        if (src.closest('[data-clone]')) continue;
+        const c = src.cloneNode(true); c.dataset.clone = '1';
+        c.querySelectorAll('[data-glass]').forEach(n => n.remove());
+        // The clone sits where the original sits in the world.
+        let x = 0, y = 0, p = src.parentElement;
+        while (p && p !== world) { x += p.offsetLeft; y += p.offsetTop; p = p.parentElement; }
+        const wrap = document.createElement('div'); wrap.className = 'a'; wrap.style.cssText = `left:${x}px;top:${y}px`;
+        wrap.dataset.parentOf = role;
+        wrap.appendChild(c); off.appendChild(wrap);
+      }
+    }
+  }
+  roleCache.clear();
+}
+// Glass that moves (its own position or a parent's push): line its clone up with the world behind it. Measured once a
+// frame from the layout, after every style is set.
+let cam = { tx: 0, ty: 0, s: 1, cx: 0, cy: 0, side: 1 };
+// A flood's radius: just past the farthest visible corner, so it crosses the frame in its whole 0.3 s.
+const cover = (x, y) => 1.15 * Math.max(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => Math.hypot(cam.cx + a * cam.side / 2 - x, cam.cy + b * cam.side / 2 - y)));
+function alignGlass() {
+  const f = frameEl.getBoundingClientRect();
+  const list = [...document.querySelectorAll('[data-glass]')].filter(el => !el.closest('[data-clone]'));
+  const pos = list.map(el => {
+    const p = el.offsetParent.getBoundingClientRect();
+    return [((p.left - f.left) - cam.tx) / cam.s + el.offsetLeft, ((p.top - f.top) - cam.ty) / cam.s + el.offsetTop];
+  });
+  list.forEach((el, i) => {
+    // Clones of a pushed screen carry the push themselves, so take it back out here.
+    el.querySelector('[data-off]').style.transform = `translate(${-pos[i][0]}px,${-pos[i][1]}px)`;
+  });
+}
+
+// ================= camera =================
+const COL = { w: 393, h: 852 };
+const CX = COL.w / 2;
+// Camera keys: [beat, centre x, centre y, region side] in world units. Each moment fills the square.
+const CAM = [
+  [0, CX, 400, 470], [2, CX, 400, 420], [3.8, CX, 470, 600], [5.6, 104, 500, 380], [6.7, CX, 400, 600],
+  [8, CX, 360, 540], [10.6, CX, 470, 480], [11.9, CX, 250, 540], [13, CX, 175, 440], [14.3, 316, 140, 240],
+  [15.3, 316, 140, 110], [16.3, CX, 426, 900], [18.1, CX, 560, 640], [19.1, CX, 320, 720], [20.6, CX, 340, 560],
+  [21.2, CX, 560, 620], [23.3, CX, 700, 560], [24.1, CX, 426, 860], [24.6, CX, 300, 640], [26, CX, 340, 660],
+  [27.6, CX, 400, 620], [28.1, 340, 414, 300], [28.95, CX, 426, 700], [29.9, CX, 400, 720], [30.5, CX, 426, 900],
+  [31.3, CX, 380, 700], [32, CX, 300, 520], [33.3, CX, 240, 560], [34.1, CX, 380, 760], [36.1, CX, 330, 640],
+  [37.6, CX, 520, 720], [41.6, CX, 330, 640], [42.2, CX, 400, 760], [42.8, CX, 320, 500], [43, CX, 300, 430],
+  [44.9, CX, 345, 520], [45.4, CX, 345, 470], [48.5, CX, 380, 440], [51, CX, 426, 760], [52, CX, 560, 640],
+  [56, CX, 426, 1180], [56.6, CX, 20, 420], [57.9, CX, 426, 1180], [58.9, CX, 920, 600], [59.9, CX, 1010, 640], [61.3, CX, 400, 470],
+];
+const GLOW_A = { w: 980 }, GLOW_B = { w: 900 };
+function camera(t) {
+  const cx = track(t, CAM.map(k => [k[0], k[1]]));
+  const cy = track(t, CAM.map(k => [k[0], k[2]]));
+  const side = track(t, CAM.map(k => [k[0], k[3]]));
+  const s = 1440 / side, tx = 720 - cx * s, ty = 720 - cy * s;
+  cam = { tx, ty, s, cx, cy, side };
+  world.style.transform = `translate(${tx}px,${ty}px) scale(${s})`;
+  // The glows drift a little against the camera so the canvas feels deep; glass clones get them in world units.
+  const ax = 900 - (cx - CX) * 0.4, ay = -520 - (cy - 426) * 0.2, bx = -480 - (cx - CX) * 0.3, by = 900 - (cy - 426) * 0.15;
+  S('glowA', { left: ax + 'px', top: ay + 'px' });
+  S('glowB', { left: bx + 'px', top: by + 'px' });
+  const wg = (x, y, w) => ({ left: ((x - tx) / s) + 'px', top: ((y - ty) / s) + 'px', width: (w / s) + 'px', height: (w / s) + 'px', filter: `blur(${140 / s}px)` });
+  S('wglowA', wg(ax, ay, GLOW_A.w));
+  S('wglowB', wg(bx, by, GLOW_B.w));
+}
+
+// ================= the cursor =================
+// Events: what the cursor does and where. A click draws a ripple ring, a hold a ring that fills, a drag carries it.
+// `light` draws the rings in white on dark scenes. Positions that depend on text layout are filled in at start.
+const EV = [
+  { b: 5, x: 104, y: 500 },
+  { b: 11, x: CX, y: 481 }, { b: 11.5, x: CX, y: 481 },
+  { b: 14, x: 316, y: 140 },
+  { b: 19, x: 82, y: 601 },
+  { b: 24, x: CX, y: 800 },
+  { b: 24.5, x: 301, y: 38, light: 1 },
+  { b: 25, x: CX, y: 450, hold: 0.4, light: 1 },
+  { b: 25.5, x: CX, y: 450, light: 1 },
+  { b: 26, x: 355, y: 38, light: 1 },
+  { b: 26.5, x: 312, y: 583 },
+  { b: 27, x: CX, y: 484, light: 1, drag: [27.5, CX, 800] },
+  { b: 28, x: 355, y: 414, light: 1 }, { b: 28.15, x: 355, y: 414, light: 1 },
+  { b: 28.9, x: 110, y: 450, light: 1, drag: [28.95, 330, 450] },
+  { b: 30, x: 38, y: 38, light: 1 },
+  { b: 30.25, x: 299, y: 38 },
+  { b: 31, x: 128.5, y: 793 },
+  { b: 32, x: CX, y: 214, hold: 0.5 },
+  { b: 33, x: CX, y: 415 },
+  { b: 34, x: 264.5, y: 793 },
+  { b: 35, x: 355, y: 38 },
+  { b: 36, x: CX, y: 793 },
+  { b: 37, x: 105, y: 224, hold: 0.5 },
+  { b: 38, x: 150, y: 382 },
+  { b: 40, x: CX, y: 648 },
+  { b: 42, x: 105, y: 224 },
+  { b: 43, x: 0, y: 0, hold: 0.4, id: 'selStart', paper: 1 },
+  { b: 43.5, x: 0, y: 0, id: 'selHandle', drag: [43.55, 0, 0], paper: 1 },
+  { b: 44.5, x: 0, y: 0, id: 'dotYellow' },
+  { b: 45, x: 355, y: 38 },
+  { b: 48.5, x: 0, y: 712, id: 'knob', drag: [48.55, 0, 712] },
+  { b: 49, x: 8 + 44 + 4 * 57.8, y: 448 },
+  { b: 51, x: CX, y: 350, drag: [51.05, CX, 820] },
+  { b: 52, x: 245, y: 38 },
+  { b: 52.5, x: 116, y: 796, light: 1 },
+  { b: 55, x: 251, y: 796, light: 1 },
+];
+let CUR = [];
+function buildCursorPath() {
+  const off = [560, 980];
+  CUR = [[0, ...off], [4.4, ...off]];
+  let free = 4.4;
+  for (const e of EV) {
+    const arrive = Math.max(free, e.b - 0.45);
+    CUR.push([arrive, e.x, e.y]);
+    free = e.b + (e.hold || 0) + 0.12;
+    if (e.drag) { CUR.push([e.drag[0], e.drag[1], e.drag[2]]); free = e.drag[0] + 0.5; }
+  }
+  CUR.push([56, 520, 1040]);
+}
+const cursorAt = t => [track(t, CUR.map(k => [k[0], k[1]])), track(t, CUR.map(k => [k[0], k[2]]))];
+function buildCursor() {
+  world.insertAdjacentHTML('beforeend', `
+  <svg class="a" data-r="ring" width="80" height="80" viewBox="-40 -40 80 80" style="overflow:visible"><circle r="10" fill="none" stroke-width="3"/></svg>
+  <svg class="a" data-r="hold" width="80" height="80" viewBox="-40 -40 80 80" style="overflow:visible"><circle r="17" fill="none" stroke-width="3.5" stroke-linecap="round" transform="rotate(-90)" pathLength="100"/></svg>
+  <svg class="a" data-r="cursor" width="20" height="28" viewBox="0 0 20 28" style="overflow:visible;filter:drop-shadow(0 1.5px 2px rgba(0,0,0,.3))">
+    <path d="M1.5 1.5 L1.5 22.5 L6.6 17.6 L10 25.6 L13.6 24.1 L10.3 16.3 L17.3 16.3 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+  </svg>`);
+}
+function setCursor(t) {
+  const [x, y] = cursorAt(t);
+  let press = 0, ring = null, hold = null;
+  for (const e of EV) {
+    const dt = t - sec(e.b);
+    const down = e.hold ? e.hold * BEAT * 2 : (e.drag ? sec(e.drag[0]) - sec(e.b) + 0.35 : 0.12);
+    if (dt > -0.06 && dt < down) press = 1;
+    if (!e.hold && dt >= 0 && dt < 0.42) ring = { dt, e };
+    if (e.hold && dt >= 0 && dt < e.hold * BEAT * 2 + 0.15) hold = { u: clamp(dt / (e.hold * BEAT * 2)), e, out: dt > e.hold * BEAT * 2 };
+  }
+  S('cursor', { left: (x - 1.5) + 'px', top: (y - 1.5) + 'px', transform: `scale(${1 - 0.12 * press})`, transformOrigin: '1.5px 1.5px' });
+  const rc = R('ring')[0].firstElementChild;
+  if (ring) {
+    const u = ring.dt / 0.42, rr = 6 + 22 * (1 - Math.pow(1 - u, 3));
+    S('ring', { left: (x - 40) + 'px', top: (y - 40) + 'px', visibility: 'inherit' });
+    rc.setAttribute('r', rr); rc.setAttribute('stroke-width', 3.2 * (1 - u));
+    rc.setAttribute('stroke', ring.e.paper ? '#111' : '#fff');
+  } else S('ring', { visibility: 'hidden' });
+  const hc = R('hold')[0].firstElementChild;
+  if (hold) {
+    S('hold', { left: (x - 40) + 'px', top: (y - 40) + 'px', visibility: 'inherit' });
+    hc.setAttribute('stroke', hold.e.paper ? '#111' : '#fff');
+    hc.setAttribute('stroke-dasharray', `${hold.u * 100} 100`);
+    hc.setAttribute('stroke-width', hold.out ? 3.5 * (1 - clamp((t - sec(hold.e.b) - hold.e.hold * BEAT * 2) / 0.15)) : 3.5);
+  } else S('hold', { visibility: 'hidden' });
+}
+
+// ================= open: wordmark, pill, onboarding, iris =================
+let wm = null;   // wordmark geometry, measured after the font loads
+function buildOpen() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="a" data-r="open" style="left:0;top:0">
+    <div class="a" data-r="wm" style="left:0;top:0;font-weight:900;font-size:76px;letter-spacing:-1.5px;line-height:1;white-space:nowrap">
+      ${['A', 'k', 'ı', 'd', 'e', 'v'].map((c, i) => `<span class="a" data-r="wl${i}" style="transform-origin:50% 70%">${c}</span>`).join('')}
+    </div>
+    <div class="a" data-r="pill" style="background:var(--y);border-radius:999px;overflow:hidden">
+      <div class="a" data-r="pillLabel" style="left:0;width:100%;text-align:center;font-weight:800;font-size:27px;color:var(--on-y);letter-spacing:-.4px;white-space:nowrap">What do you read?</div>
+    </div>
+  </div>`);
+}
+function measureWordmark() {
+  const fs = 76, font = `900 ${fs}px Nunito`;
+  const c = document.createElement('canvas'), g = c.getContext('2d', { willReadFrequently: true });
+  g.font = font; g.letterSpacing = '-1.5px';
+  const letters = ['A', 'k', 'ı', 'd', 'e', 'v'];
+  const widths = letters.map(l => g.measureText(l).width - 1.5);
+  const total = widths.reduce((a, b) => a + b, 0);
+  c.width = 120; c.height = 120; g.font = font;
+  const ink = ch => { g.clearRect(0, 0, 120, 120); g.fillText(ch, 20, 95); return g.getImageData(0, 0, 120, 120).data; };
+  const a = ink('i'), b = ink('ı');
+  let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+  for (let y = 0; y < 120; y++) for (let x = 0; x < 120; x++) {
+    const i = (y * 120 + x) * 4 + 3;
+    if (a[i] > 128 && b[i] < 40) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  }
+  const left = CX - total / 2, top = 400 - fs * 0.62;
+  const xs = []; let acc = left;
+  for (const w of widths) { xs.push(acc); acc += w; }
+  const dot = { x: xs[2] + (x0 + x1) / 2 - 20, d: Math.max(x1 - x0, y1 - y0) + 1, y: top + fs * 0.83 - (95 - (y0 + y1) / 2) };
+  wm = { xs, widths, top, dot, fs };
+}
+function setOpen(t) {
+  const on = t < sec(4.6) || t >= sec(61.8);
+  show('open', on);
+  if (!on) return;
+  const { xs, widths, top, dot } = wm;
+  // Squeeze: every letter moves toward the dot by the same factor f, its width follows (bounded) so they stay touching.
+  // At the close the letters spring back out of the dot and land on the downbeat that is frame 0.
+  const f = t < sec(30) ? 1 - C(t, 1) : P(t, 62.8);
+  xs.forEach((x, i) => {
+    const cxl = x + widths[i] / 2, nx = dot.x + (cxl - dot.x) * f;
+    const sx = Math.max(f, 0.3), sy = f < 0.35 ? f / 0.35 : 1;
+    S('wl' + i, { left: (nx - widths[i] / 2) + 'px', top: top + 'px', transform: `scale(${sx},${Math.max(0, sy)})`, visibility: f < 0.02 ? 'hidden' : 'inherit' });
+  });
+  // The dot is the pill: it pops, grows into a capsule and the label rises in it; at 4 it flattens into the seam the
+  // onboarding cards open from. At the close the pill is back (under the black) and shrinks into the dot.
+  let w, h, px, py;
+  if (t < sec(30)) {
+    h = track(t, [[0, dot.d], [1.6, 64, 'pop'], [4, 0]]);
+    w = track(t, [[0, dot.d], [1.6, 64, 'pop'], [2.6, 318], [4, 353]]);
+    px = track(t, [[0, dot.x], [1.6, CX]]);
+    py = track(t, [[0, dot.y], [1.6, 400], [4, 500]]);
+  } else {
+    h = track(t, [[61, 64], [62.6, dot.d]]);
+    w = track(t, [[61, 318], [62.6, dot.d]]);
+    px = track(t, [[61, CX], [62.6, dot.x]]);
+    py = track(t, [[61, 400], [62.6, dot.y]]);
+  }
+  S('pill', { left: (px - w / 2) + 'px', top: (py - h / 2) + 'px', width: w + 'px', height: Math.max(h, 0.01) + 'px' });
+  S('pillLabel', { top: (h / 2 - 18 + (1 - C(t, 3)) * 44) + 'px', visibility: t < sec(3.95) ? 'inherit' : 'hidden' });
+}
+
+function buildOnboarding() {
+  const mangaArt = `
+    <div class="a" style="left:22px;top:26px;width:76px;height:114px;border-radius:12px;background:var(--chip);transform:translateX(-26px) rotate(-10deg);box-shadow:0 4px 10px rgba(0,0,0,.1)"></div>
+    <div class="a" style="left:22px;top:26px;width:76px;height:114px;border-radius:12px;background:rgba(245,245,245,.85);transform:translateX(26px) rotate(9deg);box-shadow:0 4px 10px rgba(0,0,0,.1)"></div>
+    <div class="a" style="left:22px;top:26px;width:76px;height:114px;border-radius:12px;background:var(--y);transform:rotate(-1deg);box-shadow:0 4px 10px rgba(0,0,0,.12)">
+      <div class="a" style="left:7px;top:14px;width:62px;height:44px;border-radius:6px;background:rgba(20,20,20,.18)"></div>
+      <div class="a" style="left:7px;top:64px;width:28px;height:30px;border-radius:6px;background:rgba(20,20,20,.18)"></div>
+      <div class="a" style="left:40px;top:68px;width:30px;height:22px;border-radius:50%;background:#fff"></div>
+    </div>`;
+  const spine = (x, h, w, bg, ribbon) => `<div class="a" style="left:${x}px;top:${146 - h}px;width:${w}px;height:${h}px;border-radius:6px;background:${bg};box-shadow:0 3px 6px rgba(0,0,0,.1)">
+      <div class="a" style="left:6px;top:14px;width:${w - 12}px;height:3px;border-radius:2px;background:rgba(255,255,255,.5)"></div>${ribbon ? '<div class="a" style="left:15px;top:-4px;width:8px;height:34px;background:var(--red)"></div>' : ''}</div>`;
+  const booksArt = spine(8, 112, 30, 'rgba(245,245,245,.85)') + spine(44, 132, 38, 'var(--y)', 1) + spine(88, 100, 28, 'var(--chip)') + spine(122, 120, 32, 'rgba(255,210,31,.55)') +
+    `<div class="a" style="left:4px;top:148px;width:150px;height:4px;border-radius:2px;background:rgba(245,245,245,.25)"></div>`;
+  world.insertAdjacentHTML('beforeend', `
+  <div class="a" data-r="ob" style="left:0;top:0">
+    <div class="a" data-r="obTitle" style="left:0;top:232px;width:393px;text-align:center" ><span class="h1" style="display:inline-block;font-weight:800">What do you read?</span></div>
+    ${maskText('obBody', 36, 284, 321, 50, 'text-align:center;font-size:17px;line-height:1.35;color:var(--muted)', 'Akidev reads manga and books, both always here. Pick what comes first.')}
+    ${maskText('obFoot', 20, 636, 353, 22, 'text-align:center;font-size:13px;font-weight:500;color:var(--muted)', 'You can change this any time in Settings.')}
+  </div>`);
+  const parent = R('ob')[0];
+  const card = (role, x, art, title) => glass({ parent, role, x, y: 380, w: 169.5, h: 240, r: 28, behind: ['canvas'],
+    face: `<div style="position:absolute;inset:0">
+      <div class="a" data-r="${role}Fill" style="background:var(--y);border-radius:50%"></div>
+      <div class="a" style="left:5px;top:4px;width:160px;height:166px;transform:scale(.78);transform-origin:50% 55%">${art}</div>
+      <div class="a" data-r="${role}Title" style="left:16px;top:184px;font-size:19px;font-weight:800">${title}</div></div>` });
+  card('obManga', 20, mangaArt, 'Manga').style.boxShadow = '0 14px 34px rgba(0,0,0,.45)';
+  card('obBooks', 203.5, booksArt, 'Books').style.boxShadow = '0 14px 34px rgba(0,0,0,.45)';
+}
+function setOnboarding(t) {
+  const on = between(t, 3.9, 6.75);
+  show('ob', on);
+  if (!on) return;
+  // The label leaves the pill and becomes the title.
+  const u = C(t, 4);
+  S('obTitle', { transform: `translateY(${(1 - u) * 151}px) scale(${lerp(27 / 34, 1, u)})`, visibility: t >= sec(3.95) ? 'inherit' : 'hidden' });
+  S('obBody', { transform: riseY(t, 4.25) });
+  S('obFoot', { transform: riseY(t, 4.5) });
+  // The cards open out of the pill's seam.
+  const open = C(t, 4.05);
+  const clip = open > 0.999 ? 'none' : `inset(${(1 - open) * 120}px 0 ${(1 - open) * 120}px 0 round 28px)`;
+  const chosen = C(t, 5.5);
+  S('obManga', { clipPath: clip, transform: `scale(${squeeze(t, 5) * lerp(1, 1.03, chosen)})` });
+  S('obBooks', { clipPath: clip, transform: `scale(${lerp(1, 0.95, chosen)})` });
+  // Manga takes the yellow: it floods out from where it was clicked.
+  const r = 300 * flood(t, 5.5, 0.35);
+  S('obMangaFill', { left: (84 - r) + 'px', top: (120 - r) + 'px', width: 2 * r + 'px', height: 2 * r + 'px' });
+  S('obMangaTitle', { color: r > 90 ? 'var(--on-y)' : 'var(--text)' });
+}
+
+// Iris: six blades around a hexagonal aperture. Each blade is its two vertices, both edge extensions and the short arc.
+function buildIris() {
+  world.insertAdjacentHTML('beforeend', `<svg class="a" data-r="iris" width="10" height="10" style="left:0;top:0;overflow:visible">
+    ${[0, 1, 2, 3, 4, 5].map(i => `<path data-r="blade${i}" fill="${i % 2 ? '#FFD21F' : '#F7CB12'}" stroke="#E2B60C" stroke-width="1.2" stroke-linejoin="round"/>`).join('')}</svg>`);
+}
+function rayToCircle(ax, ay, bx, by, cx, cy, R) {
+  let dx = bx - ax, dy = by - ay; const l = Math.hypot(dx, dy); dx /= l; dy /= l;
+  const fx = ax - cx, fy = ay - cy, b = fx * dx + fy * dy, c = fx * fx + fy * fy - R * R;
+  const s = -b + Math.sqrt(b * b - c);
+  return [ax + dx * s, ay + dy * s];
+}
+function setIris(t) {
+  const on = between(t, 6, 7.6);
+  show('iris', on);
+  if (!on) return;
+  const cx = 104.75, cy = 500, Rr = 2600, a0 = 1100;
+  const closed = flood(t, 6, 0.5), opened = flood(t, 7, 0.45);
+  const a = Math.max(0.6, a0 * (1 - closed + opened));
+  const rot = 0.3 + 0.9 * (closed - opened);
+  const Pt = [...Array(6)].map((_, i) => { const th = rot + i * Math.PI / 3; return [cx + a * Math.cos(th), cy + a * Math.sin(th)]; });
+  for (let i = 0; i < 6; i++) {
+    const A = Pt[i], B = Pt[(i + 1) % 6], Z = Pt[(i + 5) % 6];
+    const E = rayToCircle(...A, ...B, cx, cy, Rr), F = rayToCircle(...Z, ...A, cx, cy, Rr);
+    const sweep = ((E[0] - cx) * (F[1] - cy) - (E[1] - cy) * (F[0] - cx)) > 0 ? 1 : 0;
+    R('blade' + i)[0].setAttribute('d', `M${A} L${B} L${E} A${Rr} ${Rr} 0 0 ${sweep} ${F} Z`);
+  }
+}
+
+// ================= source: welcome, repository, install =================
+function buildWelcome() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="wl">
+    ${maskText('wlTitle', 0, 306, 393, 44, 'text-align:center', '<span class="h1">Welcome to Akidev</span>')}
+    ${maskText('wlBody', 36, 358, 321, 50, 'text-align:center;font-size:17px;line-height:1.35;color:var(--muted)', 'Akidev is a reader. It comes with no manga.')}
+    <div class="pill" data-r="wlPaste" style="left:28px;top:455px;width:337px;height:52px;background:var(--y);color:var(--on-y);font-size:17px;font-weight:800;overflow:hidden">
+      <div class="a" data-r="wlPasteA" style="left:0;top:14px;width:100%;text-align:center">Paste</div>
+      <div class="a" data-r="wlPasteB" style="left:0;top:14px;width:100%;text-align:center">Continue</div>
+    </div>
+    <div class="mask" style="left:28px;top:519px;width:337px;height:52px">
+      <div class="pill" data-r="wlType" style="left:0;top:0;width:337px;height:52px;background:var(--chip);font-size:16px;font-weight:700;overflow:hidden">
+        <div class="a" data-r="wlTypeA" style="left:0;top:15px;width:100%;display:flex;justify-content:center;gap:8px">${face('keyboard', 20)}Type an address</div>
+        <div class="a" data-r="wlTypeB" style="left:22px;top:15px;width:300px;font-weight:600">github.com/owner/repository</div>
+      </div>
+    </div>
+    ${maskText('wlFoot', 20, 590, 353, 22, 'text-align:center;font-size:13px;font-weight:500;color:var(--muted)', 'Only add repositories you trust.')}
+  </div>`);
+  glass({ parent: R('wl')[0], role: 'wlTile', x: 126.5, y: 140, w: 140, h: 140, r: 36, behind: ['canvas'],
+    face: `<img src="${WEB}icon.png" style="width:120px;height:120px;border-radius:26.8px">` });
+}
+function setWelcome(t) {
+  const on = between(t, 6.6, 12.9);
+  show('wl', on);
+  if (!on) return;
+  push('wl', -393 * C(t, 12));
+  S('wlTile', { transform: `scale(${P(t, 7)})` });
+  S('wlTitle', { transform: riseY(t, 8) });
+  S('wlBody', { transform: riseY(t, 9) });
+  S('wlPaste', { transform: `scale(${P(t, 10) * squeeze(t, 11) * squeeze(t, 11.5)})` });
+  S('wlType', { transform: riseY(t, 10.25) });
+  S('wlFoot', { transform: riseY(t, 10.5) });
+  // Paste: its label rises out and "Continue" rises in; the grey button becomes the field and the address slides in.
+  S('wlPasteA', { transform: `translateY(${-C(t, 11.1) * 40}px)` });
+  S('wlPasteB', { transform: `translateY(${(1 - C(t, 11.1)) * 40}px)` });
+  S('wlTypeA', { transform: `translateX(${-C(t, 11.05) * 340}px)` });
+  S('wlTypeB', { transform: `translateX(${(1 - C(t, 11.1)) * 340}px)` });
+}
+
+function buildRepo() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="rp">
+    <div class="a" style="left:72px;top:27px;font-size:17px;font-weight:800">github.com/owner/repository</div>
+    <div class="card" data-r="rpCard" style="left:20px;top:84px;width:353px;height:112px;transform-origin:50% 50%">
+      <img class="a" src="${WEB}source.jpg" style="left:16px;top:16px;width:80px;height:80px;border-radius:12px;object-fit:cover">
+      <div class="a" style="left:110px;top:24px;width:130px;font-size:17px;font-weight:800;line-height:1.2">Your amazing source</div>
+      <div class="pill" style="left:110px;top:70px;height:26px;padding:0 10px 0 8px;gap:5px;background:var(--chip);font-size:13px;font-weight:600;color:var(--muted)">${face('tick', 14)}Signed</div>
+      <div class="pill" data-r="rpBtn" style="left:255px;top:35px;width:82px;height:42px;background:var(--chip);overflow:hidden;transform-origin:50% 50%">
+        <div class="a" data-r="rpBar" style="left:0;top:0;height:42px;background:var(--y)"></div>
+        <div class="a" data-r="rpLabel" style="left:0;top:11px;width:100%;text-align:center;font-size:15px;font-weight:800">Install</div>
+        <div class="a" data-r="rpTick" style="left:27px;top:7px;width:28px;height:28px;color:var(--on-y)">${face('tick', 28)}</div>
+      </div>
+    </div>
+  </div>
+  <div class="a" data-r="yfl" style="background:var(--y)"></div>
+  <div class="a" data-r="yflLabel" style="left:36px;top:586px;width:92px;height:30px;overflow:hidden">
+    <div class="a" data-r="yflText" style="left:0;top:0;width:92px;height:30px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:13px;font-weight:800;color:var(--on-y)">${face('play-solid', 12)}Read now</div>
+  </div>`);
+  glass({ parent: R('rp')[0], role: 'rpBack', x: 16, y: 16, w: 44, h: 44, behind: ['canvas', 'rp'], face: face('back') });
+}
+function setRepo(t) {
+  const on = between(t, 11.9, 16.6);
+  show('rp', on);
+  if (on) {
+    push('rp', 393 * (1 - C(t, 12)));
+    S('rpCard', { transform: `scale(${P(t, 13)})` });
+    // Install: the yellow bar draws across, the label drops away and a tick pops; then it becomes a circle.
+    S('rpBar', { width: (82 * inOut(clamp((t - sec(14.1)) / 0.45))) + 'px' });
+    S('rpLabel', { transform: `translateY(${C(t, 14.9) * 40}px)` });
+    S('rpTick', { transform: `scale(${P(t, 15)})` });
+    const w = lerp(82, 42, C(t, 15.5));
+    S('rpBtn', { left: (296 - w / 2) + 'px', width: w + 'px', transform: `scale(${squeeze(t, 14)})` });
+    S('rpTick', { left: (w / 2 - 14) + 'px' });
+  }
+  // The circle floods the frame on the drop, then contracts into "Read now" while Discover unfolds behind it.
+  const fon = between(t, 15.9, 17.9);
+  show('yfl', fon); show('yflLabel', between(t, 17.2, 17.9));
+  if (fon) {
+    // It starts as the button itself (its width is still settling), so the hand-over has no jump.
+    const fl = flood(t, 16, 0.3), wb = lerp(82, 42, C(t, 15.5)), R = cover(316, 140);
+    const fw = fl < 1 ? lerp(wb, 2 * R, fl) : 6000, fh = fl < 1 ? lerp(42, 2 * R, fl) : 6000;
+    const k = C(t, 17);
+    const x = lerp(316 - fw / 2, 36, k), y = lerp(140 - fh / 2, 586, k);
+    const w = lerp(fw, 92, k), h = lerp(fh, 30, k);
+    S('yfl', { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px', borderRadius: Math.min(w, h) / 2 + 'px' });
+    S('yflText', { transform: riseY(t, 17.3) });
+  }
+}
+
+// ================= discover and series =================
+const COVERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => `${WEB}cover-${String(i).padStart(2, '0')}.jpg`);
+const TITLES = ['The Last Lantern', 'Parcel Run', 'Maple Bridge', 'One Umbrella', 'Green Glass', 'Wheat and Wings', 'Night Wok', 'Cold Stars', 'The Round Library', 'Red Bag'];
+function buildDiscover() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="dc">
+    <div class="a h1" style="left:20px;top:22px">Discover</div>
+    <div class="a" data-r="dcFeat" style="overflow:hidden;border-radius:28px">
+      <img class="a" data-r="dcFeatImg" src="${COVERS[0]}" style="left:0;top:0;width:100%;height:100%;object-fit:cover">
+      <div class="a" style="left:0;right:0;bottom:0;height:62%;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78))"></div>
+    </div>
+    ${maskText('dcTitle', 40, 524, 320, 42, 'font-size:30px;font-weight:800;color:#fff;letter-spacing:-.4px', TITLES[0])}
+    <div class="pill" data-r="dcRead" style="left:36px;top:586px;width:92px;height:30px;gap:4px;background:var(--y);color:var(--on-y);font-size:13px;font-weight:800;transform-origin:50% 50%">${face('play-solid', 12)}Read now</div>
+    <div class="a" data-r="dcBelow" style="left:0;top:0;width:393px;height:852px">
+      <div class="a" style="left:20px;top:650px;font-size:21px;font-weight:800">Continue reading</div>
+      ${[1, 2, 3].map(i => `<img class="cover" data-r="dcRow${i}" src="${COVERS[i]}" style="left:${20 + (i - 1) * 121.5}px;top:690px;width:110px;height:165px;transform-origin:50% 50%">`).join('')}
+    </div>
+  </div>`);
+  const p = R('dc')[0];
+  glass({ parent: p, role: 'dcSearch', x: 20, y: 86, w: 353, h: 50, behind: ['canvas'],
+    face: `<div style="width:100%;display:flex;align-items:center;gap:10px;padding-left:16px;color:var(--muted);font-size:16px;font-weight:600">${face('search', 20)}Search Your amazing source</div>` });
+  glass({ parent: p, role: 'dcGenre', x: 20, y: 150, w: 112, h: 42, behind: ['canvas'],
+    face: `<div style="display:flex;align-items:center;gap:6px;font-size:16px;font-weight:700">${face('filter', 17)}Genre${face('down', 14, 'opacity:.6')}</div>` });
+  p.prepend(R('dcGenre')[0]); p.prepend(R('dcSearch')[0]);
+  glass({ parent: p, role: 'dcChip', x: 40, y: 490, w: 222, h: 28, behind: ['dcFeat'], tone: 'dark',
+    face: `<div style="display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700">${face('sparkles', 13)}Popular on Your amazing source</div>` });
+}
+// Discover unfolds like a paper map: the centre tile first, then the four beside it, then the corners, each growing
+// from the edge or corner it shares with the centre.
+function unfoldPath(t) {
+  const cols = [0, 131, 262, 393], rows = [0, 284, 568, 852];
+  let d = '';
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    const ring = Math.abs(r - 1) + Math.abs(c - 1);
+    const u = C(t, 17 + ring * 0.25);
+    if (u <= 0) continue;
+    const x0 = cols[c], x1 = cols[c + 1], y0 = rows[r], y1 = rows[r + 1];
+    const ax = c === 0 ? x1 : c === 2 ? x0 : (x0 + x1) / 2, ay = r === 0 ? y1 : r === 2 ? y0 : (y0 + y1) / 2;
+    const L = lerp(ax, x0, u), Rr = lerp(ax, x1, u), T = lerp(ay, y0, u), B = lerp(ay, y1, u);
+    d += `M${L - .5} ${T - .5}H${Rr + .5}V${B + .5}H${L - .5}Z`;
+  }
+  return d ? `path('${d}')` : 'inset(50%)';
+}
+function setDiscover(t) {
+  const on = between(t, 16.3, 20.2) || between(t, 30.4, 31.7);
+  show('dc', on);
+  if (!on) return;
+  const back = t >= sec(30);
+  if (back) push('dc', -393 * (1 - C(t, 30.5)) - 393 * C(t, 31));
+  else S('dc', { clipPath: t > sec(18.2) ? 'none' : unfoldPath(t), transform: 'none' });
+  // The featured card grows into the series hero at 19.25; back at the card when we come back.
+  const e = back ? 0 : C(t, 19.25);
+  S('dcBelow', { transform: `translateY(${e * 300}px)` });
+  const fx = lerp(20, 0, e), fy = lerp(212, 0, e), fw = lerp(353, 393, e), fh = lerp(420, 590, e);
+  S('dcFeat', { left: fx + 'px', top: fy + 'px', width: fw + 'px', height: fh + 'px', borderRadius: lerp(28, 0, e) + 'px' });
+  S('dcTitle', { transform: back ? 'none' : (t < sec(19) ? riseY(t, 18) : dropY(t, 19.25)) });
+  S('dcRead', { transform: `scale(${(back ? 1 : 1 - C(t, 19.25)) * squeeze(t, 19)})`, visibility: !back && t < sec(17.9) ? 'hidden' : 'inherit' });
+  S('dcChip', { transform: `scale(${back ? 1 : P(t, 18) * (1 - C(t, 19.25))})` });
+  [1, 2, 3].forEach(i => S('dcRow' + i, { transform: `scale(${back ? 1 : P(t, 18 + i * 0.25)})` }));
+}
+
+function buildSeries() {
+  const ch = (n, i) => `
+    <div class="card" data-r="srCh${i}" style="left:20px;top:${495 + i * 117}px;width:353px;height:105px">
+      <img class="cover" src="${COVERS[0]}" style="left:10px;top:10px;width:64px;height:85px">
+      <div class="a" style="left:92px;top:14px;font-size:13px;font-weight:600;color:var(--muted)">Unread</div>
+      <div class="a" style="left:92px;top:33px;font-size:18px;font-weight:800">Chapter ${n}</div>
+      <div class="pill" style="left:92px;top:64px;height:26px;padding:0 11px;background:var(--chip);font-size:13px;font-weight:600;color:var(--muted)">${['Nov 14, 2026', 'Nov 7, 2026', 'Oct 31, 2026'][i]}</div>
+      <div class="a" style="left:310px;top:39px;width:28px;height:28px;color:var(--muted)">${face('check', 28)}</div>
+    </div>`;
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="sr">
+    <div class="a" data-r="srHero" style="left:0;top:0;width:393px;height:590px">
+      <img class="a" src="${COVERS[0]}" style="left:0;top:0;width:393px;height:590px;object-fit:cover">
+      <div class="a" style="left:0;top:224px;width:393px;height:366px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.78))"></div>
+    </div>
+    ${maskText('srTitle', 20, 316, 360, 52, 'font-size:40px;font-weight:800;color:#fff;letter-spacing:-.8px', TITLES[0])}
+    <div class="a" data-r="srSheet" style="left:0;top:0;width:393px;height:520px;background:var(--bg);border-radius:32px 32px 0 0">
+      <div class="a" data-r="srPills" style="left:0;top:24px;width:393px;height:47px">
+        <div class="pill" style="left:20px;top:0;width:111px;height:47px;background:var(--y);font-size:17px;font-weight:800;color:var(--on-y)">Chapters</div>
+        <div class="pill" style="left:141px;top:0;width:111px;height:47px;background:var(--chip);font-size:15px;font-weight:600;color:var(--muted)">Bookmarks</div>
+        <div class="pill" style="left:262px;top:0;width:111px;height:47px;background:var(--chip);font-size:15px;font-weight:600;color:var(--muted)">Details</div>
+      </div>
+    </div>
+    ${ch(3, 0)}${ch(2, 1)}${ch(1, 2)}
+    <div class="pill" data-r="srStart" style="left:86.5px;top:772px;width:220px;height:56px;gap:8px;background:var(--y);color:var(--on-y);font-size:18px;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.14);transform-origin:50% 50%">${face('play-solid', 18)}Start · Chapter 1</div>
+  </div>`);
+  const p = R('sr')[0], hero = ['srHero'];
+  const g = (role, x, n) => glass({ parent: p, role, x, y: 16, w: 44, h: 44, behind: hero, tone: 'dark', face: n });
+  g('srBack', 16, face('back'));
+  g('srSave', 277, `<div data-r="srSaveA" style="display:flex">${face('bookmark')}</div><div data-r="srSaveB" class="a" style="inset:0;display:flex;align-items:center;justify-content:center">${face('bookmark-solid')}</div>`);
+  g('srMore', 333, face('more'));
+  const chip = (role, x, w, ic, text) => glass({ parent: p, role, x, y: 274, w, h: 30, behind: hero, tone: 'dark',
+    face: `<div style="display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:700">${face(ic, 14)}${text}</div>` });
+  chip('srC1', 20, 106, 'list', '3 chapters');
+  chip('srC2', 134, 96, 'clock', 'Ongoing');
+  chip('srC3', 20, 168, 'sources', 'Your amazing source');
+  R('srC1')[0].style.top = R('srC2')[0].style.top = '236px';
+}
+function setSeries(t) {
+  const on = between(t, 19.9, 24.6) || between(t, 29.8, 31.2);
+  show('sr', on);
+  if (!on) return;
+  push('sr', 393 * C(t, 30.5));
+  ['srBack', 'srSave', 'srMore'].forEach((r, i) => S(r, { transform: `scale(${P(t, 20 + i * 0.12) * (r === 'srSave' ? squeeze(t, 30.25) : 1)})` }));
+  ['srC1', 'srC2', 'srC3'].forEach((r, i) => S(r, { transform: `scale(${P(t, 20.1 + i * 0.12)})` }));
+  S('srTitle', { transform: riseY(t, 20.5) });
+  S('srSheet', { top: lerp(880, 404, C(t, 21)) + 'px' });
+  S('srPills', { transform: `translateX(${(1 - C(t, 21.25)) * 393}px)` });
+  [0, 1, 2].forEach(i => S('srCh' + i, { transform: `translateY(${(1 - C(t, 22 + i * 0.33)) * 420}px)` }));
+  S('srStart', { transform: `scale(${P(t, 23) * squeeze(t, 24)})` });
+  // Saved: the bookmark turns solid.
+  show('srSaveA', t < sec(30.25)); show('srSaveB', t >= sec(30.25));
+  S('srSaveB', { transform: `scale(${t >= sec(30.25) ? P(t, 30.25) : 0})` });
+}
+
+// ================= reader =================
+let SEG = {};
+function segmented(name, y, labels, chosen = 0, inner = 353) {
+  const gap = 10, w = (inner - gap * (labels.length - 1)) / labels.length, box = inner + 40;
+  SEG[name] = { w, box };
+  const row = (dark) => labels.map((l, i) =>
+    `<div class="pill" style="left:${20 + i * (w + gap)}px;top:0;width:${w}px;height:42px;font-size:15px;font-weight:${dark ? 800 : 600};color:${dark ? 'var(--on-y)' : 'var(--muted)'}">${l}</div>`).join('');
+  const base = labels.map((l, i) => `<div class="pill" style="left:${20 + i * (w + gap)}px;top:0;width:${w}px;height:42px;background:var(--chip)"></div>`).join('');
+  return `<div class="a" style="left:0;top:${y}px;width:${box}px;height:42px">
+    ${base}
+    <div class="pill" data-r="${name}Y" style="left:${20 + chosen * (w + gap)}px;top:0;width:${w}px;height:42px;background:var(--y)"></div>
+    ${row(false)}
+    <div class="a" data-r="${name}Dark" style="left:0;top:0;width:${box}px;height:42px">${row(true)}</div>
+  </div>`;
+}
+// A row of capsules where a yellow capsule slides to the chosen one. The dark labels are a copy clipped to the yellow
+// capsule, so a label changes colour exactly where the yellow covers it.
+function setSegment(name, x) {
+  const { w, box } = SEG[name];
+  S(name + 'Y', { left: x + 'px' });
+  S(name + 'Dark', { clipPath: `inset(0 ${box - x - w}px 0 ${x}px round 21px)` });
+}
+const segX = (name, i) => 20 + i * (SEG[name].w + 10);
+
+function buildReader() {
+  const stripH = 393 / 1080 * 5572;
+  world.insertAdjacentHTML('beforeend', `
+  <div class="a" data-r="reader" style="left:0;top:0;width:393px;height:852px">
+    <div class="a" data-r="rdBlack" style="left:-3000px;top:-3000px;width:6393px;height:6852px;background:#000"></div>
+    <div class="scr" data-r="rdPages">
+      <img class="a" data-r="strip" src="${ASSETS}strip-l.png" style="left:0;top:0;width:393px;height:${stripH}px">
+      <div class="a" data-r="spread" style="left:0;top:278px;width:393px;height:295px;transform-origin:354.7px 135.7px">
+        <img class="a" data-r="pageR" src="${ASSETS}spread-right-l.png" style="left:196.5px;top:0;width:196.5px;height:295px">
+        <img class="a" data-r="pageL" src="${ASSETS}spread-left-l.png" style="left:0;top:0;width:196.5px;height:295px">
+      </div>
+      <div class="a" data-r="rdEnd" style="left:0;top:0;width:393px;height:852px">
+        <div class="pill" style="left:76.5px;top:150px;width:240px;height:44px;background:#1C1C1C;color:#BDBDC2;font-size:15px;font-weight:700">End of Chapter 1</div>
+        <img class="a" src="${ASSETS}strip-2.png" style="left:0;top:230px;width:393px;height:${393 / 1640 * 2048}px">
+      </div>
+    </div>
+    <div class="a" data-r="rdSheet" style="left:8px;top:0;width:377px;height:374px;background:var(--sheet);border-radius:34px;box-shadow:0 -10px 40px rgba(0,0,0,.4)">
+      <div class="a" style="left:168px;top:8px;width:41px;height:5px;border-radius:3px;background:var(--line)"></div>
+      <div class="a" style="left:20px;top:30px;font-size:21px;font-weight:800">Reader</div>
+      <div class="a label" style="left:20px;top:74px">Reading mode, this series</div>
+      ${segmented('mode', 92, ['Strip', 'Paged', 'Right to left'], 0, 337)}
+      <div class="a label" style="left:20px;top:150px">Auto-scroll speed</div>
+      ${segmented('speed', 168, ['Slow', 'Normal', 'Fast', 'Rapid'], 1, 337)}
+      <div class="a label" style="left:20px;top:226px">Background</div>
+      ${segmented('bg', 244, ['Black', 'Dark grey'], 0, 337)}
+    </div>
+  </div>`);
+  const behind = ['rdBlack', 'rdPages'], parent = R('reader')[0];
+  glass({ parent, role: 'rdBack', x: 16, y: 16, w: 44, h: 44, behind, tone: 'dark', face: face('back') });
+  glass({ parent, role: 'rdTitle', x: 70, y: 16, w: 132, h: 44, behind, tone: 'dark',
+    face: `<div style="font-size:12px;line-height:1.25;font-weight:700;color:#fff;width:100%;padding-left:16px">${TITLES[0]}<br><span style="font-weight:600;color:#E6E6EA">Chapter 1</span></div>` });
+  glass({ parent, role: 'rdPlay', x: 279, y: 16, w: 44, h: 44, behind, tone: 'dark', face: face('play', 20) });
+  glass({ parent, role: 'rdSliders', x: 333, y: 16, w: 44, h: 44, behind, tone: 'dark', face: face('sliders') });
+  glass({ parent, role: 'rdBottom', x: 16, y: 778, w: 361, h: 50, behind, tone: 'dark',
+    face: `<div style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:14px;font-weight:700">Page 1 / 2${face('bookmark', 20)}</div>` });
+}
+function setReader(t) {
+  const on = between(t, 23.9, 30.7);
+  show('reader', on);
+  if (!on) return;
+  // Black floods out of the Start button, and at the end draws back to the column before the reader pushes away.
+  const fb = flood(t, 24, 0.3), r = fb < 1 ? lerp(0, cover(CX, 800), fb) : 3000, shrink = 2600 * (1 - C(t, 29.2));
+  S('rdBlack', { clipPath: t < sec(29.1) ? `circle(${r}px at ${3000 + CX}px ${3800}px)` : `inset(${3000 - TOP - shrink}px ${3000 - shrink}px ${3000 - BOT - shrink}px)` });
+  const tx = 393 * C(t, 30.1);
+  S('reader', { transform: `translateX(${tx}px)`, clipPath: t > sec(30.1) ? `inset(-60px ${tx}px -60px -60px)` : 'none' });
+  // The strip rises into the reader; auto-scroll from 24.5, a finger pauses it at 25.
+  const run = clamp(t - sec(24.5), 0, sec(25) - sec(24.5));
+  const drift = run * 150 + 20 * C(t, 25);
+  const pushL = C(t, 26.75), pushR = crit(t - sec(26.75) + 0.05);
+  S('strip', { transform: `translate(${pushL * 430}px,${(1 - C(t, 24.2)) * 852 - drift}px)` });
+  // The spread pushes in from the left (right page first); a double-tap zooms the page with the camera; a swipe
+  // brings the end of the chapter in from the left.
+  const zoom = 1 + C(t, 28.15) - C(t, 28.85), next = C(t, 29);
+  S('spread', { transform: `translateX(${393 * next}px) scale(${zoom})` });
+  S('pageR', { transform: `translateX(${(pushR - 1) * 393}px)` });
+  S('pageL', { transform: `translateX(${(pushL - 1) * 393}px)` });
+  show('spread', t >= sec(26.75));
+  S('rdEnd', { transform: `translateX(${-393 * (1 - next)}px)`, visibility: t >= sec(28.95) ? 'inherit' : 'hidden' });
+  // Bars: in with the reader, away when auto-scroll starts, back on a tap in the middle.
+  const barY = track(t, [[23.9, -130], [24.05, 16], [24.6, -130], [25.5, 16]]);   // hidden bars sit above the screen, not in the status bar
+  const botY = track(t, [[23.9, 900], [24.05, 778], [24.6, 900], [25.5, 778]]);
+  [['rdBack', 16], ['rdTitle', 70], ['rdPlay', 279], ['rdSliders', 333]].forEach(([rl, x]) => S(rl, { left: x + 'px', top: barY + 'px', transform: rl === 'rdPlay' ? `scale(${squeeze(t, 24.5)})` : rl === 'rdBack' ? `scale(${squeeze(t, 30)})` : 'none' }));
+  S('rdBottom', { top: botY + 'px' });
+  const sheetTop = track(t, [[24, 880], [26, 470], [27.5, 880]]);
+  S('rdSheet', { top: sheetTop + 'px', visibility: sheetTop < 852 + BOT ? 'inherit' : 'hidden' });
+  setSegment('mode', track(t, [[24, segX('mode', 0)], [26.5, segX('mode', 2)]]));
+  setSegment('speed', segX('speed', 1));
+  setSegment('bg', segX('bg', 0));
+}
+
+// ================= tab bar, library, updates, shelf, share =================
+const TAB_X = i => 29.5 + i * 68;   // left edge of tab i inside the column
+const TABS = [['home', 'home-solid'], ['library', 'library-solid'], ['book', 'book-solid'], ['inbox', 'inbox-solid'], ['sources', 'sources-solid']];
+function buildTabBar() {
+  world.insertAdjacentHTML('beforeend', `<div class="a" data-r="tb" style="left:0;top:0"></div>`);
+  glass({ parent: R('tb')[0], role: 'tbBar', x: 23.5, y: 758, w: 346, h: 70, r: 28, behind: ['canvas', 'dc', 'lb', 'up', 'sh'], face: `
+    <div style="position:absolute;inset:0">
+      <div class="a" data-r="tbSel" style="top:6px;height:58px;border-radius:22px;background:var(--y);box-shadow:inset 0 1px 1px rgba(255,255,255,.7)"></div>
+      ${TABS.map(([o, s], i) => `
+        <div class="a" data-r="tbO${i}" style="left:${25 + i * 68}px;top:23px;color:var(--muted)">${face(o, 24)}</div>
+        <div class="a" data-r="tbS${i}" style="left:${25 + i * 68}px;top:23px;color:var(--on-y)">${face(s, 24)}</div>`).join('')}
+      <div class="pill" data-r="tbBadge" style="left:${6 + 3 * 68 + 40}px;top:8px;min-width:20px;height:20px;padding:0 5px;background:#F5F5F5;color:#111;font-size:12px;font-weight:800;box-sizing:border-box;transform-origin:50% 50%">3</div>
+    </div>` });
+}
+function setTabBar(t) {
+  const on = between(t, 30.4, 42.7);
+  show('tb', on);
+  if (!on) return;
+  S('tbBar', { transform: `translateY(${(1 - C(t, 30.6)) * 130 + C(t, 42) * 130}px)` });
+  // The yellow item flows: the edge in the direction of travel leads, the other follows a moment later.
+  const L = track(t, [[30, 0], [31.08, 1], [34, 3], [36, 2]]), Rt = track(t, [[30, 0], [31, 1], [34.08, 3], [36.08, 2]]);
+  const left = 6 + Math.min(L, Rt) * 68, right = 6 + Math.max(L, Rt) * 68 + 62;
+  S('tbSel', { left: left + 'px', width: (right - left) + 'px' });
+  const sel = t < sec(31) ? 0 : t < sec(34) ? 1 : t < sec(36) ? 3 : 2;
+  TABS.forEach((_, i) => { show('tbO' + i, i !== sel); show('tbS' + i, i === sel); });
+  S('tbBadge', { transform: `scale(${P(t, 34)})` });
+}
+
+function buildLibrary() {
+  const order = [0, 3, 4, 5, 6, 7, 8, 9, 1];
+  const badge = [3, 1, 0, 12, 0, 2, 0, 5, 1];
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="lb">
+    <div class="a h1" style="left:20px;top:22px">Library</div>
+    ${order.map((c, k) => {
+      const col = k % 3, row = Math.floor(k / 3), x = 20 + col * 121.7, y = 132 + row * 214;
+      return `<div class="a" data-r="lbC${k}" style="left:${x}px;top:${y}px;width:109.7px;height:205px;transform-origin:50% 40%">
+        <img class="cover" data-r="lbImg${k}" src="${COVERS[c]}" style="left:0;top:0;width:109.7px;height:164.5px">
+        <div class="a" style="left:0;top:170px;width:109.7px;font-size:12.5px;font-weight:700;line-height:1.25">${TITLES[c]}</div>
+      </div>`;
+    }).join('')}
+    <div class="menu" data-r="lbMenu" style="left:86.5px;top:305px;width:220px;height:176px;transform-origin:50% 0">
+      <div class="a" data-r="lbRows" style="left:0;top:0;width:220px;height:176px;transform-origin:50% 0">
+        <div class="row" style="top:0">Open</div><div class="row" style="top:44px">Mark read</div><div class="row" style="top:88px">Move to category</div><div class="row" style="top:132px;color:var(--red)">Remove</div>
+      </div>
+    </div>
+  </div>`);
+  const p = R('lb')[0];
+  order.forEach((c, k) => {
+    if (!badge[k]) return;
+    const col = k % 3, row = Math.floor(k / 3);
+    glass({ parent: p, role: 'lbB' + k, x: 20 + col * 121.7 + 109.7 - 34, y: 132 + row * 214 + 6, w: 28, h: 24, behind: ['lbImg' + k], tone: 'dark',
+      face: `<div style="font-size:12.5px;font-weight:800">${badge[k]}</div>` });
+  });
+  p.appendChild(p.querySelector('[data-r="lbMenu"]'));
+  glass({ parent: p, role: 'lbAll', x: 20, y: 76, w: 64, h: 40, behind: ['canvas'], tint: 'rgba(255,210,31,.92)',
+    face: `<div style="font-size:15px;font-weight:800;color:var(--on-y)">All</div>` });
+  glass({ parent: p, role: 'lbWeek', x: 94, y: 76, w: 104, h: 40, behind: ['canvas'],
+    face: `<div class="mask" style="position:relative;height:22px"><div data-r="lbWeekLabel" style="font-size:15px;font-weight:700;color:var(--muted)">Weekend</div></div>` });
+}
+function setLibrary(t) {
+  const on = between(t, 30.9, 34.7);
+  show('lb', on);
+  if (!on) return;
+  push('lb', 393 * (1 - C(t, 31)) - 393 * C(t, 34));
+  // Long-press: the cover squeezes, the menu pops from zero; "Move to category" turns the menu into a new pill.
+  S('lbC1', { transform: `scale(${1 - 0.05 * (C(t, 32) - C(t, 32.6))})` });
+  const m = C(t, 33.1);
+  const mx = lerp(86.5, 94, m), my = lerp(305, 76, m), mw = lerp(220, 104, m), mh = lerp(176, 40, m);
+  S('lbMenu', { left: mx + 'px', top: my + 'px', width: mw + 'px', height: mh + 'px', borderRadius: lerp(22, 20, m) + 'px',
+    transform: `scale(${t < sec(33) ? P(t, 32.5) : 1})`, visibility: between(t, 32.5, 33.8) ? 'inherit' : 'hidden', overflow: 'hidden' });
+  S('lbRows', { transform: `scale(${1 - m})` });
+  S('lbWeek', { visibility: t >= sec(33.75) ? 'inherit' : 'hidden' });
+  S('lbWeekLabel', { transform: riseY(t, 33.8) });
+}
+
+function buildUpdates() {
+  const row = (c, n, i) => `
+    <div class="card" data-r="upCard${i}" style="left:20px;top:${142 + i * 117}px;width:353px;height:105px">
+      <img class="cover" src="${COVERS[c]}" style="left:10px;top:10px;width:64px;height:85px">
+      <div class="a" style="left:92px;top:14px;font-size:13px;font-weight:600;color:var(--muted)">${TITLES[c]}</div>
+      <div class="a" style="left:92px;top:33px;font-size:18px;font-weight:800">Chapter ${n}</div>
+      <div class="pill" style="left:92px;top:64px;height:26px;padding:0 11px;background:var(--chip);font-size:13px;font-weight:600;color:var(--muted)">${['Today', 'Yesterday', 'Nov 16, 2026'][i]}</div>
+    </div>`;
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="up">
+    <div class="a h1" style="left:20px;top:22px">Updates</div>
+    <div class="a" data-r="upPills" style="left:0;top:76px;width:393px;height:46px">
+      <div class="pill" style="left:20px;top:0;width:171px;height:46px;background:var(--y);font-size:17px;font-weight:800;color:var(--on-y)">Unread</div>
+      <div class="pill" style="left:202px;top:0;width:171px;height:46px;background:var(--chip);font-size:15px;font-weight:600;color:var(--muted)">Recent</div>
+    </div>
+    ${row(0, 4, 0)}${row(2, 12, 1)}${row(6, 7, 2)}
+  </div>`);
+  glass({ parent: R('up')[0], role: 'upRefresh', x: 333, y: 16, w: 44, h: 44, behind: ['canvas'],
+    face: `<div data-r="upSpin" style="display:flex">${face('refresh')}</div>` });
+}
+function setUpdates(t) {
+  const on = between(t, 33.9, 36.7);
+  show('up', on);
+  if (!on) return;
+  push('up', 393 * (1 - C(t, 34)) + 393 * C(t, 36));
+  S('upPills', { transform: `translateX(${(1 - C(t, 34.5)) * 393}px)` });
+  S('upSpin', { transform: `rotate(${360 * C(t, 35)}deg)` });
+  S('upRefresh', { transform: `scale(${squeeze(t, 35)})` });
+  [0, 1, 2].forEach(i => S('upCard' + i, { transform: `translateY(${(1 - C(t, 35.1 + i * 0.15)) * 700}px)` }));
+}
+
+function buildShelf() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="scr" data-r="sh">
+    <div class="a h1" style="left:20px;top:22px">Books</div>
+    <div class="a" style="left:20px;top:64px;font-size:15px;font-weight:600;color:var(--muted)">1 book</div>
+    <img class="cover" data-r="shCover" src="${WEB}alice.jpg" style="left:19px;top:96px;width:170px;height:255px;transform-origin:50% 50%">
+    <div class="a" style="left:19px;top:362px;width:200px;font-size:17px;font-weight:800;line-height:1.3">Alice's Adventures in Wonderland</div>
+    <div class="a" style="left:19px;top:414px;font-size:15px;font-weight:600;color:var(--muted)">2%</div>
+    <div class="menu" data-r="shMenu" style="left:40px;top:360px;width:220px;height:88px;transform-origin:30% 0">
+      <div class="row" style="top:0;gap:10px">${face('share', 18)}Share</div><div class="row" style="top:44px;gap:10px;color:var(--red)">${face('trash', 18)}Remove</div>
+    </div>
+  </div>
+  <div class="a" data-r="ss" style="left:0;top:0;width:393px;height:852px;overflow:hidden">
+    <div class="a" data-r="ssSheet" style="background:var(--sheet);box-shadow:0 -10px 40px rgba(0,0,0,.45);overflow:hidden">
+      <div class="a" style="left:168px;top:8px;width:41px;height:5px;border-radius:3px;background:var(--line)"></div>
+      <div class="a" style="left:20px;top:30px;font-size:21px;font-weight:800">Send</div>
+      <div class="a" style="left:20px;top:60px;font-size:14px;font-weight:600;color:var(--muted)">Alice's Adventures in Wonderland</div>
+      <div class="a" data-r="ssLook" style="left:0;top:112px;width:377px;text-align:center;font-size:16px;font-weight:600;color:var(--muted)">Looking nearby…</div>
+      <div class="card" data-r="ssPeer" style="left:20px;top:150px;width:337px;height:56px;border-radius:22px;background:var(--chip);transform-origin:50% 50%">
+        <div class="a" style="left:18px;top:17px">${face('share', 22)}</div>
+        <div class="a" style="left:54px;top:16px;font-size:17px;font-weight:700">Mira's phone</div>
+        <div class="a" style="left:302px;top:18px;color:var(--muted)">${face('forward', 18)}</div>
+      </div>
+      <div class="a" data-r="ssSend" style="left:0;top:0;width:377px">
+        ${maskText('ssSendText', 0, 104, 377, 30, 'text-align:center;font-size:19px;font-weight:800', "Sending to Mira's phone")}
+        <div class="a" style="left:32px;top:150px;width:313px;height:8px;border-radius:4px;background:var(--chip);overflow:hidden">
+          <div class="a" data-r="ssBar" style="left:0;top:0;height:8px;background:var(--y)"></div>
+        </div>
+        <div class="pill" data-r="ssTick" style="left:164.5px;top:180px;width:48px;height:48px;background:var(--y);color:var(--on-y);transform-origin:50% 50%">${face('tick', 26)}</div>
+      </div>
+    </div>
+  </div>`);
+  glass({ parent: R('sh')[0], role: 'shFilter', x: 277, y: 18, w: 44, h: 44, behind: ['canvas'], face: face('filter') });
+  R('sh')[0].insertAdjacentHTML('beforeend', `<div class="pill" style="left:333px;top:18px;width:44px;height:44px;background:var(--y);color:var(--on-y);box-shadow:0 6px 18px rgba(0,0,0,.12)">${face('add', 24)}</div>`);
+}
+function setShelf(t) {
+  const on = between(t, 35.9, 42.7);
+  show('sh', on);
+  if (on) {
+    push('sh', -393 * (1 - C(t, 36)));
+    S('shCover', { transform: `scale(${(1 - 0.05 * (C(t, 37) - C(t, 37.6))) * squeeze(t, 42)})`, visibility: t < sec(42.2) ? 'inherit' : 'hidden' });
+    // Long-press: the menu pops; Share stretches it up into the sheet.
+    S('shMenu', { transform: `scale(${P(t, 37.5)})`, visibility: between(t, 37.5, 38.2) ? 'inherit' : 'hidden' });
+  }
+  const son = between(t, 38, 41.9);
+  show('ss', son);
+  if (!son) return;
+  const m = C(t, 38.1), down = C(t, 41.2);
+  const x = lerp(40, 8, m), y = lerp(360, 470, m) + down * 420, w = lerp(220, 377, m), h = lerp(88, 374, m);
+  S('ssSheet', { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px', borderRadius: lerp(22, 34, m) + 'px' });
+  S('ssPeer', { transform: `scale(${P(t, 39) * squeeze(t, 40) * (1 - C(t, 40.2))})` });
+  show('ssLook', t < sec(40.2));
+  show('ssSend', t >= sec(40.2));
+  S('ssSendText', { transform: riseY(t, 40.2) });
+  S('ssBar', { width: (313 * inOut(clamp((t - sec(40.3)) / 0.55))) + 'px' });
+  S('ssTick', { transform: `scale(${P(t, 41)})` });
+}
+
+// ================= books =================
+let alice = null;
+async function loadAlice() {
+  const html = await (await fetch(ASSETS + 'alice.htm')).text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const h2 = doc.getElementById('chap01').closest('h2');
+  const ps = []; let n = h2.nextElementSibling;
+  while (n && ps.length < 4) { if (n.tagName === 'P') ps.push(n.textContent.replace(/\s+/g, ' ').trim()); n = n.nextElementSibling; }
+  alice = ps;
+}
+const PHRASE = 'the book her sister was reading';
+const BAND = 'background-image:linear-gradient(rgba(255,210,31,.34),rgba(255,210,31,.34));background-repeat:no-repeat;background-size:0% 100%';
+let SENTENCES = [];
+function page2HTML() {
+  SENTENCES = alice.slice(2).join(' ').split(/(?<=[.!?][”’"]?)\s+/);
+  return `<div class="a page" data-r="page2" style="left:0;top:0;width:393px;height:852px;overflow:hidden;color:#D6D6DA">
+    <div class="a" data-r="body2" style="left:30px;top:30px;width:333px;font-size:18px;line-height:1.75"><p style="text-indent:0">${
+      SENTENCES.map((x, i) => `<span data-r="sen${i}" style="${BAND}">${x}</span>`).join(' ')}</p></div>
+  </div>`;
+}
+function pageHTML(color, role) {
+  const [p1, p2] = alice;
+  const i = p1.indexOf(PHRASE);
+  // Two backgrounds on the phrase: the yellow highlight on top, the grey selection under it.
+  const p1h = p1.slice(0, i) + `<span data-r="hl" style="background-image:linear-gradient(rgba(255,210,31,.55),rgba(255,210,31,.55)),linear-gradient(rgba(0,0,0,.13),rgba(0,0,0,.13));background-repeat:no-repeat;background-size:0% 100%,0% 100%;background-position:left,right">${PHRASE}</span>` + p1.slice(i + PHRASE.length);
+  return `<div class="a page" data-r="${role}" style="left:0;top:0;width:393px;height:852px;overflow:hidden;color:${color}">
+    <div class="a" style="left:0;top:14px;width:393px;text-align:center;font-size:30px">CHAPTER I.</div>
+    <div class="a" style="left:0;top:74px;width:393px;text-align:center;font-size:31px;line-height:1.3">Down the<br>Rabbit-Hole</div>
+    <div class="a" data-r="body" style="left:30px;top:178px;width:333px;font-size:18px;line-height:1.75">
+      <p>${p1h}</p><p><span data-r="senA" style="${BAND}">${p2}</span></p>
+    </div>
+  </div>`;
+}
+const THEMES = [
+  ['Auto', '#FFFFFF', '#1A1A1A'], ['Paper', '#FAFAF8', '#1A1A1A'], ['Sepia', '#F3EAD7', '#4B3B2A'],
+  ['Ink', '#DADAD6', '#1A1A1A'], ['Night', '#1C1C1E', '#D6D6DA'], ['Black', '#000000', '#BDBDC2'],
+];
+const SW = i => 44 + i * 57.8;   // swatch centre x, inside the sheet
+const HL_DOTS = ['#FFD21F', '#4CC38A', '#4C9AFF', '#FF7EB6'];
+function buildBook() {
+  world.insertAdjacentHTML('beforeend', `
+  <div class="a" data-r="book" style="left:0;top:0;width:393px;height:852px">
+    <div class="a" data-r="paper" style="left:-3000px;top:-3000px;width:6393px;height:6852px;background:#FAFAF8"></div>
+    ${pageHTML('#1A1A1A', 'pageDay')}
+    <div class="a" data-r="night" style="left:-3000px;top:-3000px;width:6393px;height:6852px">
+      <div class="a" style="inset:0;background:#1C1C1E"></div>
+      <div class="a" style="left:3000px;top:3000px;width:393px;height:852px;overflow:hidden">${pageHTML('#D6D6DA', 'pageNight')}${page2HTML()}</div>
+    </div>
+    <img class="a" data-r="bkCover" src="${WEB}alice.jpg" style="object-fit:cover">
+    <div class="a" data-r="hA" style="width:2px;background:#111"><div class="a" style="left:-4px;top:-9px;width:10px;height:10px;border-radius:50%;background:#111"></div></div>
+    <div class="a" data-r="hB" style="width:2px;background:#111"><div class="a" style="left:-4px;bottom:-9px;width:10px;height:10px;border-radius:50%;background:#111"></div></div>
+    <div class="pill" data-r="selMenu" style="height:46px;width:270px;background:var(--menu);box-shadow:0 10px 30px rgba(0,0,0,.4);gap:10px;font-size:15px;font-weight:700;transform-origin:50% 100%">
+      ${HL_DOTS.map(c => `<div style="width:22px;height:22px;border-radius:50%;background:${c}"></div>`).join('')}
+      <div style="width:1px;height:22px;background:var(--line)"></div>Note<span>Copy</span>
+    </div>
+    <div class="a" data-r="ttSheet" style="left:8px;top:0;width:377px;height:504px;background:var(--sheet);border-radius:34px;box-shadow:0 -10px 40px rgba(0,0,0,.35)">
+      <div class="a" style="left:168px;top:8px;width:41px;height:5px;border-radius:3px;background:var(--line)"></div>
+      <div class="a" style="left:20px;top:30px;font-size:21px;font-weight:800">Type and theme</div>
+      ${THEMES.map(([n, bg, fg], i) => `
+        <div class="pill" data-r="sw${i}" style="left:${SW(i) - 24}px;top:84px;width:48px;height:48px;background:${bg};color:${fg};font-family:Lora;font-weight:500;font-size:16px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)">Aa</div>
+        <div class="a" data-r="swl${i}" style="left:${SW(i) - 30}px;top:140px;width:60px;text-align:center;font-size:13px;font-weight:600;color:var(--muted)">${n}</div>`).join('')}
+      <div class="a" data-r="swRing" style="left:0;top:78px;width:60px;height:60px;border-radius:50%;box-shadow:inset 0 0 0 3px var(--y)"></div>
+      <div class="a label" style="left:20px;top:180px">Reading</div>
+      ${segmented('reading', 198, ['Pages', 'Scroll'], 0, 337)}
+      <div class="a" style="left:16px;top:258px;width:345px;height:190px;border-radius:24px;background:var(--chip)">
+        <div class="a" style="left:20px;top:20px;font-size:16px;font-weight:700">Font</div>
+        <div class="pill" style="left:265px;top:12px;width:62px;height:34px;background:var(--line);font-family:Lora;font-size:15px">Lora</div>
+        <div class="a" style="left:20px;top:68px;font-size:16px;font-weight:700">Text size</div>
+        <div class="a" style="left:20px;top:104px;font-size:12px;color:var(--muted)">A</div>
+        <div class="a" style="left:309px;top:98px;font-size:20px;color:var(--muted)">A</div>
+        <div class="a" style="left:40px;top:112px;width:260px;height:4px;border-radius:2px;background:var(--line)"></div>
+        <div class="a" data-r="sizeFill" style="left:40px;top:112px;height:4px;border-radius:2px;background:var(--y)"></div>
+        <div class="a" data-r="sizeKnob" style="top:100px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.18)"></div>
+        <div class="a" style="left:20px;top:146px;font-size:16px;font-weight:700">Line spacing</div>
+      </div>
+    </div>
+  </div>`);
+  const behind = ['paper', 'pageDay', 'night'], parent = R('book')[0];
+  glass({ parent, tone: 'light', role: 'bkBack', x: 16, y: 16, w: 44, h: 44, behind, face: face('back') });
+  glass({ parent, tone: 'light', role: 'bkTitle', x: 70, y: 16, w: 140, h: 44, behind,
+    face: `<div style="font-size:12px;line-height:1.25;width:100%;padding:0 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="color:#111">Alice's Adventures in Wonderland</b><br><span style="color:#6E6E73;font-weight:600">Lewis Carroll</span></div>` });
+  glass({ parent, tone: 'light', role: 'bkHead', x: 223, y: 16, w: 44, h: 44, behind, face: face('headphones') });
+  glass({ parent, tone: 'light', role: 'bkSearch', x: 278, y: 16, w: 44, h: 44, behind, face: face('search') });
+  glass({ parent, tone: 'light', role: 'bkSliders', x: 333, y: 16, w: 44, h: 44, behind, face: face('sliders') });
+  // Read aloud: one glass bar (grouped, never glass on glass), play is the yellow action.
+  glass({ parent, role: 'aloud', x: 16, y: 764, w: 361, h: 64, r: 32, behind, tone: 'dark', face: `
+    <div style="position:relative;width:100%;height:100%">
+      ${icon('previous', 24, 26, 20)}
+      <div class="pill" style="left:76px;top:8px;width:48px;height:48px;background:var(--y);color:var(--on-y)"><div data-r="aPlay" style="position:relative;display:flex">${face('play', 22)}</div><div data-r="aPause" class="a" style="inset:0;display:flex;align-items:center;justify-content:center">${face('pause', 22)}</div></div>
+      ${icon('next', 24, 148, 20)}
+      <div class="pill" data-r="speed" style="left:204px;top:14px;width:62px;height:36px;background:rgba(255,255,255,.12);font-weight:800;font-size:15px">1x</div>
+      ${icon('close', 24, 307, 20)}
+    </div>` });
+}
+// Selection geometry, measured from the laid-out phrase (world units).
+function phraseRects() {
+  const span = R('hl').find(el => el.closest('[data-r="pageDay"]') && !el.closest('[data-clone]'));
+  const f = frameEl.getBoundingClientRect();
+  return [...span.getClientRects()].map(r => ({ x: ((r.left - f.left) - cam.tx) / cam.s, y: ((r.top - f.top) - cam.ty) / cam.s, w: r.width / cam.s, h: r.height / cam.s }));
+}
+function pointAlong(rects, u) {
+  const total = rects.reduce((a, r) => a + r.w, 0);
+  let d = u * total;
+  for (const r of rects) { if (d <= r.w + 1e-6) return { x: r.x + d, y: r.y, h: r.h }; d -= r.w; }
+  const l = rects[rects.length - 1]; return { x: l.x + l.w, y: l.y, h: l.h };
+}
+const SEL0 = 3 / 31;   // "the" selected on press-and-hold
+function setBook(t) {
+  const on = between(t, 41.95, 61.5);
+  show('book', on);
+  if (!on) return;
+  // The cover expands into the page, then slides up off it.
+  const e = C(t, 42.1);
+  const box = { x: lerp(19, -60, e), y: lerp(96, -60, e), w: lerp(170, 513, e), h: lerp(255, 972, e) };
+  S('book', { clipPath: t < sec(43) ? `inset(${box.y}px ${393 - box.x - box.w}px ${852 - box.y - box.h}px ${box.x}px round ${lerp(18, 0, e)}px)` : 'none' });
+  S('bkCover', { left: box.x + 'px', top: box.y + 'px', width: box.w + 'px', height: box.h + 'px',
+    transform: `translateY(${-1000 * C(t, 42.45)}px)`, visibility: t < sec(43) ? 'inherit' : 'hidden' });
+  // Select, drag the handles, pick yellow: the yellow paints over the grey from the left.
+  const sel = t < sec(43.2) ? 0 : lerp(SEL0, 1, C(t, 43.55));
+  const paint = clamp((t - sec(44.6)) / 0.32);
+  const selShown = sel * (1 - paint);
+  S('hl', { backgroundSize: `${100 * paint}% 100%, ${100 * selShown}% 100%`, backgroundPosition: 'left, right' });
+  // The grey layer is drawn from the right so it shrinks where the yellow arrives.
+  const showHandles = between(t, 43.2, 44.6);
+  show('hA', showHandles); show('hB', showHandles);
+  if (showHandles) {
+    const rects = phraseRects(), a = pointAlong(rects, 0), b = pointAlong(rects, sel);
+    S('hA', { left: (a.x - 1) + 'px', top: a.y + 'px', height: a.h + 'px' });
+    S('hB', { left: (b.x - 1) + 'px', top: b.y + 'px', height: b.h + 'px' });
+  }
+  const mOn = between(t, 44, 44.95);
+  show('selMenu', mOn);
+  if (mOn) {
+    const rects = phraseRects(), r0 = rects[0];
+    S('selMenu', { left: (CX - 135) + 'px', top: (r0.y - 58) + 'px', transform: `scale(${P(t, 44) * (1 - C(t, 44.6))})` });
+  }
+  // Text size: the knob drags at 48.5 and the text reflows live on the spring.
+  const size = track(t, [[42, 0.3], [48.5, 0.52]]);
+  S('body', { fontSize: (16 + size * 8) + 'px' });
+  S('sizeKnob', { left: (40 + size * 260 - 14) + 'px' });
+  S('sizeFill', { width: (size * 260) + 'px' });
+  const sheetTop = track(t, [[42, 880], [45, 340], [51, 880]]);
+  S('ttSheet', { top: sheetTop + 'px', visibility: sheetTop < 852 + BOT ? 'inherit' : 'hidden' });
+  THEMES.forEach((_, i) => {
+    S('sw' + i, { transform: `scale(${P(t, 45.5 + i * 0.5)})` });
+    S('swl' + i, { color: (i === 4 && t >= sec(49)) || (i === 1 && t < sec(49)) ? 'var(--text)' : 'var(--muted)' });
+  });
+  const ringX = track(t, [[42, SW(1)], [49, SW(4)]]);
+  S('swRing', { left: (ringX - 30) + 'px', transform: `scale(${P(t, 48)})` });
+  setSegment('reading', segX('reading', 0));
+  // Night: a dark circle grows out of the swatch and floods past the corners; the page under it is its own copy.
+  const cx = 8 + SW(4), cy = sheetTop + 108;
+  const fn = flood(t, 49.5, 0.3), rN = fn < 1 ? lerp(24, cover(cx, cy), fn) : 3000;
+  S('night', { clipPath: t < sec(49.5) ? 'circle(0px at 0 0)' : `circle(${rN}px at ${cx + 3000}px ${cy + 3000}px)` });
+  show('paper', t < sec(50.5)); show('pageDay', t < sec(50.5));
+  // Top bar: drops in with the page, away once the voice is reading.
+  const barY = track(t, [[42, -140], [42.6, 16], [53.5, -140]]);
+  [['bkBack', 16], ['bkTitle', 70], ['bkHead', 223], ['bkSearch', 278], ['bkSliders', 333]].forEach(([r, x]) =>
+    S(r, { top: barY + 'px', transform: r === 'bkSliders' ? `scale(${squeeze(t, 45)})` : r === 'bkHead' ? `scale(${squeeze(t, 52)})` : 'none' }));
+  // Read aloud: the band draws across the sentence being read and moves on every beat; the page turns itself at 53.
+  const band = (role, b0, b1) => {
+    const inn = clamp((t - sec(b0)) / 0.3), out = clamp((t - sec(b1)) / 0.25);
+    S(role, { backgroundSize: (100 * (inn - out)) + '% 100%', backgroundPosition: out > 0 ? 'right' : 'left' });
+  };
+  band('senA', 52.5, 53);
+  SENTENCES.forEach((_, i) => band('sen' + i, i < 3 ? 53.25 + i : 99, i < 2 ? 54 + i : 99));
+  const turn = C(t, 53);
+  S('pageNight', { transform: `translateX(${-393 * turn}px)` });
+  S('page2', { transform: `translateX(${393 * (1 - turn)}px)` });
+  show('aPlay', t < sec(52.5)); show('aPause', t >= sec(52.5));
+  S('aloud', { transform: `scale(${P(t, 52)})`, visibility: t >= sec(52) ? 'inherit' : 'hidden' });
+  R('speed').forEach(el => el.textContent = t >= sec(55) ? '1.5x' : '1x');
+  S('speed', { transform: `scale(${squeeze(t, 55)})` });
+}
+
+// ================= the iPhone: the app lives on its screen =================
+// The screen grows out of the pill at beat 4 and stays until the close flood covers it. The app's column is the safe
+// area: the screen reaches TOP points above it (status bar and island) and BOT below it (home indicator), so nothing
+// of the app sits under them. At 56 the camera pulls back.
+const TOP = 47, BOT = 20, IY = -TOP + 29.5;   // island centre: 11 pt below the screen's top edge
+function buildStage() {
+  world.insertAdjacentHTML('afterbegin', `
+  <div class="a" data-r="stage" style="left:0;top:0">
+    <div class="a" data-r="phone" style="background:#050506"></div>
+    <div class="a" data-r="screen" style="background:var(--bg)"></div>
+    ${[0, 1, 2, 3].map(i => `<div class="a" data-r="btn${i}" style="background:#4A4A50;border-radius:2px"></div>`).join('')}
+  </div>`);
+  world.insertAdjacentHTML('beforeend', `
+  <div class="a" data-r="islandLayer" style="left:0;top:0;filter:url(#goo)">
+    <div class="a" data-r="island" style="background:#000;border-radius:999px"></div>
+    <div class="a" data-r="neck" style="background:#000;clip-path:polygon(0 0,100% 0,72% 50%,100% 100%,0 100%,28% 50%)"></div>
+    <div class="a" data-r="flyer" style="background:#000;border-radius:999px"></div>
+  </div>
+  <div class="a" data-r="stPills" style="left:0;top:0"></div>`);
+  const p = R('stPills')[0];
+  const pill = (role, x, y, w, text) => glass({ parent: p, role, x, y, w, h: 64, behind: ['canvas'], face: `<div style="font-size:25px;font-weight:800">${text}</div>` });
+  pill('stIOS', 46, 920, 130, 'iOS');
+  pill('stAndroid', 192, 920, 160, 'Android');
+  pill('cl0', -62, 1000, 196, 'No accounts');
+  pill('cl1', 146, 1000, 124, 'No ads');
+  pill('cl2', 284, 1000, 186, 'No tracking');
+}
+// The status bar and the home indicator sit on the screen, above every app scene (built into the app layer).
+function statusBarHTML() {
+  const bars = [4, 6, 8.5, 11].map((h, i) => `<div class="a" style="left:${i * 4.5}px;top:${11 - h}px;width:3px;height:${h}px;border-radius:1px;background:currentColor"></div>`).join('');
+  return `<div class="a" data-r="statusBar" style="left:0;top:0">
+    <div class="a" style="left:32px;top:${IY - 11}px;width:60px;text-align:center;font-size:17px;font-weight:700;line-height:22px">9:41</div>
+    <div class="a" style="left:298px;top:${IY - 5.5}px">${bars}</div>
+    <div class="a" style="left:325px;top:${IY - 6}px;width:25px;height:12px;border-radius:4px;box-shadow:inset 0 0 0 1px currentColor;opacity:.45"></div>
+    <div class="a" style="left:327px;top:${IY - 4}px;width:18px;height:8px;border-radius:2.5px;background:currentColor"></div>
+    <div class="a" style="left:351px;top:${IY - 2}px;width:2px;height:4px;border-radius:0 1px 1px 0;background:currentColor;opacity:.45"></div>
+    <div class="a" style="left:${CX - 67}px;top:${852 + BOT - 13}px;width:134px;height:5px;border-radius:3px;background:currentColor"></div>
+  </div>`;
+}
+// The screen's rectangle: the pill's capsule at 3.9, the full screen once the spring at 4 settles.
+function screenRect(t) {
+  const g = C(t, 4);
+  return { g, x: lerp(CX - 159, 0, g), y: lerp(368, -TOP, g), w: lerp(318, 393, g), h: lerp(64, 852 + TOP + BOT, g), r: lerp(32, 55, g) };
+}
+function setStage(t) {
+  const on = t >= sec(3.9) && t < sec(61) + 0.4;   // off once the close flood has covered the frame
+  show('stage', on); show('islandLayer', on); show('statusBar', on);
+  show('stPills', between(t, 55.5, 61.6));
+  if (!on) return;
+  const { g, x, y, w, h, r } = screenRect(t);
+  const bz = 14 * g;                                      // the bezel grows with the screen
+  S('screen', { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px', borderRadius: r + 'px' });
+  S('phone', { left: (x - bz) + 'px', top: (y - bz) + 'px', width: (w + 2 * bz) + 'px', height: (h + 2 * bz) + 'px', borderRadius: (r + bz) + 'px',
+    boxShadow: `inset 0 0 0 1.5px #2A2A30, 0 0 0 ${3 * g}px #5A5A62, 0 30px 80px rgba(0,0,0,.6)` });
+  S('app', { clipPath: `inset(${y}px ${393 - x - w}px ${852 - y - h}px ${x}px round ${r}px)` });
+  // Dark status bar text on the Paper page, light everywhere else.
+  S('statusBar', { color: between(t, 42.5, 49.65) ? '#1A1A1A' : '#fff' });
+  // iPhone buttons: action, volume up and down on the left, the side button on the right.
+  const out = 3 * g;
+  [[-1, 110, 32], [-1, 175, 62], [-1, 250, 62], [1, 205, 100]].forEach(([side, by, bh], i) =>
+    S('btn' + i, { left: (side < 0 ? x - bz - out : x + w + bz) + 'px', width: out + 'px', top: (y + by) + 'px', height: bh * g + 'px' }));
+  // Island: a liquid neck pulls a drop up past the top edge, the neck pinches, and the drop falls back into the island.
+  const rise = C(t, 57.1), pinch = C(t, 57.35), back = P(t, 57.8);
+  const bulge = 1 + 0.12 * (P(t, 58.05) - C(t, 58.05));
+  const iy = y + 29.5, iw = 126 * bulge * g, ih = 37 * bulge * g;
+  S('island', { left: (CX - iw / 2) + 'px', top: (iy - ih / 2) + 'px', width: iw + 'px', height: ih + 'px' });
+  const fy = iy - 104 * rise + 104 * back, fd = 30 + 4 * rise - 6 * back;
+  S('flyer', { left: (CX - fd / 2) + 'px', top: (fy - fd / 2) + 'px', width: fd + 'px', height: fd + 'px', visibility: between(t, 57.1, 58.1) ? 'inherit' : 'hidden' });
+  const nw = 24 * (1 - pinch);
+  S('neck', { left: (CX - nw / 2) + 'px', top: fy + 'px', width: nw + 'px', height: Math.max(0, iy - fy) + 'px', visibility: t >= sec(57.1) && pinch < 0.97 ? 'inherit' : 'hidden' });
+  // Two glass pills: the app is on both. Then the three promises.
+  S('stIOS', { transform: `scale(${P(t, 59)})` });
+  S('stAndroid', { transform: `scale(${P(t, 59.15)})` });
+  [0, 1, 2].forEach(i => S('cl' + i, { transform: `scale(${P(t, 60 + i / 3)})` }));
+}
+
+// ================= close: black floods, contracts into the pill, then the dot =================
+function buildClose() {
+  world.insertAdjacentHTML('beforeend', `<div class="a" data-r="blk" style="background:var(--y)"></div>`);
+}
+function setClose(t) {
+  const on = between(t, 60.9, 62.75);
+  show('blk', on);
+  if (!on) return;
+  // Grows from the phone past the corners; at 62 contracts onto the pill's rectangle, then drains into its centre.
+  const fc = flood(t, 61, 0.36), r = fc < 1 ? lerp(30, cover(CX, 426), fc) : 2600;
+  const k = C(t, 62), d = C(t, 62.3);
+  const cx = lerp(CX, CX, k), cy = lerp(426, 400, k);
+  let w = lerp(2 * r, 318, k), h = lerp(2 * r, 64, k);
+  w *= 1 - d; h *= 1 - d;
+  S('blk', { left: (cx - w / 2) + 'px', top: (cy - h / 2) + 'px', width: w + 'px', height: h + 'px', borderRadius: Math.min(w, h) / 2 + 'px' });
+}
+
+// ================= the app layer =================
+// Every app scene moves into one layer clipped to the phone's screen (setStage sets the clip). The layer sits at 0,0
+// with the column's size (the clip is measured from it) and no transform, so the scenes keep their world positions.
+// The scenes are everything built from onboarding up to the island layer, plus the iris.
+function buildApp() {
+  const app = document.createElement('div'); app.className = 'a'; app.dataset.r = 'app'; app.style.cssText = 'left:0;top:0;width:393px;height:852px';
+  const first = R('ob')[0], scenes = [];
+  for (let el = first; el && el !== R('islandLayer')[0]; el = el.nextElementSibling) scenes.push(el);
+  world.insertBefore(app, first);
+  for (const el of [...scenes, R('iris')[0]]) app.appendChild(el);
+  app.insertAdjacentHTML('beforeend', statusBarHTML());
+  roleCache.clear();
+}
+
+// ================= seek =================
+async function seek(t) {
+  camera(t);
+  setOpen(t);
+  setOnboarding(t);
+  setIris(t);
+  setWelcome(t);
+  setRepo(t);
+  setDiscover(t);
+  setSeries(t);
+  setReader(t);
+  setTabBar(t);
+  setLibrary(t);
+  setUpdates(t);
+  setShelf(t);
+  setBook(t);
+  setStage(t);
+  setClose(t);
+  setCursor(t);
+  alignGlass();
+}
+window.seek = seek; window.__seek = seek;
+
+// Sound: one cue per event, in story beats, with a level in dB. The mixer (out of this file) reads window.__events()
+// and places each Mixkit effect so its measured peak lands on the cue.
+const SOUND = [
+  [1, 'sheet', -12], [1.6, 'pop', -6], [4.05, 'sheet', -10], [5, 'click', -6], [5.5, 'select', -10],
+  [6, 'shutter', -4], [7, 'shutter', -6], [7.05, 'pop', -9], [10, 'pop', -8], [11, 'click', -6], [11.5, 'click', -6],
+  [12, 'push', -10], [13, 'pop', -8], [14, 'click', -6], [15, 'tick', -4], [16, 'flood', -3], [17, 'sheet', -8],
+  [18, 'pop', -11], [18.25, 'pop', -13], [18.5, 'pop', -13], [18.75, 'pop', -13], [19, 'click', -6], [19.25, 'push', -10],
+  [20, 'pop', -10], [21, 'sheet', -9], [22, 'select', -15], [22.33, 'select', -15], [22.66, 'select', -15], [23, 'pop', -7],
+  [24, 'click', -6], [24, 'flood', -7], [24.5, 'click', -8], [25, 'hold', -8], [25.5, 'click', -8], [26, 'click', -8],
+  [26.05, 'sheet', -10], [26.5, 'select', -8], [26.75, 'push', -10], [27, 'click', -10], [27.5, 'sheet', -10],
+  [28, 'click', -8], [28.15, 'click', -10], [28.9, 'push', -9], [30, 'click', -8], [30.1, 'push', -11],
+  [30.25, 'click', -8], [30.3, 'pop', -12], [30.5, 'push', -10], [30.6, 'sheet', -11], [31, 'click', -7], [31.05, 'select', -11],
+  [32, 'hold', -8], [32.5, 'pop', -8], [33, 'click', -7], [33.1, 'sheet', -12], [33.8, 'pop', -10],
+  [34, 'click', -7], [34.02, 'push', -12], [34.05, 'badge', -6], [35, 'click', -7], [35.1, 'select', -14],
+  [36, 'click', -7], [36.02, 'push', -12], [37, 'hold', -8], [37.5, 'pop', -8], [38, 'click', -7], [38.1, 'sheet', -9],
+  [39, 'pop', -8], [40, 'click', -7], [41, 'tick', -4], [41.2, 'sheet', -12],
+  [42, 'click', -7], [42.1, 'push', -9], [43, 'hold', -8], [44, 'pop', -8], [44.5, 'click', -7], [44.6, 'select', -10],
+  [45, 'click', -7], [45.05, 'sheet', -9], [45.5, 'pop', -13], [46, 'pop', -13], [46.5, 'pop', -13], [47, 'pop', -13],
+  [47.5, 'pop', -13], [48, 'pop', -13], [48.5, 'select', -12], [49, 'click', -7], [49.5, 'flood', -6], [51, 'sheet', -10],
+  [52, 'click', -7], [52.05, 'pop', -8], [52.5, 'click', -7], [53, 'push', -12], [54, 'select', -14], [55, 'click', -7],
+  [56, 'sheet', -10], [57.1, 'sheet', -12], [57.8, 'pop', -10], [59, 'pop', -6], [59.15, 'pop', -8],
+  [60, 'pop', -7], [60.33, 'pop', -7], [60.67, 'pop', -7], [61, 'flood', -4], [62, 'sheet', -8], [62.8, 'pop', -6],
+];
+window.__events = () => SOUND.map(([b, name, db]) => ({ t: sec(b), name, db }));
+window.__duration = sec(64);   // 128 film beats
+
+// Positions that come from text layout: the phrase, the handle, the yellow dot, the knob.
+function placeDynamicEvents() {
+  const ev = id => EV.find(e => e.id === id);
+  seek(sec(43.3));
+  const rects = phraseRects(), first = rects[0], end = pointAlong(rects, SEL0), last = pointAlong(rects, 1);
+  Object.assign(ev('selStart'), { x: first.x + 12, y: first.y + first.h * 0.6 });
+  Object.assign(ev('selHandle'), { x: end.x, y: end.y + end.h + 6 });
+  ev('selHandle').drag = [43.55, last.x, last.y + last.h + 6];
+  seek(sec(44.3));
+  Object.assign(ev('dotYellow'), { x: CX - 135 + 27, y: first.y - 58 + 23 });
+  const knob0 = 8 + 16 + 40 + 0.3 * 260, knob1 = 8 + 16 + 40 + 0.52 * 260;
+  Object.assign(ev('knob'), { x: knob0, y: 340 + 258 + 114 });
+  ev('knob').drag = [48.55, knob1, 340 + 258 + 114];
+}
+
+window.__ready = (async () => {
+  await Promise.all([document.fonts.load('900 76px Nunito'), document.fonts.load('800 34px Nunito'), document.fonts.load('400 18px Lora'), loadAlice()]);
+  buildStage();
+  buildOpen();
+  buildOnboarding();
+  buildWelcome();
+  buildRepo();
+  buildDiscover();
+  buildSeries();
+  buildReader();
+  buildTabBar();
+  buildLibrary();
+  buildUpdates();
+  buildShelf();
+  buildBook();
+  world.appendChild(R('islandLayer')[0]);
+  world.appendChild(R('stPills')[0]);
+  buildIris();
+  buildApp();
+  buildClose();
+  buildCursor();
+  measureWordmark();
+  fillGlass();
+  await Promise.all([...document.images].map(i => i.decode().catch(() => {})));
+  buildCursorPath();
+  placeDynamicEvents();
+  buildCursorPath();
+  await seek(0);
+  return true;
+})();
+</script>
+</body>
+</html>

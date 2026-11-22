@@ -66,3 +66,5 @@ pids
 marketing/
 design-shots/
 manga-app/build-rel/
+manga-android/store/film/inputs/
+manga-android/store/film/out/

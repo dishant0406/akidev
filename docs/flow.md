@@ -126,3 +126,32 @@ Edge cases and what the viewer sees:
 - A service that keeps asking to retry: stops at the 20 s budget or after 40 calls.
 - A plugin removed or switched off: its service leaves `sources::current().services` at once, and its key stays in the file.
 - A module file missing or changed: the plugin shows its problem in Settings and is not used (`plugin::load`).
+
+## Signing in to a manga source (2026-11-22)
+
+The engine part, and the iPhone and Android screens that sit on it.
+
+1. The app asks the engine about a source (`Source::info`). `has_sign_in` says the definition has an `auth` section, and `signed_in` says a session is held.
+2. The app draws one field per `auth.fields` entry (hidden when `secret` is true) and calls `Source::sign_in` with what was typed, by field id. An empty field stops it before anything is sent: "Email is needed to sign in".
+3. `sign_in` sends the `login` request to `base_url` only, with the fields as holes. It reads `login.vars` from the answer. Those values are the session, and the `user` value is what the app can show as "signed in as".
+4. The engine hands every change of the session to the app's `SessionKeeper` (`save`), and asks it for the saved session when a source loads (`load`). The iPhone app keeps it in the Keychain (`SessionKeychain.swift`), the Android app in the Keystore (`SessionKeystore.kt`). The password is not kept.
+5. Every request to `base_url` now carries `auth.headers` with the session filled in. A mirror gets nothing.
+6. If a request gets 401 and the definition has `refresh`, `refresh_unless_done` asks the refresh request once (two refused requests at the same time refresh once), then the first request is asked again.
+7. `sign_out` asks the `logout` request if there is one, then forgets the session either way.
+
+**Edge cases and what the person sees.**
+- Wrong account (the site answers 400, 401, 403, 404 or 422): "`<source>` did not accept that sign-in: is the account right?". Nothing is signed in. The password is not in the message.
+- The site answers 200 but none of the session values are in the answer: "answered, but its answer holds no session".
+- The refresh fails or is refused: the session is cleared, and the error says "the session ended, sign in again".
+- A source with `auth` still works signed out. The headers are left off, so the free titles load.
+- The sign-in cannot reach `base_url`: "could not sign in", with the network reason. It does not try a mirror.
+- Command line: `akidev-manga-cli run` signs in first when `AKI_AUTH_<FIELD ID>` are set in the environment, so nothing is typed on the command line.
+- Fixtures: the calls `sign_in` (with made-up `fields`) and `sign_out` test a definition with recorded answers.
+
+**On the phone.** Sources tab, the source, then the Account row. "Sign in" opens a sheet titled "Sign in to <source>" with one labelled field per entry in `auth.fields` and the line "Sent to <host> only. Akidev keeps a session, not your password." The Sign in button stays off until every field has text. A refused sign-in shows the message under the fields and clears it as soon as a field changes. On success the sheet closes and the row shows the name the site gave and a Sign out button. Sign out tells the site (if the definition says how) and removes the session from the Keychain or Keystore. Removing the source removes its session too.
+
+**Checked on the iPhone simulator** against `manga-app/scripts/demo-server.py` (its `paid` source): a wrong password, a right one, the name shown, a relaunch that gets the session back from the Keychain, and a premium chapter that opens after the server refuses the old token (`DEMO_EXPIRE=1`), with the refreshed session saved back.
+
+**A locked chapter.** The chapter list shows "Locked" above the title of a chapter the source flagged (`chapters.chapter.locked`), while the person is signed out of a source that has a sign-in. Tapping it opens the sign-in sheet, and when sign-in works the sheet closes and the chapter opens at its place. Signed in, it opens like any chapter. If it still fails (the account does not cover it), the reader shows the site's own error. A source with no sign-in shows no mark and opens as before. The library keeps the flag with the chapter (`chapter.locked`), so the mark is there offline.
+
+**Recovery.** Sign out and sign in again.

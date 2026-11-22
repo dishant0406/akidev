@@ -291,3 +291,40 @@ folder path shows with `~`. The long explanations were cut to one line each.
 
 **Why.** The old section had paragraph help text, a button beside every field and a sentence about the folder. It read as
 generated. The new one says only what a person needs to act.
+
+## Manga sources can sign in (2026-11-22)
+
+**Chosen.** A manga source can have an `auth` section. It says which fields the person types (an email, a password), which request signs in, and where in the answer the session is (`access`, `refresh`, `user`). Those session values become holes (`{access}`) in every later request, and an `authorization` header is added to requests to `base_url`. If a request gets 401, the engine asks the `refresh` request once and tries again. The code is `desktop/manga/src/source.rs` (`sign_in`, `sign_out`, `refresh_unless_done`) and the shapes are in `def.rs` (`AuthDef`).
+
+**Why.** Some sites (Asura is the one we looked at) have free titles and paid ones behind an account. Their sign-in is a plain POST that answers a token, so it fits the idea that the JSON controls everything. A company that wants to give us a source can give a token endpoint or an API key the same way.
+
+**The safety rules.**
+- The definition holds no secret, because a repository is public. The person types the account in the app.
+- The engine never keeps the password. It keeps the session, and the app keeps that in Keychain or Keystore.
+- The session goes only to `base_url`. The sign-in, the refresh, the logout and the headers never go to a mirror, because a mirror is another host.
+- A password is never in an error message. A refused sign-in says "is the account right?".
+- Fixtures use made-up accounts. `record` is not used for a sign-in, because it would save real tokens.
+
+**Turned down.**
+- Letting a setting hold the password. A setting only holds one of the options the definition lists, and it would be stored in the database.
+- Sign in with Google and other redirects. They need a browser, and the app has no web view.
+- A captcha or Turnstile token. Nothing here can pass a check.
+
+**In the apps (same day).** The engine does not store the session itself. The app gives it a `SessionKeeper` (a small interface in `desktop/manga-ffi/src/lib.rs`, with two calls: `load` and `save`). The engine calls `load` when a source loads and `save` every time the session changes, a refresh included. So the apps only hold a safe key-value store: `manga-app/App/SessionKeychain.swift` (Keychain, this device only, after first unlock) and `manga-android/.../sources/SessionKeystore.kt` (AES-GCM with a key that lives in the Android Keystore). All the sign-in logic stays in Rust.
+
+The screen is one sheet, drawn from the fields the definition lists, with the host the account goes to: `SignInSheet.swift` and `SignInSheet.kt`, opened from the source's own settings page (an "Account" row: Sign in, or the person's name and Sign out). It uses the app's small components only. Two new ones: a secure field and a labelled field (`AkiField`), because a form field keeps its name above it when it fills.
+
+**Turned down in the apps.** Keeping the password so the app can sign in again by itself (the refresh does that without it).
+
+## A chapter can say it is locked (2026-11-22)
+
+**Chosen.** `chapters.chapter.locked` is an expression like the others (`"locked": "is_premium"`). Any text counts as yes except `false`, `0`, `no` and `null`. The engine keeps it as `Chapter.locked` and the library keeps it in a new `chapter.locked` column (database version 11, added by an `ALTER TABLE` with a default of 0, so an existing library is not touched). When a listing is read again the value is replaced, so a chapter whose early access ended unlocks by itself.
+
+**In the apps.** While the person is signed out of a source that has `auth`, a locked chapter shows "Locked" where it would show "Unread". Tapping it opens the sign-in sheet first, and the chapter opens as soon as sign-in works. A signed-in person sees nothing different, because the site decides what an account may read. A source with no `auth` shows nothing: the flag alone would promise something the app cannot do.
+
+**Why a flag from the site and not a guess from a failed request.** A failed read cannot tell "locked" from "broken", and the first tap would always cost a request and an error screen. The chapter list already says it (`is_premium` on Asura).
+
+**Turned down.**
+- Hiding locked chapters. Some people see them on the website too, and they read in order.
+- Reading a date (`early_access_until`) as the flag. A date in the past would still count as "yes". Use a real yes or no field.
+- A lock icon on the row. The small line above the title already says it, and a second mark would repeat it.
