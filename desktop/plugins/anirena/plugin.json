@@ -1,0 +1,41 @@
+{
+  "plugin": 1,
+  "id": "anirena",
+  "name": "AniRena",
+  "version": 1,
+  "module": {
+    "file": "anirena.wasm",
+    "sha256": "8fdd5a36e4f1efca2811a69ebe66dacccda073a8c4eaa8751654df82e74d6354"
+  },
+  "indexers": [
+    {
+      "id": "anirena",
+      "name": "AniRena",
+      "kinds": [
+        "anime",
+        "series",
+        "movie"
+      ],
+      "hosts": [
+        "https://www.anirena.com"
+      ],
+      "code": "search",
+      "request": {
+        "path": "/",
+        "query": {
+          "q": "{term}"
+        }
+      },
+      "response": {
+        "format": "json",
+        "rows": "items",
+        "fields": {
+          "title": "title",
+          "hash": "hash",
+          "size": "size",
+          "seeders": "seeders"
+        }
+      }
+    }
+  ]
+}
