@@ -2054,6 +2054,8 @@ pub(crate) mod tests {
                 "tokyotosho",
                 "knaben",
                 "torrents-csv",
+                "aniscraper",
+                "aniscraper-anirena",
                 "torrentio",
                 "apibay",
                 "zilean-anime",
@@ -2067,6 +2069,8 @@ pub(crate) mod tests {
             [
                 "knaben",
                 "torrents-csv",
+                "aniscraper",
+                "aniscraper-anirena",
                 "torrentio",
                 "eztv",
                 "apibay",
@@ -2080,6 +2084,8 @@ pub(crate) mod tests {
             [
                 "knaben",
                 "torrents-csv",
+                "aniscraper",
+                "aniscraper-anirena",
                 "torrentio",
                 "yts",
                 "apibay",

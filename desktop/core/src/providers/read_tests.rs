@@ -75,7 +75,7 @@ fn anime_kitsu_maps_an_anilist_id_to_the_exact_kitsu_episode() {
             .iter()
             .filter(|indexer| indexer.mapper_id() == Some("kitsu"))
             .count()
-            == 1
+            == 3
     );
 }
 

@@ -359,6 +359,44 @@ mod tests {
     const B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     #[test]
+    fn aniscraper_reads_the_filename_size_and_seeders_of_a_real_answer() {
+        // Saved from a real answer:
+        // https://c5541ffce7d3-aniscraper.baby-beamup.club/stream/series/kitsu:48105:1:1.json
+        let body = json!({"streams": [
+            {"name": "[p2p] Aniscraper 1080P ",
+             "description": "🎬 [SubsPlease] Sousou no Frieren - 01 (1080p) [F02B9CEE].mkv\n📜 Season 1  Episode 1\n📏 1.5 GiB | 🌱 116\n⚙️ Nyaa",
+             "infoHash": "374ff33f0fae5206c693c7c7e0bd7acc88ef6ad0",
+             "fileIdx": 0,
+             "sources": ["dht:374ff33f0fae5206c693c7c7e0bd7acc88ef6ad0"],
+             "_quality": "1080P",
+             "behaviorHints": {"bingeGroup": "nyaa-p2p-1080P-subsplease",
+                               "videoSize": 1610612736,
+                               "filename": "[SubsPlease] Sousou no Frieren - 01 (1080p) [F02B9CEE].mkv"}},
+            {"name": "[p2p] Aniscraper 1080P HEVC",
+             "description": "🎬 [Arg0] Frieren: Beyond Journey's End (2023) - S01E01 v3 (WEB 1080p HEVC x265 E-AC-3) [Dual-Audio] | Sousou no Frieren | Frieren at the Funeral.mkv\n📜 Season 1  Episode 1\n📏 3.3 GiB | 🌱 99\n⚙️ Nyaa",
+             "infoHash": "7796597611c96c5d0d69b6546eb0480b40ffd54e",
+             "fileIdx": 0,
+             "sources": ["dht:7796597611c96c5d0d69b6546eb0480b40ffd54e"],
+             "_quality": "1080P",
+             "behaviorHints": {"bingeGroup": "nyaa-p2p-1080P-arg0",
+                               "videoSize": 3543348019i64,
+                               "filename": "[Arg0] Frieren: Beyond Journey's End (2023) - S01E01 v3 (WEB 1080p HEVC x265 E-AC-3) [Dual-Audio] | Sousou no Frieren | Frieren at the Funeral.mkv"}}
+        ]});
+        let found = run("aniscraper", &body, "x");
+        assert_eq!(found.len(), 2);
+        assert_eq!(
+            found[0].title,
+            "[SubsPlease] Sousou no Frieren - 01 (1080p) [F02B9CEE].mkv"
+        );
+        assert_eq!(found[0].info_hash, "374ff33f0fae5206c693c7c7e0bd7acc88ef6ad0");
+        assert_eq!(found[0].size_bytes, Some(1610612736));
+        assert_eq!(found[0].seeders, Some(116));
+        assert_eq!(found[0].file_idx, Some(0));
+        assert_eq!(found[1].seeders, Some(99));
+        assert_eq!(found[1].size_bytes, Some(3543348019));
+    }
+
+    #[test]
     fn final_review_torrentio_extract_rank_select() {
         use crate::releases::{VideoFile, pick_video_file_for_release, rank_releases};
 
