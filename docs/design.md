@@ -331,3 +331,13 @@ The screen is one sheet, drawn from the fields the definition lists, with the ho
 - Reading a date as the flag directly. A date in the past would still count as "yes". The `in_future` step turns a date into yes or no, and it is the source's JSON that says to use it.
 - Dimming the cover of a locked chapter. It makes the row look disabled, and it is not: a tap does something.
 - Colour for the lock (an accent or red). The app has one accent and it marks the current choice. The lock is a quiet fact.
+
+## The video loop waits only a few milliseconds for events (2026-11-22)
+
+Video felt laggy on 4K files. We measured it: the picture reached the screen about every 61 ms (roughly 16 fps) for a 24 fps film, and mpv dropped about 8 frames a second. Decoding and drawing were not the problem (a frame draws in about 6 ms, no decoder drops).
+
+The cause was the loop in `desktop/app/src/player.rs` that both reads mpv events and draws frames. It waited up to 50 ms for events, so frames were drawn late and mpv threw them away. Now it waits at most 4 ms. The same file then played at a steady 24 fps (frames 42 ms apart) and mpv dropped one frame in 40 seconds. CPU is about 30% of one core for 4K.
+
+Rejected for now: drawing on the GPU instead of the CPU, which mpv's own header suggests for speed. The CPU path costs little on Apple silicon (about 20% of one core for 1080p), and the GPU path needs a large change in how GPUI shows frames. We will do it only if a real file still stutters.
+
+Not tested: Windows, and files at 60 fps.

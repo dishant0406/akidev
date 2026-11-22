@@ -473,8 +473,10 @@ unsafe extern "C" fn on_update(target: *mut c_void) {
 
 unsafe fn handle_events(mpv: &Mpv, shared: &Shared) {
     loop {
-        // Waits briefly: the update callback wakes it as soon as a frame is due.
-        let event = unsafe { &*mpv_wait_event(mpv.0, 0.05) };
+        // Waits a few milliseconds at most. The same loop renders frames, and a long wait
+        // here made it miss frames: on 4K video mpv dropped ~8 frames a second and the picture
+        // ran at ~16 fps. At this wait the same video plays at a steady 24 fps.
+        let event = unsafe { &*mpv_wait_event(mpv.0, 0.004) };
         match event.event_id {
             id if id == mpv_event_id_MPV_EVENT_NONE => return,
             id if id == mpv_event_id_MPV_EVENT_SHUTDOWN => return,
