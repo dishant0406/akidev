@@ -341,3 +341,15 @@ The cause was the loop in `desktop/app/src/player.rs` that both reads mpv events
 Rejected for now: drawing on the GPU instead of the CPU, which mpv's own header suggests for speed. The CPU path costs little on Apple silicon (about 20% of one core for 1080p), and the GPU path needs a large change in how GPUI shows frames. We will do it only if a real file still stutters.
 
 Not tested: Windows, and files at 60 fps.
+
+## A skipping catalogue is asked for one page, and a second only when the first is short (2026-11-22)
+
+We measured the desktop app before changing anything. Home scrolls at 120 fps, a title page needs one request (about 120 ms), and the window opens in about 215 ms, most of it the graphics framework. The gap was in the network: a cold start made about 19 requests, and the banner waited for the slowest.
+
+The cause: for a catalogue that pages by skip (Cinemeta, 48 titles a page), `desktop/core/src/providers/list.rs` always asked for one page more than the row needed, "in case" titles were left out. The banner needs 6 titles and a row 24, so the extra page of about 120 KB was almost never used, but the banner waited for it.
+
+Now one page is asked for. If it comes up short after titles are left out (not out yet, twice) and the catalogue goes on, one more page is asked for. Three cold launches each, alternating old and new: banner median 1808 ms before, 384 ms after; first row 546 ms before, about 270 ms after. Two tests in `desktop/core/src/providers/read_tests.rs` cover both cases.
+
+Not changed, on purpose:
+- Rows that read a window of 3 pages (the date sort and genre rows). Reading fewer would show older titles in "New Releases", and Cinemeta's own genre address did not give matching titles in a test.
+- Pressing Play takes about 13 s to the first frame, mostly torrent pieces (the file index at the far end of a 12 GB file, the resume jump). That needs a change in the torrent engine, so it was left for its own piece of work.

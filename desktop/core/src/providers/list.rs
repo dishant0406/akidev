@@ -93,8 +93,9 @@ pub async fn list(def: &ProviderDef, kind: Kind, filters: &Filters) -> anyhow::R
         (Style::Skip { size, window }, Mode::Skip { windowed }) if windowed => {
             (window.pages, 0, *size, wanted.per_page)
         }
+        // One page is asked for when it holds enough; a short answer asks for one more (below).
         (Style::Skip { size, .. }, _) => (
-            wanted.per_page.div_ceil(*size) + 1,
+            wanted.per_page.div_ceil(*size),
             (wanted.page - 1) * wanted.per_page,
             *size,
             wanted.per_page,
@@ -108,45 +109,65 @@ pub async fn list(def: &ProviderDef, kind: Kind, filters: &Filters) -> anyhow::R
         _ => (1, 0, 0, wanted.per_page),
     };
     let ttl = Duration::from_secs(list.ttl_secs);
-    let answers = join_all((0..scans).map(|index| {
-        let mut asking = Asking::new(def, kind);
-        asking.sort = filters.sort;
-        asking.page = wanted.page;
-        asking.per_page = rows_asked;
-        asking.skip = offset + index * step;
-        asking.genre = wanted.genre();
-        asking.year = filters.year;
-        let request = asking.prepare(&list.request);
-        async move {
-            let request =
-                request.ok_or_else(|| anyhow::anyhow!("the request cannot be filled in"))?;
-            get(
-                &def.id,
-                kind,
-                request,
-                list.check.as_ref(),
-                ttl,
-                &list.rows,
-                true,
-            )
-            .await
-        }
-    }))
-    .await;
+    let ask = |indexes: std::ops::Range<usize>| {
+        join_all(indexes.map(|index| {
+            let mut asking = Asking::new(def, kind);
+            asking.sort = filters.sort;
+            asking.page = wanted.page;
+            asking.per_page = rows_asked;
+            asking.skip = offset + index * step;
+            asking.genre = wanted.genre();
+            asking.year = filters.year;
+            let request = asking.prepare(&list.request);
+            async move {
+                let request =
+                    request.ok_or_else(|| anyhow::anyhow!("the request cannot be filled in"))?;
+                get(
+                    &def.id,
+                    kind,
+                    request,
+                    list.check.as_ref(),
+                    ttl,
+                    &list.rows,
+                    true,
+                )
+                .await
+            }
+        }))
+    };
     // A run of pages with one failing is still a run: it is an error only when none came.
     let mut bodies = Vec::new();
     let mut failure = None;
-    for answer in answers {
-        match answer {
-            Ok(Some(body)) => bodies.push(body),
-            Ok(None) => {}
-            Err(error) => failure = failure.or(Some(error)),
-        }
+    keep(ask(0..scans).await, &mut bodies, &mut failure);
+    let mut page = shape(def, list, kind, &wanted, &bodies, now_ms());
+    // A page of a skipping service that came up short once rows were left out (a date in the
+    // future, a title twice) is topped up from the next page, which is not asked for otherwise.
+    let skipping = matches!(wanted.mode, Mode::Skip { windowed: false });
+    if skipping && page.results.len() < wanted.per_page && page.has_next {
+        keep(ask(scans..scans + 1).await, &mut bodies, &mut failure);
+        page = shape(def, list, kind, &wanted, &bodies, now_ms());
     }
     if let (true, Some(error)) = (bodies.is_empty(), failure) {
         return Err(error);
     }
-    Ok(shape(def, list, kind, &wanted, &bodies, now_ms()))
+    Ok(page)
+}
+
+/// Sorts what came back into the bodies that answered and the first error.
+fn keep(
+    answers: Vec<anyhow::Result<Option<std::sync::Arc<Value>>>>,
+    bodies: &mut Vec<std::sync::Arc<Value>>,
+    failure: &mut Option<anyhow::Error>,
+) {
+    for answer in answers {
+        match answer {
+            Ok(Some(body)) => bodies.push(body),
+            Ok(None) => {}
+            Err(error) => {
+                failure.get_or_insert(error);
+            }
+        }
+    }
 }
 
 /// The page that answers make, once they are in.

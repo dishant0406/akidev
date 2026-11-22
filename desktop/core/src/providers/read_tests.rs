@@ -1118,3 +1118,68 @@ fn a_provider_whose_request_has_a_misspelt_hole_is_refused() {
     assert!(super::check(&broken).is_err());
     assert!(super::check(&def("tvmaze")).is_ok());
 }
+
+/// A catalogue server that counts what it is asked: a first page of `first` and a second of
+/// forty-eight good titles.
+async fn catalogue(first: Vec<Value>) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = asked.clone();
+    let second: Vec<Value> = (0..48)
+        .map(|n| entry(&format!("tt2{n:03}"), "2020-01-01T00:00:00.000Z", &[]))
+        .collect();
+    let app = axum::Router::new().fallback(move |uri: axum::http::Uri| {
+        let (log, first, second) = (log.clone(), first.clone(), second.clone());
+        async move {
+            log.lock().unwrap().push(uri.path().to_string());
+            let page = if uri.path().contains("skip=48") {
+                second
+            } else {
+                first
+            };
+            axum::Json(metas(&page))
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (base, asked)
+}
+
+async fn row_from(base: &str) -> crate::model::Page {
+    let mut cinemeta = def("cinemeta");
+    cinemeta.base_url = base.to_string();
+    let filters = filters(Some(Sort::Popularity), 1, 24);
+    super::list::list(&cinemeta, Kind::Movie, &filters)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_page_that_holds_enough_is_the_only_one_asked_for() {
+    let first = (0..48)
+        .map(|n| entry(&format!("tt1{n:03}"), "2020-01-01T00:00:00.000Z", &[]))
+        .collect();
+    let (base, asked) = catalogue(first).await;
+    let page = row_from(&base).await;
+    assert_eq!(page.results.len(), 24);
+    assert_eq!(asked.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_page_that_came_up_short_is_topped_up_from_the_next() {
+    // Forty of the forty-eight are not out yet, so the page holds eight.
+    let first = (0..48)
+        .map(|n| {
+            let released = if n < 8 {
+                "2020-01-01T00:00:00.000Z"
+            } else {
+                "2099-01-01T00:00:00.000Z"
+            };
+            entry(&format!("tt1{n:03}"), released, &[])
+        })
+        .collect();
+    let (base, asked) = catalogue(first).await;
+    let page = row_from(&base).await;
+    assert_eq!(page.results.len(), 24);
+    assert_eq!(asked.lock().unwrap().len(), 2);
+}
