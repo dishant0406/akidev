@@ -320,11 +320,14 @@ The screen is one sheet, drawn from the fields the definition lists, with the ho
 
 **Chosen.** `chapters.chapter.locked` is an expression like the others (`"locked": "is_premium"`). Any text counts as yes except `false`, `0`, `no` and `null`. The engine keeps it as `Chapter.locked` and the library keeps it in a new `chapter.locked` column (database version 11, added by an `ALTER TABLE` with a default of 0, so an existing library is not touched). When a listing is read again the value is replaced, so a chapter whose early access ended unlocks by itself.
 
-**In the apps.** While the person is signed out of a source that has `auth`, a locked chapter shows "Locked" where it would show "Unread". Tapping it opens the sign-in sheet first, and the chapter opens as soon as sign-in works. A signed-in person sees nothing different, because the site decides what an account may read. A source with no `auth` shows nothing: the flag alone would promise something the app cannot do.
+**In the apps.** While the person is signed out, a locked chapter shows a filled lock in the place of the read mark (muted, 20 pt, with the accessible name "Locked"). The icon is the state, so the line above the title is left as it was, unless the source gives its own word in `chapters.locked_label` ("Members only"). By default a tap opens the sign-in sheet first (when the source has `auth`), and the chapter opens as soon as sign-in works; `chapters.locked_action: "none"` only shows the lock and opens the chapter as usual. A signed-in person sees it as any chapter, because the site decides what an account may read.
+
+**Why the lock replaces the read mark and no word is added.** The two marks mean different things in one slot and cannot both be true (a chapter you cannot open has not been read). An icon and the word "Locked" would say the same thing twice. The word comes from the source only when it says something more ("Early access").
 
 **Why a flag from the site and not a guess from a failed request.** A failed read cannot tell "locked" from "broken", and the first tap would always cost a request and an error screen. The chapter list already says it (`is_premium` on Asura).
 
 **Turned down.**
 - Hiding locked chapters. Some people see them on the website too, and they read in order.
-- Reading a date (`early_access_until`) as the flag. A date in the past would still count as "yes". Use a real yes or no field.
-- A lock icon on the row. The small line above the title already says it, and a second mark would repeat it.
+- Reading a date as the flag directly. A date in the past would still count as "yes". The `in_future` step turns a date into yes or no, and it is the source's JSON that says to use it.
+- Dimming the cover of a locked chapter. It makes the row look disabled, and it is not: a tap does something.
+- Colour for the lock (an accent or red). The app has one accent and it marks the current choice. The lock is a quiet fact.

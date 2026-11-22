@@ -103,7 +103,7 @@ def paid_source():
     """The `paid` source: a JSON site whose open titles load for anyone and whose chapter 2 needs a sign-in."""
     card = {"id": "slug", "title": "title", "cover": "cover"}
     return json.dumps({
-        "schema": 1, "id": "paid", "name": "Paid demo", "version": 2, "lang": ["en"], "nsfw": False,
+        "schema": 1, "id": "paid", "name": "Paid demo", "version": 3, "lang": ["en"], "nsfw": False,
         "base_url": f"{BASE}/paid", "rate_per_second": 20,
         "auth": {
             "fields": [{"id": "email", "name": "Email"}, {"id": "password", "name": "Password", "secret": True}],
@@ -116,7 +116,7 @@ def paid_source():
         },
         "popular": {"request": {"url": "{base}/series"}, "format": "json", "rows": "data", "card": card},
         "detail": {"request": {"url": "{base}/series/{id}"}, "format": "json", "title": "title", "cover": "cover", "description": "description"},
-        "chapters": {"request": {"url": "{base}/series/{id}/chapters"}, "format": "json", "rows": "data", "chapter": {"id": "slug", "number": "number", "title": "title", "locked": "premium"}},
+        "chapters": {"request": {"url": "{base}/series/{id}/chapters"}, "format": "json", "rows": "data", "chapter": {"id": "slug", "number": "number", "title": "title", "locked": "premium"}, "locked_label": "Members only"},
         "pages": {"request": {"url": "{base}/chapters/{series}/{id}"}, "format": "json", "images": "data.pages.*", "reading": "longstrip"},
     }, indent=2).encode()
 
@@ -154,7 +154,7 @@ class Handler(BaseHTTPRequestHandler):
             "themes": [{"id": "madara", "version": json.loads(theme)["version"], "path": "themes/madara.json", "sha256": sha(theme)}],
         }
         paid = paid_source()
-        index["sources"].append({"id": "paid", "name": "Paid demo", "version": 2, "path": "sources/paid.json", "sha256": sha(paid), "lang": ["en"]})
+        index["sources"].append({"id": "paid", "name": "Paid demo", "version": 3, "path": "sources/paid.json", "sha256": sha(paid), "lang": ["en"]})
         files = {"index.json": json.dumps(index, indent=2).encode(), "themes/madara.json": theme, "sources/local.json": local, "sources/second.json": second, "sources/paid.json": paid}
         if inside in files:
             return self.reply(files[inside], "application/json")

@@ -179,7 +179,7 @@ For a source with free titles and paid ones. The source's definition has an `aut
 2. **Sign in** opens a sheet: "Sign in to <source>", one labelled field for each thing the definition asks for (the password hidden), the line "Sent to <host> only. Akidev keeps a session, not your password.", and **Sign in**. The button is off until every field has text.
 3. A refused sign-in says so under the fields ("<source> did not accept that sign-in: is the account right?") and the message goes as soon as a field changes. The password is never in a message.
 4. On success the sheet closes. The row shows the name the site gave and **Sign out**. Free titles never needed this; paid chapters now open.
-   A chapter the source flags as locked says **Locked** over its title while signed out; tapping it opens this sheet first and the chapter opens after sign-in.
+   A chapter the source flags as locked shows a lock in place of the read mark while signed out (the source may give its own word over the title, such as "Members only"); tapping it opens this sheet first and the chapter opens after sign-in. A source can ask for the lock to be only shown (`locked_action: none`).
 5. When the site stops accepting the session, the app asks it for a new one once and goes on. If that fails, the next read says "the session ended, sign in again".
 6. **Sign out** tells the site and removes the session. Removing the source removes it too.
 
