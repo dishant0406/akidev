@@ -12,6 +12,7 @@ import live.akidev.manga.app.describe
 import uniffi.akimanga.Bookmark
 import uniffi.akimanga.ChapterEntry
 import uniffi.akimanga.Detail
+import uniffi.akimanga.SourceInfo
 
 /** Where the reader opens: a chapter, a page in it, and how far down that page (0 to 1). */
 class ReaderTarget(val chapterId: String, val page: Int, val offset: Double = 0.0)
@@ -223,8 +224,13 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         app.refresh()
     }
 
-    /** The source has an account the person has not signed in to. */
-    val needsAccount: Boolean get() = app.sources.firstOrNull { it.id == ref.source }?.let { it.hasSignIn && !it.signedIn } == true
+    private val source: SourceInfo? get() = app.sources.firstOrNull { it.id == ref.source }
+
+    /** The source flags it and the person is not signed in. A signed-in person sees it as any chapter: the site decides what an account may read. */
+    fun isLocked(chapter: ChapterEntry): Boolean = chapter.locked && source?.signedIn != true
+
+    /** A tap on this chapter asks the person to sign in first. */
+    fun asksToSignIn(chapter: ChapterEntry): Boolean = isLocked(chapter) && source?.lockedPromptsSignIn == true
 
     /** The small line over a chapter's title: where you are in it, or what it is. */
     fun label(chapter: ChapterEntry): String {
@@ -232,7 +238,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         if (chapter.finished) return if (downloaded) "Read · Downloaded" else "Read"
         if (downloaded) return "Downloaded"
         chapter.page?.let { return "Page ${it + 1u}" }
-        if (chapter.locked && needsAccount) return "Locked"
+        if (isLocked(chapter)) source?.lockedLabel?.let { return it }
         val number = chapter.number?.let { "Chapter " + chapterName(it, null).removePrefix("Chapter ") }
         if (number != null && chapter.title?.contains(number, ignoreCase = true) == false) return number
         return "Unread"

@@ -193,11 +193,18 @@ struct SeriesView: View {
                     AkiListCard(thumbnail: cover, label: label(chapter),
                                 title: chapterName(number: chapter.number, title: chapter.title),
                                 badges: [shortDate(chapter.dateMs), chapter.scanlator].compactMap { $0 }, dimmed: chapter.finished) {
-                        AkiTap(action: { toggleRead(chapter) }) {
-                            AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .text : .muted)
+                        if isLocked(chapter) {
+                            // The mark is the state, so it sits where the read mark would; the whole row opens the sign-in.
+                            AkiIcon("lock-solid", size: 20, tone: .muted)
                                 .frame(width: 44, height: 44)
+                                .accessibilityLabel("Locked")
+                        } else {
+                            AkiTap(action: { toggleRead(chapter) }) {
+                                AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .text : .muted)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
                         }
-                        .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
                     }
                 }
                 .akiContextMenu([
@@ -229,13 +236,15 @@ struct SeriesView: View {
         }
     }
 
-    /// The source has an account the person has not signed in to.
-    private var needsAccount: Bool { model.sources.first { $0.id == ref.source }.map { $0.hasSignIn && !$0.signedIn } ?? false }
+    private var source: SourceInfo? { model.sources.first { $0.id == ref.source } }
 
-    /// A locked chapter asks for the account first, when there is one to sign in to; any other opens at its place.
+    /// The source flags it and the person is not signed in. A signed-in person sees it as any chapter: the site decides what an account may read.
+    private func isLocked(_ chapter: ChapterEntry) -> Bool { chapter.locked && source?.signedIn != true }
+
+    /// A locked chapter asks for the account first, when the source says so and has one to sign in to; any other opens at its place.
     private func open(_ chapter: ChapterEntry) {
         let next = ReaderTarget(chapterID: chapter.id, page: Int(chapter.page ?? 0))
-        if chapter.locked && needsAccount {
+        if isLocked(chapter) && source?.lockedPromptsSignIn == true {
             waiting = next
             signingIn = true
         } else {
@@ -248,7 +257,7 @@ struct SeriesView: View {
         if chapter.finished { return kept.contains(chapter.id) ? "Read · Downloaded" : "Read" }
         if kept.contains(chapter.id) { return "Downloaded" }
         if let page = chapter.page { return "Page \(page + 1)" }
-        if chapter.locked && needsAccount { return "Locked" }
+        if isLocked(chapter), let word = source?.lockedLabel { return word }
         let number = chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" }
         if let number, chapter.title.map({ !$0.localizedCaseInsensitiveContains(number) }) == true { return number }
         return "Unread"

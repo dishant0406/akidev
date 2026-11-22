@@ -51,6 +51,8 @@ import live.akidev.manga.app.rememberPhotoPicker
 import live.akidev.manga.app.shortDate
 import live.akidev.manga.design.*
 import live.akidev.manga.sources.SignInSheet
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import uniffi.akimanga.ChapterEntry
 
 private enum class SeriesTab { Chapters, Bookmarks, Details }
@@ -75,7 +77,7 @@ fun SeriesScreen(ref: SeriesRef) {
     var waiting by remember { mutableStateOf<ReaderTarget?>(null) }
     val openChapter = { chapter: ChapterEntry ->
         val next = ReaderTarget(chapter.id, (chapter.page ?: 0u).toInt())
-        if (chapter.locked && series.needsAccount) {
+        if (series.asksToSignIn(chapter)) {
             waiting = next
             signingIn = true
         } else {
@@ -261,9 +263,17 @@ private fun LazyListScope.chapterRows(series: SeriesModel, openChapter: (Chapter
                 AkiListCard(
                     series.cover, series.label(chapter), chapterName(chapter.number, chapter.title),
                     badges = listOfNotNull(shortDate(chapter.dateMs), chapter.scanlator), dimmed = chapter.finished,
-                ) { ReadMark(chapter, series) }
+                ) { if (series.isLocked(chapter)) LockMark() else ReadMark(chapter, series) }
             }
         }
+    }
+}
+
+/** The state mark, in the place of the read mark: the whole row opens the sign-in. */
+@Composable
+private fun LockMark() {
+    Box(Modifier.size(44.dp).semantics { contentDescription = "Locked" }, contentAlignment = Alignment.Center) {
+        AkiIcon("lock-solid", size = 20.dp, tone = AkiTone.Muted)
     }
 }
 
