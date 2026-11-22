@@ -121,8 +121,8 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         coroutineScope {
             val fetchedDetail = async { runCatching { engine.details(ref.source, ref.id) } }
             val fetchedChapters = if (fresh) null else async { runCatching { engine.chapters(ref.source, ref.id) } }
-            fetchedDetail.await().fold({ detail = it }, { if (detail == null) error = describe(it) })
-            fetchedChapters?.await()?.fold({ showChapters(it.entries) }, { if (chapters.isEmpty()) error = describe(it) })
+            fetchedDetail.await().fold({ detail = it }, { if (detail == null) error = describe(it, "Could not load this series") })
+            fetchedChapters?.await()?.fold({ showChapters(it.entries) }, { if (chapters.isEmpty()) error = describe(it, "Could not load the chapters") })
         }
         loading = false
         loadBookmarks()
@@ -157,7 +157,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             try { engine.downloadChapter(ref.source, ref.id, chapter.id) } catch (failure: Exception) { failed += 1 }
             loadKept()
         }
-        if (failed > 0) problem = if (failed == 1) "One chapter could not be downloaded." else "$failed chapters could not be downloaded."
+        if (failed > 0) problem = (if (failed == 1) "1 chapter could not be downloaded." else "$failed chapters could not be downloaded.") + " Check your connection and try again."
         return failed == 0
     }
 
@@ -180,7 +180,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             saved = !saved
             app.refresh()
         } catch (failure: Exception) {
-            error = describe(failure)
+            error = describe(failure, "Could not update your library")
         }
         return saved
     }
@@ -238,7 +238,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         if (chapter.finished) return if (downloaded) "Read · Downloaded" else "Read"
         if (downloaded) return "Downloaded"
         chapter.page?.let { return "Page ${it + 1u}" }
-        if (isLocked(chapter)) source?.lockedLabel?.let { return it }
+        if (isLocked(chapter)) return source?.lockedLabel ?: "Locked"
         val number = chapter.number?.let { "Chapter " + chapterName(it, null).removePrefix("Chapter ") }
         if (number != null && chapter.title?.contains(number, ignoreCase = true) == false) return number
         return "Unread"

@@ -11,12 +11,13 @@ struct ListenBar: View {
             HStack(spacing: 12) {
                 AkiIconButton(symbol: "previous", label: "Previous sentence") { listener.skip(forward: false) }
                 if listener.state == .loading {
-                    AkiSpinner().frame(width: 44, height: 44).akiGlass(.circle, interactive: false)
+                    AkiSpinner().frame(width: 44, height: 44).akiGlass(.circle, interactive: false).accessibilityLabel("Getting ready to read aloud")
                 } else {
                     AkiIconButton(symbol: listener.state == .playing ? "pause" : "play", label: listener.state == .playing ? "Pause" : "Play", tint: Aki.primary) { listener.toggle() }
                 }
                 AkiIconButton(symbol: "next", label: "Next sentence") { listener.skip(forward: true) }
                 AkiMenuPill(selection: Bindable(listener).rate, options: Self.rates)
+                    .accessibilityHint("Reading speed")
                 AkiIconButton(symbol: "close", label: "Stop reading aloud") { listener.stop() }
             }
         }

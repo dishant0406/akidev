@@ -66,7 +66,7 @@ fun AkiSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable 
         // Down is the distance pulled, as a fraction of the screen; the sheet leaves the same way it was pulled.
         fun close() = scope.launch { rise.animateTo(1f, AkiMotion.settle()); onDismiss() }
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * (1f - rise.value))).clickable(remember { MutableInteractionSource() }, null) { close() },
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * (1f - rise.value))).clickable(remember { MutableInteractionSource() }, null, onClickLabel = "Done") { close() },
             contentAlignment = Alignment.BottomCenter,
         ) {
             Column(

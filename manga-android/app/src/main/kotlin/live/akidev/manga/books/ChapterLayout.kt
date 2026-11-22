@@ -94,6 +94,9 @@ class ChapterLayout(
 
     fun offset(anchor: String): Int? = anchors[anchor]
 
+    /** What a page says, as plain words: for a screen reader. */
+    fun pageText(page: Int) = words(start(page), end(page))
+
     /** The first place after what the page shows. */
     private fun end(page: Int) = if (page + 1 < pages.size) pages[page + 1].start else totalLength
 

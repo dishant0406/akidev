@@ -19,30 +19,30 @@ struct SourceAddSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
                     AkiLogo(size: 36)
-                    AkiText("Add a source", .title)
+                    AkiText("Add a source", .title).accessibilityAddTraits(.isHeader)
                 }
-                AkiText("Paste a source definition. One that extends a theme has the theme merged in, so it works on its own.", .caption, tone: .muted)
+                AkiText("Paste the text of a source. It is checked before anything is kept.", .caption, tone: .muted)
                 AkiPasteButton { pasted in text = pasted }
 
-                AkiTextArea(text: $text)
+                AkiTextArea(text: $text, label: "Source text")
                     .onChange(of: text) { preview = nil; error = nil }
 
                 if let error {
-                    AkiEmptyState(title: error.title, message: error.message, action: ("Check again", { Task { await check() } }))
+                    AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await check() } }))
                 } else if let preview {
                     AkiCard(padding: 16) {
                         VStack(alignment: .leading, spacing: 6) {
                             AkiText(preview.name, .heading)
-                            AkiText("\(preview.languages.joined(separator: ", ").uppercased()) · v\(preview.version)\(preview.nsfw ? " · 18+" : "")", .caption, tone: .muted)
+                            AkiText("\(preview.languages.joined(separator: ", ").uppercased()) · v\(preview.version)\(preview.nsfw ? " · 18+" : "")", .caption, tone: .muted, digits: true)
                         }
                     }
                     if let origin = model.engine.installedOrigin(id: preview.id) {
-                        AkiText("This replaces the \(preview.name) installed from \(origin). A pasted source does not update itself, and the repository stops updating it.", .caption, tone: .muted)
+                        AkiText("This replaces the \(preview.name) installed from \(origin). A pasted source does not update itself, and the repository no longer updates it.", .caption, tone: .muted)
                     }
-                    AkiButton(installing ? "Installing…" : "Install", variant: .primary, size: .large, fullWidth: true) { Task { await install() } }
+                    AkiButton(installing ? "Installing…" : "Install source", variant: .primary, size: .large, fullWidth: true) { Task { await install() } }
                         .disabled(installing)
                 } else {
-                    AkiButton(checking ? "Checking…" : "Check", variant: .glass, size: .large, fullWidth: true) { Task { await check() } }
+                    AkiButton(checking ? "Checking…" : "Check source", variant: .glass, size: .large, fullWidth: true) { Task { await check() } }
                         .disabled(checking || json.isEmpty)
                 }
                 AkiText("Akidev does not include, offer or endorse any source. Only add one you trust: it decides which sites the app contacts.", .caption, tone: .muted)
@@ -60,11 +60,11 @@ struct SourceAddSheet: View {
         do {
             let checked = try await model.engine.previewSource(json: json)
             if checked.nsfw {
-                self.error = ("Not available", "Sources marked 18+ are not available in this app.")
+                self.error = ("Could not add this source", "Sources marked 18+ are not available in this app.")
             } else {
                 preview = checked
             }
-        } catch { self.error = describe(error) }
+        } catch { self.error = describe(error, "Could not read this source") }
     }
 
     private func install() async {
@@ -76,6 +76,6 @@ struct SourceAddSheet: View {
             model.refresh()
             model.tab = .sources
             dismiss()
-        } catch { self.error = describe(error) }
+        } catch { self.error = describe(error, "Could not add this source") }
     }
 }

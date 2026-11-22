@@ -32,6 +32,9 @@ import live.akidev.manga.manga.CategoriesSheet
 import live.akidev.manga.manga.CategoryPicker
 import uniffi.akimanga.BookHighlight
 import uniffi.akimanga.BookInfo
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import java.text.NumberFormat
 
 /** The books on this device: add one from Files, pick one up where you left it. */
 @Composable
@@ -73,13 +76,13 @@ fun BooksScreen() {
                 }
             }
             if (books.books.isEmpty()) {
-                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you remove them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer), secondary = AkiAction("Receive from a friend") { app.sharing = Sharing(null, null) }) }
+                item { AkiEmptyState("No books yet", "Add EPUB files from your device. They stay on this phone until you delete them.", Modifier.heightIn(min = 380.dp), action = AkiAction("Add books", importer), secondary = AkiAction("Receive from a friend") { app.sharing = Sharing(null, null) }) }
             } else {
                 val shown = books.shown
-                if (shown.isEmpty()) item { AkiEmptyState("Nothing here", if (books.category == -2L) "Every book is on a category." else "No books on this shelf yet. Long-press a book to put it on one.", Modifier.heightIn(min = 260.dp)) }
+                if (shown.isEmpty()) item { AkiEmptyState("Nothing here", if (books.category == -2L) "Every book is in a category." else "No books in this category yet. Press and hold a book to add it to one.", Modifier.heightIn(min = 260.dp)) }
                 akiGrid(shown, columns, key = { it.id }) { book ->
                     val menu = if (books.selecting) emptyList() else menuOf(app, books, book, scope, details = { sheet = BooksSheet.Details(book, runCatching { app.engine.bookMarks(book.id) }.getOrDefault(emptyList())) }, share = { shareBook(book) }, sort = { sheet = BooksSheet.Sorting(book) }, cover = { coverFor = book; chooseCover() }, remove = { sheet = BooksSheet.Removing(book) })
-                    AkiTapMenu(menu, onClick = { if (books.selecting) books.toggle(book) else open(book) }) {
+                    AkiTapMenu(menu, if (books.selecting) Modifier.semantics { selected = book.id in books.picked } else Modifier, onClick = { if (books.selecting) books.toggle(book) else open(book) }) {
                         Box {
                             AkiBookCard(book.title, book.authors.firstOrNull(), book.cover, progressLine(book))
                             if (books.selecting) Tick(book.id in books.picked, Modifier.align(Alignment.TopStart))
@@ -92,10 +95,10 @@ fun BooksScreen() {
         if (books.selecting && chosen.isNotEmpty()) {
             // What can be done to the books picked: put them on categories, mark them finished or not started, remove them.
             Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 112.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiIconButton("folder", "Categories") { sheet = BooksSheet.Assigning(chosen) }
+                AkiIconButton("folder", "Change categories") { sheet = BooksSheet.Assigning(chosen) }
                 AkiIconButton("check", "Mark as finished") { books.finish(chosen); books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } }
                 AkiIconButton("restore", "Mark as not started") { books.reset(chosen); books.picked = emptySet(); books.selecting = false; scope.launch { books.load() } }
-                AkiIconButton("trash", "Remove", tint = Aki.colors.destructive) { sheet = BooksSheet.RemovingPicked(chosen) }
+                AkiIconButton("trash", "Delete books", tint = Aki.colors.destructive) { sheet = BooksSheet.RemovingPicked(chosen) }
             }
         }
     }
@@ -118,12 +121,12 @@ fun BooksScreen() {
                 remove = { sheet = BooksSheet.Removing(book) },
             )
         }
-        is BooksSheet.RemovingPicked -> AkiConfirm("Remove ${current.books.size} books?", "Their files are deleted from this phone. Your place in them is forgotten.", "Remove", { sheet = null }) {
+        is BooksSheet.RemovingPicked -> AkiConfirm(if (current.books.size == 1) "Delete 1 book?" else "Delete ${current.books.size} books?", "Their files and your reading progress are deleted from this phone.", if (current.books.size == 1) "Delete book" else "Delete books", { sheet = null }) {
             books.remove(current.books)
             books.picked = emptySet(); books.selecting = false
             scope.launch { books.load() }
         }
-        is BooksSheet.Removing -> AkiConfirm("Remove “${current.book.title}”?", "Its file is deleted from this phone. Your place in it is forgotten.", "Remove", { sheet = null }) {
+        is BooksSheet.Removing -> AkiConfirm("Delete “${current.book.title}”?", "Its file and your reading progress are deleted from this phone.", "Delete book", { sheet = null }) {
             books.remove(listOf(current.book))
             scope.launch { books.load() }
         }
@@ -154,9 +157,9 @@ private fun sortItems(app: live.akidev.manga.app.AppModel, books: BooksModel): L
 }
 
 private fun moreItems(app: live.akidev.manga.app.AppModel, books: BooksModel, manage: () -> Unit): List<AkiMenuItem> = buildList {
-    add(AkiMenuItem(if (books.searching) "Hide search" else "Search", "search") { books.searching = !books.searching; if (!books.searching) books.words = "" })
-    add(AkiMenuItem(if (books.selecting) "Done selecting" else "Select", "check") { books.select() })
-    add(AkiMenuItem("Categories", "folder", onClick = manage))
+    add(AkiMenuItem(if (books.searching) "Hide search" else "Search books", "search") { books.searching = !books.searching; if (!books.searching) books.words = "" })
+    add(AkiMenuItem(if (books.selecting) "Done selecting" else "Select books", "check") { books.select() })
+    add(AkiMenuItem("Edit categories", "folder", onClick = manage))
     add(AkiMenuItem("Receive from a friend", "share") { app.sharing = Sharing(null, null) })
 }
 
@@ -164,19 +167,22 @@ private fun menuOf(
     app: live.akidev.manga.app.AppModel, books: BooksModel, book: BookInfo, scope: kotlinx.coroutines.CoroutineScope,
     details: () -> Unit, share: () -> Unit, sort: () -> Unit, cover: () -> Unit, remove: () -> Unit,
 ): List<AkiMenuItem> = buildList {
-    add(AkiMenuItem("Details", "list", onClick = details))
-    add(AkiMenuItem("Share", "share", onClick = share))
-    add(AkiMenuItem("Categories", "folder", onClick = sort))
+    add(AkiMenuItem("Show details", "list", onClick = details))
+    add(AkiMenuItem("Share book", "share", onClick = share))
+    add(AkiMenuItem("Change categories", "folder", onClick = sort))
     add(AkiMenuItem("Choose a cover picture", "image", onClick = cover))
-    if (book.customCover) add(AkiMenuItem("Use the book's own cover", "restore") { runCatching { app.engine.clearBookCustomCover(book.id) }; scope.launch { books.load() } })
-    add(AkiMenuItem("Remove", "trash", destructive = true, onClick = remove))
+    if (book.customCover) add(AkiMenuItem("Use the book’s own cover", "restore") { runCatching { app.engine.clearBookCustomCover(book.id) }; scope.launch { books.load() } })
+    add(AkiMenuItem("Delete book", "trash", destructive = true, onClick = remove))
 }
 
 fun progressLine(book: BookInfo): String = when {
     book.finished -> "Finished"
     book.openedMs == null -> "New"
-    else -> "${Math.round(book.progress * 100)}%"
+    else -> percent(book.progress)
 }
+
+/** A share of a book as the phone's language writes it: "45%". */
+fun percent(fraction: Double): String = NumberFormat.getPercentInstance().format(fraction)
 
 @Composable
 private fun Tick(on: Boolean, modifier: Modifier) {

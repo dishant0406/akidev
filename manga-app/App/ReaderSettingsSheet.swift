@@ -11,8 +11,8 @@ struct ReaderSettingsSheet: View {
         @Bindable var prefs = app.prefs
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                AkiText("Reader", .title)
-                choice("Reading mode, this series") {
+                AkiText("Reader settings", .title).accessibilityAddTraits(.isHeader)
+                choice("Reading mode for this series") {
                     AkiTabs(items: ReadingMode.allCases.map { ($0, $0.shortTitle) }, selection: Binding(get: { model.mode }, set: { model.setMode($0) }))
                 }
                 choice("Auto-scroll speed") {
@@ -29,12 +29,16 @@ struct ReaderSettingsSheet: View {
                 }
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {
-                        AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading the left edge goes forward.", isOn: $prefs.invertTaps)
+                        AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading, the left edge goes forward.", isOn: $prefs.invertTaps)
                         AkiSwitch(title: "Keep the screen on", isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 || model.autoScrolling }))
                     }
                 }
-                AkiButton(coverSet == true ? "Cover changed" : coverSet == false ? "Could not use this page" : "Use what is on screen as the cover", icon: "image", fullWidth: true) {
-                    Task { coverSet = await model.useCurrentPageAsCover(); app.refresh() }
+                AkiButton(coverSet == true ? "Cover changed" : coverSet == false ? "Could not use this page as the cover" : "Use this page as the cover", icon: "image", fullWidth: true) {
+                    Task {
+                        coverSet = await model.useCurrentPageAsCover()
+                        app.refresh()
+                        akiAnnounce(coverSet == true ? "Cover changed" : "Could not use this page as the cover")
+                    }
                 }
             }
             .padding(24)
@@ -46,5 +50,7 @@ struct ReaderSettingsSheet: View {
             AkiText(title, .captionStrong, tone: .muted)
             content()
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
     }
 }

@@ -19,11 +19,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.SeriesRef
+import live.akidev.manga.app.plural
 import live.akidev.manga.app.SeriesRoute
 import live.akidev.manga.app.shortDate
 import live.akidev.manga.design.*
@@ -55,19 +58,19 @@ fun LibraryScreen() {
         AkiRefreshable({ app.refreshLibrary(force = true); library.loadHistory(); library.loadCategories() }, Modifier.fillMaxSize()) {
             AkiPage(narrow = false, state = library.scroll) {
                 item {
-                    AkiHeader("Library", subtitle = if (library.selecting) "${library.pickedShown.size} selected" else "${app.library.size} saved") {
+                    AkiHeader("Library", subtitle = if (library.selecting) "${library.pickedShown.size} selected" else plural(app.library.size, "series", "series")) {
                         AkiMenu("filter", "Sort and filter", library.menu(inMangaTab = part != null) { sheet = LibrarySheet.Managing })
                     }
                 }
                 item { MangaPartPills() }
-                if (part == null) item { AkiTabs(listOf(AkiChoice(LibraryTab.Saved, "Saved"), AkiChoice(LibraryTab.History, "History")), library.tab, { library.tab = it }) }
+                if (part == null) item { AkiTabs(listOf(AkiChoice(LibraryTab.Saved, "Library"), AkiChoice(LibraryTab.History, "History")), library.tab, { library.tab = it }) }
                 if (library.tab == LibraryTab.Saved) saved(library, columns, inMangaTab = part != null) else history(library)
             }
         }
         if (library.tab == LibraryTab.Saved && library.selecting && library.pickedShown.isNotEmpty()) {
             // What can be done to the series picked: icons alone, round, so three of them fit and sit clear of the tab bar.
             Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 112.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiIconButton("folder", "Categories") { sheet = LibrarySheet.Assigning(library.pickedShown.map { it.source to it.id }) }
+                AkiIconButton("folder", "Change categories") { sheet = LibrarySheet.Assigning(library.pickedShown.map { it.source to it.id }) }
                 AkiIconButton("check", "Mark as read") { library.markPickedRead() }
                 AkiIconButton("bookmark-off", "Remove from library", tint = Aki.colors.destructive) { sheet = LibrarySheet.Removing }
             }
@@ -76,7 +79,7 @@ fun LibraryScreen() {
     when (val current = sheet) {
         LibrarySheet.Managing -> CategoriesSheet { sheet = null; library.loadCategories(); app.refresh() }
         is LibrarySheet.Assigning -> CategoryPicker(current.series, onDismiss = { sheet = null; library.loadCategories(); library.picked = emptySet(); library.selecting = false })
-        LibrarySheet.Removing -> AkiConfirm("Remove ${library.pickedShown.size} from your library?", "Their read state stays; you can save them again.", "Remove", { sheet = null }) { scope.launch { library.removePicked() } }
+        LibrarySheet.Removing -> AkiConfirm("Remove ${library.pickedShown.size} series from your library?", "Your reading progress is kept. You can add the series to your library again.", "Remove series", { sheet = null }) { scope.launch { library.removePicked() } }
         null -> {}
     }
 }
@@ -90,14 +93,14 @@ private sealed interface LibrarySheet {
 
 private fun LazyListScope.saved(library: LibraryModel, columns: Int, inMangaTab: Boolean) {
     if (library.isEmpty) {
-        item { AkiEmptyState("Nothing saved yet", "Save a series with the bookmark on its page and it stays here, with how far you have read.", Modifier.heightIn(min = 340.dp)) }
+        item { AkiEmptyState("Your library is empty", "Add a series with the bookmark button on its page. It stays here with your reading progress.", Modifier.heightIn(min = 340.dp)) }
         return
     }
     if (library.categories.isNotEmpty() && !inMangaTab) item { Shelves(library) }
     val shown = library.shown
     if (shown.isEmpty()) {
         item {
-            AkiEmptyState("Nothing here", if (library.onlyUnread) "Everything in this shelf is read." else "No series on this shelf yet. Long-press a series to put it on one.", Modifier.heightIn(min = 260.dp))
+            AkiEmptyState(if (library.onlyUnread) "All caught up" else "Nothing here", if (library.onlyUnread) "You have read everything in this category." else "No series in this category yet. Touch and hold a series to add it to a category.", Modifier.heightIn(min = 260.dp))
         }
     }
     akiGrid(shown, columns, key = { it.source + "/" + it.id }) { entry -> Cover(library, entry) }
@@ -116,7 +119,7 @@ private fun Cover(library: LibraryModel, entry: LibraryEntry) {
     val subtitle = if (entry.unread > 0u) "${entry.unread} unread" else "Up to date"
     val card = @Composable { AkiCoverCard(entry.title, entry.cover, subtitle = subtitle, badge = entry.unread.toInt()) }
     if (library.selecting) {
-        AkiTap({ library.toggle(entry) }) {
+        AkiTap({ library.toggle(entry) }, Modifier.semantics { selected = entry.source + "/" + entry.id in library.picked }) {
             Box {
                 card()
                 Tick(entry.source + "/" + entry.id in library.picked, Modifier.align(Alignment.TopStart))
@@ -136,7 +139,7 @@ private fun Tick(on: Boolean, modifier: Modifier) {
 
 private fun LazyListScope.history(library: LibraryModel) {
     if (library.history.isEmpty()) {
-        item { AkiEmptyState("Nothing read yet", "The chapters you open show up here, newest first.", Modifier.heightIn(min = 340.dp)) }
+        item { AkiEmptyState("Nothing read yet", "Chapters you open appear here, newest first.", Modifier.heightIn(min = 340.dp)) }
         return
     }
     items(library.history.size) { index ->

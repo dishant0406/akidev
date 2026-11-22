@@ -8,7 +8,7 @@ struct AkiSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            AkiText(title, .heading)
+            AkiText(title, .heading).accessibilityAddTraits(.isHeader)
             content()
             if let footer { AkiText(footer, .caption, tone: .muted) }
         }

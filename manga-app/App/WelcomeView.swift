@@ -13,7 +13,7 @@ struct WelcomeView: View {
                 .shadow(color: Aki.shadow, radius: 20, y: 8)
             VStack(spacing: 10) {
                 AkiText("Welcome to Akidev", .display, align: .center)
-                AkiText("Akidev is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.", .body, tone: .muted, align: .center)
+                AkiText("Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer.", .body, tone: .muted, align: .center)
             }
             VStack(spacing: 12) {
                 AkiPasteButton { model.propose(repository: $0) }
@@ -25,7 +25,7 @@ struct WelcomeView: View {
         }
         .padding(.horizontal, 28)
         .frame(maxWidth: .infinity, minHeight: 560)
-        .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $typed, isPresented: $typing) {
+        .akiPrompt("Add a repository", message: "Enter the address of a repository, for example a folder on GitHub.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $typed, isPresented: $typing) {
             model.propose(repository: typed)
             typed = ""
         }

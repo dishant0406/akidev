@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AkiSpinner: View {
-    var body: some View { ProgressView().tint(Aki.textMuted) }
+    var body: some View { ProgressView().tint(Aki.textMuted).accessibilityLabel("Loading") }
 }
 
 /// A bar that fills: a download.
@@ -16,5 +16,8 @@ struct AkiProgressBar: View {
             }
         }
         .frame(height: 6)
+        .accessibilityElement()
+        .accessibilityLabel("Progress")
+        .accessibilityValue(min(max(fraction, 0), 1).formatted(.percent.precision(.fractionLength(0))))
     }
 }

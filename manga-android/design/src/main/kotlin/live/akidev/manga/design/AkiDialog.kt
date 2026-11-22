@@ -36,6 +36,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 
 private val CardShape = AkiShapes.rounded(44.dp)
 private val CardMargin = 24.dp
@@ -61,14 +67,20 @@ fun AkiDialogLayer(dialogs: AkiDialogs) {
     dialogs.shown?.let { last = it }
     val dialog = last ?: return
     val visible = dialogs.shown != null
+    val still = akiReduceMotion()
     BackHandler(enabled = visible) { dialogs.shown?.onDismiss?.invoke() }
     AnimatedVisibility(visible, enter = fadeIn(tween(150)), exit = fadeOut(tween(120))) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(remember { MutableInteractionSource() }, null) { dialogs.shown?.onDismiss?.invoke() }
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(remember { MutableInteractionSource() }, null, onClickLabel = "Cancel") { dialogs.shown?.onDismiss?.invoke() }
                 .systemBarsPadding().imePadding(),
             contentAlignment = Alignment.Center,
         ) {
-            AnimatedVisibility(visible, enter = scaleIn(tween(200), initialScale = 0.92f), exit = scaleOut(tween(120), targetScale = 0.96f)) {
+            // The card only fades when animations are off in the phone's settings.
+            AnimatedVisibility(
+                visible,
+                enter = if (still) EnterTransition.None else scaleIn(tween(200), initialScale = 0.92f),
+                exit = if (still) ExitTransition.None else scaleOut(tween(120), targetScale = 0.96f),
+            ) {
                 Box(Modifier.clickable(remember { MutableInteractionSource() }, null) {}) { dialog.content() }
             }
         }
@@ -83,11 +95,15 @@ private fun DialogCard(title: String, message: String?, content: @Composable () 
         Modifier.padding(horizontal = CardMargin).widthIn(max = 340.dp).fillMaxWidth()
             .akiShadow(CardShape, 30.dp, 12.dp)
             .akiGlass(CardShape, tint = colors.secondary.copy(alpha = if (colors.dark) 0.92f else 0.85f))
-            .padding(28.dp),
+            .padding(28.dp)
+            // A long message at a large font size scrolls inside the card instead of running off the screen.
+            .verticalScroll(rememberScrollState())
+            // A screen reader announces the title when the card appears.
+            .semantics { paneTitle = title },
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         CompositionLocalProvider(LocalAkiFlat provides true) {
-            AkiText(title, AkiTextStyle.Heading)
+            AkiText(title, AkiTextStyle.Heading, isHeading = true)
             if (message != null) AkiText(message, AkiTextStyle.Body, tone = AkiTone.Muted)
             content()
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
@@ -114,7 +130,7 @@ private fun AkiDialogCard(title: String, message: String?, onDismiss: () -> Unit
 /** A message with one button. */
 @Composable
 fun AkiAlert(title: String, message: String?, onDismiss: () -> Unit) {
-    AkiDialogCard(title, message, onDismiss) { AkiButton("OK", Modifier.weight(1f), onClick = onDismiss) }
+    AkiDialogCard(title, message, onDismiss) { AkiButton("Done", Modifier.weight(1f), onClick = onDismiss) }
 }
 
 /** A question with a text field: an address, a name. */
@@ -127,7 +143,7 @@ fun AkiPrompt(title: String, message: String, placeholder: String, confirm: Stri
     }
 }
 
-/** A yes or no that is not a warning: someone wants to send you a book. */
+/** A choice that is not a warning: someone wants to send you a book. */
 @Composable
 fun AkiQuestion(title: String, message: String, yes: String, no: String, onYes: () -> Unit, onNo: () -> Unit) {
     AkiDialogCard(title, message, onNo) {
@@ -136,7 +152,7 @@ fun AkiQuestion(title: String, message: String, yes: String, no: String, onYes: 
     }
 }
 
-/** A yes or no for something that cannot be undone. */
+/** A choice for something that cannot be undone. */
 @Composable
 fun AkiConfirm(title: String, message: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AkiDialogCard(title, message, onDismiss) {

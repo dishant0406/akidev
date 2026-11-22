@@ -13,6 +13,7 @@ struct SignInSheet: View {
     @State private var values: [String: String] = [:]
     @State private var working = false
     @State private var problem: String?
+    @State private var loadFailed = false
 
     private var ready: Bool { form.map { $0.fields.allSatisfy { !(values[$0.id] ?? "").isEmpty } } ?? false }
 
@@ -21,7 +22,7 @@ struct SignInSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
                     AkiLogo(size: 36)
-                    AkiText("Sign in to \(model.name(of: source))", .title)
+                    AkiText("Sign in to \(model.name(of: source))", .title).accessibilityAddTraits(.isHeader)
                 }
                 if let form {
                     ForEach(form.fields, id: \.id) { field in
@@ -30,13 +31,20 @@ struct SignInSheet: View {
                     if let problem { AkiText(problem, .caption, tone: .destructive) }
                     AkiButton(working ? "Signing in…" : "Sign in", variant: .primary, size: .large, fullWidth: true) { Task { await signIn() } }
                         .disabled(working || !ready)
-                    AkiText("Sent to \(form.host) only. Akidev keeps a session, not your password.", .caption, tone: .muted)
+                    AkiText("Your details go to \(form.host) only. Akidev keeps a session, not your password.", .caption, tone: .muted)
+                } else if loadFailed {
+                    AkiText("Could not load the sign-in form. Close this and try again.", .caption, tone: .destructive)
+                        .onAppear { akiAnnounce("Could not load the sign-in form. Close this and try again.") }
                 }
                 AkiButton("Cancel", variant: .ghost, fullWidth: true) { dismiss() }
             }
             .padding(24)
         }
-        .onAppear { form = try? model.engine.signInForm(source: source) }
+        .onAppear {
+            form = try? model.engine.signInForm(source: source)
+            loadFailed = form == nil
+        }
+        .onChange(of: problem) { if let problem { akiAnnounce(problem) } }
     }
 
     private func binding(_ id: String) -> Binding<String> {

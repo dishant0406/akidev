@@ -39,6 +39,7 @@ struct AkiImage: View {
                         }
                     }
                     .transition(.opacity)
+                    .accessibilityLabel(pageNumber.map { "Page \($0 + 1)" } ?? "")
                 } else if failed, pageNumber == nil {
                     AkiIcon("image", tone: .muted)
                 }
@@ -49,6 +50,9 @@ struct AkiImage: View {
             .clipped()
             .contentShape(Rectangle())
             .task(id: "\(url ?? "")|\(attempt)") { await load(widthPoints: geometry.size.width) }
+            // A cover is described by the title beside it, so it is hidden. A reader page says which page it is
+            // (while it loads or fails, the placeholder speaks for itself).
+            .accessibilityHidden(pageNumber == nil)
         }
         // It comes in rather than popping in.
         .animation(.easeOut(duration: 0.25), value: image != nil)

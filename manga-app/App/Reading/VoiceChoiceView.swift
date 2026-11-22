@@ -14,7 +14,7 @@ struct VoiceChoiceView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 AkiBackHeader(title: "Voice", subtitle: model.current.map { "Voices of \($0.name)" }, back: { dismiss() })
-                AkiSection(title: "Standard") { card(id: "", name: "\(model.current?.name ?? "Model") voice", detail: nil, description: "The model's own voice.", voice: nil) }
+                AkiSection(title: "Standard") { card(id: "", name: "\(model.current?.name ?? "Model") voice", detail: nil, description: "The model’s own voice.", voice: nil) }
                 ForEach(groups, id: \.title) { group in
                     AkiSection(title: group.title) {
                         ForEach(group.voices, id: \.id) { voice in
@@ -50,23 +50,23 @@ struct VoiceChoiceView: View {
         return AkiCard(padding: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    AkiText(name, .heading, lines: 1)
-                    if let detail { AkiText(detail, .caption, tone: .muted, lines: 1) }
+                    AkiText(name, .heading).accessibilityAddTraits(.isHeader)
+                    if let detail { AkiText(detail, .caption, tone: .muted) }
                     Spacer(minLength: 0)
                 }
                 AkiText(description, .caption, tone: .muted, lines: 4)
                 HStack(spacing: 10) {
                     if busy {
-                        AkiSpinner().frame(width: 44, height: 44)
+                        AkiSpinner().frame(width: 44, height: 44).accessibilityLabel("Getting \(name)")
                     } else if model.playing == id {
-                        AkiIconButton(symbol: "pause", label: "Stop \(name)", size: 44) { model.stopHearing() }
+                        AkiIconButton(symbol: "pause", label: "Stop sample of \(name)", size: 44) { model.stopHearing() }
                     } else {
-                        AkiIconButton(symbol: "play", label: "Hear \(name)", size: 44) { Task { await model.hear(voice) } }
+                        AkiIconButton(symbol: "play", label: "Play sample of \(name)", size: 44) { Task { await model.hear(voice) } }
                     }
                     if model.voiceInUse == id {
                         AkiText("In use", .captionStrong, tone: .muted)
                     } else {
-                        AkiButton("Use", size: .small) { Task { await model.choose(voice) } }
+                        AkiButton("Use", size: .small) { Task { await model.choose(voice) } }.accessibilityLabel("Use \(name)")
                     }
                     Spacer(minLength: 0)
                 }

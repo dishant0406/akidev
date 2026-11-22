@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import live.akidev.manga.design.*
+import androidx.compose.animation.EnterTransition
 
 /** The first screen of a fresh install: what does the person read? Both stay in the app; the answer only decides what comes first. */
 @Composable
@@ -62,16 +63,16 @@ fun OnboardingScreen() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         Box(Modifier.shadow(18.dp, AkiShapes.rounded(34.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.rounded(34.dp)).padding(10.dp)) { AkiLogo(size = 76.dp) }
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AkiText("What do you read?", AkiTextStyle.Display, align = TextAlign.Center)
-                            AkiText("Akidev reads manga and books, both always here. Pick what comes first.", AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
+                            AkiText("What do you read?", AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
+                            AkiText("Akidev has manga and books. Choose which one comes first.", AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
                         }
                     }
                 }
                 Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, "Follow series from your sources, with new chapter alerts.", chosen) { chosen = it } }
-                    Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, "EPUB books from your files or a catalogue, with your place kept.", chosen) { chosen = it } }
+                    Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, "Follow series from your sources and get alerts for new chapters.", chosen) { chosen = it } }
+                    Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, "Read EPUB books from your files or a catalogue. Akidev keeps your place.", chosen) { chosen = it } }
                 }
-                Reveal(shown, 320) { AkiText("You can change this any time in Settings.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
+                Reveal(shown, 320) { AkiText("You can change this at any time in Settings.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
             }
         }
     }
@@ -88,5 +89,7 @@ private fun Choice(kind: ReaderKind, detail: String, chosen: ReaderKind?, onChoo
 /** Comes up from below and fades in, a moment after the one before. */
 @Composable
 private fun Reveal(shown: Boolean, delayMs: Int, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    AnimatedVisibility(shown, modifier, enter = fadeIn(tween(600, delayMs)) + slideInVertically(tween(700, delayMs)) { 60 }) { content() }
+    // With animations turned off in the phone's settings it only fades in.
+    val still = akiReduceMotion()
+    AnimatedVisibility(shown, modifier, enter = fadeIn(tween(600, delayMs)) + if (still) EnterTransition.None else slideInVertically(tween(700, delayMs)) { 60 }) { content() }
 }

@@ -5,6 +5,8 @@ struct AkiTextArea: View {
     @Binding var text: String
     var height: CGFloat = 160
     var prose = false
+    /// The name VoiceOver reads for the box.
+    var label = ""
 
     var body: some View {
         TextEditor(text: $text)
@@ -15,6 +17,7 @@ struct AkiTextArea: View {
             .textInputAutocapitalization(prose ? .sentences : .never)
             // A fixed height: a long paste scrolls inside the box instead of pushing the buttons below it off the screen.
             .frame(height: height)
+            .accessibilityLabel(label)
             .padding(10)
             .akiGlass(.rounded(18), interactive: false)
     }

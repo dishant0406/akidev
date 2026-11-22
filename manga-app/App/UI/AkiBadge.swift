@@ -43,8 +43,8 @@ struct AkiCount: View {
     var tinted = true
 
     var body: some View {
-        AkiText("\(min(value, 99))", .captionStrong, tone: tinted ? .onPrimary : .onMedia)
-            .monospacedDigit()
+        AkiText("\(min(value, 99))", .captionStrong, tone: tinted ? .onPrimary : .onMedia, digits: true)
+            .accessibilityLabel("\(value) unread")
             .padding(.horizontal, 9)
             .frame(minWidth: 26, minHeight: 26)
             .akiGlass(.capsule, tint: tinted ? Aki.primary : Aki.destructive, interactive: false)

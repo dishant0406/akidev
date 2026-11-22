@@ -29,6 +29,7 @@ import live.akidev.manga.app.SeriesRef
 import live.akidev.manga.app.SeriesRoute
 import live.akidev.manga.design.*
 import uniffi.akimanga.Card
+import java.text.NumberFormat
 
 /** Discover: the sources you installed, what is popular or new in one, and search. */
 @Composable
@@ -67,7 +68,7 @@ fun HomeScreen() {
 private fun NothingVisible(model: AppModel) {
     AkiEmptyState(
         if (model.sources.isEmpty()) "No sources installed" else "Nothing to show",
-        if (model.sources.isEmpty()) "Install a source from your repository in Sources to start reading." else "Your content settings hide every installed source.",
+        if (model.sources.isEmpty()) "Install a source from a repository in Sources to start reading." else "Your content settings hide every installed source.",
         Modifier.heightIn(min = 420.dp), action = AkiAction("Open Sources") { model.tab = AppTab.Sources },
     )
 }
@@ -78,12 +79,12 @@ private fun SearchRow(onFilters: () -> Unit) {
     val scope = rememberCoroutineScope()
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AkiInput(
-            "Search ${if (discover.isGlobal) "every source" else discover.info?.name ?: ""}", discover.term, { discover.term = it }, Modifier.weight(1f), icon = "search",
+            "Search ${if (discover.isGlobal) "all sources" else discover.info?.name ?: ""}", discover.term, { discover.term = it }, Modifier.weight(1f), icon = "search",
             onSubmit = { discover.submitted = discover.term; scope.launch { discover.reload() } },
             onClear = { discover.submitted = ""; scope.launch { discover.reload() } },
         )
         if (discover.otherFilters.isNotEmpty() && !discover.isGlobal) {
-            AkiIconButton("sliders", "Filters", tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
+            AkiIconButton("sliders", if (discover.choices.isEmpty()) "Filter results" else "Filter results, on", tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
         }
     }
 }
@@ -122,7 +123,7 @@ private fun LazyListScope.everySource(model: AppModel, open: (String, Card) -> U
     } else if (feed.shelves.isEmpty() && feed.loading) {
         item { Box(Modifier.fillMaxWidth().heightIn(min = 280.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
     } else if (feed.shelves.isEmpty()) {
-        item { AkiEmptyState("Nothing to show", "None of your sources gave any titles. Pull down to try again.", Modifier.heightIn(min = 320.dp)) }
+        item { AkiEmptyState("Nothing to show", "No source returned any series. Pull down to try again.", Modifier.heightIn(min = 320.dp)) }
     } else {
         val popular = feed.shelves.firstOrNull { it.id.endsWith("popular") }
         val lead = popular?.items?.firstOrNull()
@@ -146,12 +147,12 @@ private fun LazyListScope.searchResults(search: GlobalSearchModel, open: (String
     items(search.groups.size, key = { search.groups[it].source.id }) { index ->
         val group = search.groups[index]
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiText(group.source.name, AkiTextStyle.Heading)
+            AkiText(group.source.name, AkiTextStyle.Heading, isHeading = true)
             when (val state = group.state) {
-                SearchState.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
+                SearchState.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Searching ${group.source.name}") }
                 is SearchState.Failed -> AkiCard(padding = 14.dp) { AkiText(state.message, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3) }
                 is SearchState.Done -> if (state.cards.isEmpty()) {
-                    AkiText("No results here", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText("No results in this source.", AkiTextStyle.Caption, tone = AkiTone.Muted)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         items(state.cards.size, key = { state.cards[it].id }) { cardIndex ->
@@ -177,7 +178,7 @@ private fun LazyListScope.oneSource(model: AppModel, columns: Int, open: (String
         item {
             AkiEmptyState(
                 if (discover.submitted.isEmpty()) "Nothing to show" else "No results",
-                if (discover.submitted.isEmpty()) "This source gave no titles." else "Nothing matched “${discover.submitted}” in ${discover.info?.name ?: discover.source}.",
+                if (discover.submitted.isEmpty()) "This source returned no series. Pull down to try again." else "Nothing matched “${discover.submitted}” in ${discover.info?.name ?: discover.source}.",
                 Modifier.heightIn(min = 320.dp),
             )
         }
@@ -218,7 +219,7 @@ private fun LazyListScope.sourceFeed(model: AppModel, columns: Int, open: (Strin
         }
     }
     if (items.size > 10) {
-        item { AkiText("Browse all", AkiTextStyle.Heading) }
+        item { AkiText("Browse all", AkiTextStyle.Heading, isHeading = true) }
         coverGrid(model, items.drop(10), columns, open)
     }
     showMore(model)
@@ -272,8 +273,8 @@ private fun Retry(title: String, message: String) {
 
 fun chaptersLabel(count: UInt?) = when {
     count == null || count == 0u -> null
-    count == 1u -> "1 chapter"
-    else -> "$count chapters"
+    count == 1u -> "1\u00A0chapter"
+    else -> "${NumberFormat.getInstance().format(count.toLong())}\u00A0chapters"
 }
 
 /** A chapter's name: its title, else "Chapter 12". */

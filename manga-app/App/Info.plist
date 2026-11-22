@@ -75,9 +75,9 @@
 		<string>_akidev-p2p._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Akidev uses the camera only to scan a code from a friend's phone.</string>
+	<string>Akidev uses the camera only to scan a code from a friend’s phone. It does not record or keep any picture.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Akidev uses your local network to send books and series to a friend's phone on the same Wi-Fi, and to receive from them.</string>
+	<string>Akidev uses your local network to send books and series to a friend’s phone on the same Wi-Fi, and to receive from that phone.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

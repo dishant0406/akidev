@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 
 /**
  * What stands in for a reader page until its picture arrives: a plain dark panel with a soft light sweeping across it and the page
@@ -40,18 +42,21 @@ fun AkiPagePlaceholder(number: Int? = null, failed: Boolean = false, retry: () -
     val colors = Aki.colors
     Box(
         Modifier.fillMaxSize().background(colors.stageAlt)
-            .semantics { contentDescription = if (failed) "Page failed to load. Tap to try again." else "Loading page" }
+            .semantics {
+                contentDescription = if (failed) (if (number != null) "Try again. Could not load page $number." else "Try again. Could not load the page.") else if (number != null) "Loading page $number" else "Loading page"
+                if (failed) role = Role.Button
+            }
             .clickable(remember { MutableInteractionSource() }, null, enabled = failed) { retry() },
         contentAlignment = Alignment.Center,
     ) {
         if (failed) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AkiIcon("refresh", size = 22.dp, tone = AkiTone.OnMedia)
-                AkiText("Tap to try again", AkiTextStyle.CaptionStrong, tone = AkiTone.OnMedia)
+                AkiText("Try again", AkiTextStyle.CaptionStrong, tone = AkiTone.OnMedia)
             }
         } else {
-            Shimmer()
-            if (number != null) AkiText("$number", AkiTextStyle.Heading, Modifier.alpha(0.3f), tone = AkiTone.OnMedia)
+            if (!akiReduceMotion()) Shimmer()
+            if (number != null) AkiText("$number", AkiTextStyle.Heading, Modifier.alpha(0.3f), tone = AkiTone.OnMedia, tabular = true)
         }
     }
 }
@@ -76,7 +81,7 @@ private fun Shimmer() {
 fun AkiOpeningLoader(label: String? = null) {
     val turn by rememberInfiniteTransition(label = "opening").animateFloat(0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart), label = "turn")
     val color = Aki.colors.primary
-    Column(Modifier.semantics { contentDescription = "Opening chapter" }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.semantics { contentDescription = if (label != null) "Opening chapter, $label" else "Opening chapter" }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Canvas(Modifier.size(30.dp)) {
             val width = 3.dp.toPx()
             drawArc(color, turn, 100f, false, Offset(width / 2, width / 2), Size(size.width - width, size.height - width), style = Stroke(width, cap = StrokeCap.Round))

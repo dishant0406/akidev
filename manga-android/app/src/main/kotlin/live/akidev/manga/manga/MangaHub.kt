@@ -23,7 +23,7 @@ val LocalMangaPart = compositionLocalOf<MangaPartControl?> { null }
 fun MangaPartPills() {
     val control = LocalMangaPart.current ?: return
     AkiChips(
-        listOf(AkiChoice(MangaPart.Saved, "Saved"), AkiChoice(MangaPart.History, "History"), AkiChoice(MangaPart.Unread, "Unread"), AkiChoice(MangaPart.Recent, "Recent"), AkiChoice(MangaPart.Discover, "Discover")),
+        listOf(AkiChoice(MangaPart.Saved, "Library"), AkiChoice(MangaPart.History, "History"), AkiChoice(MangaPart.Unread, "Unread"), AkiChoice(MangaPart.Recent, "Recent"), AkiChoice(MangaPart.Discover, "Discover")),
         control.part, control.choose,
     )
 }

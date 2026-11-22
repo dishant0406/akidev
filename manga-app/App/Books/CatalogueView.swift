@@ -42,7 +42,7 @@ struct CatalogueView: View {
                     ForEach(Array(items.enumerated()), id: \.offset) { _, item in CatalogueItemRow(item: item, search: search) }
                 }
                 if let next {
-                    if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton("More", fullWidth: true) { Task { await more(next) } } }
+                    if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton("Show more", fullWidth: true) { Task { await more(next) } } }
                 }
             }
             .akiPage(narrow: true)
@@ -63,7 +63,7 @@ struct CatalogueView: View {
             feed = found
             items = found.items
             next = found.next
-        } catch { failure = describe(error) }
+        } catch { failure = describe(error, "Could not load this catalogue") }
     }
 
     private func run() async {
@@ -80,7 +80,7 @@ struct CatalogueView: View {
         } catch {
             feed = CatalogueFeed(title: "", items: [], next: nil, search: search)
             items = []
-            failure = describe(error)
+            failure = describe(error, "Could not load this catalogue")
         }
     }
 
@@ -91,11 +91,11 @@ struct CatalogueView: View {
             let found = try await model.engine.catalogueFeed(url: url)
             items += found.items
             next = found.next
-        } catch { problem = describe(error) }
+        } catch { problem = describe(error, "Could not load more books") }
     }
 }
 
-/// One line of a catalogue: a book with a Get button, or a shelf that opens. Getting a book puts it on the shelf in the Books tab.
+/// One line of a catalogue: a book with a Download button, or a shelf that opens. Downloading a book puts it on the shelf in the Books tab.
 struct CatalogueItemRow: View {
     let item: CatalogueItem
     let search: String?
@@ -109,11 +109,11 @@ struct CatalogueItemRow: View {
             if let get = item.get {
                 AkiListCard(thumbnail: item.cover, label: item.author ?? "", title: item.title) {
                     if got {
-                        AkiBadge("On your shelf", icon: "tick")
+                        AkiBadge("In your library", icon: "tick")
                     } else if getting {
-                        AkiSpinner()
+                        AkiSpinner().accessibilityLabel("Downloading")
                     } else {
-                        AkiButton("Get", variant: .primary, size: .small) { Task { await fetch(get) } }
+                        AkiButton("Download", variant: .primary, size: .small) { Task { await fetch(get) } }.accessibilityLabel("Download \(item.title)")
                     }
                 }
             } else if let open = item.open {
@@ -131,6 +131,7 @@ struct CatalogueItemRow: View {
         do {
             _ = try await model.engine.getBook(url: url)
             got = true
-        } catch { problem = describe(error) }
+            akiAnnounce("\(item.title) is in your library")
+        } catch { problem = describe(error, "Could not download this book") }
     }
 }

@@ -371,3 +371,19 @@ The magnifier in the top bar now does the same in both apps. On a screen that is
 The site's panel felt slow for three reasons, all removed: the dimmed backdrop faded in over 0.7 s (now it appears at once), the panel animated for 0.16 s (now 0.08 s, in a new `snap` animation in `tailwind.config.ts`), and the panel's code was only downloaded on the first open (now it is fetched one second after the page loads). Measured in the browser: the panel is on screen about 6 to 8 ms after the click. The party panel keeps the 0.16 s animation.
 
 Checked on screen in the app from Home and from Browse, and in the browser on a title page. Not checked: a phone, or the music screens after this change.
+
+## One pass over words, screen readers and type, in both phone apps (2026-11-22)
+
+We went through every screen of the iPhone app and the Android app, three ways: the words, what a screen reader says, and how the text is set. We did it for both apps at the same time, with one shared list of rules and one shared vocabulary, so the two apps say the same thing.
+
+The choices:
+- Fix shared pieces in the shared parts. Icon buttons got a bigger touch area (44 pt on iOS, 48 dp on Android) without changing how they look. Icons are hidden from screen readers, so every control must have its own name. Tabs, chips and the tab bar say which one is selected. A new `digits` option (iOS) and `tabular` option (Android) keep changing numbers from jittering. Message helpers announce toasts and errors.
+- Vocabulary: a source is one site, a repository is a folder of sources, "Sign in", "Remove" takes something out of a list, "Delete" erases data from the phone. Errors say what failed, then what to do. Titles use sentence case. No "OK", no "Oops", no "Are you sure".
+- Error titles are specific ("Could not load this series", "Could not reach the site") and come from one helper, `describe(error, failed)`, on both platforms.
+- Menu items are verb first ("Edit categories", "Change categories", "Delete series data").
+
+Rejected: a shared string file for both apps. It would be cleaner, but it would mean a build step and a larger change than this pass needed. The cost of the choice is that the two apps can drift again, so check the other app when a string changes.
+
+Not fixed, and why: a few colour pairs may be under 4.5:1 (red caption text, muted text on a pale chip, text on a dimmed card). Colours are a design decision, so they are listed for the owner. Menu actions that remove a source, repository or catalogue still act at once without a question. The page text of a book drawn on a canvas on iPhone has no screen reader text yet.
+
+Checked: both apps build, the Android unit tests and lint pass, and the Sources and Discover screens on the iPhone simulator. Not checked: a screen reader (VoiceOver, TalkBack) on a real phone, and the largest text size on every screen.

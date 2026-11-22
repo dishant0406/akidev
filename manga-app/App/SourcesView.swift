@@ -17,7 +17,7 @@ struct SourcesView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Sources", subtitle: "\(model.sources.count) installed") {
+                    AkiHeader(title: "Sources", subtitle: "\(plural(model.sources.count, "source", "sources")) installed") {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
                                 AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "settings", label: "Settings", action: {}).face }.akiGlass(.circle)
@@ -33,7 +33,7 @@ struct SourcesView: View {
                         booksSection
                     }
                     repositoriesSection
-                    if let note = model.note { AkiText(note, .caption, tone: .muted) }
+                    if let note = model.note { AkiText(note, .caption, tone: .muted).onAppear { akiAnnounce(note) } }
                 }
                 .akiPage(narrow: true)
             }
@@ -52,18 +52,18 @@ struct SourcesView: View {
             .akiDestination(for: VoiceChoiceRoute.self) { _ in VoiceChoiceView() }
             .akiSheet(isPresented: $pasting) { SourceAddSheet() }
             .onAppear(perform: loadCatalogues)
-            .akiPrompt("Add a book catalogue", message: "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add", text: $catalogueAddress, isPresented: $addingCatalogue) {
+            .akiPrompt("Add a book catalogue", message: "Enter the address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add catalogue", text: $catalogueAddress, isPresented: $addingCatalogue) {
                 let address = catalogueAddress
                 catalogueAddress = ""
                 Task {
                     do {
                         _ = try await model.engine.addCatalogue(url: address)
                         loadCatalogues()
-                    } catch { catalogueProblem = describe(error) }
+                    } catch { catalogueProblem = describe(error, "Could not add the catalogue") }
                 }
             }
             .akiAlert(catalogueProblem?.title ?? "", message: catalogueProblem?.message, isPresented: Binding(get: { catalogueProblem != nil }, set: { if !$0 { catalogueProblem = nil } }))
-            .akiPrompt("Add a repository", message: "The address of a repository's folder on GitHub, or any https folder with an index.json.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
+            .akiPrompt("Add a repository", message: "Enter the address of a repository folder on GitHub, or of any web folder that lists sources.", placeholder: "github.com/owner/repository", confirm: "Preview repository", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
     }
 }
@@ -71,12 +71,12 @@ struct SourcesView: View {
 extension SourcesView {
     @ViewBuilder fileprivate var installedSection: some View {
                     AkiSection(title: "Installed") {
-                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("Nothing installed yet", tone: .muted) } }
+                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("No sources yet. Add a repository, then install a source from it.", tone: .muted) } }
                         ForEach(model.sources, id: \.id) { source in
                             AkiLink(value: source.id) {
                                 AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
+                            .akiContextMenu([AkiMenuItem(title: "Remove source", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
                         AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
                     }
@@ -88,21 +88,21 @@ extension SourcesView {
                             AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
                                 AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
+                            .akiContextMenu([AkiMenuItem(title: "Remove catalogue", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
                         }
-                        AkiButton("Add an EPUB book", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
+                        AkiButton("Add an EPUB", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
                         AkiButton("Add a book catalogue", icon: "add", fullWidth: true) { addingCatalogue = true }
                     }
     }
 
     @ViewBuilder fileprivate var repositoriesSection: some View {
-                    AkiSection(title: "Repositories", footer: "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.") {
-                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repository added", tone: .muted) } }
+                    AkiSection(title: "Repositories", footer: "A repository is a folder of sources, usually on GitHub. Paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a source decides which sites the app contacts.") {
+                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repositories yet. Add one to find sources.", tone: .muted) } }
                         ForEach(model.repos, id: \.base) { repo in
                             AkiLink(value: repo) {
                                 AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
+                            .akiContextMenu([AkiMenuItem(title: "Remove repository", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
                         }
                         AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
                     }
@@ -133,10 +133,11 @@ struct RepoScreen: View {
                 } else if !loaded {
                     AkiSpinner().frame(maxWidth: .infinity, minHeight: 200)
                 } else {
+                    if sources.isEmpty { AkiText("This repository lists no sources.", tone: .muted) }
                     ForEach(sources, id: \.id) { source in
                         AkiRow(title: source.name, subtitle: "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")") { action(for: source) }
                     }
-                    AkiText(signed ? "This repository signs its index, so the app notices if it ever changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .muted)
+                    AkiText(signed ? "This repository is signed, so the app notices if it changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .muted)
                 }
             }
             .akiPage(narrow: true)
@@ -153,8 +154,8 @@ struct RepoScreen: View {
             AkiSpinner()
         } else {
             switch source.state {
-            case .notInstalled: AkiButton("Install", variant: .primary, size: .small) { Task { await install(source) } }
-            case .updateAvailable: AkiButton("Update", variant: .primary, size: .small) { Task { await install(source) } }
+            case .notInstalled: AkiButton("Install", variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel("Install \(source.name)")
+            case .updateAvailable: AkiButton("Update", variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel("Update \(source.name)")
             case .installed: AkiBadge("Installed", icon: "tick")
             case .needsNewerApp: AkiBadge("Needs a newer app")
             }
@@ -168,7 +169,7 @@ struct RepoScreen: View {
             sources = view.sources.filter { !$0.nsfw }
             signed = view.info.signed
             loaded = true
-        } catch { self.error = describe(error) }
+        } catch { self.error = describe(error, "Could not load this repository") }
     }
 
     private func install(_ source: RepoSource) async {
@@ -178,7 +179,7 @@ struct RepoScreen: View {
             _ = try await model.engine.installFromRepo(base: repo.base, source: source.id)
             model.refresh()
             await load()
-        } catch { self.error = describe(error) }
+        } catch { self.error = describe(error, "Could not add this source") }
     }
 }
 
@@ -210,14 +211,14 @@ struct SourceSettingsView: View {
                         ), options: setting.options.map { ($0.value, $0.name) })
                     }
                 }
-                AkiButton("Remove this source", icon: "trash", variant: .destructive, fullWidth: true) { removing = true }.padding(.top, 8)
+                AkiButton("Remove source", icon: "trash", variant: .destructive, fullWidth: true) { removing = true }.padding(.top, 8)
             }
             .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()
         .hidesTabBar()
-        .akiConfirm("Remove \(model.name(of: source))?", message: "Its saved series stay in your library but cannot be read until you install it again.", confirm: "Remove", isPresented: $removing) {
+        .akiConfirm("Remove \(model.name(of: source))?", message: "Its series stay in your library but cannot be read until you install it again.", confirm: "Remove source", isPresented: $removing) {
             try? model.engine.removeSource(id: source)
             model.refresh()
             dismiss()
@@ -231,7 +232,7 @@ struct SourceSettingsView: View {
 
     @ViewBuilder private func accountRow(signedIn: Bool) -> some View {
         if signedIn {
-            AkiRow(title: signedInAs ?? "Signed in", subtitle: "Signed in") {
+            AkiRow(title: signedInAs ?? "Account", subtitle: "Signed in") {
                 AkiButton("Sign out", size: .small) { Task { try? await model.engine.signOut(source: source); model.refresh() } }
             }
         } else {

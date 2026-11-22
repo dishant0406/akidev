@@ -30,9 +30,9 @@ fun WelcomeScreen() {
     ) {
         AkiLogo(Modifier.shadow(20.dp, AkiShapes.rounded(26.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow), size = 120.dp)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiText("Welcome to Akidev", AkiTextStyle.Display, align = TextAlign.Center)
+            AkiText("Welcome to Akidev", AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
             AkiText(
-                "Akidev is a reader. It comes with no manga: you add a repository of sources, a folder usually kept on GitHub, and read what those sources describe.",
+                "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer.",
                 AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center,
             )
         }
@@ -44,7 +44,7 @@ fun WelcomeScreen() {
     }
     if (typing) {
         AkiPrompt(
-            "Add a repository", "The address of a repository's folder on GitHub, or any https folder with an index.json.", "github.com/owner/repository", "Continue",
+            "Add a repository", "Enter the address of a repository, for example a folder on GitHub.", "github.com/owner/repository", "Continue",
             onDismiss = { typing = false }, onConfirm = { typing = false; model.propose(it) },
         )
     }

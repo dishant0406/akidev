@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
@@ -84,6 +86,7 @@ fun StripReader(reader: ReaderModel) {
             Modifier.fillMaxSize()
                 .graphicsLayer { alpha = shown; scaleX = live; scaleY = live }
                 .pointerInput(Unit) { detectTapGestures { reader.chrome = !reader.chrome } }
+                .semantics { onClick("Show or hide controls") { reader.chrome = !reader.chrome; true } }
                 .pointerInput(Unit) { pinchToZoom(reader) { live = it } }
                 .horizontalScroll(rememberScrollState(), enabled = reader.zoom > 1f),
         ) {
@@ -92,7 +95,7 @@ fun StripReader(reader: ReaderModel) {
                     when (val row = rows[index]) {
                         is Row.Page -> AkiImage(
                             row.url, Modifier.fillMaxWidth(), row.headers, placeholder = reader.aspects[row.url]?.let { 1 / it } ?: reader.typicalHeightRatio,
-                            onAspect = { reader.noteAspect(it, row.url) }, pageNumber = row.index,
+                            onAspect = { reader.noteAspect(it, row.url) }, pageNumber = row.index, description = "Page ${row.index + 1}",
                         )
                         is Row.End -> ChapterEnd(reader, row.segment)
                     }
@@ -214,7 +217,7 @@ private fun ChapterEnd(reader: ReaderModel, segment: Segment) {
     val next = reader.newer(segment.chapterId)
     val note = reader.skippedNote(segment.chapterId)
     Column(
-        Modifier.fillMaxWidth().height(if (next == null) 220.dp else if (note == null) 96.dp else 124.dp).padding(horizontal = 24.dp),
+        Modifier.fillMaxWidth().heightIn(min = if (next == null) 220.dp else if (note == null) 96.dp else 124.dp).padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
     ) {
         AkiText("End of ${reader.chapter(segment.chapterId)?.let { reader.label(it) } ?: "chapter"}", AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
@@ -222,7 +225,7 @@ private fun ChapterEnd(reader: ReaderModel, segment: Segment) {
             AkiText(if (reader.segments.any { it.chapterId == next.id }) "Next chapter below" else "Next: ${reader.label(next)}", AkiTextStyle.Caption, tone = AkiTone.Muted)
             if (note != null) AkiText(note, AkiTextStyle.Caption, tone = AkiTone.Muted)
         } else {
-            AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia)
+            AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
             AkiButton("Back to the series", Modifier.padding(top = 6.dp)) { router.back() }
         }
     }

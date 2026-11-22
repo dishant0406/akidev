@@ -31,6 +31,7 @@ struct AkiChoiceCard<Art: View>: View {
     var state = State.rest
     let action: () -> Void
     @ViewBuilder var art: () -> Art
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum State { case rest, chosen, passed }
 
@@ -51,10 +52,11 @@ struct AkiChoiceCard<Art: View>: View {
         }
         .buttonStyle(AkiPressStyle())
         .akiGlass(.card, tint: state == .chosen ? Aki.primary : nil)
-        .scaleEffect(state == .chosen ? 1.03 : state == .passed ? 0.95 : 1)
+        .scaleEffect(reduceMotion ? 1 : state == .chosen ? 1.03 : state == .passed ? 0.95 : 1)
         .opacity(state == .passed ? 0.4 : 1)
         .accessibilityLabel(title)
         .accessibilityHint(detail)
+        .accessibilityAddTraits(state == .chosen ? .isSelected : [])
     }
 }
 

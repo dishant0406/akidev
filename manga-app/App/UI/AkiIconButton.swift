@@ -17,6 +17,9 @@ struct AkiIconButton: View {
             .buttonStyle(.plain)
             .accessibilityLabel(label)
             .akiGlass(.circle, tint: tint ?? (onMedia ? scrim : nil))
+            // A small button still has a 44 pt hit area; the glass keeps its size.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
     }
 
     /// The round face alone, for a menu that supplies its own button.

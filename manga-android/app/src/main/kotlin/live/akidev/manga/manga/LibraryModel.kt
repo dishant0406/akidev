@@ -93,9 +93,9 @@ class LibraryModel(private val app: AppModel) {
     fun menu(inMangaTab: Boolean, manage: () -> Unit): List<AkiMenuItem> = buildList {
         for (option in LibrarySort.entries) add(AkiMenuItem(option.title, "order", isSelected = option == app.prefs.librarySort) { choose(option) })
         add(AkiMenuItem("Reverse order", "swap", isSelected = app.prefs.libraryReversed) { app.prefs.libraryReversed = !app.prefs.libraryReversed })
-        add(AkiMenuItem("Only unread", "check", isSelected = onlyUnread) { onlyUnread = !onlyUnread })
-        add(AkiMenuItem(if (selecting) "Done selecting" else "Select", "check") { select() })
-        add(AkiMenuItem("Categories", "folder", onClick = manage))
+        add(AkiMenuItem("Show only unread", "check", isSelected = onlyUnread) { onlyUnread = !onlyUnread })
+        add(AkiMenuItem(if (selecting) "Done selecting" else "Select series", "check") { select() })
+        add(AkiMenuItem("Edit categories", "folder", onClick = manage))
         add(AkiMenuItem("Receive from a friend", "share") { app.sharing = live.akidev.manga.app.Sharing(null, null) })
         // Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
         if (inMangaTab && categories.isNotEmpty()) {

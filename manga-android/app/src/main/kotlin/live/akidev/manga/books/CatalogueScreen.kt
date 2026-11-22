@@ -24,7 +24,7 @@ import live.akidev.manga.design.*
 import uniffi.akimanga.CatalogueFeed
 import uniffi.akimanga.CatalogueItem
 
-/** A catalogue of books: shelves to open and books to get. Getting one downloads it onto the shelf in the Books tab. */
+/** A catalogue of books: shelves to open and books to download. Downloading one puts it on the shelf in the Books tab. */
 @Composable
 fun CatalogueScreen(ref: CatalogueRef) {
     val app = LocalApp.current
@@ -54,7 +54,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
         } catch (error: Exception) {
             feed = CatalogueFeed("", emptyList(), null, search)
             items = emptyList()
-            failure = describe(error)
+            failure = describe(error, "Could not load this catalogue")
         }
     }
 
@@ -67,7 +67,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
             items = found.items
             next = found.next
         } catch (error: Exception) {
-            failure = describe(error)
+            failure = describe(error, "Could not load this catalogue")
         }
     }
 
@@ -84,7 +84,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
         next?.let { address ->
             item {
                 if (loadingMore) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { AkiSpinner() }
-                else AkiButton("More", fullWidth = true) {
+                else AkiButton("Show more", fullWidth = true) {
                     scope.launch {
                         loadingMore = true
                         try {
@@ -92,7 +92,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
                             items = items + found.items
                             next = found.next
                         } catch (failure: Exception) {
-                            problem = describe(failure)
+                            problem = describe(failure, "Could not load more books")
                         }
                         loadingMore = false
                     }
@@ -103,15 +103,16 @@ fun CatalogueScreen(ref: CatalogueRef) {
     problem?.let { AkiAlert(it.title, it.message) { problem = null } }
 }
 
-/** Where the Get button of a book is: waiting to be tapped, getting the book, or the book is on the shelf. */
+/** Where the Download button of a book is: waiting to be tapped, downloading the book, or the book is on the shelf. */
 private enum class Getting { Ready, Busy, Done }
 
-/** One line of a catalogue: a book with a Get button, or a shelf that opens. Getting a book puts it on the shelf in the Books tab. */
+/** One line of a catalogue: a book with a Download button, or a shelf that opens. Downloading a book puts it on the shelf in the Books tab. */
 @Composable
 fun CatalogueItemRow(item: CatalogueItem, search: String?) {
     val app = LocalApp.current
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
+    val view = androidx.compose.ui.platform.LocalView.current
     var getting by remember { mutableStateOf(Getting.Ready) }
     var problem by remember { mutableStateOf<Problem?>(null) }
     val get = item.get
@@ -119,16 +120,17 @@ fun CatalogueItemRow(item: CatalogueItem, search: String?) {
     if (get != null) {
         AkiListCard(item.cover, item.author ?: "", item.title) {
             when (getting) {
-                Getting.Done -> AkiBadge("On your shelf", icon = "tick")
-                Getting.Busy -> AkiSpinner()
-                Getting.Ready -> AkiButton("Get", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) {
+                Getting.Done -> AkiBadge("In your library", icon = "tick")
+                Getting.Busy -> AkiSpinner(label = "Downloading")
+                Getting.Ready -> AkiButton("Download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Download ${item.title}") {
                     scope.launch {
                         getting = Getting.Busy
                         getting = try {
                             app.engine.getBook(get)
+                            view.announceForAccessibility("${item.title} is in your library")
                             Getting.Done
                         } catch (failure: Exception) {
-                            problem = describe(failure)
+                            problem = describe(failure, "Could not download this book")
                             Getting.Ready
                         }
                     }

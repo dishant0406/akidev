@@ -21,5 +21,7 @@ struct AkiIcon: View {
             .scaledToFit()
             .frame(width: size * min(scale, 1.4), height: size * min(scale, 1.4))
             .foregroundStyle(tone.color)
+            // A picture of a symbol: a button or row names the action, so VoiceOver must not read the file name.
+            .accessibilityHidden(true)
     }
 }

@@ -29,7 +29,7 @@ fun HighlightsScreen(open: (BookHighlightIn) -> Unit) {
 
     AkiPage(underTabBar = false, spacing = 14.dp) {
         item { AkiBackHeader("Highlights", back = router::back, subtitle = if (found.size == 1) "1 highlight" else "${found.size} highlights") }
-        if (found.isEmpty()) item { AkiEmptyState("No highlights yet", "Press and hold a word in a book, drag to the end of what you want, and choose Highlight or Note.", Modifier.heightIn(min = 300.dp)) }
+        if (found.isEmpty()) item { AkiEmptyState("No highlights yet", "Press and hold a word in a book, drag the handles to choose text, then pick a colour or choose Note.", Modifier.heightIn(min = 300.dp)) }
         items(found.size, key = { found[it].highlight.id }) { index ->
             val item = found[index]
             AkiTap({ router.back(); open(item) }) {

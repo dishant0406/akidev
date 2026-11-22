@@ -16,7 +16,7 @@ struct VoicesView: View {
             VStack(alignment: .leading, spacing: 16) {
                 AkiBackHeader(title: "Voice models", subtitle: "Reading aloud happens on this phone", back: { dismiss() })
                 if model.models.isEmpty {
-                    AkiEmptyState(title: "No models yet", message: "The voice repository has none to offer right now.").frame(minHeight: 260)
+                    AkiEmptyState(title: "No voice models yet", message: "The voices repository has none to offer. Check your connection and try again later.").frame(minHeight: 260)
                 }
                 ForEach(model.models, id: \.id) { voice in
                     AkiRow(title: voice.name, subtitle: details(of: voice)) { control(for: voice) }
@@ -34,6 +34,7 @@ struct VoicesView: View {
                         AkiText("Voice by Underdog Woof, underdog.ai. Free for non-commercial use.", .caption, tone: .muted)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(.isLink)
                 }
                 AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", .caption, tone: .muted)
             }
@@ -46,29 +47,29 @@ struct VoicesView: View {
     }
 
     private func details(of voice: VoiceModel) -> String {
-        var parts = [voice.languages.joined(separator: ", ").uppercased(), ByteCountFormatter.string(fromByteCount: Int64(voice.bytes), countStyle: .file), voice.licence]
+        var parts = [voice.languages.joined(separator: ", ").uppercased(), bookSize(voice.bytes), voice.licence]
         if !voice.commercial { parts.append("not for commercial use") }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private func control(for voice: VoiceModel) -> some View {
         if let fraction = model.progress[voice.id] {
-            AkiProgressBar(fraction: fraction).frame(width: 64)
+            AkiProgressBar(fraction: fraction).frame(width: 64).accessibilityElement(children: .ignore).accessibilityLabel("Downloading \(voice.name)").accessibilityValue(bookPercent(fraction))
         } else if model.has(voice) {
             HStack(spacing: 8) {
                 if model.hasUpdate(voice) {
-                    AkiButton("Update", variant: .primary, size: .small) { Task { await model.install(voice) } }
+                    AkiButton("Update", variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel("Update \(voice.name)")
                 } else if model.current?.id == voice.id {
                     AkiText("In use", .captionStrong, tone: .muted)
                 } else {
-                    AkiButton("Use", size: .small) { model.use(voice) }
+                    AkiButton("Use", size: .small) { model.use(voice) }.accessibilityLabel("Use \(voice.name)")
                 }
-                AkiIconButton(symbol: "trash", label: "Remove \(voice.name)", size: 44) { model.remove(voice) }
+                AkiIconButton(symbol: "trash", label: "Delete \(voice.name)", size: 44) { model.remove(voice) }
             }
         } else if voice.usable {
-            AkiButton("Get", icon: "download", variant: .primary, size: .small) { Task { await model.install(voice) } }
+            AkiButton("Download", icon: "download", variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel("Download \(voice.name)")
         } else {
-            AkiText("Needs a newer Akidev", .caption, tone: .muted)
+            AkiText("Update Akidev to use this voice", .caption, tone: .muted)
         }
     }
 }

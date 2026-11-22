@@ -57,6 +57,7 @@ import live.akidev.manga.sources.RepoAddSheet
 import live.akidev.manga.sources.RepoScreen
 import live.akidev.manga.sources.SourceSettingsScreen
 import live.akidev.manga.sources.SourcesScreen
+import live.akidev.manga.design.akiReduceMotion
 
 /** The whole app: the tabs with the floating bar, the screens pushed over them, and the first-run question. */
 @Composable
@@ -103,7 +104,12 @@ private fun Shell(model: AppModel, router: Router) {
             AppTab.Sources -> SourcesScreen()
         }
         val top = router.top
-        AnimatedVisibility(top == null || !top.hidesTabBar, Modifier.align(Alignment.BottomCenter), enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+        val still = akiReduceMotion()
+        AnimatedVisibility(
+            top == null || !top.hidesTabBar, Modifier.align(Alignment.BottomCenter),
+            enter = if (still) fadeIn() else slideInVertically { it } + fadeIn(),
+            exit = if (still) fadeOut() else slideOutVertically { it } + fadeOut(),
+        ) {
             val kind = model.prefs.readerKind
             AkiTabBar(
                 model.tabs.map { it.item(kind, if (it == AppTab.Updates || it == AppTab.Manga) model.unreadTotal else 0) },
@@ -119,6 +125,7 @@ private fun Shell(model: AppModel, router: Router) {
 @Composable
 private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
     val slide = remember { Animatable(1f) }
+    val still = akiReduceMotion()
     AkiGlassMotion(slide.isRunning)
     LaunchedEffect(Unit) { slide.animateTo(0f, tween(320, easing = FastOutSlowInEasing)) }
     LaunchedEffect(pushed.leaving) {
@@ -129,7 +136,7 @@ private fun PushedScreen(pushed: Pushed, router: Router, isTop: Boolean) {
     }
     Box(
         Modifier.fillMaxSize()
-            .graphicsLayer { translationX = slide.value * size.width * 0.35f; alpha = 1f - slide.value }
+            .graphicsLayer { translationX = if (still) 0f else slide.value * size.width * 0.35f; alpha = 1f - slide.value }
             // A screen under the top one is not drawn at all: it only keeps its state.
             .then(if (isTop || pushed.leaving) Modifier else Modifier.drawWithContent {}),
     ) {

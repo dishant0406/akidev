@@ -15,8 +15,8 @@ struct ReaderChaptersSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        AkiText("Chapters", .title)
-                        AkiText("\(model.ref.title) · \(chapters.count)", .caption, tone: .muted, lines: 1)
+                        AkiText("Chapters", .title).accessibilityAddTraits(.isHeader)
+                        AkiText([model.ref.title, chaptersLabel(UInt32(chapters.count))].compactMap { $0 }.joined(separator: " · "), .caption, tone: .muted, lines: 1, digits: true)
                     }
                     LazyVStack(spacing: 10) {
                         ForEach(chapters, id: \.id) { chapter in
@@ -51,12 +51,13 @@ struct ReaderChaptersSheet: View {
             .background(reading ? Aki.primary : Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
+        .accessibilityAddTraits(reading ? .isSelected : [])
     }
 
     /// What is special about a chapter, as icons on the right; a chapter not yet opened has none. Fixed sizes, so nothing moves.
     @ViewBuilder private func marks(_ chapter: ChapterEntry, reading: Bool) -> some View {
         HStack(spacing: 10) {
-            if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted) }
+            if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted).accessibilityLabel("Downloaded") }
             if reading {
                 AkiIcon("play-solid", size: 14, tone: .onMedia)
                     .frame(width: 36, height: 36)

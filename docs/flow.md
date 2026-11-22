@@ -155,3 +155,12 @@ The engine part, and the iPhone and Android screens that sit on it.
 **A locked chapter.** The chapter list shows a lock in the place of the read mark on a chapter the source flagged (`chapters.chapter.locked`), while the person is signed out. If the source gives `chapters.locked_label`, that word replaces the small line above the title. Tapping it opens the sign-in sheet (the default, `locked_action: "sign_in"`, and only when the source has a sign-in), and when sign-in works the sheet closes and the chapter opens at its place. With `locked_action: "none"` the lock is only shown and the tap opens the chapter. A date can lock a chapter only while it is ahead (`in_future`). Signed in, it opens like any chapter. If it still fails (the account does not cover it), the reader shows the site's own error. A source with no sign-in still shows the lock when it flags a chapter, and opens it as before. The library keeps the flag with the chapter (`chapter.locked`), so the mark is there offline.
 
 **Recovery.** Sign out and sign in again.
+
+## What a screen reader and large text do now (2026-11-22)
+
+- A screen reader (VoiceOver on iPhone, TalkBack on Android) reads each control by its name. The name starts with the text you see. Icon-only buttons name the action ("Add bookmark"). Pictures that only decorate are skipped.
+- Tabs, chips and the tab bar say which one is selected. The tab bar also says how many are unread ("Updates, 3 unread").
+- Messages that appear without you touching anything are announced: sign-in errors, "Downloaded", share progress, "Added to library". This lives in `akiAnnounce` (iPhone, `App/UI`) and in live regions (Android, `design/`).
+- Large text: buttons, tabs, chips and rows grow in height and wrap. They do not cut text. Long titles on a list still end in an ellipsis, and the full title stays available to the screen reader.
+- Reduced motion (iPhone) and "Remove animations" (Android) turn slides and scales into plain fades or no motion.
+- Errors: if a call fails, the screen shows a specific title from `describe(error, failed)` and the message from the engine under it. If the phone is offline the title is "Could not reach the site". The share flow retries only for the offline error type, not for a piece of text.

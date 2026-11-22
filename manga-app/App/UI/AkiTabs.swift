@@ -15,12 +15,13 @@ struct AkiTabs<ID: Hashable & Sendable>: View {
                     Button {
                         withAnimation(AkiMotion.settle(reduceMotion)) { selection = item.id }
                     } label: {
-                        AkiText(item.title, on ? .bodyStrong : .caption, tone: on ? .onPrimary : .muted, lines: 1)
+                        AkiText(item.title, on ? .bodyStrong : .caption, tone: on ? .onPrimary : .muted, lines: 1, align: .center)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 46)
+                            .frame(minHeight: 46)
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                     .akiGlass(.capsule, tint: on ? Aki.primary : nil)
                     .glassEffectID(item.id, in: space)
                 }
@@ -47,10 +48,11 @@ struct AkiChips<ID: Hashable & Sendable>: View {
                         } label: {
                             AkiText(item.title, on ? .bodyStrong : .caption, tone: on ? .onPrimary : .text, lines: 1)
                                 .padding(.horizontal, 16)
-                                .frame(height: 44)
+                                .frame(minHeight: 44)
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityAddTraits(on ? .isSelected : [])
                         .akiGlass(.capsule, tint: on ? Aki.primary : nil)
                     }
                 }

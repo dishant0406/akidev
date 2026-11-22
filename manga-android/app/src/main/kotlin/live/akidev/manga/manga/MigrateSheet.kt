@@ -51,7 +51,7 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
             val cards = app.engine.search(asked, term.trim(), 1u, emptyList()).items
             if (asked == target) found = Found.Cards(cards)
         } catch (error: Exception) {
-            if (asked == target) found = Found.Failed(describe(error))
+            if (asked == target) found = Found.Failed(describe(error, "Could not search this source"))
         }
     }
     // Opening the sheet, and choosing another source, each look for the title straight away.
@@ -70,7 +70,7 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
                 onMoved()
                 onDismiss()
             } catch (error: Exception) {
-                problem = describe(error)
+                problem = describe(error, "Could not move the series")
             }
             busy = false
         }
@@ -79,11 +79,11 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                AkiText("Move to another source", AkiTextStyle.Title)
-                AkiText("Find “${ref.title}” on another source. Its shelves and the chapters you read go with it.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiText("Move to another source", AkiTextStyle.Title, isHeading = true)
+                AkiText("Find “${ref.title}” on another source. Its categories and your reading progress move with it.", AkiTextStyle.Caption, tone = AkiTone.Muted)
             }
             if (others.isEmpty()) {
-                AkiEmptyState("No other source", "Install another source that can search, then come back.", Modifier.heightIn(min = 260.dp))
+                AkiEmptyState("No other source to move to", "Install another source that can search, then come back.", Modifier.heightIn(min = 260.dp))
             } else {
                 AkiMenuPill(target, { target = it }, others.map { AkiOption(it.id, it.name) }, icon = "sources")
                 val scopeForSearch = rememberCoroutineScope()
@@ -93,7 +93,7 @@ fun MigrateSheet(ref: SeriesRef, onMoved: () -> Unit, onDismiss: () -> Unit) {
         }
     }
     chosen?.let { card ->
-        AkiConfirm("Move to “${card.title}”?", "It leaves ${app.name(ref.source)} and moves to ${app.name(target)}; your shelves and read chapters carry over.", "Move", { chosen = null }) { move(card) }
+        AkiConfirm("Move “${ref.title}” to ${app.name(target)}?", "The series leaves ${app.name(ref.source)} and moves to ${app.name(target)}. Your categories and reading progress move with it.", "Move series", { chosen = null }) { move(card) }
     }
     problem?.let { AkiAlert(it.title, it.message) { problem = null } }
 }
@@ -108,12 +108,12 @@ private sealed interface Found {
 @Composable
 private fun Results(source: String, term: String, found: Found, onRetry: () -> Unit, onChoose: (Card) -> Unit) {
     when (found) {
-        Found.Searching -> Box(Modifier.fillMaxWidth().heightIn(min = 140.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
+        Found.Searching -> Box(Modifier.fillMaxWidth().heightIn(min = 140.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Searching $source") }
         is Found.Failed -> AkiEmptyState(found.problem.title, found.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again", onRetry))
         is Found.Cards -> if (found.cards.isEmpty()) {
             AkiEmptyState("Nothing found", "$source has nothing called “$term”. Try a shorter title, or another source.", Modifier.heightIn(min = 240.dp))
         } else {
-            AkiText("Tap the one that is the same series", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
+            AkiText("Choose the matching series", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted, isHeading = true)
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (card in found.cards) {
                     AkiTap({ onChoose(card) }) {

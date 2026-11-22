@@ -19,7 +19,7 @@ class AkiAction(val label: String, val run: () -> Unit)
 fun AkiEmptyState(title: String, message: String, modifier: Modifier = Modifier, action: AkiAction? = null, secondary: AkiAction? = null) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 420.dp).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiText(title, AkiTextStyle.Title, align = TextAlign.Center)
+            AkiText(title, AkiTextStyle.Title, align = TextAlign.Center, isHeading = true)
             AkiText(message, AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
             if (action != null) AkiButton(action.label, Modifier.padding(top = 8.dp), variant = AkiButtonVariant.Primary, onClick = action.run)
             if (secondary != null) AkiButton(secondary.label, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = secondary.run)

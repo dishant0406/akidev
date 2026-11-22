@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -40,6 +42,11 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlin.math.roundToInt
 import live.akidev.manga.design.*
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 /** What a menu over the page is about: a selection, or a highlight that was tapped, and where the finger was. */
 private class MenuTarget(val span: BookSpan, val mark: Long?, val point: Offset)
@@ -61,11 +68,22 @@ fun BookPageView(model: BookModel, chapter: Int, page: Int, modifier: Modifier =
         val top = insets.top + if (model.style.scroll) layout.leading(shown) else 0f
         val overlays = model.overlays
         val footer = remember(layout, shown) { model.footer(BookPlace(chapter, shown), layout) }
+        val spoken = remember(layout, shown) { layout.pageText(shown).ifBlank { "No text on this page." } }
         val density = LocalDensity.current
-        val foot = remember(density) { Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12 * density.density; typeface = Typeface.create(Typeface.SANS_SERIF, 500, false) } }
+        val foot = remember(density) { Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12 * density.density; typeface = Typeface.create(Typeface.SANS_SERIF, 500, false); fontFeatureSettings = "tnum" } }
 
         Canvas(
             Modifier.fillMaxSize()
+                // The page is drawn, not a text view, so TalkBack is given its words, its place, and the actions a swipe or a tap would do.
+                .semantics {
+                    contentDescription = if (layout.coverPicture != null) "Cover of ${model.info.title}" else spoken
+                    stateDescription = "Page ${shown + 1} of ${layout.count}"
+                    customActions = listOf(
+                        CustomAccessibilityAction("Next page") { model.turnPage(forward = true); true },
+                        CustomAccessibilityAction("Previous page") { model.turnPage(forward = false); true },
+                        CustomAccessibilityAction("Show or hide controls") { model.chromeVisible = !model.chromeVisible; true },
+                    )
+                }
                 .pointerInput(layout, shown) {
                     detectTapGestures(
                         onTap = { tap(model, layout, shown, it, size.width, insets, top) { target -> menu = target } },
@@ -206,9 +224,12 @@ private fun ActionMenu(model: BookModel, layout: ChapterLayout, target: MenuTarg
     val density = LocalDensity.current.density
     Popup(popupPositionProvider = above(target.point, 12 * density), onDismissRequest = close) {
         Column(Modifier.width(240.dp).shadow(18.dp, shape).background(Aki.colors.background, shape).padding(vertical = 8.dp)) {
-            Row(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                // Each colour is a 48 dp target around the 30 dp dot.
                 for (index in HighlightColour.names.indices) {
-                    Box(Modifier.size(30.dp).background(HighlightColour.colour(index), CircleShape).akiPress(label = HighlightColour.names[index]) { act(BookAction.Highlight(index)) })
+                    Box(Modifier.size(48.dp).akiPress(label = "Highlight in ${HighlightColour.names[index].lowercase()}") { act(BookAction.Highlight(index)) }, contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(30.dp).background(HighlightColour.colour(index), CircleShape))
+                    }
                 }
             }
             val items = buildList {

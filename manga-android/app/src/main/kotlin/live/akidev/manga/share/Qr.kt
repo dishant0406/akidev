@@ -23,6 +23,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -59,7 +61,7 @@ fun qrRead(brightness: ByteArray, rowWidth: Int, width: Int, height: Int): Strin
 fun QrCode(text: String) {
     val cells = remember(text) { qrCells(text) }
     val ink = Aki.colors.onPrimary
-    Box(Modifier.size(240.dp).background(Color.White, RoundedCornerShape(28.dp)).padding(18.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(240.dp).background(Color.White, RoundedCornerShape(28.dp)).padding(18.dp).semantics { contentDescription = "QR code" }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(204.dp)) {
             // Whole pixels a square, so the edges are sharp; what is left over goes round the code.
             val cell = floor(size.width / cells.size)
@@ -87,7 +89,7 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
         }
     }
     AndroidView(
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = "Camera, looking for a code" },
         factory = { context ->
             // A normal view, not a separate surface: the surface ignores the sheet's rounded corners and its slide.
             val view = PreviewView(context).apply {

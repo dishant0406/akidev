@@ -17,6 +17,7 @@ private struct AkiMenuButton: View {
         Button(role: item.destructive ? .destructive : nil, action: item.action) {
             Label { Text(item.title) } icon: { Image("solar-\(item.isSelected ? "tick" : item.icon)") }
         }
+        .accessibilityAddTraits(item.isSelected ? .isSelected : [])
     }
 }
 

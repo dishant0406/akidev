@@ -40,13 +40,13 @@ fun BookDetailSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AkiImage(book.cover, Modifier.size(width = 104.dp, height = 156.dp).clip(RoundedCornerShape(Aki.thumbRadius)), placeholder = 1.5f, fill = true)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AkiText(book.title, AkiTextStyle.Heading, lines = 4)
+                    AkiText(book.title, AkiTextStyle.Heading, lines = 4, isHeading = true)
                     if (book.authors.isNotEmpty()) AkiText(book.authors.joinToString(", "), AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3)
-                    val facts = listOfNotNull(book.language?.uppercase(), Formatter.formatFileSize(context, book.bytes.toLong()), "Added ${shortDate(book.addedMs) ?: ""}")
+                    val facts = listOfNotNull(book.language?.uppercase(), Formatter.formatFileSize(context, book.bytes.toLong()), shortDate(book.addedMs)?.let { "Added $it" })
                     AkiText(facts.joinToString(" · "), AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3)
                     if (book.openedMs != null) {
-                        AkiProgressBar(if (book.finished) 1.0 else book.progress, Modifier.padding(top = 4.dp))
-                        AkiText(if (book.finished) "Finished" else "${Math.round(book.progress * 100)}% read", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                        AkiProgressBar(if (book.finished) 1.0 else book.progress, Modifier.padding(top = 4.dp), label = null)
+                        AkiText(if (book.finished) "Finished" else "${percent(book.progress)} read", AkiTextStyle.Caption, tone = AkiTone.Muted, tabular = true)
                     }
                 }
             }
@@ -58,12 +58,12 @@ fun BookDetailSheet(
                 if (!book.finished) AkiButton("Mark as finished", icon = "check", fullWidth = true, onClick = finish)
                 if (book.openedMs != null) AkiButton("Mark as not started", icon = "restore", fullWidth = true, onClick = reset)
                 AkiButton("Share with a friend", icon = "share", fullWidth = true, onClick = share)
-                AkiButton("Categories", icon = "folder", fullWidth = true, onClick = categories)
+                AkiButton("Change categories", icon = "folder", fullWidth = true, onClick = categories)
                 AkiButton("Choose a cover picture", icon = "image", fullWidth = true, onClick = chooseCover)
-                if (book.customCover) AkiButton("Use the book's own cover", icon = "restore", fullWidth = true, onClick = ownCover)
+                if (book.customCover) AkiButton("Use the book’s own cover", icon = "restore", fullWidth = true, onClick = ownCover)
             }
             if (marks.isNotEmpty()) {
-                AkiSection("Highlights ${marks.size}") {
+                AkiSection("Highlights · ${marks.size}") {
                     for (mark in marks) {
                         AkiCard(padding = 14.dp) {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -74,7 +74,7 @@ fun BookDetailSheet(
                     }
                 }
             }
-            AkiButton("Remove from this phone", icon = "trash", variant = AkiButtonVariant.Destructive, fullWidth = true, onClick = remove)
+            AkiButton("Delete book", icon = "trash", variant = AkiButtonVariant.Destructive, fullWidth = true, onClick = remove)
         }
     }
 }

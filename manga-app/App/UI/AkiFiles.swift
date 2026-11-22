@@ -115,9 +115,9 @@ struct AkiShare: View {
         ShareLink(item: file) {
             HStack(spacing: 8) {
                 AkiIcon(icon, size: 15, tone: .onPrimary)
-                AkiText(title, .bodyStrong, tone: .onPrimary)
+                AkiText(title, .bodyStrong, tone: .onPrimary, align: .center)
             }
-            .padding(.horizontal, 22).frame(height: 50)
+            .padding(.horizontal, 22).frame(minHeight: 50)
             .background(Aki.primary, in: Capsule())
         }
     }

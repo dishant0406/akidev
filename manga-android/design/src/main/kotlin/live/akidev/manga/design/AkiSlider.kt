@@ -24,10 +24,23 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 
 /** A slider: a track with the part that is done in yellow and a round thumb. `onEnd` is called when the finger lifts. */
 @Composable
-fun AkiSlider(value: Double, onChange: (Double) -> Unit, modifier: Modifier = Modifier, range: ClosedFloatingPointRange<Double> = 0.0..1.0, onEnd: () -> Unit = {}) {
+fun AkiSlider(
+    value: Double,
+    onChange: (Double) -> Unit,
+    modifier: Modifier = Modifier,
+    range: ClosedFloatingPointRange<Double> = 0.0..1.0,
+    onEnd: () -> Unit = {},
+    /** What the slider sets ("Reading speed"): a screen reader says it with the value, and can raise or lower it. */
+    label: String? = null,
+) {
     val colors = Aki.colors
     val thumb = 26.dp
     var widthPx by remember { mutableStateOf(1) }
@@ -41,7 +54,12 @@ fun AkiSlider(value: Double, onChange: (Double) -> Unit, modifier: Modifier = Mo
         return range.start + position * (range.endInclusive - range.start)
     }
     Box(
-        modifier.fillMaxWidth().height(36.dp).onSizeChanged { widthPx = it.width }
+        modifier.fillMaxWidth().height(48.dp).onSizeChanged { widthPx = it.width }
+            .semantics {
+                if (label != null) contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), range.start.toFloat()..range.endInclusive.toFloat())
+                setProgress { target -> onChange(target.toDouble().coerceIn(range)); onEnd(); true }
+            }
             .pointerInput(range) { detectTapGestures { onChange(valueAt(it.x)); onEnd() } }
             .pointerInput(range) {
                 detectDragGestures(

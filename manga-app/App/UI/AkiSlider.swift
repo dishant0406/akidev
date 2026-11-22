@@ -5,7 +5,10 @@ struct AkiSlider: View {
     @Binding var value: Double
     var range: ClosedRange<Double> = 0...1
     var onEnd: () -> Void = {}
+    /// The name VoiceOver reads for the slider.
+    var label = ""
     @State private var dragging = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let thumb: CGFloat = 26
 
     var body: some View {
@@ -19,7 +22,7 @@ struct AkiSlider: View {
                     .frame(width: thumb, height: thumb)
                     .shadow(color: Aki.shadow, radius: 4, y: 1)
                     .offset(x: width * fraction)
-                    .scaleEffect(dragging ? 1.12 : 1)
+                    .scaleEffect(dragging && !reduceMotion ? 1.12 : 1)
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
@@ -34,10 +37,11 @@ struct AkiSlider: View {
                     onEnd()
                 })
         }
-        .frame(height: 36)
+        .frame(height: 44)
         .animation(.snappy(duration: 0.15), value: dragging)
         .accessibilityElement()
-        .accessibilityValue("\(Int(((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * 100)) percent")
+        .accessibilityLabel(label)
+        .accessibilityValue(((value - range.lowerBound) / (range.upperBound - range.lowerBound)).formatted(.percent.precision(.fractionLength(0))))
         .accessibilityAdjustableAction { direction in
             let step = (range.upperBound - range.lowerBound) / 20
             value = min(max(value + (direction == .increment ? step : -step), range.lowerBound), range.upperBound)

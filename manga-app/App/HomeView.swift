@@ -83,13 +83,14 @@ struct HomeView: View {
                     if model.sources.isEmpty && model.repos.isEmpty {
                         WelcomeView()
                     } else if model.visibleSources.isEmpty {
-                        AkiEmptyState(title: model.sources.isEmpty ? "No sources installed" : "Nothing to show", message: model.sources.isEmpty ? "Install a source from your repository in Sources to start reading." : "Your content settings hide every installed source.", action: ("Open Sources", { model.tab = .sources }))
+                        AkiEmptyState(title: model.sources.isEmpty ? "No sources installed" : "Nothing to show", message: model.sources.isEmpty ? "Install a source from a repository in Sources to start reading." : "Your content settings hide every installed source.", action: ("Open Sources", { model.tab = .sources }))
                             .frame(minHeight: 420)
                     } else {
                         HStack(spacing: 10) {
-                            AkiInput(placeholder: "Search \(isGlobal ? "every source" : info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                            AkiInput(placeholder: isGlobal ? "Search all sources" : "Search \(info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
                             if !otherFilters.isEmpty && !isGlobal {
-                                AkiIconButton(symbol: "sliders", label: "Filters", tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
+                                AkiIconButton(symbol: "sliders", label: "Filter results", tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
+                                    .accessibilityValue(choices.isEmpty ? "" : "On")
                             }
                         }
                         HStack(spacing: 10) {
@@ -175,7 +176,7 @@ struct HomeView: View {
         if feed.shelves.isEmpty && feed.loading {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 280)
         } else if feed.shelves.isEmpty {
-            AkiEmptyState(title: "Nothing to show", message: "None of your sources gave any titles. Pull down to try again.").frame(minHeight: 320)
+            AkiEmptyState(title: "Nothing to show", message: "No source returned any series. Pull down to try again.").frame(minHeight: 320)
         } else {
             if let lead = feed.shelves.first(where: { $0.id.hasSuffix("popular") })?.items.first, let from = feed.shelves.first(where: { $0.id.hasSuffix("popular") }) {
                 AkiLink(value: SeriesRef(source: from.source, id: lead.id, title: lead.title, cover: lead.cover)) {
@@ -199,7 +200,7 @@ struct HomeView: View {
         if let error = browse.error, browse.items.isEmpty {
             AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await reload() } })).frame(minHeight: 320)
         } else if browse.items.isEmpty && !browse.loading {
-            AkiEmptyState(title: submitted.isEmpty ? "Nothing to show" : "No results", message: submitted.isEmpty ? "This source gave no titles." : "Nothing matched “\(submitted)” in \(info?.name ?? source).").frame(minHeight: 320)
+            AkiEmptyState(title: submitted.isEmpty ? "Nothing to show" : "No results", message: submitted.isEmpty ? "This source returned no series. Pull down to try again." : "Nothing matched “\(submitted)” in \(info?.name ?? source).").frame(minHeight: 320)
         } else if browse.items.isEmpty {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 240)
         } else if submitted.isEmpty && choices.isEmpty {
@@ -237,7 +238,7 @@ struct HomeView: View {
             }
         }
         if browse.items.count > 10 {
-            AkiText("Browse all", .heading)
+            AkiText("Browse all", .heading).accessibilityAddTraits(.isHeader)
             grid(Array(browse.items.dropFirst(10)))
         }
         if browse.hasNext {
@@ -288,7 +289,7 @@ struct FiltersSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Filters", .title)
+                AkiText("Filters", .title).accessibilityAddTraits(.isHeader)
                 ForEach(filters, id: \.id) { filter in
                     AkiCard(padding: 16) {
                         switch filter.kind {
@@ -303,7 +304,7 @@ struct FiltersSheet: View {
                     }
                 }
                 AkiButton("Show results", variant: .primary, size: .large, fullWidth: true) { dismiss(); apply() }
-                AkiButton("Reset", variant: .ghost, fullWidth: true) { choices = [:]; dismiss(); apply() }
+                AkiButton("Reset filters", variant: .ghost, fullWidth: true) { choices = [:]; dismiss(); apply() }
             }
             .padding(24)
         }

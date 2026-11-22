@@ -22,12 +22,12 @@ struct BookDetailSheet: View {
                         .frame(width: 104)
                         .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
                     VStack(alignment: .leading, spacing: 6) {
-                        AkiText(book.title, .heading, lines: 4)
-                        if !book.authors.isEmpty { AkiText(book.authors.joined(separator: ", "), .caption, tone: .muted, lines: 3) }
+                        AkiText(book.title, .heading).accessibilityAddTraits(.isHeader)
+                        if !book.authors.isEmpty { AkiText(book.authors.joined(separator: ", "), .caption, tone: .muted) }
                         AkiText(facts, .caption, tone: .muted, lines: 3)
                         if book.openedMs != nil {
-                            AkiProgressBar(fraction: book.finished ? 1 : book.progress).padding(.top, 4)
-                            AkiText(book.finished ? "Finished" : "\(Int((book.progress * 100).rounded()))% read", .caption, tone: .muted)
+                            AkiProgressBar(fraction: book.finished ? 1 : book.progress).padding(.top, 4).accessibilityHidden(true)
+                            AkiText(book.finished ? "Finished" : "\(bookPercent(book.progress)) read", .caption, tone: .muted, digits: true)
                         }
                     }
                     Spacer(minLength: 0)
@@ -37,12 +37,12 @@ struct BookDetailSheet: View {
                     if !book.finished { AkiButton("Mark as finished", icon: "check", fullWidth: true, action: finish) }
                     if book.openedMs != nil { AkiButton("Mark as not started", icon: "restore", fullWidth: true, action: reset) }
                     AkiButton("Share with a friend", icon: "share", fullWidth: true, action: share)
-                    AkiButton("Categories", icon: "folder", fullWidth: true, action: categories)
+                    AkiButton("Change categories", icon: "folder", fullWidth: true, action: categories)
                     AkiButton("Choose a cover picture", icon: "image", fullWidth: true, action: chooseCover)
-                    if book.customCover { AkiButton("Use the book's own cover", icon: "restore", fullWidth: true, action: ownCover) }
+                    if book.customCover { AkiButton("Use the book’s own cover", icon: "restore", fullWidth: true, action: ownCover) }
                 }
                 if !marks.isEmpty {
-                    AkiSection(title: "Highlights \(marks.count)") {
+                    AkiSection(title: "Highlights · \(marks.count)") {
                         ForEach(marks, id: \.id) { mark in
                             AkiCard(padding: 14) {
                                 VStack(alignment: .leading, spacing: 6) {
@@ -53,7 +53,7 @@ struct BookDetailSheet: View {
                         }
                     }
                 }
-                AkiButton("Remove from this phone", icon: "trash", variant: .destructive, fullWidth: true, action: remove)
+                AkiButton("Delete book", icon: "trash", variant: .destructive, fullWidth: true, action: remove)
             }
             .padding(24)
         }
@@ -62,8 +62,8 @@ struct BookDetailSheet: View {
     private var facts: String {
         var parts: [String] = []
         if let language = book.language { parts.append(language.uppercased()) }
-        parts.append(ByteCountFormatter.string(fromByteCount: Int64(book.bytes), countStyle: .file))
-        parts.append("Added \(shortDate(book.addedMs) ?? "")")
+        parts.append(bookSize(book.bytes))
+        if let added = shortDate(book.addedMs) { parts.append("Added \(added)") }
         return parts.joined(separator: " · ")
     }
 }

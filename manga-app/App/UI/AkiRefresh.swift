@@ -70,7 +70,7 @@ private struct AkiPullToRefresh: ViewModifier {
             Circle().stroke(Aki.secondary, lineWidth: 3)
             ring
             if phase == .done {
-                AkiIcon("tick", size: 17, tone: .text).transition(.scale(scale: 0.4).combined(with: .opacity))
+                AkiIcon("tick", size: 17, tone: .text).transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
             } else if phase == .idle {
                 AkiIcon("refresh", size: 15, tone: .muted).rotationEffect(.degrees(progress * 180)).opacity(0.4 + 0.6 * progress)
             }

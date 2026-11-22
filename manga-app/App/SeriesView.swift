@@ -83,7 +83,7 @@ struct SeriesView: View {
         .akiHaptic(.impact(weight: .medium), trigger: savedTaps)
         .akiHaptic(.success, trigger: downloadsDone)
         .akiHaptic(.error, trigger: problem)
-        .akiAlert("Download failed", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiAlert("Could not download chapters", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiSheet(isPresented: $presented.equals(.move)) { MigrateSheet(ref: ref) { dismiss() } }
         .akiSheet(isPresented: $signingIn) { SignInSheet(source: ref.source) { afterSignIn = waiting } }
         .onChange(of: signingIn) { if !signingIn, let next = afterSignIn { afterSignIn = nil; target = next } }
@@ -93,7 +93,7 @@ struct SeriesView: View {
             model.refresh()
         }
         .akiSheet(isPresented: $presented.equals(.categories)) { CategoryPicker(series: [CategoryPicker.Series(source: ref.source, id: ref.id)]) }
-        .akiConfirm("Forget \(ref.title)?", message: "It leaves your library and its reading progress and downloads are deleted.", confirm: "Forget", isPresented: $presented.equals(.forget)) {
+        .akiConfirm("Delete the data for “\(ref.title)”?", message: "The series leaves your library. Your reading progress and downloaded chapters are deleted from this device. You can add the series again later.", confirm: "Delete data", isPresented: $presented.equals(.forget)) {
             try? model.engine.forgetSeries(source: ref.source, series: ref.id)
             model.refresh()
             dismiss()
@@ -116,13 +116,13 @@ struct SeriesView: View {
                 LinearGradient(colors: [Aki.scrimTop, .clear, Aki.scrimBottom], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
-                        if !chapters.isEmpty { AkiBadge("\(chapters.count) chapters", icon: "list", style: .glass) }
+                        if let count = chaptersLabel(UInt32(chapters.count)) { AkiBadge(count, icon: "list", style: .glass) }
                         if let status = statusText { AkiBadge(status, icon: "clock", style: .glass) }
                         AkiBadge(model.name(of: ref.source), icon: "sources", style: .glass)
                     }
-                    AkiText(detail?.title ?? ref.title, .display, tone: .onMedia, lines: 3)
+                    AkiText(detail?.title ?? ref.title, .display, tone: .onMedia, lines: 3).accessibilityAddTraits(.isHeader)
                     if let authors = detail?.authors, !authors.isEmpty {
-                        AkiText(authors.joined(separator: ", "), .caption, tone: .onMedia, lines: 1)
+                        AkiText(authors.joined(separator: ", "), .caption, tone: .onMedia, lines: 2)
                     }
                 }
                 .padding(.horizontal, 20).padding(.bottom, 46)
@@ -142,18 +142,18 @@ struct SeriesView: View {
             HStack {
                 AkiIconButton(symbol: "back", label: "Back", onMedia: true) { dismiss() }
                 Spacer()
-                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Save to library", tint: saved ? Aki.primary : nil, onMedia: true) { Task { await toggleSaved() } }
-                AkiMenu(symbol: "more", label: "More", onMedia: true, items: [
+                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Add to library", tint: saved ? Aki.primary : nil, onMedia: true) { Task { await toggleSaved() } }
+                AkiMenu(symbol: "more", label: "More options", onMedia: true, items: [
                     AkiMenuItem(title: "Mark all as read", icon: "check") { markAll(read: true) },
                     AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
-                    AkiMenuItem(title: "Download unread", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
+                    AkiMenuItem(title: "Download unread chapters", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
                     AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
                     AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .series(ref)) },
-                    AkiMenuItem(title: "Categories", icon: "folder") { presented = .categories },
+                    AkiMenuItem(title: "Change categories", icon: "folder") { presented = .categories },
                     AkiMenuItem(title: "Choose a cover", icon: "image") { presented = .cover },
                     AkiMenuItem(title: "Reset cover", icon: "refresh") { clearCover() },
                     AkiMenuItem(title: "Move to another source", icon: "swap") { presented = .move },
-                    AkiMenuItem(title: "Forget this series", icon: "trash", destructive: true) { presented = .forget },
+                    AkiMenuItem(title: "Delete series data", icon: "trash", destructive: true) { presented = .forget },
                 ])
             }
         }
@@ -170,7 +170,7 @@ struct SeriesView: View {
             } else if let error, chapters.isEmpty {
                 AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load(force: true) } })).frame(minHeight: 260)
             } else if tab == .chapters && chapters.isEmpty && !loading {
-                AkiEmptyState(title: "Nothing to read here", message: "\(model.name(of: ref.source)) lists this series but has no chapters it can show in your language. Licensed series are often only linked to the publisher's own site. Try another source, or another language in the source's settings.")
+                AkiEmptyState(title: "Nothing to read here", message: "\(model.name(of: ref.source)) lists this series but has no chapters to show in your language. Licensed series are often only linked to the publisher’s site. Try another source, or change the language in the source’s settings.")
                     .frame(minHeight: 280)
             } else if tab == .chapters {
                 chapterList
@@ -219,7 +219,7 @@ struct SeriesView: View {
     private var bookmarkList: some View {
         LazyVStack(spacing: 12) {
             if bookmarks.isEmpty {
-                AkiEmptyState(title: "No bookmarks yet", message: "Tap the bookmark button while you read to mark a page, and it will be here.").frame(minHeight: 260)
+                AkiEmptyState(title: "No bookmarks yet", message: "Bookmark a page while you read and it appears here.").frame(minHeight: 260)
             }
             ForEach(bookmarks, id: \.self) { mark in
                 AkiTap(action: { target = ReaderTarget(chapterID: mark.chapter, page: Int(mark.page), offset: mark.offset) }) {
@@ -269,7 +269,7 @@ struct SeriesView: View {
                 AkiCard(padding: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         AkiText(description, .body, lines: expanded ? nil : 6)
-                        AkiButton(expanded ? "Show less" : "Read more", variant: .ghost, size: .small) { withAnimation(AkiMotion.settle(reduceMotion)) { expanded.toggle() } }
+                        AkiButton(expanded ? "Show less" : "Show more", variant: .ghost, size: .small) { withAnimation(AkiMotion.settle(reduceMotion)) { expanded.toggle() } }
                     }
                 }
             }
@@ -278,7 +278,7 @@ struct SeriesView: View {
                     info("Status", statusText ?? "Unknown")
                     info("Author", detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : "—")
                     info("Source", model.name(of: ref.source))
-                    info("Chapters", "\(chapters.count)")
+                    info("Chapters", chapters.count.formatted())
                 }
             }
             if let tags = detail?.tags, !tags.isEmpty {
@@ -294,6 +294,7 @@ struct SeriesView: View {
             AkiText(value, .bodyStrong, align: .trailing)
         }
         .padding(.horizontal, 12).padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
     }
 
     private var statusText: String? {
@@ -339,11 +340,11 @@ struct SeriesView: View {
         chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
         async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
         if fresh {
-            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
+            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, "Could not load this series") } }
         } else {
             async let fetchedChapters = model.engine.chapters(source: ref.source, id: ref.id)
-            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error) } }
-            do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error) } }
+            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, "Could not load this series") } }
+            do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error, "Could not load the chapters") } }
         }
         loading = false
         loadBookmarks()
@@ -362,14 +363,15 @@ struct SeriesView: View {
     }
 
     private func download(_ list: [ChapterEntry]) {
+        akiAnnounce("Downloading")
         Task {
             var failed = 0
             for chapter in list.reversed() {
                 do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { failed += 1 }
                 loadKept()
             }
-            if failed == 0 { downloadsDone += 1 }
-            if failed > 0 { problem = failed == 1 ? "One chapter could not be downloaded." : "\(failed) chapters could not be downloaded." }
+            if failed == 0 { downloadsDone += 1; akiAnnounce("Downloaded") }
+            if failed > 0 { problem = (failed == 1 ? "1 chapter could not be downloaded." : "\(failed) chapters could not be downloaded.") + " Check your connection and try again." }
         }
     }
 
@@ -398,9 +400,10 @@ struct SeriesView: View {
             try await model.engine.setInLibrary(source: ref.source, id: ref.id, saved: !saved)
             saved.toggle()
             savedTaps += 1
+            akiAnnounce(saved ? "Added to library" : "Removed from library")
             if saved { putOnSaveCategory() }
             model.refresh()
-        } catch { self.error = describe(error) }
+        } catch { self.error = describe(error, "Could not update your library") }
     }
 
     private func clearCover() {

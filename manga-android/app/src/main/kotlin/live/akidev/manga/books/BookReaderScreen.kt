@@ -45,6 +45,7 @@ import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
 import live.akidev.manga.listen.ListenBar
+import androidx.compose.ui.semantics.clearAndSetSemantics
 
 /** Opens the book and shows it, or says why it cannot be shown. */
 @Composable
@@ -65,7 +66,7 @@ fun BookReaderScreen(route: BookReaderRoute) {
     val opened = model
     when {
         opened != null -> BookReaderView(opened)
-        failure != null -> AkiEmptyState("This book cannot be opened", failure!!, action = AkiAction("Close") { router.back() })
+        failure != null -> AkiEmptyState("Could not open this book", failure!!, action = AkiAction("Close") { router.back() })
         else -> Box(Modifier.fillMaxSize().background(Aki.colors.background), contentAlignment = Alignment.Center) { AkiOpeningLoader(route.book.title) }
     }
 }
@@ -128,7 +129,7 @@ private fun BookReaderView(model: BookModel) {
         model.footnote?.let { note -> BookFootnoteSheet(model, note) { model.footnote = null } }
         model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
         model.externalLink?.let { link ->
-            AkiConfirm("Open this link?", link, "Open", { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, link.toUri())) }
+            AkiConfirm("Open this link?", link, "Open link", { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, link.toUri())) }
         }
     }
 }
@@ -144,11 +145,11 @@ private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Uni
     val router = LocalRouter.current
     val app = LocalApp.current
     AkiReaderTopBar {
-        AkiIconButton("back", "Back") { router.back() }
-        AkiBarTitle(model.info.title, model.info.authors.firstOrNull(), "Contents", onContents)
+        AkiIconButton("back", "Close book") { router.back() }
+        AkiBarTitle(model.info.title, model.info.authors.firstOrNull(), "${model.info.title}. Show contents", onContents)
         if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen() }
         AkiIconButton("search", "Search in this book", onClick = onSearch)
-        AkiIconButton("sliders", "Type and theme", onClick = onSettings)
+        AkiIconButton("sliders", "Text and theme", onClick = onSettings)
     }
 }
 
@@ -160,8 +161,10 @@ private fun BottomBar(model: BookModel, onContents: () -> Unit) {
             Modifier.weight(1f).height(44.dp).akiGlass(AkiShapes.pill(44.dp)).padding(horizontal = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            AkiSlider(model.progress, { value -> model.progress = value }, Modifier.weight(1f), onEnd = { model.goToProgress(model.progress) })
-            AkiText("${Math.round(model.progress * 100)}%", AkiTextStyle.Caption, Modifier.widthIn(min = 40.dp), lines = 1, align = androidx.compose.ui.text.style.TextAlign.End)
+            val onEnd = { model.goToProgress(model.progress) }
+            AkiSlider(model.progress, { value -> model.progress = value }, Modifier.weight(1f).spokenValue(percent(model.progress)), onEnd = onEnd, label = "Reading progress")
+            // The slider already says the percentage aloud.
+            AkiText(percent(model.progress), AkiTextStyle.Caption, Modifier.widthIn(min = 40.dp).clearAndSetSemantics {}, lines = 1, align = androidx.compose.ui.text.style.TextAlign.End, tabular = true)
         }
     }
 }

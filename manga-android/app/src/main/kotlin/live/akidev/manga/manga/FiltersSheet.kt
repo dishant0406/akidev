@@ -21,7 +21,7 @@ fun FiltersSheet(filters: List<FilterInfo>, choices: Map<String, String>, onChoi
 
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Filters", AkiTextStyle.Title)
+            AkiText("Filters", AkiTextStyle.Title, isHeading = true)
             for (filter in filters) {
                 AkiCard(padding = 16.dp) {
                     when (filter.kind) {
@@ -34,7 +34,7 @@ fun FiltersSheet(filters: List<FilterInfo>, choices: Map<String, String>, onChoi
                 }
             }
             AkiButton("Show results", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { onDismiss(); apply() }
-            AkiButton("Reset", variant = AkiButtonVariant.Ghost, fullWidth = true) { onChoices(emptyMap()); onDismiss(); apply() }
+            AkiButton("Reset filters", variant = AkiButtonVariant.Ghost, fullWidth = true) { onChoices(emptyMap()); onDismiss(); apply() }
         }
     }
 }

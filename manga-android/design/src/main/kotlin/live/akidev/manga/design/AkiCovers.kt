@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
 
 /** A cover with its title: the grid card on Home and in the Library. */
 @Composable
@@ -41,7 +43,8 @@ fun AkiListCard(
     dimmed: Boolean = false,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
-    AkiCard(modifier, padding = 10.dp, dimmed = dimmed) {
+    // One thing to a screen reader: the small line, the title, the badges. A button in `trailing` stays a button of its own.
+    AkiCard(modifier.semantics(mergeDescendants = true) {}, padding = 10.dp, dimmed = dimmed) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             AkiImage(thumbnail, Modifier.width(66.dp).clip(RoundedCornerShape(Aki.thumbRadius)), placeholder = 1.25f, fill = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -62,7 +65,8 @@ fun AkiBookCard(title: String, author: String?, cover: String?, subtitle: String
             AkiImage(cover, Modifier.fillMaxWidth().clip(RoundedCornerShape(Aki.cardRadius)), placeholder = 1.5f, fill = true)
         } else {
             Column(Modifier.fillMaxWidth().aspectRatio(1f / 1.5f).clip(RoundedCornerShape(Aki.cardRadius)).background(Aki.colors.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                AkiText(title, AkiTextStyle.Heading, lines = 4)
+                // The title is said once, from the line under the card.
+                AkiText(title, AkiTextStyle.Heading, Modifier.clearAndSetSemantics {}, lines = 4)
                 if (author != null) AkiText(author, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 2)
             }
         }

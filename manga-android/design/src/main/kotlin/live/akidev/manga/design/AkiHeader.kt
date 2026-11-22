@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.dp
 fun AkiHeader(title: String, modifier: Modifier = Modifier, subtitle: String? = null, trailing: @Composable RowScope.() -> Unit = {}) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AkiText(title, AkiTextStyle.Display)
-            if (subtitle != null) AkiText(subtitle, AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(title, AkiTextStyle.Display, isHeading = true)
+            if (subtitle != null) AkiText(subtitle, AkiTextStyle.Caption, tone = AkiTone.Muted, tabular = true)
         }
         trailing()
     }

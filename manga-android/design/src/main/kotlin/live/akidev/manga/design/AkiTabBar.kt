@@ -16,6 +16,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
 
 /** One place the bar can go: its icon (and the filled one for when it is chosen), what it is called, and an unread count. */
 class AkiTabItem<ID>(val id: ID, val icon: String, val iconSolid: String, val label: String, val badge: Int = 0)
@@ -41,7 +42,7 @@ fun <ID> AkiTabBar(tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> 
             for (tab in tabs) {
                 val on = tab.id == selection
                 Box(
-                    Modifier.size(CellWidth, CellHeight).akiPress(label = tab.label) {
+                    Modifier.size(CellWidth, CellHeight).akiPress(label = if (tab.badge > 0) "${tab.label}, ${tab.badge} unread" else tab.label, role = Role.Tab, selected = on) {
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         onSelect(tab.id)
                     },

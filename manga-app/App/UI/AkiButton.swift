@@ -41,11 +41,12 @@ struct AkiButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let icon { AkiIcon(icon, size: 15, tone: tone) }
-                AkiText(title, .bodyStrong, tone: tone, lines: 1)
+                AkiText(title, .bodyStrong, tone: tone, align: .center)
             }
             .padding(.horizontal, 20)
             .frame(maxWidth: fullWidth ? .infinity : nil)
-            .frame(height: size.height)
+            // A minimum, so a long title or a large text size wraps instead of being cut off.
+            .frame(minHeight: size.height)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

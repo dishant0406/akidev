@@ -43,3 +43,13 @@ func shelf(_ books: [BookInfo], sort: BookSort, reversed: Bool, filter: BookFilt
     }
     return reversed ? ordered.reversed() : ordered
 }
+
+/// "45%" for a share of a book, written the way the person's language writes it.
+func bookPercent(_ fraction: Double) -> String {
+    fraction.formatted(.percent.precision(.fractionLength(0)))
+}
+
+/// "1.2 MB" for a file, with a no-break space so the number and the unit never part at the end of a line.
+func bookSize<T: BinaryInteger>(_ bytes: T) -> String {
+    ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file).replacingOccurrences(of: " ", with: "\u{00A0}")
+}

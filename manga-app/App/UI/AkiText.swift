@@ -29,24 +29,42 @@ struct AkiText: View {
     /// Takes the room of all `lines` lines even when the text is shorter, so a row of these stays one height.
     var reserves = false
     var align: TextAlignment = .leading
+    /// Equal-width digits, so a number that changes (a counter, a size, a percentage) does not jiggle.
+    var digits = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .text, lines: Int? = nil, reserves: Bool = false, align: TextAlignment = .leading) {
+    init(_ text: String, _ style: AkiTextStyle = .body, tone: AkiTone = .text, lines: Int? = nil, reserves: Bool = false, align: TextAlignment = .leading, digits: Bool = false) {
         self.text = text
         self.style = style
         self.tone = tone
         self.lines = lines
         self.reserves = reserves
         self.align = align
+        self.digits = digits
     }
 
     var body: some View {
+        // At the accessibility text sizes nothing is cut short: every line limit is lifted.
+        let limit = typeSize.isAccessibilitySize ? nil : lines
         Text(style == .eyebrow ? text.uppercased() : text)
-            .font(font)
+            .font(digits ? font.monospacedDigit() : font)
             .tracking(tracking)
-            .lineSpacing(style == .display ? -2 : 0)
-            .foregroundStyle(tone.color.opacity(style == .eyebrow ? 0.7 : 1))
-            .lineLimit(lines ?? Int.max, reservesSpace: reserves && lines != nil)
+            .lineSpacing(lineSpacing)
+            .foregroundStyle(tone.color)
+            .lineLimit(limit ?? Int.max, reservesSpace: reserves && limit != nil)
             .multilineTextAlignment(align)
+            // Screen titles are headings for VoiceOver's heading rotor.
+            .accessibilityAddTraits(style == .display || style == .title ? .isHeader : [])
+    }
+
+    /// Text that wraps needs about 1.4 times its size between lines.
+    private var lineSpacing: CGFloat {
+        switch style {
+        case .display: -2
+        case .body, .bodyStrong: 3
+        case .caption, .captionStrong: 2
+        case .title, .heading, .eyebrow, .numeral: 0
+        }
     }
 
     /// Big text sits tighter, small text a little looser: letters read too far apart as they grow.

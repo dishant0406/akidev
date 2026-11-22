@@ -54,11 +54,11 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         # The Share screen finds and announces phones with Bonjour; iOS asks the person first, and says why with this line.
-        NSLocalNetworkUsageDescription: Akidev uses your local network to send books and series to a friend's phone on the same Wi-Fi, and to receive from them.
+        NSLocalNetworkUsageDescription: Akidev uses your local network to send books and series to a friend’s phone on the same Wi-Fi, and to receive from that phone.
         # _akidev-p2p._tcp is the direct link between two iPhones with no Wi-Fi in common.
         NSBonjourServices: [_akidev._tcp, _akidev-p2p._tcp]
         # Only asked when the person taps "Scan their code".
-        NSCameraUsageDescription: Akidev uses the camera only to scan a code from a friend's phone.
+        NSCameraUsageDescription: Akidev uses the camera only to scan a code from a friend’s phone. It does not record or keep any picture.
         # "Open in Akidev" for a book or a comic archive (a series card never travels as a file: it arrives through the Share screen).
         # iOS hands the app a copy of the file, so nothing is opened in place (Apple asks every document app to say which: ITMS-90737).
         LSSupportsOpeningDocumentsInPlace: false

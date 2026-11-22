@@ -2,6 +2,7 @@ package live.akidev.manga.listen
 
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import live.akidev.manga.app.VoiceChoiceRoute
 import live.akidev.manga.design.*
 import uniffi.akimanga.VoiceModel
 import uniffi.akimanga.VoiceOption
+import live.akidev.manga.books.percent
 
 /** The voice models for reading aloud: get one, choose which reads, remove it. */
 @Composable
@@ -34,7 +36,7 @@ fun VoicesScreen() {
     val uriHandler = LocalUriHandler.current
     AkiPage(underTabBar = false, spacing = 16.dp) {
         item { AkiBackHeader("Voice models", back = router::back, subtitle = "Reading aloud happens on this phone") }
-        if (model.models.isEmpty()) item { AkiEmptyState("No models yet", "The voice repository has none to offer right now.", Modifier.heightIn(min = 260.dp)) }
+        if (model.models.isEmpty()) item { AkiEmptyState("No voice models yet", "The voices repository has none to offer. Check your connection and try again later.", Modifier.heightIn(min = 260.dp)) }
         items(model.models.size, key = { model.models[it].id }) { index ->
             val voice = model.models[index]
             val parts = listOf(voice.languages.joinToString(", ").uppercase(), Formatter.formatFileSize(context, voice.bytes.toLong()), voice.licence) + if (voice.commercial) emptyList() else listOf("not for commercial use")
@@ -62,15 +64,15 @@ private fun Control(voice: VoiceModel, install: () -> Unit) {
     val model = LocalApp.current.readAloud
     val fraction = model.progress[voice.id]
     when {
-        fraction != null -> AkiProgressBar(fraction, Modifier.width(64.dp))
+        fraction != null -> AkiProgressBar(fraction, Modifier.width(64.dp), label = "Downloading ${voice.name}")
         model.has(voice) -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (model.hasUpdate(voice)) AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, onClick = install)
+            if (model.hasUpdate(voice)) AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Update ${voice.name}", onClick = install)
             else if (model.current?.id == voice.id) AkiText("In use", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
-            else AkiButton("Use", size = AkiButtonSize.Small) { model.use(voice) }
-            AkiIconButton("trash", "Remove ${voice.name}") { model.remove(voice) }
+            else AkiButton("Use", size = AkiButtonSize.Small, description = "Use ${voice.name}") { model.use(voice) }
+            AkiIconButton("trash", "Delete ${voice.name}") { model.remove(voice) }
         }
-        voice.usable -> AkiButton("Get", icon = "download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, onClick = install)
-        else -> AkiText("Needs a newer Akidev", AkiTextStyle.Caption, tone = AkiTone.Muted)
+        voice.usable -> AkiButton("Download", icon = "download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Download ${voice.name}", onClick = install)
+        else -> AkiText("Update Akidev to use this voice", AkiTextStyle.Caption, tone = AkiTone.Muted)
     }
 }
 
@@ -89,7 +91,7 @@ fun VoiceChoiceScreen() {
 
     AkiPage(underTabBar = false, spacing = 22.dp) {
         item { AkiBackHeader("Voice", back = router::back, subtitle = model.current?.let { "Voices of ${it.name}" }) }
-        item { AkiSection("Standard") { VoiceCard("", "${model.current?.name ?: "Model"} voice", null, "The model's own voice.", null) } }
+        item { AkiSection("Standard") { VoiceCard("", "${model.current?.name ?: "Model"} voice", null, "The model’s own voice.", null) } }
         for ((title, group) in groups) {
             item(key = title) {
                 AkiSection(title) { for (voice in group) VoiceCard(voice.id, voice.name, detail(voice), voice.description, voice) }
@@ -112,19 +114,19 @@ private fun VoiceCard(id: String, name: String, detail: String?, description: St
     val busy = id in model.fetching || model.hearing == id
     AkiCard(padding = 16.dp) {
         androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AkiText(name, AkiTextStyle.Heading, lines = 1)
-                if (detail != null) AkiText(detail, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                AkiText(name, AkiTextStyle.Heading, isHeading = true)
+                if (detail != null) AkiText(detail, AkiTextStyle.Caption, tone = AkiTone.Muted)
             }
             AkiText(description, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 4)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 when {
-                    busy -> Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
-                    model.playing == id -> AkiIconButton("pause", "Stop $name") { model.stopHearing() }
-                    else -> AkiIconButton("play", "Hear $name") { scope.launch { model.hear(voice) } }
+                    busy -> Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Getting $name") }
+                    model.playing == id -> AkiIconButton("pause", "Stop sample of $name") { model.stopHearing() }
+                    else -> AkiIconButton("play", "Play sample of $name") { scope.launch { model.hear(voice) } }
                 }
                 if (model.voiceInUse == id) AkiText("In use", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
-                else AkiButton("Use", size = AkiButtonSize.Small) { scope.launch { model.choose(voice) } }
+                else AkiButton("Use", size = AkiButtonSize.Small, description = "Use $name") { scope.launch { model.choose(voice) } }
             }
         }
     }

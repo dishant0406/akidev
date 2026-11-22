@@ -31,6 +31,8 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import live.akidev.manga.design.AkiImageLoader
 import live.akidev.manga.design.AkiPagePlaceholder
@@ -45,7 +47,7 @@ fun ZoomPage(number: Int, url: String, headers: Map<String, String>, onTap: (Flo
     var attempt by remember { mutableStateOf(0) }
     var failed by remember { mutableStateOf(false) }
     var picture by remember(url) { mutableStateOf<Bitmap?>(null) }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().semantics { onClick("Show or hide controls") { onTap(0.5f); true } }) {
         val widthPx = constraints.maxWidth
         LaunchedEffect(url, attempt) {
             failed = false
@@ -56,21 +58,21 @@ fun ZoomPage(number: Int, url: String, headers: Map<String, String>, onTap: (Flo
         when {
             shown == null -> AkiPagePlaceholder(number + 1, failed) { attempt += 1 }
             // A page much taller than the screen (a webtoon strip shown in page mode) is fitted to the width and scrolled down.
-            shown.width.toFloat() / shown.height < 0.5f -> TallPage(shown, onTap)
-            else -> ZoomablePicture(shown, onTap, onZoomed)
+            shown.width.toFloat() / shown.height < 0.5f -> TallPage(shown, number, onTap)
+            else -> ZoomablePicture(shown, number, onTap, onZoomed)
         }
     }
 }
 
 @Composable
-private fun TallPage(picture: Bitmap, onTap: (Float) -> Unit) {
+private fun TallPage(picture: Bitmap, number: Int, onTap: (Float) -> Unit) {
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTap(it.x / size.width) } }.verticalScroll(rememberScrollState())) {
-        Image(picture.asImageBitmap(), null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
+        Image(picture.asImageBitmap(), "Page ${number + 1}", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
     }
 }
 
 @Composable
-private fun ZoomablePicture(picture: Bitmap, onTap: (Float) -> Unit, onZoomed: (Boolean) -> Unit) {
+private fun ZoomablePicture(picture: Bitmap, number: Int, onTap: (Float) -> Unit, onZoomed: (Boolean) -> Unit) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
@@ -123,7 +125,7 @@ private fun ZoomablePicture(picture: Bitmap, onTap: (Float) -> Unit, onZoomed: (
             },
     ) {
         Image(
-            picture.asImageBitmap(), null,
+            picture.asImageBitmap(), "Page ${number + 1}",
             Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
             contentScale = ContentScale.Fit,
         )

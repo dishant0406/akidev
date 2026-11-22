@@ -7,10 +7,15 @@ extension Binding {
     }
 }
 
+/// Says a change out loud for VoiceOver users when nothing takes focus: a saved setting, a finished download, an error beside a field.
+func akiAnnounce(_ text: String) {
+    AccessibilityNotification.Announcement(text).post()
+}
+
 extension View {
     /// A message with one button.
     func akiAlert(_ title: String, message: String?, isPresented: Binding<Bool>) -> some View {
-        alert(title, isPresented: isPresented) { Button("OK", role: .cancel) {} } message: { Text(message ?? "") }
+        alert(title, isPresented: isPresented) { Button("Done", role: .cancel) {} } message: { Text(message ?? "") }
     }
 
     /// A question with a text field: an address, a name.

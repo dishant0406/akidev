@@ -116,7 +116,7 @@ class ReaderModel(private val app: AppModel, val ref: SeriesRef, chapters: List<
         val number = chapter(id)?.number ?: return null
         val next = newer(id)?.number ?: return null
         val skipped = skippedChapters(number, next) ?: return null
-        return if (skipped.count() == 1) "Chapter ${skipped.first} is missing from this source" else "Chapters ${skipped.first} to ${skipped.last} are missing from this source"
+        return if (skipped.count() == 1) "Chapter ${skipped.first} is missing from this source" else "Chapters ${skipped.first}–${skipped.last} are missing from this source"
     }
 
     /** The whole chapter numbers a source skips between a chapter and the next one it lists: 178.5 then 180 skips 179. A jump of more than ten is a different way of numbering. */

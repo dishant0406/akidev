@@ -14,9 +14,10 @@ struct AkiScanner: View {
             if allowed == true {
                 Camera(found: found)
                     .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
+                    .accessibilityLabel("Camera, looking for a code")
             } else if allowed == false {
                 VStack(spacing: 12) {
-                    AkiText("Allow the camera to scan a code", .body, tone: .muted, align: .center)
+                    AkiText("Camera access is off. Allow it in Settings to scan a code.", .body, tone: .muted, align: .center)
                     AkiButton("Open Settings", variant: .ghost, size: .small) {
                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                     }
@@ -25,7 +26,7 @@ struct AkiScanner: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 200)
+        .frame(minHeight: 200)
         .task { allowed = await Self.cameraAllowed() }
     }
 

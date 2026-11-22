@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -29,6 +28,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 
 /**
  * A glass text field with an icon and a clear button. [secure] hides what is typed (a password) and [email] asks for the email keyboard;
@@ -48,23 +54,31 @@ fun AkiInput(
     onClear: () -> Unit = {},
     /** Takes the keyboard as soon as it appears, as the field in an iOS alert does. */
     autoFocus: Boolean = false,
+    /** What a screen reader calls the field. The placeholder, when there is no better name. */
+    label: String = placeholder,
+    /** What is wrong with the field. A screen reader says it with the field. */
+    errorMessage: String? = null,
 ) {
     val focus = LocalFocusManager.current
     val requester = remember { FocusRequester() }
     if (autoFocus) LaunchedEffect(Unit) { requester.requestFocus() }
     var focused by remember { mutableStateOf(false) }
     Row(
-        modifier.fillMaxWidth().height(52.dp).akiGlass(AkiShapes.pill(52.dp)).akiPress { requester.requestFocus() }.padding(horizontal = 18.dp),
+        modifier.fillMaxWidth().heightIn(min = 52.dp).akiGlass(AkiShapes.pill(52.dp)).akiPress { requester.requestFocus() }.padding(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) AkiIcon(icon, size = 16.dp, tone = AkiTone.Muted)
         Box(Modifier.weight(1f)) {
-            if (text.isEmpty()) AkiText(placeholder, tone = AkiTone.Muted, lines = 1)
+            if (text.isEmpty()) AkiText(placeholder, tone = AkiTone.Muted, lines = 1, modifier = Modifier.clearAndSetSemantics {})
             BasicTextField(
                 value = text,
                 onValueChange = onChange,
-                modifier = Modifier.fillMaxWidth().focusRequester(requester).onFocusChanged { focused = it.isFocused },
+                modifier = Modifier.fillMaxWidth().focusRequester(requester).onFocusChanged { focused = it.isFocused }.semantics {
+                    contentDescription = label
+                    if (secure) contentType = ContentType.Password else if (email) contentType = ContentType.EmailAddress
+                    if (errorMessage != null) error(errorMessage)
+                },
                 singleLine = true,
                 visualTransformation = if (secure) PasswordVisualTransformation() else VisualTransformation.None,
                 textStyle = akiTextStyle(AkiTextStyle.Body, AkiTone.Text.color),
@@ -78,10 +92,10 @@ fun AkiInput(
             )
         }
         if (text.isNotEmpty() && !secure) {
-            Box(Modifier.akiPress(label = "Clear") { onChange(""); onClear() }) { AkiIcon("close-solid", size = 16.dp, tone = AkiTone.Muted) }
+            Box(Modifier.akiPress(label = "Clear text") { onChange(""); onClear() }.akiTouchTarget()) { AkiIcon("close-solid", size = 16.dp, tone = AkiTone.Muted) }
         }
         // While typing, a way out that does not need a search: closes the keyboard.
-        if (focused) AkiText("Done", AkiTextStyle.BodyStrong, Modifier.akiPress { focus.clearFocus() })
+        if (focused) AkiText("Done", AkiTextStyle.BodyStrong, Modifier.akiPress { focus.clearFocus() }.akiTouchTarget())
     }
 }
 
@@ -96,9 +110,12 @@ fun AkiField(
     secure: Boolean = false,
     email: Boolean = false,
     onSubmit: () -> Unit = {},
+    /** What is wrong with the field, in words that say what to do ("Enter an address that starts with https://"). Shown under it. */
+    errorMessage: String? = null,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         AkiText(label, AkiTextStyle.CaptionStrong, Modifier.padding(start = 18.dp), tone = AkiTone.Muted)
-        AkiInput(placeholder, text, onChange, secure = secure, email = email, onSubmit = onSubmit)
+        AkiInput(placeholder, text, onChange, secure = secure, email = email, onSubmit = onSubmit, label = label, errorMessage = errorMessage)
+        if (errorMessage != null) AkiText(errorMessage, AkiTextStyle.Caption, Modifier.padding(start = 18.dp), tone = AkiTone.Destructive)
     }
 }

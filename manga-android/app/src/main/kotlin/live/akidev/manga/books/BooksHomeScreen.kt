@@ -74,7 +74,7 @@ fun BooksHomeScreen() {
         if (loaded && books.isEmpty()) {
             item {
                 AkiEmptyState(
-                    "Your shelf is empty", "Add EPUB files from your device, or get books from a catalogue.", Modifier.heightIn(min = 340.dp),
+                    "Your library is empty", "Add EPUB files from your device, or download books from a catalogue.", Modifier.heightIn(min = 340.dp),
                     action = AkiAction("Add books") { app.tab = AppTab.Books; app.addingBook = true }, secondary = AkiAction("Find a catalogue") { app.tab = AppTab.Browse },
                 )
             }
@@ -105,12 +105,12 @@ fun BooksHomeScreen() {
             item {
                 AkiSection("Recent highlights") {
                     for (found in highlights.take(3)) AkiTap({ open(found) }) { HighlightCard(found) }
-                    AkiButton("All highlights", icon = "forward", fullWidth = true) { router.push(HighlightsRoute { open(it) }) }
+                    AkiButton("Show all highlights", icon = "forward", fullWidth = true) { router.push(HighlightsRoute { open(it) }) }
                 }
             }
         }
         item {
-            AkiSection("Catalogues", footer = "Get books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
+            AkiSection("Catalogues", footer = "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
                 for (catalogue in catalogues) {
                     AkiTap({ router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) { AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true) }
                 }
@@ -130,8 +130,8 @@ private fun ContinueCard(book: BookInfo, onClick: () -> Unit) {
                     AkiText("Continue reading", AkiTextStyle.Eyebrow, tone = AkiTone.Muted)
                     AkiText(book.title, AkiTextStyle.Heading, lines = 2)
                     book.authors.firstOrNull()?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1) }
-                    AkiProgressBar(book.progress)
-                    AkiText("${Math.round(book.progress * 100)}%", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiProgressBar(book.progress, label = null)
+                    AkiText(percent(book.progress), AkiTextStyle.Caption, tone = AkiTone.Muted, tabular = true)
                 }
             }
         }

@@ -8,13 +8,18 @@ struct AkiPagePlaceholder: View {
     var retry: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var label: String {
+        guard let number else { return failed ? "Try again. Could not load the page." : "Loading page" }
+        return failed ? "Try again. Could not load page \(number)." : "Loading page \(number)"
+    }
+
     var body: some View {
         ZStack {
             Aki.stageAlt
             if failed {
                 VStack(spacing: 10) {
                     AkiIcon("refresh", size: 22, tone: .onMedia)
-                    AkiText("Tap to try again", .captionStrong, tone: .onMedia)
+                    AkiText("Try again", .captionStrong, tone: .onMedia)
                 }
             } else {
                 shimmer
@@ -23,7 +28,10 @@ struct AkiPagePlaceholder: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { if failed { retry() } }
-        .accessibilityLabel(failed ? "Page failed to load. Tap to try again." : "Loading page")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(failed ? .isButton : [])
+        .accessibilityAction { if failed { retry() } }
     }
 
     /// A band of light crossing left to right, slow and faint, drawn 30 times a second (it is slow, and several can be on screen

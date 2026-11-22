@@ -113,7 +113,7 @@ final class ReaderModel {
     /// "Chapter 179 is missing from this source" when the chapter after this one skips ahead, else nil.
     func skippedNote(after id: String) -> String? {
         guard let this = chapter(id)?.number, let next = newer(than: id)?.number, let skipped = skippedChapters(from: this, to: next) else { return nil }
-        return skipped.count == 1 ? "Chapter \(skipped.lowerBound) is missing from this source" : "Chapters \(skipped.lowerBound) to \(skipped.upperBound) are missing from this source"
+        return skipped.count == 1 ? "Chapter \(skipped.lowerBound) is missing from this source" : "Chapters \(skipped.lowerBound)–\(skipped.upperBound) are missing from this source"
     }
 
     func label(_ chapter: ChapterEntry) -> String {
@@ -153,7 +153,7 @@ final class ReaderModel {
             latest = (chapterID, at, offset)
             prefetchNewer()
         } catch {
-            self.error = describe(error)
+            self.error = describe(error, "Could not load this chapter")
         }
     }
 

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
 
 /** A line in a card: a yellow icon tile, a title, a line under it, something on the right. */
 @Composable
@@ -25,7 +26,8 @@ fun AkiRow(
     showsChevron: Boolean = false,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
-    AkiCard(modifier) {
+    // One thing to a screen reader: "Title, line under it". A button in `trailing` stays a button of its own.
+    AkiCard(modifier.semantics(mergeDescendants = true) {}) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
                 Box(Modifier.size(46.dp).background(Aki.colors.primary, RoundedCornerShape(Aki.thumbRadius)), contentAlignment = Alignment.Center) {
@@ -33,8 +35,8 @@ fun AkiRow(
                 }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                AkiText(title, AkiTextStyle.Heading, lines = 1)
-                if (subtitle != null) AkiText(subtitle, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
+                AkiText(title, AkiTextStyle.Heading, lines = 2)
+                if (subtitle != null) AkiText(subtitle, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 2)
             }
             Spacer(Modifier.width(8.dp))
             trailing()

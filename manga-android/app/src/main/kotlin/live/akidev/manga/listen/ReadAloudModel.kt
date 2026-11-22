@@ -88,7 +88,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             installed = engine.voicesInstalled()
             if (installed.size == 1) prefs.voiceModel = model.id
         } catch (error: Exception) {
-            failure = describe(error)
+            failure = describe(error, "Could not download the voice")
         }
         progress.remove(model.id)
     }
@@ -117,7 +117,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             }.getOrNull()
         }
         hearing = null
-        if (heard == null) failure = Problem("That did not work", "The voice could not be played.") else play(heard.first, heard.second, voice?.id ?: "")
+        if (heard == null) failure = Problem("Could not play the voice", "Try again, or choose another voice.") else play(heard.first, heard.second, voice?.id ?: "")
     }
 
     /** Stops a sample that is playing. Called by the button, and when the screen is left. */
@@ -158,7 +158,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             installed = engine.voicesInstalled()
             return true
         } catch (error: Exception) {
-            failure = describe(error)
+            failure = describe(error, "Could not download the voice")
             return false
         } finally {
             fetching = fetching - voice.id
@@ -170,7 +170,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             engine.removeVoice(model.id)
             installed = engine.voicesInstalled()
         } catch (error: Exception) {
-            failure = describe(error)
+            failure = describe(error, "Could not remove the voice")
         }
     }
 

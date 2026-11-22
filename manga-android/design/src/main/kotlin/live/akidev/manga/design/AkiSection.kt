@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun AkiSection(title: String, modifier: Modifier = Modifier, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        AkiText(title, AkiTextStyle.Heading)
+        AkiText(title, AkiTextStyle.Heading, isHeading = true)
         content()
         if (footer != null) AkiText(footer, AkiTextStyle.Caption, tone = AkiTone.Muted)
     }

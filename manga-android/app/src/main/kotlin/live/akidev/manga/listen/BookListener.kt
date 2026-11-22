@@ -111,7 +111,7 @@ class BookListener(
             sampleRate = opened.sampleRate().toInt()
             begin()
         } catch (error: Exception) {
-            return stop(describe(error))
+            return stop(describe(error, "Could not read aloud"))
         }
         run(chapter, offset)
     }
@@ -317,7 +317,7 @@ class BookListener(
                     withContext(Dispatchers.Default) { voiceOfModel.speak(sentence.text, voice).toFloatArray() }
                 } catch (error: Exception) {
                     failures += 1
-                    if (failures >= 3 && mine == generation) stop(describe(error))
+                    if (failures >= 3 && mine == generation) stop(describe(error, "Could not read aloud"))
                     continue
                 }
                 failures = 0
@@ -361,7 +361,7 @@ class BookListener(
             sentences[chapter] = found
             found
         } catch (error: Exception) {
-            stop(describe(error))
+            stop(describe(error, "Could not read aloud"))
             null
         }
     }

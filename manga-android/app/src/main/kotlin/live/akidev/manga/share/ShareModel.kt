@@ -18,6 +18,7 @@ import live.akidev.manga.app.Problem
 import live.akidev.manga.app.Sharing
 import live.akidev.manga.app.describe
 import java.net.Inet4Address
+import uniffi.akimanga.MangaException
 import uniffi.akimanga.Share
 import uniffi.akimanga.ShareCode
 import uniffi.akimanga.ShareEvents
@@ -173,7 +174,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
             val text = opened.makeCode(info.address, info.ssid, info.password, null)
             if (text == null) {
                 hotspot.stop()
-                message = Problem("Temporary Wi-Fi", "This phone could not make a code for the temporary Wi-Fi.")
+                message = Problem("Could not start temporary Wi-Fi", "This phone could not make a code for it. Try again.")
             } else {
                 network = info
                 code = text
@@ -184,14 +185,14 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                 }
             }
         } catch (failure: NetworkProblem) {
-            message = Problem("Temporary Wi-Fi", failure.message.orEmpty())
+            message = Problem("Could not start temporary Wi-Fi", failure.message.orEmpty())
         }
         making = false
     }
 
     fun networkDenied() {
         val which = if (Build.VERSION.SDK_INT >= 33) "Nearby devices" else "Location"
-        message = Problem("Temporary Wi-Fi", "Allow $which for Akidev in Settings to make a temporary Wi-Fi.")
+        message = Problem("Could not start temporary Wi-Fi", "Allow $which for Akidev in the Android Settings app, then try again.")
     }
 
     /** Takes down the Wi-Fi this phone made, or leaves the one it joined, and goes back to the Wi-Fi code. */
@@ -227,7 +228,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                 if (code == null) {
                     badCode = text
                     badAt = now
-                    scanNote = "That is not an Akidev code"
+                    scanNote = "That is not an Akidev code. Ask them to show the code again."
                 } else {
                     reach(code, text)
                 }
@@ -269,8 +270,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
         if (peer == null) {
             joiner.leave()
             state = SendState.Failed(
-                if (code.peer != null) "That phone has no shared Wi-Fi with you. Tap “No shared Wi-Fi?” on this phone and ask them to scan your code."
-                else "Could not reach that phone.",
+                if (code.peer != null) "That phone has no shared Wi-Fi with you. Choose “Use a temporary Wi-Fi” on this phone and ask them to scan your code."
+                else "Could not reach that phone. Check that both phones are on the same Wi-Fi.",
             )
         } else {
             add(peer)
@@ -293,8 +294,8 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
             val ended = try {
                 when (now.run()) {
                     ShareOutcome.SENT -> SendState.Done(to).also { endNetwork() }
-                    ShareOutcome.DECLINED -> SendState.Failed("${to.alias} said no.")
-                    ShareOutcome.BUSY -> SendState.Failed("${to.alias} is busy right now.")
+                    ShareOutcome.DECLINED -> SendState.Failed("${to.alias} declined.")
+                    ShareOutcome.BUSY -> SendState.Failed("${to.alias} is busy. Try again in a moment.")
                     ShareOutcome.STOPPED -> SendState.Choosing
                 }
             } catch (failure: Exception) {
@@ -367,12 +368,12 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                 try {
                     app.engine.shareAddCard(pending.path)
                     app.refresh()
-                    received = "\"${pending.card.title}\" is in your library."
+                    received = "“${pending.card.title}” is in your library."
                 } catch (failure: Exception) {
                     val problem = describe(failure)
-                    if (problem.message.contains("could not reach")) {
+                    if (failure is MangaException.Offline || problem.message.contains("could not reach", ignoreCase = true)) {
                         // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
-                        message = Problem("Share", "Could not add the source: this phone needs the internet to download it. Connect to Wi-Fi or mobile data, then tap Add again.")
+                        message = Problem("Could not add the source", "This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again.")
                         retry = pending
                         return@launch
                     }
@@ -395,7 +396,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
     override fun ended(session: String, reason: String) {
         app.launch {
             // Saying no is the person's own doing; the rest is news.
-            if (incoming?.session == session && reason != "declined" && reason != "stopped on this phone") message = Problem("Share", "The send stopped: $reason.")
+            if (incoming?.session == session && reason != "declined" && reason != "stopped on this phone") message = Problem("Could not share", "Sending stopped: $reason.")
             if (incoming?.session == session) incoming = null
         }
     }

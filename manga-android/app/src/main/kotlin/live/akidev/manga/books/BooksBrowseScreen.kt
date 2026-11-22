@@ -63,7 +63,7 @@ class BookSearchAcross {
                     val answer = try {
                         // A catalogue says where it is searched on its first page.
                         address = engine.catalogueFeed(catalogue.url).search
-                        if (address == null) CatalogueAnswer.Failed("This catalogue cannot be searched.") else CatalogueAnswer.Done(engine.catalogueSearch(address, typed).items)
+                        if (address == null) CatalogueAnswer.Failed("This catalogue does not offer search.") else CatalogueAnswer.Done(engine.catalogueSearch(address, typed).items)
                     } catch (failure: Exception) {
                         CatalogueAnswer.Failed(describe(failure).message)
                     }
@@ -108,7 +108,7 @@ fun BooksBrowseScreen() {
                 item {
                     AkiSection("Catalogues") {
                         for (catalogue in catalogues) {
-                            val remove = AkiMenuItem("Remove", "trash", destructive = true) { runCatching { app.engine.removeCatalogue(catalogue.url) }; load() }
+                            val remove = AkiMenuItem("Remove catalogue", "trash", destructive = true) { runCatching { app.engine.removeCatalogue(catalogue.url) }; load() }
                             AkiTapMenu(listOf(remove), onClick = { router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) {
                                 AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true)
                             }
@@ -120,7 +120,7 @@ fun BooksBrowseScreen() {
     }
     if (adding) {
         AkiPrompt(
-            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add", { adding = false },
+            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add catalogue", { adding = false },
             onConfirm = { link ->
                 adding = false
                 scope.launch {
@@ -128,7 +128,7 @@ fun BooksBrowseScreen() {
                         app.engine.addCatalogue(link)
                         load()
                     } catch (failure: Exception) {
-                        problem = describe(failure)
+                        problem = describe(failure, "Could not add the catalogue")
                     }
                 }
             },
@@ -142,12 +142,12 @@ private fun LazyListScope.results(across: BookSearchAcross) {
     items(across.groups.size, key = { across.groups[it].url }) { index ->
         val group = across.groups[index]
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiText(group.name, AkiTextStyle.Heading)
+            AkiText(group.name, AkiTextStyle.Heading, isHeading = true)
             when (val answer = group.answer) {
                 CatalogueAnswer.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
                 is CatalogueAnswer.Failed -> AkiText(answer.message, AkiTextStyle.Caption, tone = AkiTone.Muted)
                 is CatalogueAnswer.Done -> {
-                    if (answer.items.isEmpty()) AkiText("Nothing found.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    if (answer.items.isEmpty()) AkiText("No books found.", AkiTextStyle.Caption, tone = AkiTone.Muted)
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { for (item in answer.items.take(8)) CatalogueItemRow(item, group.search) }
                 }
             }

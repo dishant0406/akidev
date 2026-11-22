@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -14,6 +13,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 class AkiOption<V>(val value: V, val label: String)
 
@@ -29,12 +32,13 @@ fun <V> AkiMenuPill(selection: V, onSelect: (V) -> Unit, options: List<AkiOption
     val items = options.map { option -> AkiMenuItem(option.label, "", isSelected = option.value == selection) { onSelect(option.value) } }
     AkiMenuPopup(open, { open = false }, items) {
         Row(
-            modifier.height(44.dp).akiGlass(AkiShapes.pill(44.dp)).akiPress(label = current) { open = true }.padding(horizontal = 16.dp),
+            modifier.heightIn(min = 44.dp).akiGlass(AkiShapes.pill(44.dp)).akiPress(label = current, role = Role.DropdownList) { open = true }
+                .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (icon != null) AkiIcon(icon, size = 14.dp, tone = AkiTone.Muted)
-            AkiText(current, AkiTextStyle.BodyStrong, lines = 1)
+            AkiText(current, AkiTextStyle.BodyStrong)
             AkiIcon("down", size = 11.dp, tone = AkiTone.Muted)
         }
     }
@@ -51,7 +55,9 @@ fun <V> AkiSelect(title: String, selection: V, onSelect: (V) -> Unit, options: L
             // A chip, so it reads as something to tap.
             AkiText(
                 options.firstOrNull { it.value == selection }?.label ?: "", AkiTextStyle.BodyStrong, lines = 1,
-                modifier = Modifier.akiPress(label = title) { open = true }.background(Aki.colors.secondary, AkiShapes.pill(36.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.akiPress(label = "$title, ${options.firstOrNull { it.value == selection }?.label ?: ""}", role = Role.DropdownList) { open = true }
+                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                    .heightIn(min = 36.dp).akiTouchTarget().background(Aki.colors.secondary, AkiShapes.pill(36.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
     }

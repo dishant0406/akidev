@@ -7,7 +7,7 @@ extension AppModel {
         let engine = engine
         let ext = url.pathExtension.lowercased()
         guard ["epub", "cbz", "zip"].contains(ext) else {
-            fileNotice = ("Akidev cannot open this file", "It reads EPUB books and CBZ comics.")
+            fileNotice = ("Could not open this file", "Akidev opens EPUB books and CBZ comics.")
             return
         }
         let scoped = url.startAccessingSecurityScopedResource()
@@ -16,7 +16,7 @@ extension AppModel {
         let copied = (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil && (try? FileManager.default.copyItem(at: url, to: copy)) != nil
         if scoped { url.stopAccessingSecurityScopedResource() }
         guard copied else {
-            fileNotice = ("That file could not be read", "Try opening it again.")
+            fileNotice = ("Could not read this file", "Check that the file is not damaged, then try opening it again.")
             return
         }
         Task {
@@ -29,9 +29,9 @@ extension AppModel {
                 } else {
                     _ = try await Task.detached { try engine.importFile(path: copy.path) }.value
                     refresh()
-                    fileNotice = ("Added to your library", "Find it under Saved.")
+                    fileNotice = ("Added to your library", "Find it in your library.")
                 }
-            } catch { fileNotice = describe(error) }
+            } catch { fileNotice = describe(error, "Could not open this file") }
         }
     }
 }

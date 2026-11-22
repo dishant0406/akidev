@@ -9,7 +9,7 @@ struct AkiShelf<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                AkiText(title, .heading, lines: 1)
+                AkiText(title, .heading, lines: 1).accessibilityAddTraits(.isHeader)
                 if let subtitle { AkiText(subtitle, .caption, tone: .muted, lines: 1) }
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -37,7 +37,7 @@ struct AkiPoster: View {
                 AkiText("\(rank)", .numeral, tone: .muted)
                     .frame(width: rank >= 10 ? 70 : 46, height: width * 1.5, alignment: .bottomTrailing)
                     .padding(.trailing, 4)
-                    .accessibilityHidden(true)
+                    .accessibilityLabel("Number \(rank)")
             }
             VStack(alignment: .leading, spacing: 8) {
                 AkiImage(url: cover, placeholder: 1.5, fill: true)
@@ -72,5 +72,7 @@ struct AkiBillboard: View {
         .frame(height: 440)
         .clipShape(RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Aki.cardRadius, style: .continuous))
+        // One element that reads the tag, the title and the action together.
+        .accessibilityElement(children: .combine)
     }
 }

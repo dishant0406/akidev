@@ -3,13 +3,14 @@ package live.akidev.manga.design
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 enum class AkiButtonVariant {
@@ -28,6 +29,8 @@ fun AkiButton(
     size: AkiButtonSize = AkiButtonSize.Regular,
     fullWidth: Boolean = false,
     enabled: Boolean = true,
+    /** What a screen reader says when the title alone is not enough ("Install Solo Leveling" for "Install"); it starts with the title. */
+    description: String? = null,
     onClick: () -> Unit,
 ) {
     val tone = when (variant) {
@@ -39,15 +42,15 @@ fun AkiButton(
     Row(
         modifier
             .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .height(size.height)
+            .heightIn(min = size.height)
             .then(face)
             .alpha(if (enabled) 1f else 0.5f)
-            .akiPress(label = title, enabled = enabled, onClick = onClick)
+            .akiPress(label = description ?: title, enabled = enabled, onClick = onClick)
             .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) AkiIcon(icon, size = 15.dp, tone = tone)
-        AkiText(title, AkiTextStyle.BodyStrong, tone = tone, lines = 1)
+        AkiText(title, AkiTextStyle.BodyStrong, tone = tone, align = TextAlign.Center)
     }
 }

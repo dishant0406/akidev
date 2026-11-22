@@ -37,7 +37,9 @@ import kotlin.math.sin
 @Composable
 fun AkiAurora(modifier: Modifier = Modifier) {
     val colors = Aki.colors
-    val time by produceState(0f) { while (true) androidx.compose.runtime.withFrameNanos { value = it / 1_000_000_000f } }
+    // With animations turned off in the phone's settings the light stays still.
+    val still = akiReduceMotion()
+    val time by produceState(0f, still) { while (!still) androidx.compose.runtime.withFrameNanos { value = it / 1_000_000_000f } }
     Canvas(modifier.fillMaxSize().background(colors.background)) {
         fun glow(color: Color, size: Float, x: Float, y: Float) {
             val center = Offset(this.size.width / 2 + x * density, this.size.height / 2 + y * density)
@@ -54,17 +56,18 @@ enum class AkiChoiceState { Rest, Chosen, Passed }
 /** One of two big choices, as a tall glass card with a drawing on top. The chosen one fills with yellow and the other steps back. */
 @Composable
 fun AkiChoiceCard(title: String, detail: String, state: AkiChoiceState, onClick: () -> Unit, modifier: Modifier = Modifier, art: @Composable () -> Unit) {
-    val scale by animateFloatAsState(when (state) { AkiChoiceState.Chosen -> 1.03f; AkiChoiceState.Passed -> 0.95f; else -> 1f }, AkiMotion.settle(), label = "scale")
+    val still = akiReduceMotion()
+    val scale by animateFloatAsState(if (still) 1f else when (state) { AkiChoiceState.Chosen -> 1.03f; AkiChoiceState.Passed -> 0.95f; else -> 1f }, AkiMotion.settle(), label = "scale")
     val fade by animateFloatAsState(if (state == AkiChoiceState.Passed) 0.4f else 1f, label = "fade")
     val chosen = state == AkiChoiceState.Chosen
     Column(
-        modifier.scale(scale).alpha(fade).akiGlass(AkiShapes.card, tint = if (chosen) Aki.colors.primary else null).akiPress(label = title, onClick = onClick).padding(16.dp),
+        modifier.scale(scale).alpha(fade).akiGlass(AkiShapes.card, tint = if (chosen) Aki.colors.primary else null).akiPress(selected = state == AkiChoiceState.Chosen, onClick = onClick).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) { art() }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            AkiText(title, AkiTextStyle.Heading, tone = if (chosen) AkiTone.OnPrimary else AkiTone.Text, lines = 2, reserves = true)
-            AkiText(detail, AkiTextStyle.Caption, tone = if (chosen) AkiTone.OnPrimary else AkiTone.Muted, lines = 3, reserves = true)
+            AkiText(title, AkiTextStyle.Heading, tone = if (chosen) AkiTone.OnPrimary else AkiTone.Text)
+            AkiText(detail, AkiTextStyle.Caption, tone = if (chosen) AkiTone.OnPrimary else AkiTone.Muted)
         }
     }
 }

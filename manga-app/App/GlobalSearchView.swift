@@ -55,14 +55,14 @@ struct GlobalSearchResults: View {
         VStack(alignment: .leading, spacing: 22) {
             ForEach(model.groups) { group in
                 VStack(alignment: .leading, spacing: 10) {
-                    AkiText(group.source.name, .heading)
+                    AkiText(group.source.name, .heading).accessibilityAddTraits(.isHeader)
                     switch group.state {
                     case .loading:
                         AkiSpinner().frame(maxWidth: .infinity, minHeight: 60)
                     case .failed(let message):
                         AkiCard(padding: 14) { AkiText(message, .caption, tone: .muted, lines: 3) }
                     case .done(let cards) where cards.isEmpty:
-                        AkiText("No results here", .caption, tone: .muted)
+                        AkiText("No results in this source.", .caption, tone: .muted)
                     case .done(let cards):
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 14) {

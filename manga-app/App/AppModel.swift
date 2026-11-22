@@ -256,16 +256,16 @@ struct PendingRepo: Identifiable {
     var id: String { address }
 }
 
-/// What a screen needs to say about a failed call.
-func describe(_ error: Error) -> (title: String, message: String) {
+/// What a screen needs to say about a failed call. `failed` names what did not work, in plain words; the message says why.
+func describe(_ error: Error, _ failed: String = "Could not load this screen") -> (title: String, message: String) {
     if let error = error as? MangaError {
         switch error {
-        case .Challenge(let url, _): return ("This site checks visitors first", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Akidev has no browser to pass it in. Try another source, or read this one through a Suwayomi or Komga server you run.")
-        case .Offline(let url, _): return ("No connection", "Could not reach \(URL(string: url)?.host ?? url). Check your network and try again.")
-        case .Failed(let message): return ("That did not work", message)
+        case .Challenge(let url, _): return ("This site needs a browser check", "\(URL(string: url)?.host ?? url) asks for a browser check before it answers, and Akidev cannot pass it. Try another source, or read this one through a Suwayomi or Komga server you run.")
+        case .Offline(let url, _): return ("Could not reach the site", "\(URL(string: url)?.host ?? url) did not answer. Check your connection and try again.")
+        case .Failed(let message): return (failed, message)
         }
     }
-    return ("That did not work", error.localizedDescription)
+    return (failed, error.localizedDescription)
 }
 
 /// A series being opened: the source it comes from and its id.

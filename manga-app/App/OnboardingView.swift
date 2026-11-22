@@ -19,20 +19,20 @@ struct OnboardingView: View {
                         .shadow(color: Aki.shadow, radius: 18, y: 8)
                     VStack(spacing: 10) {
                         AkiText("What do you read?", .display, align: .center)
-                        AkiText("Akidev reads manga and books, both always here. Pick what comes first.", .body, tone: .muted, align: .center)
+                        AkiText("Akidev has manga and books. Choose which one comes first.", .body, tone: .muted, align: .center)
                     }
                 }
-                .reveal(shown, delay: 0)
+                .reveal(shown, delay: 0, reduceMotion: reduceMotion)
                 AkiGlassGroup(spacing: 14) {
                     HStack(alignment: .top, spacing: 14) {
-                        card(.manga, detail: "Follow series from your sources, with new chapter alerts.") { AkiMangaArt() }
-                            .reveal(shown, delay: 0.12)
-                        card(.books, detail: "EPUB books from your files or a catalogue, with your place kept.") { AkiBooksArt() }
-                            .reveal(shown, delay: 0.22)
+                        card(.manga, detail: "Follow series from your sources and get alerts for new chapters.") { AkiMangaArt() }
+                            .reveal(shown, delay: 0.12, reduceMotion: reduceMotion)
+                        card(.books, detail: "Read EPUB books from your files or a catalogue. Akidev keeps your place.") { AkiBooksArt() }
+                            .reveal(shown, delay: 0.22, reduceMotion: reduceMotion)
                     }
                 }
-                AkiText("You can change this any time in Settings.", .caption, tone: .muted, align: .center)
-                    .reveal(shown, delay: 0.32)
+                AkiText("You can change this at any time in Settings.", .caption, tone: .muted, align: .center)
+                    .reveal(shown, delay: 0.32, reduceMotion: reduceMotion)
                 Spacer(minLength: 20)
             }
             .padding(.horizontal, 20)
@@ -59,10 +59,10 @@ struct OnboardingView: View {
 }
 
 private extension View {
-    /// Comes up from below and fades in, a moment after the one before.
-    func reveal(_ shown: Bool, delay: Double) -> some View {
+    /// Comes up from below and fades in, a moment after the one before. With Reduce Motion it only fades.
+    func reveal(_ shown: Bool, delay: Double, reduceMotion: Bool) -> some View {
         opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 24)
+            .offset(y: shown || reduceMotion ? 0 : 24)
             .animation(.spring(duration: 0.7, bounce: 0.12).delay(delay), value: shown)
     }
 }

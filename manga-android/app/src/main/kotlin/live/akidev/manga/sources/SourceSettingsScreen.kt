@@ -34,7 +34,7 @@ fun SourceSettingsScreen(source: String) {
         item { AkiBackHeader(model.name(source), back = router::back, subtitle = "Settings") }
         if (info?.hasSignIn == true) item {
             if (info.signedIn) {
-                AkiRow(signedInAs ?: "Signed in", subtitle = "Signed in") {
+                AkiRow(signedInAs ?: "Account", subtitle = "Signed in") {
                     AkiButton("Sign out", size = AkiButtonSize.Small) { scope.launch { runCatching { model.engine.signOut(source) }; model.refresh() } }
                 }
             } else {
@@ -54,11 +54,11 @@ fun SourceSettingsScreen(source: String) {
                 }, setting.options.map { AkiOption(it.value, it.name) })
             }
         }
-        item { AkiButton("Remove this source", Modifier.padding(top = 8.dp), icon = "trash", variant = AkiButtonVariant.Destructive, fullWidth = true) { removing = true } }
+        item { AkiButton("Remove source", Modifier.padding(top = 8.dp), icon = "trash", variant = AkiButtonVariant.Destructive, fullWidth = true) { removing = true } }
     }
     if (signingIn) SignInSheet(source) { signingIn = false }
     if (removing) {
-        AkiConfirm("Remove ${model.name(source)}?", "Its saved series stay in your library but cannot be read until you install it again.", "Remove", { removing = false }) {
+        AkiConfirm("Remove “${model.name(source)}”?", "Its series stay in your library but cannot be read until you install it again.", "Remove source", { removing = false }) {
             model.engine.removeSource(source)
             model.refresh()
             router.back()

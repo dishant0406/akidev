@@ -170,7 +170,7 @@ final class ShareModel {
             // Where the screen goes if this fails: the scanner stays open, unless a temporary Wi-Fi was joined.
             var back = Step.scanning
             guard let found = try? share.readCode(code: code) else {
-                codeNote = "That is not an Akidev code"
+                codeNote = "That is not an Akidev code. Ask them to show the code again."
                 step = back
                 return
             }
@@ -178,7 +178,7 @@ final class ShareModel {
                 back = .choosing
                 step = .joining
                 do { try await WifiJoin.join(ssid: ssid, password: password) } catch {
-                    problem = "Could not join their Wi-Fi."
+                    problem = "Could not join their Wi-Fi. Try again."
                     step = back
                     return
                 }
@@ -189,9 +189,9 @@ final class ShareModel {
             guard let peer = await reach(found, code: code, share: share) else {
                 if joined != nil {
                     endNetwork()
-                    problem = "Could not reach that phone."
+                    problem = "Could not reach that phone. Check that both phones are on the same Wi-Fi."
                 } else {
-                    codeNote = found.peer == nil ? "Could not reach that phone" : "Could not reach that phone. Switch Wi-Fi on for both phones; it does not need to be connected."
+                    codeNote = found.peer == nil ? "Could not reach that phone. Try again." : "Could not reach that phone. Turn Wi-Fi on for both phones. It does not need to be connected to a network."
                 }
                 step = back
                 return
@@ -335,7 +335,7 @@ final class ShareModel {
         case .receiving: wasReceiving = true
         }
         incoming = .none
-        if wasReceiving, reason != "declined", reason != "stopped on this phone" { problem = "The send stopped: \(reason)." }
+        if wasReceiving, reason != "declined", reason != "stopped on this phone" { problem = "Sending stopped: \(reason)." }
     }
 
     /// Puts each arrived file where it belongs. A series from a source that is new here waits for a yes first.
@@ -363,10 +363,10 @@ final class ShareModel {
         switch file.kind {
         case "book":
             let title = try await Task.detached { try engine.importBook(path: file.path).title }.value
-            return "\"\(title)\" is on your shelf."
+            return "“\(title)” is in your library."
         case "comic":
             _ = try await Task.detached { try engine.importFile(path: file.path) }.value
-            return "\"\(file.name)\" is in your library."
+            return "“\(file.name)” is in your library."
         case "card":
             let card = try engine.shareReadCard(path: file.path)
             guard card.installed else {
@@ -374,7 +374,7 @@ final class ShareModel {
                 return nil
             }
             try await engine.shareAddCard(path: file.path)
-            return "\"\(card.title)\" is in your library."
+            return "“\(card.title)” is in your library."
         default:
             return nil
         }
@@ -392,13 +392,13 @@ final class ShareModel {
             if accept {
                 do {
                     try await engine.shareAddCard(path: pending.path)
-                    added.append("\"\(pending.card.title)\" is in your library.")
+                    added.append("“\(pending.card.title)” is in your library.")
                     app?.refresh()
                 } catch {
                     let reason = describe(error).message
-                    if reason.contains("could not reach") {
+                    if case MangaError.Offline = error {
                         // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
-                        problem = "Could not add the source: this phone needs the internet to download it. Connect to Wi-Fi or mobile data, then tap Add again."
+                        problem = "Could not add the source. This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
                         retry = pending
                     } else {
                         problem = reason

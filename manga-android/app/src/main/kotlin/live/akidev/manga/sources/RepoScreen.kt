@@ -73,7 +73,7 @@ fun RepoScreen(repo: RepoInfo) {
                 }
                 item {
                     AkiText(
-                        if (loaded.info.signed) "This repository signs its index, so the app notices if it ever changes hands." else "This repository is not signed. You are trusting its address.",
+                        if (loaded.info.signed) "This repository is signed, so the app notices if it changes hands." else "This repository is not signed. You are trusting its address.",
                         AkiTextStyle.Caption, tone = AkiTone.Muted,
                     )
                 }
@@ -85,12 +85,12 @@ fun RepoScreen(repo: RepoInfo) {
 @Composable
 private fun RepoAction(source: RepoSource, installing: Boolean, onInstall: () -> Unit) {
     if (installing) {
-        AkiSpinner()
+        AkiSpinner(label = "Installing ${source.name}")
         return
     }
     when (source.state) {
-        SourceState.NOT_INSTALLED -> AkiButton("Install", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, onClick = onInstall)
-        SourceState.UPDATE_AVAILABLE -> AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, onClick = onInstall)
+        SourceState.NOT_INSTALLED -> AkiButton("Install", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Install ${source.name}", onClick = onInstall)
+        SourceState.UPDATE_AVAILABLE -> AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Update ${source.name}", onClick = onInstall)
         SourceState.INSTALLED -> AkiBadge("Installed", icon = "tick")
         SourceState.NEEDS_NEWER_APP -> AkiBadge("Needs a newer app")
     }

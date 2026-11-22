@@ -40,6 +40,9 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 
 /** One row of a menu: its icon (a tick when it is the chosen one, a blank when the icon is empty) and its title. */
 class AkiMenuItem(val title: String, val icon: String, val destructive: Boolean = false, val isSelected: Boolean = false, val onClick: () -> Unit)
@@ -79,11 +82,13 @@ fun AkiMenuList(items: List<AkiMenuItem>, onClose: () -> Unit, modifier: Modifie
 fun AkiMenuRows(items: List<AkiMenuItem>, onClose: () -> Unit = {}) {
     // Rows line up: when any row has an icon or a tick, every row keeps room for one.
     val room = items.any { it.isSelected || it.icon.isNotEmpty() }
+    // A menu of choices tells a screen reader which one is chosen.
+    val picks = items.any { it.isSelected }
     Column(Modifier.verticalScroll(rememberScrollState())) {
         for (item in items) {
             val tone = if (item.destructive) AkiTone.Destructive else AkiTone.Text
             Row(
-                Modifier.fillMaxWidth().akiPress(label = item.title) { onClose(); item.onClick() }.padding(horizontal = 22.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().akiPress(label = item.title, selected = if (picks) item.isSelected else null) { onClose(); item.onClick() }.heightIn(min = 48.dp).padding(horizontal = 22.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -91,7 +96,7 @@ fun AkiMenuRows(items: List<AkiMenuItem>, onClose: () -> Unit = {}) {
                     val symbol = if (item.isSelected) "tick" else item.icon
                     if (symbol.isEmpty()) Box(Modifier.size(18.dp)) else AkiIcon(symbol, size = 18.dp, tone = tone)
                 }
-                AkiText(item.title, AkiTextStyle.Body, tone = tone, lines = 1)
+                AkiText(item.title, AkiTextStyle.Body, tone = tone)
             }
         }
     }
@@ -107,13 +112,15 @@ fun AkiMenuLayer(menus: AkiMenus) {
     menus.shown?.let { last = it }
     val menu = last ?: return
     val visible = menus.shown != null
+    val still = akiReduceMotion()
+    BackHandler(enabled = visible) { menus.shown?.onClose?.invoke() }
     Box(
         Modifier.fillMaxSize().then(if (visible) Modifier.pointerInput(Unit) { detectTapGestures { menus.shown?.onClose?.invoke() } } else Modifier),
     ) {
         AnimatedVisibility(
             visible,
-            enter = fadeIn(tween(120)) + scaleIn(tween(180), initialScale = 0.85f, transformOrigin = TransformOrigin(0f, 0f)),
-            exit = fadeOut(tween(100)) + scaleOut(tween(100), targetScale = 0.9f, transformOrigin = TransformOrigin(0f, 0f)),
+            enter = fadeIn(tween(120)) + if (still) EnterTransition.None else scaleIn(tween(180), initialScale = 0.85f, transformOrigin = TransformOrigin(0f, 0f)),
+            exit = fadeOut(tween(100)) + if (still) ExitTransition.None else scaleOut(tween(100), targetScale = 0.9f, transformOrigin = TransformOrigin(0f, 0f)),
         ) {
             AkiMenuList(
                 menu.items, { menus.shown?.onClose?.invoke() },

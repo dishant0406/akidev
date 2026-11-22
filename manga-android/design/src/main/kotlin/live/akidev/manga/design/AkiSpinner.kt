@@ -22,23 +22,32 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 
-/** A quarter-circle that turns: waiting for something. */
+/** A quarter-circle that turns: waiting for something. A screen reader says `label`; pass null when text beside it already says what is loading. */
 @Composable
-fun AkiSpinner(modifier: Modifier = Modifier) {
+fun AkiSpinner(modifier: Modifier = Modifier, label: String? = "Loading") {
     val color = Aki.colors.textMuted
     val turn by rememberInfiniteTransition(label = "spinner").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "turn")
-    Canvas(modifier.size(24.dp)) {
+    Canvas(modifier.size(24.dp).then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)) {
         val width = 2.5.dp.toPx()
         drawArc(color, turn, 270f, false, Offset(width / 2, width / 2), Size(size.width - width, size.height - width), style = Stroke(width, cap = StrokeCap.Round))
     }
 }
 
-/** A bar that fills: a download. */
+/** A bar that fills: a download. A screen reader says `label` and the percentage. */
 @Composable
-fun AkiProgressBar(fraction: Double, modifier: Modifier = Modifier) {
+fun AkiProgressBar(fraction: Double, modifier: Modifier = Modifier, label: String? = "Progress") {
     val colors = Aki.colors
-    Box(modifier.fillMaxWidth().height(6.dp).background(colors.secondary, CircleShape)) {
+    Box(
+        modifier.fillMaxWidth().height(6.dp).background(colors.secondary, CircleShape).semantics {
+            if (label != null) contentDescription = label
+            progressBarRangeInfo = ProgressBarRangeInfo(fraction.coerceIn(0.0, 1.0).toFloat(), 0f..1f)
+        },
+    ) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0.0, 1.0).toFloat()).background(colors.primary, CircleShape))
     }
 }

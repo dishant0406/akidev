@@ -17,7 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -94,7 +98,8 @@ private fun ContinuePage(reader: ReaderModel, next: uniffi.akimanga.ChapterEntry
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically)) {
             if (error != null) {
-                AkiText(error.title, AkiTextStyle.Title, tone = AkiTone.OnMedia)
+                AkiText(error.title, AkiTextStyle.Title, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, tone = AkiTone.OnMedia)
+                AkiText(error.message, AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
                 AkiButton("Try again", variant = AkiButtonVariant.Primary) { scope.launch { reader.open(next.id, 0, 0.0) } }
             } else {
                 AkiText(reader.label(next), AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
@@ -116,7 +121,7 @@ private fun EndPage(reader: ReaderModel, segment: Segment) {
             if (next != null) {
                 AkiButton("Next · ${reader.label(next)}", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large) { scope.launch { reader.open(next.id, 0, 0.0) } }
             } else {
-                AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia)
+                AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
             }
             AkiButton("Back to the series") { router.back() }
         }

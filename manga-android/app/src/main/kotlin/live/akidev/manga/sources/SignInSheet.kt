@@ -16,6 +16,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.LocalApp
@@ -56,15 +60,17 @@ fun SignInSheet(source: String, onSignedIn: () -> Unit = {}, onDismiss: () -> Un
         Column(Modifier.imePadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AkiLogo(size = 36.dp)
-                AkiText("Sign in to ${model.name(source)}", AkiTextStyle.Title)
+                AkiText("Sign in to ${model.name(source)}", AkiTextStyle.Title, Modifier.semantics { heading() })
             }
             if (form != null) {
                 form.fields.forEach { field ->
                     AkiField(field.name, values[field.id].orEmpty(), { values[field.id] = it; problem = null }, secure = field.secret, email = field.id.contains("email"), onSubmit = ::signIn)
                 }
-                problem?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Destructive) }
+                problem?.let { AkiText(it, AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive) }
                 AkiButton(if (working) "Signing in…" else "Sign in", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = ready && !working) { signIn() }
-                AkiText("Sent to ${form.host} only. Akidev keeps a session, not your password.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiText("Your details go to ${form.host} only. Akidev keeps a session, not your password.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+            } else {
+                AkiText("Could not load the sign-in form. Close this and try again.", AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive)
             }
             AkiButton("Cancel", variant = AkiButtonVariant.Ghost, fullWidth = true) { onDismiss() }
         }

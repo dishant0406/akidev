@@ -25,11 +25,11 @@ struct MigrateSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    AkiText("Move to another source", .title)
-                    AkiText("Find “\(ref.title)” on another source. Its shelves and the chapters you read go with it.", .caption, tone: .muted)
+                    AkiText("Move to another source", .title).accessibilityAddTraits(.isHeader)
+                    AkiText("Find “\(ref.title)” on another source. Its categories and your reading progress move with it.", .caption, tone: .muted)
                 }
                 if others.isEmpty {
-                    AkiEmptyState(title: "No other source", message: "Install another source that can search, then come back.").frame(minHeight: 260)
+                    AkiEmptyState(title: "No other source to move to", message: "Install another source that can search, then come back.").frame(minHeight: 260)
                 } else {
                     AkiMenuPill(icon: "sources", selection: $target, options: others.map { ($0.id, $0.name) })
                     AkiInput(placeholder: "Search \(model.name(of: target))", text: $term, icon: "search", onSubmit: { Task { await search() } })
@@ -42,10 +42,10 @@ struct MigrateSheet: View {
         .onAppear { term = ref.title; if target.isEmpty { target = others.first?.id ?? "" } }
         // Opening the sheet, and choosing another source, each look for the title straight away.
         .task(id: target) { if !target.isEmpty { await search() } }
-        .akiConfirm("Move to “\(chosen?.title ?? "")”?", message: "It leaves \(model.name(of: ref.source)) and moves to \(model.name(of: target)); your shelves and read chapters carry over.", confirm: "Move", isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } })) {
+        .akiConfirm("Move “\(ref.title)” to \(model.name(of: target))?", message: "The series leaves \(model.name(of: ref.source)) and moves to \(model.name(of: target)). Your categories and reading progress move with it.", confirm: "Move series", isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } })) {
             if let chosen { Task { await move(to: chosen) } }
         }
-        .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiAlert("Could not move the series", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
     }
 
     @ViewBuilder private func results(for source: String) -> some View {
@@ -56,7 +56,7 @@ struct MigrateSheet: View {
         } else if results.isEmpty {
             AkiEmptyState(title: "Nothing found", message: "\(model.name(of: source)) has nothing called “\(term)”. Try a shorter title, or another source.").frame(minHeight: 240)
         } else {
-            AkiText("Tap the one that is the same series", .captionStrong, tone: .muted)
+            AkiText("Choose the matching series", .captionStrong, tone: .muted)
             LazyVStack(spacing: 12) {
                 ForEach(results, id: \.id) { card in
                     AkiTap(action: { chosen = card }) {
@@ -82,7 +82,7 @@ struct MigrateSheet: View {
             results = found
         } catch {
             guard asked == target else { return }
-            failure = describe(error)
+            failure = describe(error, "Could not search this source")
         }
         searching = false
     }

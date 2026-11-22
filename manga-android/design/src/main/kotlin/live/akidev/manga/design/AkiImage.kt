@@ -18,6 +18,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 
 /**
  * A picture from an address, with the headers its source needs, decoded at the size it is shown. Until it arrives (and for ever when
@@ -36,6 +40,8 @@ fun AkiImage(
     onAspect: ((Float) -> Unit)? = null,
     /** A reader page: a placeholder with its number and a way to retry, instead of the plain block. */
     pageNumber: Int? = null,
+    /** What a screen reader says about the picture. Leave it null when the title is written next to it: then the picture is decoration. */
+    description: String? = null,
 ) {
     var widthPx by remember { mutableStateOf(0) }
     var failed by remember { mutableStateOf(false) }
@@ -60,7 +66,8 @@ fun AkiImage(
         bitmap != null -> Modifier.aspectRatio(bitmap.width.toFloat() / bitmap.height)
         else -> Modifier.aspectRatio(1f / placeholder)
     }
-    Box(modifier.then(shape).clipToBounds().onSizeChanged { widthPx = it.width }.background(Aki.colors.secondary), contentAlignment = Alignment.Center) {
+    val named = if (description != null) Modifier.semantics { contentDescription = description; role = Role.Image } else Modifier
+    Box(modifier.then(shape).then(named).clipToBounds().onSizeChanged { widthPx = it.width }.background(Aki.colors.secondary), contentAlignment = Alignment.Center) {
         if (pageNumber != null && bitmap == null) AkiPagePlaceholder(pageNumber + 1, failed) { attempt += 1 }
         Crossfade(bitmap, label = "picture") { shown ->
             if (shown != null) {

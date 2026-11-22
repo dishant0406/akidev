@@ -79,7 +79,7 @@ final class BookListener {
             self.speaker = speaker
             try begin(sampleRate: Double(speaker.sampleRate()))
         } catch {
-            return stop(failure: describe(error))
+            return stop(failure: describe(error, "Could not read aloud"))
         }
         run(chapter: chapter, offset: offset)
     }
@@ -117,7 +117,7 @@ final class BookListener {
     /// Reads the book again from its first chapter.
     private func startOver() {
         guard let first = chapter(after: -1) else { return stop() }
-        do { try startAudio() } catch { return stop(failure: describe(error)) }
+        do { try startAudio() } catch { return stop(failure: describe(error, "Could not read aloud")) }
         run(chapter: first, offset: 0)
     }
 
@@ -209,7 +209,7 @@ final class BookListener {
     }
 
     private func restart(at span: BookSpan) {
-        do { try startAudio() } catch { return stop(failure: describe(error)) }
+        do { try startAudio() } catch { return stop(failure: describe(error, "Could not read aloud")) }
         run(chapter: span.chapter, offset: span.start)
     }
 
@@ -248,7 +248,7 @@ final class BookListener {
                     samples = try await Task.detached(priority: .userInitiated) { try speaker.speak(text: text, voice: voice) }.value
                 } catch {
                     failures += 1
-                    if failures >= 3, mine == generation { stop(failure: describe(error)) }
+                    if failures >= 3, mine == generation { stop(failure: describe(error, "Could not read aloud")) }
                     continue
                 }
                 failures = 0
@@ -312,7 +312,7 @@ final class BookListener {
             sentences[chapter] = found
             return found
         } catch {
-            stop(failure: describe(error))
+            stop(failure: describe(error, "Could not read aloud"))
             return nil
         }
     }

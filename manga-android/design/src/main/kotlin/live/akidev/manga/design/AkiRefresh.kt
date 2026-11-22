@@ -33,6 +33,12 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.min
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 
 private enum class Phase { Idle, Loading, Done }
 
@@ -97,7 +103,8 @@ fun AkiRefreshable(onRefresh: suspend () -> Unit, modifier: Modifier = Modifier,
         }
     }
 
-    Box(modifier.nestedScroll(connection)) {
+    // Pulling down is a gesture a screen reader cannot make, so "Refresh" is also an action in its actions menu.
+    Box(modifier.nestedScroll(connection).semantics { customActions = listOf(CustomAccessibilityAction("Refresh") { if (phase == Phase.Idle) start(); true }) }) {
         content()
         Bead(pull.value, line, phase, turn.floatValue, Modifier.align(Alignment.TopCenter))
     }
@@ -114,7 +121,9 @@ private fun Bead(pull: Float, line: Float, phase: Phase, turn: Float, modifier: 
         modifier.statusBarsPadding().offset { androidx.compose.ui.unit.IntOffset(0, drop.toInt()) }
             .alpha(if (phase == Phase.Idle) min(pull / with(density) { 36.dp.toPx() }, 1f) else 1f)
             .scale(if (phase == Phase.Idle) 0.55f + 0.45f * progress else 1f)
-            .size(46.dp).akiGlass(AkiShapes.pill(46.dp)),
+            .size(46.dp).akiGlass(AkiShapes.pill(46.dp))
+            // While it runs, and when it is done, a screen reader says so.
+            .then(if (phase == Phase.Idle) Modifier else Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = if (phase == Phase.Loading) "Refreshing" else "Refreshed" }),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(28.dp)) {

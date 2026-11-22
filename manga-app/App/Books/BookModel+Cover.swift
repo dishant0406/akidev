@@ -27,19 +27,19 @@ extension BookModel {
     func useCurrentPageAsCover() async {
         let picture = await pictureOfPage()
         guard let image = picture ?? pageImage(), let jpeg = coverJPEG(image, width: 600, centre: picture == nil ? 0.5 : 0) else {
-            return failure = ("The cover was not changed", "This page could not be made into a cover.")
+            return failure = ("Could not change the cover", "This page could not be used as a cover. Try another page.")
         }
         setCover(jpeg)
     }
 
     private func setCover(_ jpeg: Data) {
-        do { try engine.setBookCustomCover(id: info.id, jpeg: jpeg) } catch { return failure = describe(error) }
+        do { try engine.setBookCustomCover(id: info.id, jpeg: jpeg) } catch { return failure = describe(error, "Could not change the cover") }
         reloadInfo()
     }
 
     /// Goes back to the cover the book came with.
     func useOwnCover() {
-        do { try engine.clearBookCustomCover(id: info.id) } catch { return failure = describe(error) }
+        do { try engine.clearBookCustomCover(id: info.id) } catch { return failure = describe(error, "Could not change the cover") }
         reloadInfo()
     }
 

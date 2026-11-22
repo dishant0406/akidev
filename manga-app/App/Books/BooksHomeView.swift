@@ -27,7 +27,7 @@ struct BooksHomeView: View {
                         AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { model.tab = .books; model.addingBook = true }
                     }
                     if loaded && books.isEmpty {
-                        AkiEmptyState(title: "Your shelf is empty", message: "Add EPUB files from your device, or get books from a catalogue.", action: ("Add books", { model.tab = .books; model.addingBook = true }), secondary: ("Find a catalogue", { model.tab = .browse })).frame(minHeight: 340)
+                        AkiEmptyState(title: "Your library is empty", message: "Add EPUB files from your device, or download books from a catalogue.", action: ("Add books", { model.tab = .books; model.addingBook = true }), secondary: ("Find a catalogue", { model.tab = .browse })).frame(minHeight: 340)
                     }
                     if let current { continueCard(current) }
                     if !unread.isEmpty {
@@ -45,7 +45,7 @@ struct BooksHomeView: View {
                             ForEach(highlights.prefix(3), id: \.highlight.id) { found in
                                 AkiTap(action: { open(found) }) { highlightCard(found) }
                             }
-                            AkiLink(value: HighlightsRoute()) { AkiButton("All highlights", icon: "forward", fullWidth: true, action: {}).allowsHitTesting(false) }
+                            AkiLink(value: HighlightsRoute()) { AkiButton("Show all highlights", icon: "forward", fullWidth: true, action: {}).allowsHitTesting(false) }
                         }
                     }
                     catalogueSection
@@ -74,7 +74,7 @@ struct BooksHomeView: View {
                         AkiText(book.title, .heading, lines: 2)
                         if let author = book.authors.first { AkiText(author, .caption, tone: .muted, lines: 1) }
                         AkiProgressBar(fraction: book.progress)
-                        AkiText("\(Int((book.progress * 100).rounded()))%", .caption, tone: .muted)
+                        AkiText(bookPercent(book.progress), .caption, tone: .muted, digits: true)
                     }
                     Spacer(minLength: 0)
                 }
@@ -106,11 +106,11 @@ struct BooksHomeView: View {
 
     private func progressLine(_ book: BookInfo) -> String {
         if book.finished { return "Finished" }
-        return book.openedMs == nil ? "New" : "\(Int((book.progress * 100).rounded()))%"
+        return book.openedMs == nil ? "New" : bookPercent(book.progress)
     }
 
     @ViewBuilder private var catalogueSection: some View {
-        AkiSection(title: "Catalogues", footer: "Get books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
+        AkiSection(title: "Catalogues", footer: "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
             ForEach(catalogues, id: \.url) { catalogue in
                 AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
                     AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)

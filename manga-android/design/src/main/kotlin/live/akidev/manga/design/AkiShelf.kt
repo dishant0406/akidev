@@ -20,13 +20,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 
 /** A titled row of cards that scrolls sideways: one "shelf" of the home feed. */
 @Composable
 fun AkiShelf(title: String, modifier: Modifier = Modifier, subtitle: String? = null, content: LazyListScope.() -> Unit) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AkiText(title, AkiTextStyle.Heading, lines = 1)
+            AkiText(title, AkiTextStyle.Heading, lines = 1, isHeading = true)
             if (subtitle != null) AkiText(subtitle, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
         }
         LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), content = content)
@@ -39,7 +42,8 @@ fun AkiPoster(title: String, cover: String?, modifier: Modifier = Modifier, capt
     // The numeral sits on the bottom edge of the cover, whatever the title below it takes: a cover is a fixed shape, a title is not.
     Row(modifier) {
         if (rank != null) {
-            Box(Modifier.width(if (rank >= 10) 70.dp else 46.dp).height(width * 1.5f).padding(end = 4.dp), contentAlignment = Alignment.BottomEnd) {
+            // A screen reader says "Number 3" before the title, not just "3".
+            Box(Modifier.width(if (rank >= 10) 70.dp else 46.dp).height(width * 1.5f).padding(end = 4.dp).clearAndSetSemantics { text = AnnotatedString("Number $rank") }, contentAlignment = Alignment.BottomEnd) {
                 AkiText("$rank", AkiTextStyle.Numeral, tone = AkiTone.Muted)
             }
         }

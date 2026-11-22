@@ -19,12 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
 
 /** A setting that is on or off, with a title and a line under it. */
 @Composable
 fun AkiSwitch(title: String, isOn: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier, subtitle: String? = null) {
     Row(
-        modifier.toggleable(isOn, role = Role.Switch, onValueChange = onChange),
+        modifier.heightIn(min = 48.dp).toggleable(isOn, role = Role.Switch, onValueChange = onChange),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

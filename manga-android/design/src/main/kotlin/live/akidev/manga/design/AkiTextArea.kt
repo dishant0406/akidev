@@ -15,16 +15,18 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
-/** A glass box for text that runs over many lines: a pasted definition (monospaced), or words of your own (`prose`). */
+/** A glass box for text that runs over many lines: a pasted definition (monospaced), or words of your own (`prose`). `label` is what a screen reader calls it. */
 @Composable
-fun AkiTextArea(text: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, height: Dp = 160.dp, prose: Boolean = false) {
+fun AkiTextArea(text: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, height: Dp = 160.dp, prose: Boolean = false, label: String? = null) {
     val style = if (prose) akiTextStyle(AkiTextStyle.Body, AkiTone.Text.color) else akiTextStyle(AkiTextStyle.Caption, AkiTone.Text.color).copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
     // A fixed height: a long paste scrolls inside the box instead of pushing the buttons below it off the screen.
     BasicTextField(
         value = text,
         onValueChange = onChange,
-        modifier = modifier.fillMaxWidth().height(height).akiGlass(AkiShapes.rounded(18.dp)).padding(14.dp).verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxWidth().height(height).semantics { if (label != null) contentDescription = label }.akiGlass(AkiShapes.rounded(18.dp)).padding(14.dp).verticalScroll(rememberScrollState()),
         textStyle = style,
         cursorBrush = SolidColor(Aki.colors.text),
         keyboardOptions = KeyboardOptions(capitalization = if (prose) KeyboardCapitalization.Sentences else KeyboardCapitalization.None, autoCorrectEnabled = prose),

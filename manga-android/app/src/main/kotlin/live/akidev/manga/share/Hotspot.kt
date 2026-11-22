@@ -97,7 +97,7 @@ class Hotspot(private val context: Context) {
     }.getOrDefault(emptyList())
 
     private companion object {
-        const val CANNOT = "This phone cannot make a temporary Wi-Fi. Use the same Wi-Fi on both phones, or turn on this phone's hotspot and join it from the other one."
+        const val CANNOT = "This phone could not start a temporary Wi-Fi. Use the same Wi-Fi on both phones, or turn on this phone’s hotspot and join it from the other one."
     }
 }
 
@@ -120,7 +120,7 @@ class WifiJoin(context: Context) {
             }
 
             override fun onUnavailable() {
-                if (go.isActive) go.resumeWithException(NetworkProblem("Could not join their Wi-Fi."))
+                if (go.isActive) go.resumeWithException(NetworkProblem("Could not join their Wi-Fi. Move the phones closer and try again."))
             }
         }
         callback = joining
@@ -128,7 +128,7 @@ class WifiJoin(context: Context) {
             // The time counts the person's tap on the system's "Connect" question too, so it is not short.
             connectivity.requestNetwork(request, joining, 60_000)
         } catch (failure: RuntimeException) {
-            go.resumeWithException(NetworkProblem("Could not join their Wi-Fi."))
+            go.resumeWithException(NetworkProblem("Could not join their Wi-Fi. Move the phones closer and try again."))
         }
         go.invokeOnCancellation { leave() }
     }

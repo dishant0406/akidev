@@ -18,6 +18,7 @@ import live.akidev.manga.app.CatalogueRoute
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
+import live.akidev.manga.app.plural
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.ReaderKind
 import live.akidev.manga.app.RepoRoute
@@ -26,8 +27,8 @@ import live.akidev.manga.app.SourceSettingsRoute
 import live.akidev.manga.design.*
 
 /**
- * Akidev is a renderer: it ships with no source. Sources are plugins that come from repositories the person adds by address (a GitHub
- * link, say); this screen is where that happens.
+ * Akidev is a renderer: it ships with no source. Sources come from repositories the person adds by address (a GitHub link, say); this
+ * screen is where that happens.
  */
 @Composable
 fun SourcesScreen() {
@@ -41,7 +42,7 @@ fun SourcesScreen() {
     AkiRefreshable({ model.updateSources(); model.refresh() }, Modifier.fillMaxSize()) {
         AkiPage {
             item {
-                AkiHeader("Sources", subtitle = "${model.sources.size} installed") {
+                AkiHeader("Sources", subtitle = "${plural(model.sources.size, "source", "sources")} installed") {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         AkiIconButton("settings", "Settings") { router.push(SettingsRoute) }
                         AkiIconButton("add", "Add a repository", tint = Aki.colors.primary) { sheet = SourcesSheet.Repository }
@@ -60,12 +61,12 @@ fun SourcesScreen() {
     }
     when (sheet) {
         SourcesSheet.Repository -> AkiPrompt(
-            "Add a repository", "The address of a repository's folder on GitHub, or any https folder with an index.json.", "github.com/owner/repository", "Continue",
+            "Add a repository", "Enter the address of a repository folder on GitHub, or of any web folder that lists sources.", "github.com/owner/repository", "Preview repository",
             onDismiss = { sheet = null }, onConfirm = { sheet = null; model.propose(it) },
         )
         SourcesSheet.Source -> SourceAddSheet { sheet = null }
         SourcesSheet.Catalogue -> AkiPrompt(
-            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add", { sheet = null },
+            "Add a book catalogue", "Enter the address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add catalogue", { sheet = null },
             onConfirm = { address ->
                 sheet = null
                 scope.launch {
@@ -98,12 +99,12 @@ private fun BooksSection(catalogues: List<uniffi.akimanga.CatalogueInfo>, onAddC
         footer = "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.",
     ) {
         for (catalogue in catalogues) {
-            val remove = AkiMenuItem("Remove", "trash", destructive = true) { model.engine.removeCatalogue(catalogue.url); onChanged() }
+            val remove = AkiMenuItem("Remove catalogue", "trash", destructive = true) { model.engine.removeCatalogue(catalogue.url); onChanged() }
             AkiTapMenu(listOf(remove), onClick = { router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) {
                 AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true)
             }
         }
-        AkiButton("Add an EPUB book", icon = "book", fullWidth = true) { model.tab = AppTab.Books; model.addingBook = true }
+        AkiButton("Add an EPUB", icon = "book", fullWidth = true) { model.tab = AppTab.Books; model.addingBook = true }
         AkiButton("Add a book catalogue", icon = "add", fullWidth = true, onClick = onAddCatalogue)
     }
 }
@@ -113,10 +114,10 @@ private fun InstalledSection(onAdd: () -> Unit) {
     val model = LocalApp.current
     val router = LocalRouter.current
     AkiSection("Installed") {
-        if (model.sources.isEmpty()) AkiCard(padding = 16.dp) { AkiText("Nothing installed yet", tone = AkiTone.Muted) }
+        if (model.sources.isEmpty()) AkiCard(padding = 16.dp) { AkiText("No sources yet. Add a repository, then install a source from it.", tone = AkiTone.Muted) }
         for (source in model.sources) {
             val problem = model.sourceProblems[source.id]
-            val remove = AkiMenuItem("Remove", "trash", destructive = true) { model.engine.removeSource(source.id); model.refresh() }
+            val remove = AkiMenuItem("Remove source", "trash", destructive = true) { model.engine.removeSource(source.id); model.refresh() }
             AkiTapMenu(listOf(remove), onClick = { router.push(SourceSettingsRoute(source.id)) }) {
                 AkiRow(
                     source.name,
@@ -136,11 +137,11 @@ private fun RepositoriesSection(onAdd: () -> Unit) {
     val router = LocalRouter.current
     AkiSection(
         "Repositories",
-        footer = "A repository is a folder of source plugins, usually on GitHub: paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a plugin decides which sites the app contacts.",
+        footer = "A repository is a folder of sources, usually on GitHub. Paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a source decides which sites the app contacts.",
     ) {
-        if (model.repos.isEmpty()) AkiCard(padding = 16.dp) { AkiText("No repository added", tone = AkiTone.Muted) }
+        if (model.repos.isEmpty()) AkiCard(padding = 16.dp) { AkiText("No repositories yet. Add one to find sources.", tone = AkiTone.Muted) }
         for (repo in model.repos) {
-            val remove = AkiMenuItem("Remove", "trash", destructive = true) { model.engine.removeRepo(repo.base); model.refresh() }
+            val remove = AkiMenuItem("Remove repository", "trash", destructive = true) { model.engine.removeRepo(repo.base); model.refresh() }
             AkiTapMenu(listOf(remove), onClick = { router.push(RepoRoute(repo)) }) {
                 AkiRow(repo.name, subtitle = if (repo.signed) "Signed" else "Not signed", icon = "server-solid", showsChevron = true)
             }

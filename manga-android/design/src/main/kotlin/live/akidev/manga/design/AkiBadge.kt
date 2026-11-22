@@ -9,6 +9,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 
 enum class AkiBadgeStyle {
@@ -46,15 +49,16 @@ fun AkiBadge(text: String, modifier: Modifier = Modifier, icon: String? = null, 
     }
 }
 
-/** A count over a cover or a tab: unread chapters. */
+/** A count over a cover or a tab: unread chapters. A screen reader says "3 unread"; over 99 the badge says "99+". */
 @Composable
 fun AkiCount(value: Int, modifier: Modifier = Modifier, tinted: Boolean = true) {
     val colors = Aki.colors
     Row(
-        modifier.defaultMinSize(minWidth = 26.dp, minHeight = 26.dp).background(if (tinted) colors.primary else colors.destructive, CircleShape).padding(horizontal = 9.dp),
+        modifier.defaultMinSize(minWidth = 26.dp, minHeight = 26.dp).background(if (tinted) colors.primary else colors.destructive, CircleShape).padding(horizontal = 9.dp)
+            .clearAndSetSemantics { text = AnnotatedString("$value unread") },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AkiText(minOf(value, 99).toString(), AkiTextStyle.CaptionStrong, tone = if (tinted) AkiTone.OnPrimary else AkiTone.OnMedia)
+        AkiText(if (value > 99) "99+" else value.toString(), AkiTextStyle.CaptionStrong, tone = if (tinted) AkiTone.OnPrimary else AkiTone.OnMedia, tabular = true)
     }
 }

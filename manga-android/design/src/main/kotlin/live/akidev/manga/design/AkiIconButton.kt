@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** A round glass button with one symbol: back, save, refresh. */
+/** A round glass button with one symbol: back, save, refresh. `label` names what it does ("Add to library"), not the picture. */
 @Composable
 fun AkiIconButton(
     symbol: String,
@@ -23,11 +23,11 @@ fun AkiIconButton(
     size: Dp = 44.dp,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier.size(size).akiPress(label = label, onClick = onClick).akiGlass(AkiShapes.pill(size), tint = tint ?: if (onMedia) scrim else null),
-        contentAlignment = Alignment.Center,
-    ) {
-        AkiIconFace(symbol, size, tinted = tint != null, onMedia = onMedia)
+    // The glass is `size` big, but the space a finger can press is at least 48dp.
+    Box(modifier.akiPress(label = label, onClick = onClick).akiTouchTarget()) {
+        Box(Modifier.size(size).akiGlass(AkiShapes.pill(size), tint = tint ?: if (onMedia) scrim else null), contentAlignment = Alignment.Center) {
+            AkiIconFace(symbol, size, tinted = tint != null, onMedia = onMedia)
+        }
     }
 }
 

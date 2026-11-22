@@ -17,7 +17,7 @@ enum class Appearance(val title: String) { System("System"), Light("Light"), Dar
 enum class ReaderKind(val title: String) { Manga("Manga and comics"), Books("Books") }
 
 enum class ReadingMode(val title: String, val shortTitle: String) {
-    Strip("Vertical strip", "Strip"), Paged("Paged, left to right", "Paged"), RightToLeft("Paged, right to left", "Right to left")
+    Strip("Long strip", "Strip"), Paged("Pages, left to right", "Paged"), RightToLeft("Pages, right to left", "Right to left")
 }
 
 enum class ReaderBackground(val title: String) { Black("Black"), Grey("Dark grey") }

@@ -36,6 +36,13 @@ import live.akidev.manga.design.*
 import uniffi.akimanga.BookEntry
 import uniffi.akimanga.BookHit
 import uniffi.akimanga.BookSection
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 /** What can be changed about how the book looks: theme, face, size, spacing, margins. Every change shows on the page at once. */
 @Composable
@@ -43,21 +50,21 @@ fun BookSettingsSheet(model: BookModel, onDismiss: () -> Unit) {
     val style = model.style
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-            AkiText("Type and theme", AkiTextStyle.Title)
+            AkiText("Text and theme", AkiTextStyle.Title, isHeading = true)
             ThemePicker(style.theme) { model.changeStyle(style.copy(theme = it)) }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AkiText("Reading", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
+                AkiText("Reading", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted, isHeading = true)
                 AkiTabs(listOf(AkiChoice(false, "Pages"), AkiChoice(true, "Scroll")), style.scroll, { model.changeStyle(style.copy(scroll = it)) })
             }
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                     AkiSelect("Font", style.font, { model.changeStyle(style.copy(font = it)) }, BookFont.entries.map { AkiOption(it, it.title) })
-                    Stepper("Text size", style.size, BookStyle.sizes, "A", "A") { model.changeStyle(style.copy(size = it)) }
-                    Stepper("Line spacing", style.lineSpacing, BookStyle.spacings, "−", "+") { model.changeStyle(style.copy(lineSpacing = it)) }
+                    Stepper("Text size", style.size, BookStyle.sizes, "${Math.round(style.size)} points", "A", "A") { model.changeStyle(style.copy(size = it)) }
+                    Stepper("Line spacing", style.lineSpacing, BookStyle.spacings, "%.2f".format(style.lineSpacing), "−", "+") { model.changeStyle(style.copy(lineSpacing = it)) }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AkiText("Margins", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
+                AkiText("Margins", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted, isHeading = true)
                 AkiTabs(BookMargin.entries.map { AkiChoice(it, it.title) }, style.margin, { model.changeStyle(style.copy(margin = it)) })
             }
             Light(model)
@@ -65,7 +72,7 @@ fun BookSettingsSheet(model: BookModel, onDismiss: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AkiSwitch("Justify text", style.justify, { model.changeStyle(style.copy(justify = it)) })
                     AkiSwitch("Hyphenate long words", style.hyphenate, { model.changeStyle(style.copy(hyphenate = it)) }, subtitle = "Fewer gaps in justified lines.")
-                    AkiSwitch("Use the book's fonts", style.bookFonts, { model.changeStyle(style.copy(bookFonts = it)) }, subtitle = "For headings and special text, when the book carries its own.")
+                    AkiSwitch("Use the book’s fonts", style.bookFonts, { model.changeStyle(style.copy(bookFonts = it)) }, subtitle = "For headings and special text, when the book carries its own.")
                 }
             }
         }
@@ -80,45 +87,50 @@ private fun Light(model: BookModel) {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
             AkiSwitch(
                 "Set the brightness here", style.brightness != null, { model.changeStyle(style.copy(brightness = if (it) 0.6 else null)) },
-                subtitle = "Goes lower than the phone's lowest, and is given back when you close the book.",
+                subtitle = "Goes lower than the phone’s lowest, and is given back when you close the book.",
             )
-            style.brightness?.let { Stepper("Brightness", it, 0.0..1.0, "−", "+") { value -> model.changeStyle(style.copy(brightness = value)) } }
+            style.brightness?.let { Stepper("Brightness", it, 0.0..1.0, "${Math.round(it * 100)}%", "−", "+") { value -> model.changeStyle(style.copy(brightness = value)) } }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AkiText("Warm tint", AkiTextStyle.BodyStrong)
+                AkiText("Warm tint", AkiTextStyle.BodyStrong, isHeading = true)
                 AkiTabs(BookWarmth.entries.map { AkiChoice(it, it.title) }, style.warmth, { model.changeStyle(style.copy(warmth = it)) })
             }
-            if (style.warmth != BookWarmth.Off) Stepper("Warmth", style.warmthAmount, 0.1..0.8, "−", "+") { model.changeStyle(style.copy(warmthAmount = it)) }
+            if (style.warmth != BookWarmth.Off) Stepper("Warmth", style.warmthAmount, 0.1..0.8, "${Math.round(style.warmthAmount * 100)}%", "−", "+") { model.changeStyle(style.copy(warmthAmount = it)) }
             AkiSwitch("Ink display", style.ink, { model.changeStyle(style.copy(ink = it)) }, subtitle = "Grey, still and quiet like paper: no page-turn motion.")
         }
     }
 }
 
 @Composable
-private fun Stepper(title: String, value: Double, range: ClosedFloatingPointRange<Double>, small: String, large: String, onChange: (Double) -> Unit) {
+private fun Stepper(title: String, value: Double, range: ClosedFloatingPointRange<Double>, spoken: String, small: String, large: String, onChange: (Double) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        AkiText(title, AkiTextStyle.BodyStrong)
+        // The slider carries the name and the value for TalkBack, so the words around it are not read again.
+        AkiText(title, AkiTextStyle.BodyStrong, Modifier.clearAndSetSemantics {})
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AkiText(small, AkiTextStyle.Caption, tone = AkiTone.Muted)
-            AkiSlider(value, onChange, Modifier.weight(1f), range)
-            AkiText(large, AkiTextStyle.Heading, tone = AkiTone.Muted)
+            AkiText(small, AkiTextStyle.Caption, Modifier.clearAndSetSemantics {}, tone = AkiTone.Muted)
+            AkiSlider(value, onChange, Modifier.weight(1f).spokenValue(spoken), range, label = title)
+            AkiText(large, AkiTextStyle.Heading, Modifier.clearAndSetSemantics {}, tone = AkiTone.Muted)
         }
     }
 }
+
+/** What TalkBack says as the slider's value ("12 points"), in place of a bare percentage. */
+internal fun Modifier.spokenValue(spoken: String) = semantics { stateDescription = spoken }
 
 /** The reading themes as small round swatches, the chosen one ringed in yellow. */
 @Composable
 private fun ThemePicker(selection: BookTheme, onSelect: (BookTheme) -> Unit) {
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    // Wraps onto a second line when the font is large, so no swatch is cut off.
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         for (theme in BookTheme.entries) {
             val shown = theme.resolved(dark)
             val chosen = theme == selection
-            AkiTap({ onSelect(theme) }, label = theme.title) {
+            AkiTap({ onSelect(theme) }, Modifier.semantics { selected = chosen }, label = theme.title) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(
                         Modifier.size(46.dp).background(shown.paper, CircleShape).border(if (chosen) 3.dp else 1.dp, if (chosen) Aki.colors.primary else Aki.colors.secondary, CircleShape),
                         contentAlignment = Alignment.Center,
-                    ) { androidx.compose.foundation.text.BasicText("Aa", style = androidx.compose.ui.text.TextStyle(color = shown.ink, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)) }
+                    ) { androidx.compose.foundation.text.BasicText("Aa", Modifier.clearAndSetSemantics {}, style = androidx.compose.ui.text.TextStyle(color = shown.ink, fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp), fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)) }
                     AkiText(theme.title, AkiTextStyle.Caption, tone = if (chosen) AkiTone.Text else AkiTone.Muted, lines = 1)
                 }
             }
@@ -156,10 +168,10 @@ fun BookContentsSheet(model: BookModel, onClose: () -> Unit) {
     AkiSheet(onClose, full = true) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                AkiText(when (tab) { ContentsTab.Contents -> "Contents"; ContentsTab.Marks -> "Highlights"; ContentsTab.About -> "About" }, AkiTextStyle.Title)
+                AkiText(when (tab) { ContentsTab.Contents -> "Contents"; ContentsTab.Marks -> "Highlights"; ContentsTab.About -> "About" }, AkiTextStyle.Title, isHeading = true)
                 AkiText(model.info.title, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
             }
-            AkiTabs(listOf(AkiChoice(ContentsTab.Contents, "Contents"), AkiChoice(ContentsTab.Marks, "Marks ${model.marks.size}"), AkiChoice(ContentsTab.About, "About")), tab, { tab = it })
+            AkiTabs(listOf(AkiChoice(ContentsTab.Contents, "Contents"), AkiChoice(ContentsTab.Marks, "Highlights"), AkiChoice(ContentsTab.About, "About")), tab, { tab = it })
         }
         when (tab) {
             ContentsTab.Contents -> LazyColumn(Modifier.weight(1f), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -181,9 +193,9 @@ fun BookContentsSheet(model: BookModel, onClose: () -> Unit) {
 /** A quiet line that opens or folds the front or back matter. */
 @Composable
 private fun Fold(title: String, count: Int, open: Boolean, toggle: () -> Unit) {
-    AkiTap(toggle) {
+    AkiTap(toggle, Modifier.semantics { stateDescription = if (open) "Expanded" else "Collapsed" }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AkiText("$title · $count", AkiTextStyle.CaptionStrong, Modifier.weight(1f), tone = AkiTone.Muted)
+            AkiText("$title · $count", AkiTextStyle.CaptionStrong, Modifier.weight(1f), tone = AkiTone.Muted, tabular = true)
             AkiIcon(if (open) "down" else "forward", size = 12.dp, tone = AkiTone.Muted)
         }
     }
@@ -193,7 +205,7 @@ private fun Fold(title: String, count: Int, open: Boolean, toggle: () -> Unit) {
 private fun EntryRow(model: BookModel, index: Int, current: Int, onClose: () -> Unit) {
     val entry = model.contents[index]
     val isCurrent = index == current
-    AkiTap({ model.open(entry); onClose() }) {
+    AkiTap({ model.open(entry); onClose() }, Modifier.semantics { selected = isCurrent }) {
         Row(
             Modifier.fillMaxWidth().background(if (isCurrent) Aki.colors.primary else Aki.colors.surface, RoundedCornerShape(22.dp))
                 .padding(start = 18.dp + 16.dp * minOf(entry.depth.toInt(), 3), end = 18.dp, top = 14.dp, bottom = 14.dp),
@@ -211,7 +223,7 @@ private fun Marks(model: BookModel, onClose: () -> Unit) {
         return
     }
     for (mark in model.marks) {
-        AkiTapMenu(listOf(AkiMenuItem("Remove", "trash", destructive = true) { model.remove(mark) }), onClick = { model.open(mark); onClose() }) {
+        AkiTapMenu(listOf(AkiMenuItem("Remove highlight", "trash", destructive = true) { model.remove(mark) }), onClick = { model.open(mark); onClose() }) {
             Row(Modifier.fillMaxWidth().background(Aki.colors.surface, RoundedCornerShape(22.dp)).padding(horizontal = 18.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.padding(top = 5.dp).size(14.dp).background(HighlightColour.colour(mark.colour.toInt()), CircleShape))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -245,24 +257,24 @@ private fun About(model: BookModel, onClose: () -> Unit) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 AkiText(model.info.title, AkiTextStyle.Heading, lines = 4)
                 if (model.info.authors.isNotEmpty()) AkiText(model.info.authors.joinToString(", "), AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3)
-                val facts = listOfNotNull(model.info.language?.uppercase(), android.text.format.Formatter.formatFileSize(context, model.info.bytes.toLong()), "${model.chapterCount} parts")
+                val facts = listOfNotNull(model.info.language?.uppercase(), android.text.format.Formatter.formatFileSize(context, model.info.bytes.toLong()), if (model.chapterCount == 1) "1 part" else "${model.chapterCount} parts")
                 AkiText(facts.joinToString(" · "), AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiButton("Use this page as cover", icon = "image", size = AkiButtonSize.Small) { scope.launch { coverNote = if (model.useCurrentPageAsCover()) null else "This page could not be made into a cover." } }
-            if (model.info.customCover) AkiButton("Original", size = AkiButtonSize.Small) { model.useOwnCover() }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AkiButton("Use this page as the cover", icon = "image", size = AkiButtonSize.Small) { scope.launch { coverNote = if (model.useCurrentPageAsCover()) null else "This page could not be used as a cover. Try another page." } }
+            if (model.info.customCover) AkiButton("Use original cover", size = AkiButtonSize.Small) { model.useOwnCover() }
         }
-        coverNote?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Destructive) }
-        if (model.aboutPages.isEmpty()) AkiText("This book has no pages besides the book itself.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+        coverNote?.let { AkiText(it, AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, tone = AkiTone.Destructive) }
+        if (model.aboutPages.isEmpty()) AkiText("This book has no extra pages, such as a copyright page or notes.", AkiTextStyle.Caption, tone = AkiTone.Muted)
         // A page that is only a picture (a title page) has nothing to read here.
         for (chapter in model.aboutPages.filter { texts[it]?.isEmpty() != true }) {
             val text = texts[chapter]
             val open = chapter in opened
             Column(Modifier.fillMaxWidth().background(Aki.colors.surface, RoundedCornerShape(22.dp)).padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                AkiTap({ opened = if (open) opened - chapter else opened + chapter }) {
+                AkiTap({ opened = if (open) opened - chapter else opened + chapter }, Modifier.semantics { stateDescription = if (open) "Expanded" else "Collapsed" }) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        AkiText(text?.let { model.pageTitle(chapter, it) } ?: model.contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: "Page ${chapter + 1}", AkiTextStyle.BodyStrong, Modifier.weight(1f), lines = 2)
+                        AkiText(text?.let { model.pageTitle(chapter, it) } ?: model.contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: "Part ${chapter + 1}", AkiTextStyle.BodyStrong, Modifier.weight(1f), lines = 2)
                         AkiIcon(if (open) "down" else "forward", size = 12.dp, tone = AkiTone.Muted)
                     }
                 }
@@ -270,7 +282,7 @@ private fun About(model: BookModel, onClose: () -> Unit) {
                     if (text != null) {
                         // A long page (notes) shows its start: the rest is in the book.
                         AkiText(text.take(1800) + if (text.length > 1800) "…" else "", tone = AkiTone.Muted)
-                        AkiButton("Open in the book", icon = "forward", size = AkiButtonSize.Small) { model.open(BookEntry("", 0u, chapter.toUInt(), null)); onClose() }
+                        AkiButton("Open in book", icon = "forward", size = AkiButtonSize.Small) { model.open(BookEntry("", 0u, chapter.toUInt(), null)); onClose() }
                     } else AkiSpinner()
                 }
             }
@@ -306,14 +318,14 @@ fun BookSearchSheet(model: BookModel, onClose: () -> Unit) {
 
     AkiSheet(onClose, full = true) {
         Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Search", AkiTextStyle.Title)
-            AkiInput("Words in this book", query, { query = it }, icon = "search", onSubmit = ::run, onClear = { task?.cancel(); hits = emptyList(); asked = ""; searching = false })
+            AkiText("Search", AkiTextStyle.Title, isHeading = true)
+            AkiInput("Search this book", query, { query = it }, icon = "search", onSubmit = ::run, onClear = { task?.cancel(); hits = emptyList(); asked = ""; searching = false })
             if (searching && hits.isEmpty()) {
-                Box(Modifier.fillMaxWidth().heightIn(min = 80.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
+                Box(Modifier.fillMaxWidth().heightIn(min = 80.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Searching") }
             } else if (asked.isNotEmpty() && hits.isEmpty()) {
-                AkiText("Nothing for “$asked”.", tone = AkiTone.Muted)
+                AkiText("No results for “$asked”.", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }, tone = AkiTone.Muted)
             } else if (hits.firstOrNull()?.similar == true) {
-                AkiText("Nothing is written exactly like that. These are the nearest words.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiText("No exact match. These are the closest words.", AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, tone = AkiTone.Muted)
             }
         }
         LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -337,10 +349,10 @@ fun BookNoteSheet(model: BookModel, draft: NoteDraft, onClose: () -> Unit) {
     var text by remember { mutableStateOf(model.marks.firstOrNull { it.id == draft.id }?.note ?: "") }
     AkiSheet(onClose) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Note", AkiTextStyle.Title)
+            AkiText("Note", AkiTextStyle.Title, isHeading = true)
             AkiText(draft.quote, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 4)
-            AkiTextArea(text, { text = it }, height = 140.dp, prose = true)
-            AkiButton("Save", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { model.saveNote(draft, text); onClose() }
+            AkiTextArea(text, { text = it }, height = 140.dp, prose = true, label = "Note")
+            AkiButton("Save note", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { model.saveNote(draft, text); onClose() }
         }
     }
 }
@@ -351,9 +363,9 @@ fun BookFootnoteSheet(model: BookModel, note: Footnote, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     AkiSheet(onClose) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Note", AkiTextStyle.Title)
+            AkiText("Footnote", AkiTextStyle.Title, isHeading = true)
             AkiText(note.text)
-            AkiButton("Go to the note", icon = "forward", fullWidth = true) {
+            AkiButton("Go to footnote", icon = "forward", fullWidth = true) {
                 onClose()
                 scope.launch { model.followInBook(note.link) }
             }

@@ -67,7 +67,7 @@ class BooksModel(private val app: AppModel) {
         }
         adding = null
         load()
-        if (failures.isNotEmpty()) problem = (if (failures.size == 1) "A book could not be added" else "${failures.size} books could not be added") to failures.joinToString("\n")
+        if (failures.isNotEmpty()) problem = (if (failures.size == 1) "Could not add 1 book" else "Could not add ${failures.size} books") to failures.joinToString("\n")
     }
 
     fun finish(books: List<BookInfo>) {

@@ -65,10 +65,11 @@ struct ReaderView: View {
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 }
-                .accessibilityLabel("Chapters")
+                .accessibilityLabel([model.ref.title, model.chapter(model.current).map(model.label)].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityHint("Shows the chapter list")
                 Spacer(minLength: 0)
                 if model.mode == .strip {
-                    AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? "Stop auto-scroll" : "Auto-scroll", onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
+                    AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? "Stop auto-scroll" : "Start auto-scroll", onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
                 }
                 AkiIconButton(symbol: "sliders", label: "Reader settings", onMedia: true, scrim: Aki.scrimStrong) { sheet = .settings }
             }
@@ -85,10 +86,13 @@ struct ReaderView: View {
                 }
                 AkiIconButton(symbol: "list", label: "Chapters", onMedia: true, scrim: Aki.scrimStrong) { sheet = .chapters }
                 let count = model.currentSegment?.pages.images.count ?? 0
-                AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia)
-                    .monospacedDigit()
+                AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia, digits: true)
+                    .accessibilityLabel("Page \(min(model.page + 1, max(count, 1))) of \(count)")
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
-                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? "Remove bookmark" : "Bookmark this page", tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) { model.toggleBookmark() }
+                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? "Remove bookmark" : "Add bookmark", tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) {
+                    model.toggleBookmark()
+                    akiAnnounce(model.isBookmarked ? "Bookmark added" : "Bookmark removed")
+                }
                     .akiHaptic(trigger: model.isBookmarked)
                 if let newer = model.newer(than: model.current) {
                     AkiIconButton(symbol: "next", label: "Next chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(newer.id, page: 0, offset: 0) } }
@@ -326,11 +330,12 @@ private struct StripRows: View {
                 AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .muted)
                 if let note { AkiText(note, .caption, tone: .muted) }
             } else {
-                AkiText("You are up to date", .title, tone: .onMedia)
+                AkiText("You are up to date", .title, tone: .onMedia).accessibilityAddTraits(.isHeader)
                 AkiButton("Back to the series") { dismiss() }.padding(.top, 6)
             }
         }
-        .frame(width: width, height: next == nil ? 220 : note == nil ? 96 : 124)
+        .frame(width: width)
+        .frame(minHeight: next == nil ? 220 : note == nil ? 96 : 124)
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { top in
             if top < Aki.screenSize.height * 0.9 { model.finish(segment.chapterID) }
         }
@@ -394,7 +399,9 @@ private struct PagedReader: View {
     private func continuePage(_ next: ChapterEntry) -> some View {
         VStack(spacing: 14) {
             if let error = model.error {
-                AkiText(error.title, .title, tone: .onMedia)
+                AkiText(error.title, .title, tone: .onMedia, align: .center)
+                    .onAppear { akiAnnounce("\(error.title). \(error.message)") }
+                AkiText(error.message, .caption, tone: .muted, align: .center)
                 AkiButton("Try again", variant: .primary) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {
                 AkiText(model.label(next), .eyebrow, tone: .onMedia)

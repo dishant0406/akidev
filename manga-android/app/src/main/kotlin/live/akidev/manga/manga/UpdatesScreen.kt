@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.AppModel
@@ -51,8 +54,8 @@ fun UpdatesScreen() {
     AkiRefreshable(refresh, Modifier.fillMaxSize()) {
         AkiPage(narrow = true, state = updates.scroll) {
             item {
-                AkiHeader("Updates", subtitle = if (app.unreadTotal > 0) "${app.unreadTotal} unread chapters" else "All caught up") {
-                    if (app.refreshing) AkiSpinner(Modifier.size(44.dp)) else AkiIconButton("refresh", "Check for new chapters") { scope.launch { refresh() } }
+                AkiHeader("Updates", subtitle = if (app.unreadTotal == 1) "1 unread chapter" else if (app.unreadTotal > 0) "${app.unreadTotal} unread chapters" else "All caught up") {
+                    if (app.refreshing) AkiSpinner(Modifier.size(44.dp), label = "Checking for new chapters") else AkiIconButton("refresh", "Check for new chapters") { scope.launch { refresh() } }
                 }
             }
             item { MangaPartPills() }
@@ -68,8 +71,8 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
     if (list.isEmpty()) {
         item {
             AkiEmptyState(
-                if (tab == UpdatesTab.Unread) "All caught up" else "No series saved",
-                if (tab == UpdatesTab.Unread) "New chapters of the series you saved appear here." else "Save a series and its chapters show up here.",
+                if (tab == UpdatesTab.Unread) "All caught up" else "No series in your library",
+                if (tab == UpdatesTab.Unread) "New chapters of series in your library appear here." else "Add a series to your library and its chapters appear here.",
                 Modifier.heightIn(min = 340.dp), action = if (tab == UpdatesTab.Unread) AkiAction("Check for new chapters", check) else null,
             )
         }
@@ -81,7 +84,7 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
         val latest = if (row.latestNumber == null && row.latestTitle == null) null else chapterName(row.latestNumber, row.latestTitle)
         AkiTap({ router.push(SeriesRoute(SeriesRef(row.source, row.id, row.title, row.cover))) }) {
             AkiListCard(
-                row.cover, if (row.unread > 0u) "${row.unread} new chapter${if (row.unread == 1u) "" else "s"}" else "Up to date", row.title,
+                row.cover, when { row.unread == 0u -> "Up to date"; row.unread == 1u -> "1 new chapter"; else -> "${row.unread} new chapters" }, row.title,
                 badges = listOfNotNull(latest, shortDate(row.latestDateMs)), dimmed = row.unread == 0u,
             )
         }
@@ -90,10 +93,11 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
 
 @Composable
 private fun Failures(app: AppModel) {
-    AkiCard(padding = 16.dp) {
+    AkiCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, padding = 16.dp) {
         Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            AkiText("Could not check ${app.updateFailures.size} series", AkiTextStyle.BodyStrong)
-            for (failure in app.updateFailures) AkiText("${failure.title} (${failure.source}): ${failure.message}", AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 2)
+            AkiText("Could not check ${app.updateFailures.size} series", AkiTextStyle.BodyStrong, isHeading = true, tabular = true)
+            for (failure in app.updateFailures) AkiText("${failure.title} (${app.name(failure.source)}): ${failure.message}", AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText("Pull down to try again.", AkiTextStyle.Caption, tone = AkiTone.Muted)
         }
     }
 }
