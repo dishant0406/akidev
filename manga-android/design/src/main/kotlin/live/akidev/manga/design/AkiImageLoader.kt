@@ -29,7 +29,14 @@ object AkiImageLoader {
     }
     private val connections = Semaphore(6)
     private val work = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val inflight = HashMap<String, Deferred<Bitmap?>>()
+    private val inflight = HashMap<String, Pending>()
+
+    /** A picture being fetched, and how many rows are waiting for it. */
+    private class Pending {
+        lateinit var job: Deferred<Bitmap?>
+        var waiters = 0
+        var downloading = false
+    }
     private lateinit var folder: File
 
     /** Called once, when the app starts. */
@@ -47,28 +54,45 @@ object AkiImageLoader {
 
     /**
      * The picture, fetched and decoded. The work belongs to the loader, not to whoever asked: a row scrolled away stops waiting, but
-     * the picture still arrives for the next row that wants it.
+     * a download that has begun still arrives for the next row that wants it. One that is still queued for a connection is dropped
+     * when its last row leaves, so a fast scroll does not leave the pictures on screen waiting behind the ones scrolled past.
      */
     suspend fun image(url: String, headers: Map<String, String>, widthPx: Int): Bitmap? {
         val key = "$url@$widthPx"
         memory.get(key)?.let { return it }
-        val job = synchronized(inflight) {
-            inflight.getOrPut(key) {
-                work.async {
-                    val file = File(folder, hash(url))
-                    val kept = file.exists()
-                    val bytes = runCatching { if (kept) readKept(file) else connections.withPermit { download(url, headers) } }.getOrNull()
-                    val bitmap = bytes?.let { runCatching { decode(it, widthPx) }.getOrNull() }
-                    // Only a picture that opens is kept, written under another name first so a half-written file is never taken for a whole one.
-                    if (bitmap == null && kept) file.delete()
-                    if (bitmap != null && !kept && !url.startsWith("file:")) keep(file, bytes)
-                    if (bitmap != null) memory.put(key, bitmap)
-                    synchronized(inflight) { inflight.remove(key) }
-                    bitmap
+        val pending = synchronized(inflight) {
+            val found = inflight.getOrPut(key) {
+                Pending().also { pending ->
+                    pending.job = work.async {
+                        val file = File(folder, hash(url))
+                        val kept = file.exists()
+                        val bytes = runCatching {
+                            if (kept) readKept(file) else connections.withPermit { pending.downloading = true; download(url, headers) }
+                        }.getOrNull()
+                        val bitmap = bytes?.let { runCatching { decode(it, widthPx) }.getOrNull() }
+                        // Only a picture that opens is kept, written under another name first so a half-written file is never taken for a whole one.
+                        if (bitmap == null && kept) file.delete()
+                        if (bitmap != null && !kept && !url.startsWith("file:")) keep(file, bytes)
+                        if (bitmap != null) memory.put(key, bitmap)
+                        synchronized(inflight) { inflight.remove(key, pending) }
+                        bitmap
+                    }
+                }
+            }
+            found.waiters++
+            found
+        }
+        try {
+            return pending.job.await()
+        } finally {
+            synchronized(inflight) {
+                pending.waiters--
+                if (pending.waiters == 0 && !pending.downloading) {
+                    pending.job.cancel()
+                    inflight.remove(key, pending)
                 }
             }
         }
-        return job.await()
     }
 
     private fun readKept(file: File): ByteArray {

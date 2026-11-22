@@ -4,6 +4,8 @@
 //! A chapter number is pulled out of a title ("Ch. 12.5 - Name").
 
 use regex::Regex;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 const DAY_MS: i64 = 86_400_000;
 
@@ -94,8 +96,19 @@ fn compile(format: &str) -> Option<(Regex, Vec<Part>)> {
     Some((Regex::new(&format!("(?i){regex}")).ok()?, parts))
 }
 
+/// A format is compiled once, however many dates are read with it (a chapter list has one date per row).
+fn compiled(format: &str) -> Option<(Regex, Vec<Part>)> {
+    static KNOWN: LazyLock<Mutex<HashMap<String, Option<(Regex, Vec<Part>)>>>> = LazyLock::new(Mutex::default);
+    KNOWN
+        .lock()
+        .unwrap()
+        .entry(format.to_string())
+        .or_insert_with(|| compile(format))
+        .clone()
+}
+
 fn by_pattern(text: &str, format: &str) -> Option<i64> {
-    let (regex, parts) = compile(format)?;
+    let (regex, parts) = compiled(format)?;
     let found = regex.captures(text)?;
     let (mut year, mut month, mut day) = (None, 1, 1);
     for (index, part) in parts.iter().enumerate() {
@@ -117,11 +130,13 @@ fn by_pattern(text: &str, format: &str) -> Option<i64> {
 /// `2024-02-29`, or with a time and a zone (`2024-02-29T10:14:32.215Z`, `...+05:30`). A date alone is midnight UTC, and a
 /// time with no zone is UTC. Seconds and what follows them are optional; fractions of a second are dropped.
 fn iso(text: &str) -> Option<i64> {
-    let found = Regex::new(
-        r"(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?)?",
-    )
-    .ok()?
-    .captures(text)?;
+    static ISO: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?)?",
+        )
+        .unwrap()
+    });
+    let found = ISO.captures(text)?;
     let number = |index: usize| {
         found
             .get(index)
@@ -168,10 +183,10 @@ fn relative(text: &str, now_ms: i64) -> Option<i64> {
     if lower.contains("today") || lower.contains("just now") || lower.contains("moments ago") {
         return Some(now_ms);
     }
-    let found =
-        Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b")
-            .ok()?
-            .captures(&lower)?;
+    static AGO: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b").unwrap()
+    });
+    let found = AGO.captures(&lower)?;
     let amount: i64 = match &found[1] {
         "a" | "an" | "one" => 1,
         digits => digits.parse().ok()?,
@@ -205,9 +220,11 @@ pub fn check(format: &str) -> bool {
 /// The chapter number in a title: a number after "chapter", "ch.", "episode", "ep" or "#" first,
 /// otherwise the first number.
 pub fn chapter_number(text: &str) -> Option<f64> {
-    let marked = Regex::new(r"(?i)(?:chapter|ch\.?|episode|ep\.?|#)\s*(\d+(?:\.\d+)?)").ok()?;
-    let any = Regex::new(r"(\d+(?:\.\d+)?)").ok()?;
-    marked.captures(text).or_else(|| any.captures(text))?[1]
+    static MARKED: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)(?:chapter|ch\.?|episode|ep\.?|#)\s*(\d+(?:\.\d+)?)").unwrap()
+    });
+    static ANY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d+(?:\.\d+)?)").unwrap());
+    MARKED.captures(text).or_else(|| ANY.captures(text))?[1]
         .parse()
         .ok()
 }

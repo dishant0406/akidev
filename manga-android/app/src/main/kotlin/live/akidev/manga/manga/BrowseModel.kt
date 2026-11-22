@@ -3,6 +3,8 @@ package live.akidev.manga.manga
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import uniffi.akimanga.Card
@@ -24,7 +26,7 @@ class BrowseModel {
     private var page = 0
     private var key = ""
 
-    suspend fun load(engine: Engine, report: (String, Throwable?) -> Unit, source: SourceInfo, term: String, choices: List<Choice> = emptyList(), reset: Boolean) {
+    suspend fun load(engine: Engine, report: (String, Throwable?) -> Unit, source: SourceInfo, term: String, choices: List<Choice> = emptyList(), reset: Boolean, force: Boolean = false) {
         val newKey = "${source.id}|$term|${choices.joinToString { "${it.id}=${it.value}" }}"
         if (reset || newKey != key) {
             items = emptyList()
@@ -38,7 +40,16 @@ class BrowseModel {
         try {
             // The first page of Popular and Latest shows at once from the last time, while the fresh one is fetched.
             if (page == 0 && items.isEmpty() && term.isEmpty() && choices.isEmpty() && source.canPopular) {
-                engine.rememberedListing(source.id, false)?.let { kept ->
+                // A listing kept in the last ten minutes is all there is to show: the site is not asked again, unless the person pulled to refresh.
+                val fresh = if (force) null else withContext(Dispatchers.IO) { engine.freshListing(source.id, false) }
+                if (fresh != null) {
+                    items = fresh.items
+                    hasNext = fresh.hasNext
+                    page = 1
+                    report(source.id, null)
+                    return
+                }
+                withContext(Dispatchers.IO) { engine.rememberedListing(source.id, false) }?.let { kept ->
                     items = kept.items
                     hasNext = kept.hasNext
                 }

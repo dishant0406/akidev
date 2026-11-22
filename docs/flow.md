@@ -173,3 +173,12 @@ The engine part, and the iPhone and Android screens that sit on it.
 4. "Mark all as read" (shelf only) marks every cached chapter as read. The series counts as finished, so it leaves the shelf but stays in History.
 
 Edge cases: if the call fails, nothing changes and no message shows (the error is ignored, as in the other library menus). If the chapter list was never cached, "Mark all as read" marks nothing. The chapters you read in that series become unread again after a removal.
+
+## Opening Discover now (2026-11-23)
+
+1. The screen asks `reload(force: false)` (`HomeView.swift` on iPhone, `DiscoverModel.reload` on Android).
+2. For each source and each list (popular, new releases) the app reads `Engine.fresh_listing`. If a list was kept in the last ten minutes, it is shown and no request is sent. Otherwise the older kept list (`remembered_listing`), if there is one, is shown while a request goes out.
+3. Requests run four at a time (`Feed.swift`, `FeedModel.kt`). Each answer replaces its shelf as it arrives and is kept by the engine for next time.
+4. Pull to refresh and "Try again" call `reload(force: true)`: every list is asked for again.
+
+Edge cases: with an empty cache every list is asked for (the first launch). A source that fails still shows its kept list, and the error goes to `report`, as before. The cache is cleared only by the engine's own keep step, so a list never gets older than ten minutes without a request, unless the phone is offline: then the older kept list stays on screen.

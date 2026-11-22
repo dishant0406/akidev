@@ -44,7 +44,7 @@ fun HomeScreen() {
 
     LaunchedEffect(model.sourcesKey) { discover.sourcesChanged() }
 
-    AkiRefreshable({ discover.reload() }, Modifier.fillMaxSize()) {
+    AkiRefreshable({ discover.reload(force = true) }, Modifier.fillMaxSize()) {
         AkiPage(narrow = false, state = discover.scroll) {
             item { AkiHeader("Discover") }
             item { MangaPartPills() }
@@ -269,7 +269,7 @@ private fun Lead(card: Card, tag: String, onClick: () -> Unit) {
 private fun Retry(title: String, message: String) {
     val scope = rememberCoroutineScope()
     val discover = LocalApp.current.discover
-    AkiEmptyState(title, message, Modifier.heightIn(min = 320.dp), action = AkiAction("Try again") { scope.launch { discover.reload() } })
+    AkiEmptyState(title, message, Modifier.heightIn(min = 320.dp), action = AkiAction("Try again") { scope.launch { discover.reload(force = true) } })
 }
 
 fun chaptersLabel(count: UInt?) = when {

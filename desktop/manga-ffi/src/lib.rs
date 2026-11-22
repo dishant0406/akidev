@@ -1141,6 +1141,21 @@ impl Engine {
             .map(CardPage::from)
     }
 
+    /// Like `remembered_listing`, but only when it was kept in the last ten minutes: the app shows it and does not ask the site again.
+    pub fn fresh_listing(&self, source: String, latest: bool) -> Option<CardPage> {
+        let body = self
+            .store
+            .listing_since(
+                &source,
+                if latest { "latest" } else { "popular" },
+                now_ms() - 10 * 60 * 1000,
+            )
+            .ok()??;
+        serde_json::from_str::<m::Page<m::Card>>(&body)
+            .ok()
+            .map(CardPage::from)
+    }
+
     /// The ways a source lets a search be narrowed.
     pub fn source_filters(&self, source: String) -> Result<Vec<FilterInfo>> {
         Ok(self

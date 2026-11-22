@@ -20,10 +20,15 @@ final class FeedModel {
     var loading = false
     private var key = ""
 
-    func loadLatest(_ engine: Engine, report: (String, Error?) -> Void, source: SourceInfo) async {
+    func loadLatest(_ engine: Engine, report: (String, Error?) -> Void, source: SourceInfo, force: Bool = false) async {
         key = "latest|\(source.id)"
         guard source.canLatest else { return latest = [] }
-        if let kept = engine.rememberedListing(source: source.id, latest: true) { latest = Array(kept.items.prefix(14)) }
+        // A listing kept in the last ten minutes is shown and the site is not asked again, unless the person pulled to refresh.
+        if !force, let fresh = await Task.detached(operation: { engine.freshListing(source: source.id, latest: true) }).value {
+            latest = Array(fresh.items.prefix(14))
+            return
+        }
+        if let kept = await Task.detached(operation: { engine.rememberedListing(source: source.id, latest: true) }).value { latest = Array(kept.items.prefix(14)) }
         let mine = key
         do {
             let fresh = try await engine.latest(source: source.id, page: 1)
@@ -36,25 +41,48 @@ final class FeedModel {
     }
 
     /// Asks every source at once, showing what was remembered first and each answer as it arrives.
-    func loadAll(_ engine: Engine, report: @escaping (String, Error?) -> Void, sources: [SourceInfo]) async {
+    func loadAll(_ engine: Engine, report: @escaping (String, Error?) -> Void, sources: [SourceInfo], force: Bool = false) async {
         key = "all|" + sources.map(\.id).joined(separator: ",")
         let mine = key
         loading = true
         defer { if key == mine { loading = false } }
-        shelves = sources.flatMap { source -> [Shelf] in
+        // What was kept is shown at once. A listing kept in the last ten minutes is also not asked for again (unless pulled to refresh).
+        let (kept, stale) = await Task.detached { () -> ([Shelf], Set<String>) in
             var found: [Shelf] = []
-            if let kept = engine.rememberedListing(source: source.id, latest: false) { found.append(Shelf(id: "\(source.id)|popular", title: source.name, subtitle: "Popular", source: source.id, items: Array(kept.items.prefix(14)))) }
-            if source.canLatest, let kept = engine.rememberedListing(source: source.id, latest: true) { found.append(Shelf(id: "\(source.id)|latest", title: source.name, subtitle: "New releases", source: source.id, items: Array(kept.items.prefix(14)))) }
-            return found
-        }
+            var stale = Set<String>()
+            for source in sources {
+                for isLatest in source.canLatest ? [false, true] : [false] {
+                    let id = "\(source.id)|\(isLatest ? "latest" : "popular")"
+                    let fresh = force ? nil : engine.freshListing(source: source.id, latest: isLatest)
+                    if fresh == nil { stale.insert(id) }
+                    if let page = fresh ?? engine.rememberedListing(source: source.id, latest: isLatest) {
+                        found.append(Shelf(id: id, title: source.name, subtitle: isLatest ? "New releases" : "Popular", source: source.id, items: Array(page.items.prefix(14))))
+                    }
+                }
+            }
+            return (found, stale)
+        }.value
+        shelves = kept
         await withTaskGroup(of: (SourceInfo, Bool, Result<[Card], Error>).self) { group in
+            // At most four sites are asked at a time, so the first sources answer first and covers can load beside them.
+            var asking = 0
+            var waiting: [(SourceInfo, Bool)] = []
+            func start(_ source: SourceInfo, _ isLatest: Bool) {
+                asking += 1
+                group.addTask { (source, isLatest, await Result { isLatest ? try await engine.latest(source: source.id, page: 1).items : try await engine.popular(source: source.id, page: 1).items }) }
+            }
             for source in sources {
                 // A source without a popular or latest list is not asked for it: asking would only surface the
                 // engine's "has no popular list" as a failure the person cannot fix.
-                if source.canPopular { group.addTask { (source, false, await Result { try await engine.popular(source: source.id, page: 1).items }) } }
-                if source.canLatest { group.addTask { (source, true, await Result { try await engine.latest(source: source.id, page: 1).items }) } }
+                if source.canPopular && stale.contains("\(source.id)|popular") { waiting.append((source, false)) }
+                if source.canLatest && stale.contains("\(source.id)|latest") { waiting.append((source, true)) }
             }
-            for await (source, isLatest, result) in group where key == mine {
+            waiting.reverse()
+            while asking < 4, let next = waiting.popLast() { start(next.0, next.1) }
+            for await (source, isLatest, result) in group {
+                asking -= 1
+                if let next = waiting.popLast() { start(next.0, next.1) }
+                guard key == mine else { continue }
                 let id = "\(source.id)|\(isLatest ? "latest" : "popular")"
                 switch result {
                 case .success(let cards):

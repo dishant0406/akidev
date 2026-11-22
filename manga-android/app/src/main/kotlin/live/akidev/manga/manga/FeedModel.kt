@@ -6,6 +6,10 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import uniffi.akimanga.Card
 import uniffi.akimanga.Engine
 import uniffi.akimanga.SourceInfo
@@ -29,13 +33,19 @@ class FeedModel {
         private set
     private var key = ""
 
-    suspend fun loadLatest(engine: Engine, report: (String, Throwable?) -> Unit, source: SourceInfo) {
+    suspend fun loadLatest(engine: Engine, report: (String, Throwable?) -> Unit, source: SourceInfo, force: Boolean = false) {
         key = "latest|${source.id}"
         if (!source.canLatest) {
             latest = emptyList()
             return
         }
-        engine.rememberedListing(source.id, true)?.let { latest = it.items.take(14) }
+        // A listing kept in the last ten minutes is shown and the site is not asked again, unless the person pulled to refresh.
+        val fresh = if (force) null else withContext(Dispatchers.IO) { engine.freshListing(source.id, true) }
+        if (fresh != null) {
+            latest = fresh.items.take(14)
+            return
+        }
+        withContext(Dispatchers.IO) { engine.rememberedListing(source.id, true) }?.let { latest = it.items.take(14) }
         val mine = key
         try {
             val fresh = engine.latest(source.id, 1u)
@@ -46,24 +56,30 @@ class FeedModel {
     }
 
     /** Asks every source at once, showing what was remembered first and each answer as it arrives. */
-    suspend fun loadAll(engine: Engine, report: (String, Throwable?) -> Unit, sources: List<SourceInfo>) {
+    suspend fun loadAll(engine: Engine, report: (String, Throwable?) -> Unit, sources: List<SourceInfo>, force: Boolean = false) {
         key = "all|" + sources.joinToString(",") { it.id }
         val mine = key
         loading = true
         try {
-            shelves = sources.flatMap { source ->
-                listOfNotNull(
-                    engine.rememberedListing(source.id, false)?.let { Shelf("${source.id}|popular", source.name, "Popular", source.id, it.items.take(14)) },
-                    if (source.canLatest) engine.rememberedListing(source.id, true)?.let { Shelf("${source.id}|latest", source.name, "New releases", source.id, it.items.take(14)) } else null,
-                )
+            // What was kept is shown at once. A listing kept in the last ten minutes is also not asked for again (unless pulled to refresh).
+            val stale = HashSet<String>()
+            shelves = withContext(Dispatchers.IO) {
+                sources.flatMap { source ->
+                    listOfNotNull(
+                        kept(engine, source, false, force, stale),
+                        if (source.canLatest) kept(engine, source, true, force, stale) else null,
+                    )
+                }
             }
+            // At most four sites are asked at a time, so the first sources answer first and covers can load beside them.
+            val limit = Semaphore(4)
             coroutineScope {
                 // A source without a popular or latest list is not asked for it: asking would only surface the engine's "has no popular
                 // list" as a failure the person cannot fix.
                 sources.flatMap { source ->
                     listOfNotNull(
-                        if (source.canPopular) async { arrived(source, false, runCatching { engine.popular(source.id, 1u).items }, mine, report) } else null,
-                        if (source.canLatest) async { arrived(source, true, runCatching { engine.latest(source.id, 1u).items }, mine, report) } else null,
+                        if (source.canPopular && "${source.id}|popular" in stale) async { limit.withPermit { arrived(source, false, runCatching { engine.popular(source.id, 1u).items }, mine, report) } } else null,
+                        if (source.canLatest && "${source.id}|latest" in stale) async { limit.withPermit { arrived(source, true, runCatching { engine.latest(source.id, 1u).items }, mine, report) } } else null,
                     )
                 }.awaitAll()
             }
@@ -73,6 +89,15 @@ class FeedModel {
         } finally {
             if (key == mine) loading = false
         }
+    }
+
+    /** A source's kept shelf: the fresh listing if there is one, else the old one, which is then listed in `stale` to be asked for again. */
+    private fun kept(engine: Engine, source: SourceInfo, isLatest: Boolean, force: Boolean, stale: MutableSet<String>): Shelf? {
+        val id = "${source.id}|${if (isLatest) "latest" else "popular"}"
+        val fresh = if (force) null else engine.freshListing(source.id, isLatest)
+        if (fresh == null) stale.add(id)
+        val page = fresh ?: engine.rememberedListing(source.id, isLatest) ?: return null
+        return Shelf(id, source.name, if (isLatest) "New releases" else "Popular", source.id, page.items.take(14))
     }
 
     private fun arrived(source: SourceInfo, isLatest: Boolean, result: Result<List<Card>>, mine: String, report: (String, Throwable?) -> Unit) {

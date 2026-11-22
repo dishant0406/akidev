@@ -70,7 +70,7 @@ struct LibraryView: View {
         .onChange(of: model.library) { loadCategories() }
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear { loadCategories(); model.refresh() } })
         .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: assignees).onDisappear { loadCategories(); picked = []; selecting = false } })
-        .akiConfirm(pickedShown.count == 1 ? "Remove 1 series from your library?" : "Remove \(pickedShown.count) series from your library?", message: "Your reading progress is kept. You can add the series to your library again.", confirm: "Remove series", isPresented: $removing) { removePicked() }
+        .akiConfirm(removeTitle, message: "Your reading progress is kept. You can add the series to your library again.", confirm: "Remove series", isPresented: $removing) { removePicked() }
     }
 
     /// Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
@@ -94,6 +94,11 @@ struct LibraryView: View {
         case -2: item.categories.isEmpty
         default: item.categories.contains(category)
         }
+    }
+
+    private var removeTitle: String {
+        let count = selecting ? pickedShown.count : 0
+        return count == 1 ? "Remove 1 series from your library?" : "Remove \(count) series from your library?"
     }
 
     /// The series picked that are on screen: filtering after picking does not leave hidden ones to be changed unseen.
@@ -129,14 +134,16 @@ struct LibraryView: View {
         if model.library.isEmpty {
             AkiEmptyState(title: "Your library is empty", message: "Add a series with the bookmark button on its page. It stays here with your reading progress.").frame(minHeight: 340)
         } else {
+            // Sorted once for this screen: `shown` filters and sorts the whole library each time it is read.
+            let list = shown
             if !categories.isEmpty && part == nil {
                 AkiChips(items: [(Int64(-1), "All")] + categories.filter { $0.count > 0 || $0.books == 0 }.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), "No category")], selection: $category)
             }
-            if shown.isEmpty {
+            if list.isEmpty {
                 AkiEmptyState(title: onlyUnread ? "All caught up" : "Nothing here", message: onlyUnread ? "You have read everything in this category." : "No series in this category yet. Touch and hold a series to add it to a category.").frame(minHeight: 260)
             }
             LazyVGrid(columns: columns, spacing: 22) {
-                ForEach(shown, id: \.key) { item in
+                ForEach(list, id: \.key) { item in
                     if selecting {
                         AkiTap(action: { if !picked.insert(item.key).inserted { picked.remove(item.key) } }) {
                             AkiCoverCard(title: item.title, cover: item.cover, subtitle: item.unread > 0 ? "\(item.unread) unread" : "Up to date", badge: Int(item.unread))

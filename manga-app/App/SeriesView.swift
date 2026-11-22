@@ -338,10 +338,13 @@ struct SeriesView: View {
         loadKept()
         loadBookmarks()
         chosenCover = (try? model.engine.customCover(source: ref.source, series: ref.id)) ?? nil
-        async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
         if fresh {
-            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, "Could not load this series") } }
+            // Seen in the last ten minutes: the stored details are enough, unless there are none.
+            if detail == nil {
+                do { detail = try await model.engine.details(source: ref.source, id: ref.id) } catch { self.error = describe(error, "Could not load this series") }
+            }
         } else {
+            async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
             async let fetchedChapters = model.engine.chapters(source: ref.source, id: ref.id)
             do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, "Could not load this series") } }
             do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error, "Could not load the chapters") } }

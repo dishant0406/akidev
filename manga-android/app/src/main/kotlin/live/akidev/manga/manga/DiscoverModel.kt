@@ -99,12 +99,13 @@ class DiscoverModel(private val app: AppModel) {
         reload()
     }
 
-    suspend fun reload() {
+    /** `force` (pull to refresh, Try again) asks the sites again even for a listing kept a moment ago. */
+    suspend fun reload(force: Boolean = false) {
         reading = app.io { runCatching { app.engine.history(24u) }.getOrDefault(emptyList()) }
         if (isGlobal) {
             if (submitted.isEmpty()) {
                 global.clear()
-                feed.loadAll(app.engine, app::report, app.visibleSources)
+                feed.loadAll(app.engine, app::report, app.visibleSources, force)
             } else {
                 global.search(app.engine, app.visibleSources, submitted, app::report)
             }
@@ -112,16 +113,16 @@ class DiscoverModel(private val app: AppModel) {
             // New releases load beside the popular list, not after it.
             val info = info
             coroutineScope {
-                val latest = async { if (info != null) feed.loadLatest(app.engine, app::report, info) }
-                load(reset = true)
+                val latest = async { if (info != null) feed.loadLatest(app.engine, app::report, info, force) }
+                load(reset = true, force = force)
                 latest.await()
             }
         }
     }
 
-    suspend fun load(reset: Boolean) {
+    suspend fun load(reset: Boolean, force: Boolean = false) {
         val info = info ?: return
-        browse.load(app.engine, app::report, info, submitted, choices.map { Choice(it.key, it.value) }.sortedBy { it.id }, reset)
+        browse.load(app.engine, app::report, info, submitted, choices.map { Choice(it.key, it.value) }.sortedBy { it.id }, reset, force)
     }
 
     companion object {

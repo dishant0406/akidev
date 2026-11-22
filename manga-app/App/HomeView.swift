@@ -10,16 +10,26 @@ final class BrowseModel {
     private var page: UInt32 = 0
     private var key = ""
 
-    func load(_ engine: Engine, report: (String, Error?) -> Void, source: SourceInfo, term: String, choices: [Choice] = [], reset: Bool) async {
+    func load(_ engine: Engine, report: (String, Error?) -> Void, source: SourceInfo, term: String, choices: [Choice] = [], reset: Bool, force: Bool = false) async {
         let newKey = "\(source.id)|\(term)|\(choices.map { "\($0.id)=\($0.value)" })"
         if reset || newKey != key { items = []; page = 0; hasNext = false; key = newKey; error = nil }
         guard !loading else { return }
         loading = true
         defer { loading = false }
         // The first page of Popular and Latest shows at once from the last time, while the fresh one is fetched.
-        if page == 0, items.isEmpty, term.isEmpty, choices.isEmpty, source.canPopular, let kept = engine.rememberedListing(source: source.id, latest: false) {
-            items = kept.items
-            hasNext = kept.hasNext
+        if page == 0, items.isEmpty, term.isEmpty, choices.isEmpty, source.canPopular {
+            // A listing kept in the last ten minutes is all there is to show: the site is not asked again, unless the person pulled to refresh.
+            if !force, let fresh = await Task.detached(operation: { engine.freshListing(source: source.id, latest: false) }).value {
+                items = fresh.items
+                hasNext = fresh.hasNext
+                page = 1
+                report(source.id, nil)
+                return
+            }
+            if let kept = await Task.detached(operation: { engine.rememberedListing(source: source.id, latest: false) }).value {
+                items = kept.items
+                hasNext = kept.hasNext
+            }
         }
         do {
             let next = page + 1
@@ -105,7 +115,7 @@ struct HomeView: View {
                 .akiPage()
             }
             .scrollDismissesKeyboard(.immediately)
-            .akiRefreshable { await reload() }
+            .akiRefreshable { await reload(force: true) }
             .underTabBar()
             .background(AkiBackdrop())
             .akiNoNavigationBar()
@@ -216,7 +226,7 @@ struct HomeView: View {
 
     @ViewBuilder private var results: some View {
         if let error = browse.error, browse.items.isEmpty {
-            AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await reload() } })).frame(minHeight: 320)
+            AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await reload(force: true) } })).frame(minHeight: 320)
         } else if browse.items.isEmpty && !browse.loading {
             AkiEmptyState(title: submitted.isEmpty ? "Nothing to show" : "No results", message: submitted.isEmpty ? "This source returned no series. Pull down to try again." : "Nothing matched “\(submitted)” in \(info?.name ?? source).").frame(minHeight: 320)
         } else if browse.items.isEmpty {
@@ -274,26 +284,26 @@ struct HomeView: View {
         }
     }
 
-    private func reload() async {
+    private func reload(force: Bool = false) async {
         reading = (try? model.engine.history(limit: 24)) ?? []
         if isGlobal {
             if submitted.isEmpty {
                 global.clear()
-                await feed.loadAll(model.engine, report: model.report, sources: model.visibleSources)
+                await feed.loadAll(model.engine, report: model.report, sources: model.visibleSources, force: force)
             } else {
                 await global.search(model.engine, sources: model.visibleSources, term: submitted, report: model.report)
             }
         } else {
             // New releases load beside the popular list, not after it.
-            let latest = Task { if let info { await feed.loadLatest(model.engine, report: model.report, source: info) } }
-            await load(reset: true)
+            let latest = Task { if let info { await feed.loadLatest(model.engine, report: model.report, source: info, force: force) } }
+            await load(reset: true, force: force)
             await latest.value
         }
     }
 
-    private func load(reset: Bool) async {
+    private func load(reset: Bool, force: Bool = false) async {
         guard let info else { return }
-        await browse.load(model.engine, report: model.report, source: info, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset)
+        await browse.load(model.engine, report: model.report, source: info, term: submitted, choices: choices.map { Choice(id: $0.key, value: $0.value) }.sorted { $0.id < $1.id }, reset: reset, force: force)
     }
 }
 

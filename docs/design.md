@@ -397,3 +397,22 @@ Why: the shelf had no way to drop a series you stopped reading. The library card
 "Remove from history" is one engine call, `forget_history` (`desktop/manga/src/store.rs`, exported in `desktop/manga-ffi/src/lib.rs`). It deletes every progress row of that one series. History is built from progress, so there is no separate history table to clear.
 
 Trade-off: this also forgets which chapters were read. Rejected: deleting only the unfinished row. The series would then stay in the History list, which is not what "remove" says. Another cost: it acts at once, with no question, like the other menu items in the library.
+
+## Speed pass: what was slow and what was not (2026-11-23)
+
+I timed things before and after, on a Mac and on the iPhone simulator. The numbers are the reason for each choice.
+
+- Date and chapter-number reading built its regular expressions on every call. A chapter list reads two per row. They are now built once (`desktop/manga/src/date.rs`). 2000 rows went from 1069 ms to 40 ms on the Mac. A phone is slower, so the win there is bigger in real time.
+- The HTTP client spoke only HTTP/1.1. I turned on `http2` and `brotli` in `desktop/manga/Cargo.toml`. Twelve parallel requests to one host went from about 252 ms to about 135 ms. The first request costs the same. It only helps a site that speaks HTTP/2 (a site that does not still works as before).
+- The home feed asked every source for its popular and new lists on every open. A list the engine kept in the last ten minutes is now shown and not asked for again (`Engine.fresh_listing`). Pull to refresh and "Try again" still ask again. On the simulator a relaunch went from 3 listing requests to 0. The first launch with an empty cache is unchanged (4 requests). At most four sites are asked at a time, so the first sources answer first. Reading what was kept now happens off the main thread.
+- A series that was opened in the last ten minutes no longer asks again for its details when the stored ones exist (it already skipped the chapter list).
+- The library sorted its whole list up to three times for each screen draw (iOS). It now sorts once.
+- Android covers: a cover that is still waiting for a connection is dropped when the last row that wanted it scrolls away. Before, a fast scroll left the covers on screen waiting behind dozens of covers scrolled past. A download that has begun is still finished and kept.
+
+Measured and left alone: starting the engine takes about 2 ms (12 ms the first time), and every engine read is under 1 ms (the library after a write is 7 ms on a big library). The audit guessed 50 to 300 ms for start-up. That guess was wrong, so I did not move the engine off the main thread. Saving a 2000-chapter list takes about 10 ms, also left alone.
+
+Not measured: the Android cover change and the iOS library change (no device scroll test), the Android feed request count (the Android app has no demo repository switch), and how much the library file grew from HTTP/2 and brotli.
+
+Rejected: a cache inside `popular` and `latest` themselves. Pull to refresh would then need a flag in every call, and the apps already know when the person asked for fresh data.
+
+Trade-off: a list can be up to ten minutes old. New releases on a site can show up that much later unless you pull to refresh.

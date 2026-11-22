@@ -810,6 +810,23 @@ impl Store {
             .optional()?)
     }
 
+    /// Like `listing`, but only when it was kept after `newer_than_ms`.
+    pub fn listing_since(
+        &self,
+        source: &str,
+        kind: &str,
+        newer_than_ms: i64,
+    ) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .db()
+            .query_row(
+                "SELECT body FROM listing WHERE source = ?1 AND kind = ?2 AND at > ?3",
+                params![source, kind, newer_than_ms],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn keep_listing(
         &self,
         source: &str,
@@ -2499,6 +2516,15 @@ mod tests {
         assert_eq!(store.library().unwrap()[0].unread, 0);
         store.mark("s", "a", &["c2"], false, 2).unwrap();
         assert_eq!(store.library().unwrap()[0].unread, 1);
+    }
+
+    #[test]
+    fn a_listing_is_fresh_only_if_it_was_kept_recently() {
+        let store = Store::in_memory().unwrap();
+        store.keep_listing("s", "popular", "body", 1_000).unwrap();
+        assert!(store.listing_since("s", "popular", 500).unwrap().is_some());
+        assert!(store.listing_since("s", "popular", 1_000).unwrap().is_none());
+        assert!(store.listing_since("s", "latest", 0).unwrap().is_none());
     }
 
     #[test]

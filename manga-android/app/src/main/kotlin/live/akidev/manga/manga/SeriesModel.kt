@@ -119,9 +119,10 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         bookmarks = stored.bookmarks
         chosenCover = stored.cover
         coroutineScope {
-            val fetchedDetail = async { runCatching { engine.details(ref.source, ref.id) } }
+            // Seen in the last ten minutes: the stored details are enough, unless there are none.
+            val fetchedDetail = if (fresh && detail != null) null else async { runCatching { engine.details(ref.source, ref.id) } }
             val fetchedChapters = if (fresh) null else async { runCatching { engine.chapters(ref.source, ref.id) } }
-            fetchedDetail.await().fold({ detail = it }, { if (detail == null) error = describe(it, "Could not load this series") })
+            fetchedDetail?.await()?.fold({ detail = it }, { if (detail == null) error = describe(it, "Could not load this series") })
             fetchedChapters?.await()?.fold({ showChapters(it.entries) }, { if (chapters.isEmpty()) error = describe(it, "Could not load the chapters") })
         }
         loading = false
