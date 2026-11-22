@@ -223,12 +223,16 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         app.refresh()
     }
 
+    /** The source has an account the person has not signed in to. */
+    val needsAccount: Boolean get() = app.sources.firstOrNull { it.id == ref.source }?.let { it.hasSignIn && !it.signedIn } == true
+
     /** The small line over a chapter's title: where you are in it, or what it is. */
     fun label(chapter: ChapterEntry): String {
         val downloaded = chapter.id in kept
         if (chapter.finished) return if (downloaded) "Read · Downloaded" else "Read"
         if (downloaded) return "Downloaded"
         chapter.page?.let { return "Page ${it + 1u}" }
+        if (chapter.locked && needsAccount) return "Locked"
         val number = chapter.number?.let { "Chapter " + chapterName(it, null).removePrefix("Chapter ") }
         if (number != null && chapter.title?.contains(number, ignoreCase = true) == false) return number
         return "Unread"

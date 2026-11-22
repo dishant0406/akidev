@@ -50,6 +50,7 @@ import live.akidev.manga.app.SeriesRoute
 import live.akidev.manga.app.rememberPhotoPicker
 import live.akidev.manga.app.shortDate
 import live.akidev.manga.design.*
+import live.akidev.manga.sources.SignInSheet
 import uniffi.akimanga.ChapterEntry
 
 private enum class SeriesTab { Chapters, Bookmarks, Details }
@@ -69,6 +70,18 @@ fun SeriesScreen(ref: SeriesRef) {
     var popup by remember { mutableStateOf<SeriesPopup?>(null) }
     val chooseCover = rememberPhotoPicker { series.setCover(it) }
     val open = { target: ReaderTarget -> router.push(ReaderRoute(ref, series.chapters, target)) }
+    // A locked chapter asks for the account first, when there is one to sign in to; any other opens at its place.
+    var signingIn by remember { mutableStateOf(false) }
+    var waiting by remember { mutableStateOf<ReaderTarget?>(null) }
+    val openChapter = { chapter: ChapterEntry ->
+        val next = ReaderTarget(chapter.id, (chapter.page ?: 0u).toInt())
+        if (chapter.locked && series.needsAccount) {
+            waiting = next
+            signingIn = true
+        } else {
+            open(next)
+        }
+    }
 
     LaunchedEffect(Unit) { series.load() }
     // Back from the reader the page finds where the person got to.
@@ -84,7 +97,7 @@ fun SeriesScreen(ref: SeriesRef) {
         AkiRefreshable({ series.load(force = true) }, Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize().akiGlassSource(), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 0.dp)) {
                 item { Hero(series) }
-                sheet(series, tab, { tab = it }, open, scope)
+                sheet(series, tab, { tab = it }, open, openChapter, scope)
             }
         }
         // Pinned over the scrolling page, so back is always there and always takes the tap.
@@ -105,6 +118,7 @@ fun SeriesScreen(ref: SeriesRef) {
         }
     }
 
+    if (signingIn) SignInSheet(ref.source, onSignedIn = { waiting?.let(open) }) { signingIn = false }
     series.problem?.let { AkiAlert("Download failed", it) { series.problem = null } }
     when (popup) {
         SeriesPopup.Moving -> MigrateSheet(ref, onMoved = { router.back() }) { popup = null }
@@ -193,7 +207,7 @@ private fun Controls(
 // ---- the sheet over the picture -----------------------------------------------------------------------------------------------
 
 /** The sheet's rows are items of the page, each on the page colour; the first has the rounded top that rises over the picture. */
-private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (SeriesTab) -> Unit, open: (ReaderTarget) -> Unit, scope: kotlinx.coroutines.CoroutineScope) {
+private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (SeriesTab) -> Unit, open: (ReaderTarget) -> Unit, openChapter: (ChapterEntry) -> Unit, scope: kotlinx.coroutines.CoroutineScope) {
     item {
         Box(Modifier.fillMaxWidth().offset(y = (-30).dp), contentAlignment = Alignment.TopCenter) {
             // The page colour is a glass source between the picture and the page, so the tabs show it and not the picture behind the sheet.
@@ -218,7 +232,7 @@ private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (Ser
                 Modifier.heightIn(min = 280.dp),
             )
         }
-        tab == SeriesTab.Chapters -> chapterRows(series, open, scope)
+        tab == SeriesTab.Chapters -> chapterRows(series, openChapter, scope)
         else -> sheetItem { Details(series) }
     }
     item { Box(Modifier.fillMaxWidth().height(120.dp).offset(y = (-30).dp).background(Aki.colors.background)) }
@@ -236,14 +250,14 @@ private fun LazyListScope.sheetItem(content: @Composable () -> Unit) {
     item { SheetRow(content) }
 }
 
-private fun LazyListScope.chapterRows(series: SeriesModel, open: (ReaderTarget) -> Unit, scope: kotlinx.coroutines.CoroutineScope) {
+private fun LazyListScope.chapterRows(series: SeriesModel, openChapter: (ChapterEntry) -> Unit, scope: kotlinx.coroutines.CoroutineScope) {
     if (series.chapters.isEmpty() && series.loading) sheetItem { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
     items(series.chapters.size, key = { series.chapters[it].id }) { index ->
         val chapter = series.chapters[index]
         val download = if (chapter.id in series.kept) AkiMenuItem("Delete download", "trash", destructive = true) { series.removeDownload(chapter) }
         else AkiMenuItem("Download", "download") { scope.launch { series.download(listOf(chapter)) } }
         SheetRow {
-            AkiTapMenu(listOf(download), onClick = { open(ReaderTarget(chapter.id, (chapter.page ?: 0u).toInt())) }) {
+            AkiTapMenu(listOf(download), onClick = { openChapter(chapter) }) {
                 AkiListCard(
                     series.cover, series.label(chapter), chapterName(chapter.number, chapter.title),
                     badges = listOfNotNull(shortDate(chapter.dateMs), chapter.scanlator), dimmed = chapter.finished,

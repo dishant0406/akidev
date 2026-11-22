@@ -1,6 +1,7 @@
 package live.akidev.manga.design
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,9 +26,14 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
-/** A glass text field with an icon and a clear button. */
+/**
+ * A glass text field with an icon and a clear button. [secure] hides what is typed (a password) and [email] asks for the email keyboard;
+ * both are for a form, so the keyboard's action moves on instead of searching.
+ */
 @Composable
 fun AkiInput(
     placeholder: String,
@@ -36,6 +42,8 @@ fun AkiInput(
     modifier: Modifier = Modifier,
     icon: String? = null,
     isUrl: Boolean = false,
+    secure: Boolean = false,
+    email: Boolean = false,
     onSubmit: () -> Unit = {},
     onClear: () -> Unit = {},
     /** Takes the keyboard as soon as it appears, as the field in an iOS alert does. */
@@ -58,19 +66,39 @@ fun AkiInput(
                 onValueChange = onChange,
                 modifier = Modifier.fillMaxWidth().focusRequester(requester).onFocusChanged { focused = it.isFocused },
                 singleLine = true,
+                visualTransformation = if (secure) PasswordVisualTransformation() else VisualTransformation.None,
                 textStyle = akiTextStyle(AkiTextStyle.Body, AkiTone.Text.color),
                 cursorBrush = SolidColor(Aki.colors.text),
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false,
-                    keyboardType = if (isUrl) KeyboardType.Uri else KeyboardType.Text, imeAction = if (isUrl) ImeAction.Go else ImeAction.Search,
+                    keyboardType = if (secure) KeyboardType.Password else if (email) KeyboardType.Email else if (isUrl) KeyboardType.Uri else KeyboardType.Text,
+                    imeAction = if (secure || isUrl) ImeAction.Go else if (email) ImeAction.Done else ImeAction.Search,
                 ),
                 keyboardActions = KeyboardActions(onAny = { focus.clearFocus(); onSubmit() }),
             )
         }
-        if (text.isNotEmpty()) {
+        if (text.isNotEmpty() && !secure) {
             Box(Modifier.akiPress(label = "Clear") { onChange(""); onClear() }) { AkiIcon("close-solid", size = 16.dp, tone = AkiTone.Muted) }
         }
         // While typing, a way out that does not need a search: closes the keyboard.
         if (focused) AkiText("Done", AkiTextStyle.BodyStrong, Modifier.akiPress { focus.clearFocus() })
+    }
+}
+
+/** A form field: its name above, the field below. The name stays when the field fills, which a placeholder does not. */
+@Composable
+fun AkiField(
+    label: String,
+    text: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    secure: Boolean = false,
+    email: Boolean = false,
+    onSubmit: () -> Unit = {},
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AkiText(label, AkiTextStyle.CaptionStrong, Modifier.padding(start = 18.dp), tone = AkiTone.Muted)
+        AkiInput(placeholder, text, onChange, secure = secure, email = email, onSubmit = onSubmit)
     }
 }

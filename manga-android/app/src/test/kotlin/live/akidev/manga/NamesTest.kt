@@ -16,7 +16,7 @@ class NamesTest {
         assertEquals("Chapter", chapterName(null, null))
     }
 
-    private fun chapter(number: Double) = ChapterEntry(id = "c$number", number = number, title = null, dateMs = null, scanlator = null, finished = false, page = null)
+    private fun chapter(number: Double) = ChapterEntry(id = "c$number", number = number, title = null, dateMs = null, scanlator = null, locked = false, finished = false, page = null)
     private fun found(title: String, count: Int, adult: Boolean = false) = NewChapters("s", title, title, adult, (1..count).map { chapter(it.toDouble()) })
 
     @Test

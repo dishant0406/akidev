@@ -11,6 +11,8 @@ internal val akiIconSet: Map<String, Int> = mapOf(
     "bookmark-off" to R.drawable.aki_icon_bookmark_off,
     "check" to R.drawable.aki_icon_check,
     "check-solid" to R.drawable.aki_icon_check_solid,
+    "lock" to R.drawable.aki_icon_lock,
+    "lock-solid" to R.drawable.aki_icon_lock_solid,
     "clock" to R.drawable.aki_icon_clock,
     "close" to R.drawable.aki_icon_close,
     "close-solid" to R.drawable.aki_icon_close_solid,

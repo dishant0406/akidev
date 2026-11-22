@@ -20,6 +20,7 @@ import live.akidev.manga.listen.ReadAloudModel
 import live.akidev.manga.manga.DiscoverModel
 import live.akidev.manga.manga.LibraryModel
 import live.akidev.manga.manga.UpdatesModel
+import live.akidev.manga.sources.SessionKeystore
 import live.akidev.manga.updates.AutoDownloader
 import live.akidev.manga.updates.NewChapters
 import live.akidev.manga.updates.UpdateAlerts
@@ -55,6 +56,7 @@ class AppModel(private val context: Context) {
     /** The app's context, for what a screen needs from the system (the clipboard, the cache). */
     val appContext: Context get() = context
     val engine = Engine(File(context.filesDir, "AkiManga").path)
+    init { engine.setSessionKeeper(SessionKeystore(context)) }
     val prefs = Preferences(context)
     val glass = GlassGovernor(prefs)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
