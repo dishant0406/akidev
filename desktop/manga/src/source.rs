@@ -2,8 +2,8 @@
 
 use crate::date;
 use crate::def::{
-    AuthDef, Ex, LockedAction, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SCHEMA,
-    SourceDef,
+    AuthDef, Ex, FilterDef, FilterKind, Format, ListDef, LockedAction, Order, Prepare, Request,
+    Role, SCHEMA, SourceDef,
 };
 use crate::eval::{self, Ctx, check_ex, eval, eval_text, eval_texts};
 use crate::fetch::{Fetcher, Rejected, Req, Unreachable};
@@ -179,7 +179,8 @@ impl Source {
             has_sign_in: def.auth.is_some(),
             signed_in: !self.session.read().unwrap().is_empty(),
             locked_label: def.chapters.locked_label.clone(),
-            locked_prompts_sign_in: def.auth.is_some() && def.chapters.locked_action == LockedAction::SignIn,
+            locked_prompts_sign_in: def.auth.is_some()
+                && def.chapters.locked_action == LockedAction::SignIn,
         }
     }
 
@@ -1270,7 +1271,9 @@ mod tests {
         .at(NOW_MS);
         let list = source.chapters("s").await.unwrap();
         assert_eq!(
-            list.iter().map(|c| (c.id.as_str(), c.locked)).collect::<Vec<_>>(),
+            list.iter()
+                .map(|c| (c.id.as_str(), c.locked))
+                .collect::<Vec<_>>(),
             [("soon", true), ("over", false), ("never", false)]
         );
         let info = source.info();
