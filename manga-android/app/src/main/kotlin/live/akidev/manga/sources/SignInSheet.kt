@@ -3,6 +3,7 @@ package live.akidev.manga.sources
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -52,7 +53,7 @@ fun SignInSheet(source: String, onSignedIn: () -> Unit = {}, onDismiss: () -> Un
     }
 
     AkiSheet(onDismiss) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.imePadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AkiLogo(size = 36.dp)
                 AkiText("Sign in to ${model.name(source)}", AkiTextStyle.Title)

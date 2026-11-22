@@ -50,7 +50,8 @@ struct AkiInput: View {
     }
 
     @ViewBuilder private var field: some View {
-        if secure { SecureField(placeholder, text: $text) } else { TextField(placeholder, text: $text) }
+        // `.oneTimeCode` keeps iOS from offering to save what is typed: Akidev keeps a session, not the password.
+        if secure { SecureField(placeholder, text: $text).textContentType(.oneTimeCode) } else { TextField(placeholder, text: $text) }
     }
 }
 
