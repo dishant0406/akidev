@@ -2,7 +2,7 @@
 
 use crate::design::button::icon_button;
 use crate::design::state::{error_state, section_title, skeleton};
-use crate::design::tokens::{CANVAS, GUTTER, TILE_HEIGHT, TILE_WIDTH, color, radius};
+use crate::design::tokens::{CANVAS, GUTTER, TEXT, TILE_HEIGHT, TILE_WIDTH, WASH_2, color, radius};
 use crate::progress::Entry;
 use crate::route::Route;
 use crate::tile::poster_tile;
@@ -14,6 +14,8 @@ use gpui_kit::*;
 use std::cell::Cell;
 use std::rc::Rc;
 
+/// How wide the fade at each end of a row is, where its arrow sits.
+const EDGE_WIDTH: f32 = 96.;
 /// The space between two tiles of a row.
 const TILE_GAP: f32 = 12.;
 /// How many tiles past the edge of the row are built, so one is ready before it scrolls in.
@@ -138,32 +140,44 @@ impl MediaRow {
         group: SharedString,
         cx: &mut Context<Self>,
     ) -> Div {
-        let (from, to) = if left { (0., 1.) } else { (1., 0.) };
         let scrolls = if left { -1. } else { 1. };
+        // Solid at the edge of the screen, and fading out toward the posters.
+        let (outer, inner) = (0.92, 0.);
+        let (from, to) = if left { (outer, inner) } else { (inner, outer) };
         div()
             .absolute()
             .top_0()
             .h(px(TILE_HEIGHT))
-            .w(px(64.))
+            .w(px(EDGE_WIDTH))
             .flex()
             .items_center()
-            .justify_center()
-            .when_else(left, |edge| edge.left_0(), |edge| edge.right_0())
+            .px_3()
+            .when_else(
+                left,
+                |edge| edge.left_0().justify_start(),
+                |edge| edge.right_0().justify_end(),
+            )
             .bg(linear_gradient(
                 90.,
-                linear_color_stop(color(CANVAS).opacity(0.92 * from), 0.),
-                linear_color_stop(color(CANVAS).opacity(0.92 * to), 1.),
+                linear_color_stop(color(CANVAS).opacity(from), 0.),
+                linear_color_stop(color(CANVAS).opacity(to), 1.),
             ))
             .invisible()
             .group_hover(group, |style| style.visible())
-            .child(icon_button(
-                id,
-                icon,
-                cx.listener(move |row, _, _, cx| {
-                    row.scroll_by(scrolls);
-                    cx.notify();
-                }),
-            ))
+            .child(
+                // A quiet disc, so the arrow reads as a button and not as a mark on the poster.
+                div()
+                    .rounded_full()
+                    .bg(color(TEXT).opacity(WASH_2))
+                    .child(icon_button(
+                        id,
+                        icon,
+                        cx.listener(move |row, _, _, cx| {
+                            row.scroll_by(scrolls);
+                            cx.notify();
+                        }),
+                    )),
+            )
     }
 }
 

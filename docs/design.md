@@ -359,3 +359,7 @@ Not changed, on purpose:
 When Play is pressed, the torrent engine fetches the first 3 MB of the file and only then the last 3 MB, where an MKV keeps its index. mpv waited about 6 s for that index on a 4K file. We made the two fetches run together and compared old and new builds on the same release, alternating runs. The index was then local (mpv opened the file in 0.02 s), but the start of the file took about 6 s longer (2.2 s became 8.4 s) because both fetches share the same few peers. Total time to the first frame was about the same, with too few runs to tell. We reverted it.
 
 What this tells us: a Play start of 10 to 20 s on a 4K WEB-DL is limited by how fast the swarm sends, not by the order we ask. The release ranker puts the healthiest swarm first (50 or more seeders), and that is often a 4K file. Changing that trades startup speed against how many seeders the pick has, so it is a product choice, not a bug fix.
+
+## The arrows at the ends of a row fade the right way (2026-11-22)
+
+The fade behind a row's arrow was drawn backwards: solid on the side facing the posters and clear at the edge of the screen. That gave a hard vertical line across the poster, with a bare arrow on it. In `desktop/app/src/row.rs` the fade is now solid at the screen edge and clears toward the posters, 96 px wide instead of 64, and the arrow sits in a quiet disc (the same wash as the hover on a button) so it reads as a button. Checked on screen at both ends of a row. Not done: the website's rows, which were not looked at.
