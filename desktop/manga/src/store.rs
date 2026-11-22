@@ -603,6 +603,15 @@ impl Store {
         Ok(())
     }
 
+    /// Takes a series out of the history: forgets where it was left and which chapters were read. Other series are not touched.
+    pub fn forget_history(&self, source: &str, series: &str) -> anyhow::Result<()> {
+        self.db().execute(
+            "DELETE FROM progress WHERE source = ?1 AND series = ?2",
+            params![source, series],
+        )?;
+        Ok(())
+    }
+
     /// Where "Continue" goes: the chapter being read, or else the one after the last finished
     /// (chapters are stored newest first, so the next to read is the one before in the list).
     pub fn resume(&self, source: &str, series: &str) -> anyhow::Result<Option<Resume>> {
@@ -2490,6 +2499,18 @@ mod tests {
         assert_eq!(store.library().unwrap()[0].unread, 0);
         store.mark("s", "a", &["c2"], false, 2).unwrap();
         assert_eq!(store.library().unwrap()[0].unread, 1);
+    }
+
+    #[test]
+    fn forgetting_history_clears_one_series_only() {
+        let store = store_with_series();
+        store
+            .sync_chapters("s", "a", &[chapter("c2", 2.0), chapter("c1", 1.0)])
+            .unwrap();
+        store.mark("s", "a", &["c1"], true, 1).unwrap();
+        store.forget_history("s", "a").unwrap();
+        assert!(store.history(10).unwrap().is_empty());
+        assert_eq!(store.library().unwrap()[0].unread, 2);
     }
 
     #[test]

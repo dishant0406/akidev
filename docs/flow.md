@@ -164,3 +164,12 @@ The engine part, and the iPhone and Android screens that sit on it.
 - Large text: buttons, tabs, chips and rows grow in height and wrap. They do not cut text. Long titles on a list still end in an ellipsis, and the full title stays available to the screen reader.
 - Reduced motion (iPhone) and "Remove animations" (Android) turn slides and scales into plain fades or no motion.
 - Errors: if a call fails, the screen shows a specific title from `describe(error, failed)` and the message from the engine under it. If the phone is offline the title is "Could not reach the site". The share flow retries only for the offline error type, not for a piece of text.
+
+## Removing a series from history (2026-11-23)
+
+1. You long press a card in "Continue reading" (`HomeView.swift` `continueMenu`, `HomeScreen.kt` with `DiscoverModel.continueMenu`) or a row in History (`LibraryView.swift`, `LibraryScreen.kt` with `LibraryModel.historyMenu`).
+2. "Remove from history" calls `forgetHistory(source, series)`. The engine deletes that series' progress rows.
+3. The app refreshes, then loads the history again. The card or row goes away. Other series stay.
+4. "Mark all as read" (shelf only) marks every cached chapter as read. The series counts as finished, so it leaves the shelf but stays in History.
+
+Edge cases: if the call fails, nothing changes and no message shows (the error is ignored, as in the other library menus). If the chapter list was never cached, "Mark all as read" marks nothing. The chapters you read in that series become unread again after a removal.

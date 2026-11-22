@@ -4,9 +4,12 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import live.akidev.manga.app.AppModel
+import live.akidev.manga.design.AkiMenuItem
 import uniffi.akimanga.Choice
 import uniffi.akimanga.FilterInfo
 import uniffi.akimanga.HistoryEntry
@@ -56,6 +59,30 @@ class DiscoverModel(private val app: AppModel) {
         term = ""
         choices = emptyMap()
         filters = runCatching { app.engine.sourceFilters(source) }.getOrDefault(emptyList())
+    }
+
+    /** What a long press on a "Continue reading" card offers: finish the series, or forget it was started. */
+    fun continueMenu(entry: HistoryEntry, scope: CoroutineScope): List<AkiMenuItem> = listOf(
+        AkiMenuItem("Mark all as read", "check") {
+            scope.launch {
+                app.io {
+                    val ids = runCatching { app.engine.cachedChapters(entry.source, entry.series) }.getOrDefault(emptyList()).map { it.id }
+                    runCatching { app.engine.mark(entry.source, entry.series, ids, true) }
+                }
+                afterHistoryChange()
+            }
+        },
+        AkiMenuItem("Remove from history", "trash", destructive = true) {
+            scope.launch {
+                app.io { runCatching { app.engine.forgetHistory(entry.source, entry.series) } }
+                afterHistoryChange()
+            }
+        },
+    )
+
+    private suspend fun afterHistoryChange() {
+        app.refresh()
+        reading = app.io { runCatching { app.engine.history(24u) }.getOrDefault(emptyList()) }
     }
 
     /** Called when what is installed changes, and when the screen opens: picks a source if the one chosen is gone, and loads once. */

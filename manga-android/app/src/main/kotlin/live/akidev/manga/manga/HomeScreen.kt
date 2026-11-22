@@ -248,10 +248,11 @@ private fun LazyListScope.continueReading(model: AppModel, open: (String, Card) 
     val entries = model.discover.continueReading
     if (entries.isEmpty()) return
     item {
+        val scope = rememberCoroutineScope()
         AkiShelf("Continue reading") {
             items(entries.size, key = { entries[it].source + "/" + entries[it].series }) { index ->
                 val entry = entries[index]
-                AkiTap({ open(entry.source, Card(entry.series, entry.title, entry.cover, null)) }) {
+                AkiTapMenu(model.discover.continueMenu(entry, scope), onClick = { open(entry.source, Card(entry.series, entry.title, entry.cover, null)) }) {
                     AkiPoster(entry.title, entry.cover, caption = chapterName(entry.chapterNumber, entry.chapterTitle))
                 }
             }

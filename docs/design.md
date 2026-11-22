@@ -387,3 +387,13 @@ Rejected: a shared string file for both apps. It would be cleaner, but it would 
 Not fixed, and why: a few colour pairs may be under 4.5:1 (red caption text, muted text on a pale chip, text on a dimmed card). Colours are a design decision, so they are listed for the owner. Menu actions that remove a source, repository or catalogue still act at once without a question. The page text of a book drawn on a canvas on iPhone has no screen reader text yet.
 
 Checked: both apps build, the Android unit tests and lint pass, and the Sources and Discover screens on the iPhone simulator. Not checked: a screen reader (VoiceOver, TalkBack) on a real phone, and the largest text size on every screen.
+
+## Long press on Continue reading and History (2026-11-23)
+
+Chosen: a long press on a "Continue reading" card offers "Mark all as read" and "Remove from history". A long press on a History row offers "Remove from history". On Android a screen reader gets the same items as actions, because it cannot long press.
+
+Why: the shelf had no way to drop a series you stopped reading. The library cards already use a long press menu, so this looks the same.
+
+"Remove from history" is one engine call, `forget_history` (`desktop/manga/src/store.rs`, exported in `desktop/manga-ffi/src/lib.rs`). It deletes every progress row of that one series. History is built from progress, so there is no separate history table to clear.
+
+Trade-off: this also forgets which chapters were read. Rejected: deleting only the unfinished row. The series would then stay in the History list, which is not what "remove" says. Another cost: it acts at once, with no question, like the other menu items in the library.

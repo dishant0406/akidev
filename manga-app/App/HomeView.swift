@@ -166,9 +166,27 @@ struct HomeView: View {
                     AkiLink(value: SeriesRef(source: entry.source, id: entry.series, title: entry.title, cover: entry.cover)) {
                         AkiPoster(title: entry.title, cover: entry.cover, caption: chapterName(number: entry.chapterNumber, title: entry.chapterTitle))
                     }
+                    .akiContextMenu(continueMenu(for: entry))
                 }
             }
         }
+    }
+
+    /// What a long press on a "Continue reading" card offers: finish the series, or forget it was started.
+    private func continueMenu(for entry: HistoryEntry) -> [AkiMenuItem] {
+        [
+            AkiMenuItem(title: "Mark all as read", icon: "check") {
+                let ids = ((try? model.engine.cachedChapters(source: entry.source, series: entry.series)) ?? []).map(\.id)
+                try? model.engine.mark(source: entry.source, series: entry.series, chapters: ids, read: true)
+                model.refresh()
+                reading = (try? model.engine.history(limit: 24)) ?? []
+            },
+            AkiMenuItem(title: "Remove from history", icon: "trash", destructive: true) {
+                try? model.engine.forgetHistory(source: entry.source, series: entry.series)
+                model.refresh()
+                reading = (try? model.engine.history(limit: 24)) ?? []
+            },
+        ]
     }
 
     /// Every source at once: one big title, what you were reading, then a popular and a new shelf per source.

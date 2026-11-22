@@ -121,6 +121,15 @@ class LibraryModel(private val app: AppModel) {
         history = runCatching { app.engine.history(60u) }.getOrDefault(emptyList())
     }
 
+    /** What a long press on a history row offers. */
+    fun historyMenu(entry: uniffi.akimanga.HistoryEntry): List<AkiMenuItem> = listOf(
+        AkiMenuItem("Remove from history", "trash", destructive = true) {
+            runCatching { app.engine.forgetHistory(entry.source, entry.series) }
+            app.refresh()
+            loadHistory()
+        },
+    )
+
     fun markPickedRead() {
         for (item in pickedShown) markRead(item, refresh = false)
         app.refresh()

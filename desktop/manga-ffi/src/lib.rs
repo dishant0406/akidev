@@ -1475,6 +1475,11 @@ impl Engine {
         Ok(self.store.mark(&source, &series, &ids, read, now_ms())?)
     }
 
+    /// Takes a series out of the history (and forgets which of its chapters were read).
+    pub fn forget_history(&self, source: String, series: String) -> Result<()> {
+        Ok(self.store.forget_history(&source, &series)?)
+    }
+
     pub fn resume(&self, source: String, series: String) -> Result<Option<Resume>> {
         Ok(self.store.resume(&source, &series)?.map(|resume| Resume {
             chapter: resume.chapter,

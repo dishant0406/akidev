@@ -145,7 +145,7 @@ private fun LazyListScope.history(library: LibraryModel) {
     items(library.history.size) { index ->
         val entry = library.history[index]
         val router = LocalRouter.current
-        AkiTap({ router.push(SeriesRoute(SeriesRef(entry.source, entry.series, entry.title, entry.cover))) }) {
+        AkiTapMenu(library.historyMenu(entry), onClick = { router.push(SeriesRoute(SeriesRef(entry.source, entry.series, entry.title, entry.cover))) }) {
             AkiListCard(entry.cover, if (entry.finished) "Finished" else "Reading", entry.title, badges = listOfNotNull(chapterName(entry.chapterNumber, entry.chapterTitle), shortDate(entry.atMs)))
         }
     }

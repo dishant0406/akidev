@@ -228,6 +228,11 @@ struct LibraryView: View {
                         AkiListCard(thumbnail: item.cover, label: item.finished ? "Finished" : "Reading", title: item.title,
                                     badges: [chapterName(number: item.chapterNumber, title: item.chapterTitle), shortDate(item.atMs)].compactMap { $0 })
                     }
+                    .akiContextMenu([AkiMenuItem(title: "Remove from history", icon: "trash", destructive: true) {
+                        try? model.engine.forgetHistory(source: item.source, series: item.series)
+                        model.refresh()
+                        history = (try? model.engine.history(limit: 60)) ?? []
+                    }])
                 }
             }
         }
