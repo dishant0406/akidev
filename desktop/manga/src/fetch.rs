@@ -50,6 +50,21 @@ impl std::fmt::Display for Challenge {
 
 impl std::error::Error for Challenge {}
 
+/// The site answered, with a status that is not a success.
+#[derive(Debug)]
+pub struct Rejected {
+    pub url: String,
+    pub status: reqwest::StatusCode,
+}
+
+impl std::fmt::Display for Rejected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} answered {}", self.url, self.status)
+    }
+}
+
+impl std::error::Error for Rejected {}
+
 /// The site could not be reached at all: no network, a name that does not resolve, a refused connection.
 #[derive(Debug)]
 pub struct Unreachable {
@@ -261,7 +276,11 @@ impl Fetcher {
                     .into());
                 }
                 if !status.is_success() {
-                    bail!("{} answered {}", req.url, status);
+                    return Err(Rejected {
+                        url: req.url.clone(),
+                        status,
+                    }
+                    .into());
                 }
                 if let Transport::Recording { taken } = &self.transport {
                     let mut taken = taken.lock().unwrap();

@@ -65,6 +65,9 @@ pub struct Chapter {
     /// Milliseconds since the epoch, when the source says when it came out.
     pub date_ms: Option<i64>,
     pub scanlator: Option<String>,
+    /// The source says this chapter needs an account.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 /// How a chapter wants to be read: manhwa is a long strip, manga pages turn.

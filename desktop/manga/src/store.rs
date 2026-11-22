@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use std::sync::Mutex;
 
-const SCHEMA_VERSION: i32 = 10;
+const SCHEMA_VERSION: i32 = 11;
 
 pub struct Store {
     db: Mutex<Connection>,
@@ -398,6 +398,15 @@ fn migrate(db: &Connection) -> anyhow::Result<()> {
              COMMIT;",
         )?;
     }
+    if version < 11 {
+        // A chapter the source says needs an account.
+        db.execute_batch(
+            "BEGIN;
+             ALTER TABLE chapter ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;
+             PRAGMA user_version = 11;
+             COMMIT;",
+        )?;
+    }
     Ok(())
 }
 
@@ -499,9 +508,9 @@ impl Store {
         let mut new = Vec::new();
         for (position, chapter) in chapters.iter().enumerate() {
             tx.execute(
-                "INSERT INTO chapter (source, series, id, number, title, date_ms, scanlator, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-                 ON CONFLICT (source, series, id) DO UPDATE SET number = ?4, title = ?5, date_ms = ?6, scanlator = ?7, position = ?8",
-                params![source, series, chapter.id, chapter.number, chapter.title, chapter.date_ms, chapter.scanlator, position as i64],
+                "INSERT INTO chapter (source, series, id, number, title, date_ms, scanlator, position, locked) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT (source, series, id) DO UPDATE SET number = ?4, title = ?5, date_ms = ?6, scanlator = ?7, position = ?8, locked = ?9",
+                params![source, series, chapter.id, chapter.number, chapter.title, chapter.date_ms, chapter.scanlator, position as i64, chapter.locked],
             )?;
             if !known.contains(&chapter.id) && !first {
                 new.push(chapter.id.clone());
@@ -522,7 +531,7 @@ impl Store {
     pub fn chapters(&self, source: &str, series: &str) -> anyhow::Result<Vec<ChapterRow>> {
         let db = self.db();
         let mut statement = db.prepare(
-            "SELECT c.id, c.number, c.title, c.date_ms, c.scanlator, coalesce(p.finished, 0), p.page
+            "SELECT c.id, c.number, c.title, c.date_ms, c.scanlator, coalesce(p.finished, 0), p.page, c.locked
              FROM chapter c LEFT JOIN progress p ON p.source = c.source AND p.series = c.series AND p.chapter = c.id
              WHERE c.source = ?1 AND c.series = ?2 ORDER BY c.position",
         )?;
@@ -536,6 +545,7 @@ impl Store {
                     title: row.get(2)?,
                     date_ms: row.get(3)?,
                     scanlator: row.get(4)?,
+                    locked: row.get(7)?,
                 },
                 finished,
                 page: if finished {
@@ -1710,7 +1720,36 @@ mod tests {
             title: None,
             date_ms: None,
             scanlator: None,
+            locked: false,
         }
+    }
+
+    #[test]
+    fn a_locked_chapter_is_remembered_and_a_new_listing_can_unlock_it() {
+        let store = store_with_series();
+        let mut locked = chapter("c1", 1.0);
+        locked.locked = true;
+        store
+            .sync_chapters("s", "a", &[locked, chapter("c2", 2.0)])
+            .unwrap();
+        let rows = store.chapters("s", "a").unwrap();
+        assert_eq!(
+            rows.iter()
+                .map(|row| (row.chapter.id.as_str(), row.chapter.locked))
+                .collect::<Vec<_>>(),
+            [("c1", true), ("c2", false)]
+        );
+        // The site stops asking for an account for it (early access ended).
+        store
+            .sync_chapters("s", "a", &[chapter("c1", 1.0), chapter("c2", 2.0)])
+            .unwrap();
+        assert!(
+            store
+                .chapters("s", "a")
+                .unwrap()
+                .iter()
+                .all(|row| !row.chapter.locked)
+        );
     }
 
     fn store_with_series() -> Store {
@@ -2090,9 +2129,9 @@ mod tests {
             )
             .unwrap();
         let db = store.db();
-        // Take back what versions 4 to 10 added, to be left with a library as version 3 made it.
+        // Take back what versions 4 to 11 added, to be left with a library as version 3 made it.
         db.execute_batch(
-            "DROP TABLE book_category; DROP TABLE catalogue; DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; PRAGMA user_version = 3;",
+            "DROP TABLE book_category; DROP TABLE catalogue; DROP TABLE book_mark; DROP TABLE book; DROP TABLE bookmark; DROP TABLE detail; ALTER TABLE series DROP COLUMN custom_cover; ALTER TABLE chapter DROP COLUMN locked; PRAGMA user_version = 3;",
         )
         .unwrap();
         migrate(&db).unwrap();

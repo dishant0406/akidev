@@ -6,6 +6,7 @@
 //!                                              calls: popular, latest, search=TERM, details=ID, chapters=ID, pages=SERIES,CHAPTER
 //!   keygen <secret-file>                       make a signing key, print its public half
 //!   run   <definition.json> <popular|latest|search TERM|details ID|chapters ID|pages SERIES CHAPTER> [--themes <dir>]
+//!                                              a source with a sign-in is signed in first when AKI_AUTH_<FIELD ID> are set
 
 use akidev_manga::theme::Themes;
 use akidev_manga::{Source, check};
@@ -190,6 +191,25 @@ async fn main() -> anyhow::Result<()> {
         }
         Some("run") if args.len() >= 3 => {
             let source = Source::live(load(Path::new(&args[1]), themes_dir.as_deref())?)?;
+            // A source with a sign-in is signed in first when its fields are in the environment, as
+            // AKI_AUTH_<ID> (an id's dashes are underscores): nothing typed, so no shell history.
+            if let Some(auth) = &source.def().auth {
+                let name = |id: &str| format!("AKI_AUTH_{}", id.to_uppercase().replace('-', "_"));
+                let fields: std::collections::BTreeMap<String, String> = auth
+                    .fields
+                    .iter()
+                    .filter_map(|field| {
+                        Some((field.id.clone(), std::env::var(name(&field.id)).ok()?))
+                    })
+                    .collect();
+                if fields.len() == auth.fields.len() {
+                    let user = source.sign_in(&fields).await?;
+                    eprintln!(
+                        "signed in{}",
+                        user.map(|user| format!(" as {user}")).unwrap_or_default()
+                    );
+                }
+            }
             let out = match (args[2].as_str(), &args[3..]) {
                 ("popular", _) => serde_json::to_value(source.popular(1).await?)?,
                 ("latest", _) => serde_json::to_value(source.latest(1).await?)?,

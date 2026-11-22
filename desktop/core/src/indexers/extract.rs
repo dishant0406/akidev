@@ -388,7 +388,10 @@ mod tests {
             found[0].title,
             "[SubsPlease] Sousou no Frieren - 01 (1080p) [F02B9CEE].mkv"
         );
-        assert_eq!(found[0].info_hash, "374ff33f0fae5206c693c7c7e0bd7acc88ef6ad0");
+        assert_eq!(
+            found[0].info_hash,
+            "374ff33f0fae5206c693c7c7e0bd7acc88ef6ad0"
+        );
         assert_eq!(found[0].size_bytes, Some(1610612736));
         assert_eq!(found[0].seeders, Some(116));
         assert_eq!(found[0].file_idx, Some(0));

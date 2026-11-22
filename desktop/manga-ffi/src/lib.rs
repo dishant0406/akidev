@@ -130,6 +130,8 @@ pub struct ChapterEntry {
     pub title: Option<String>,
     pub date_ms: Option<i64>,
     pub scanlator: Option<String>,
+    /// The source says this chapter needs an account.
+    pub locked: bool,
     pub finished: bool,
     /// The page the person is on, in a chapter not yet finished.
     pub page: Option<u32>,
@@ -176,6 +178,39 @@ pub struct SourceInfo {
     pub can_latest: bool,
     pub can_search: bool,
     pub has_settings: bool,
+    /// The source has an account to sign in to (paid or private titles).
+    pub has_sign_in: bool,
+    pub signed_in: bool,
+    /// The source's own word for a locked chapter, when it gives one.
+    pub locked_label: Option<String>,
+    /// A tap on a locked chapter asks to sign in first.
+    pub locked_prompts_sign_in: bool,
+}
+
+/// What the sign-in screen shows: where the account is typed to, and what is asked for.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SignInForm {
+    /// The site the account goes to (and nowhere else), as `example.com`.
+    pub host: String,
+    pub fields: Vec<SignInField>,
+}
+
+/// One thing a person types to sign in to a source.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SignInField {
+    pub id: String,
+    pub name: String,
+    /// Typed hidden.
+    pub secret: bool,
+}
+
+/// Where the app keeps a source's session (what the site answered when the person signed in) safely: the
+/// Keychain on iPhone, the Keystore on Android. The password is never given to it. The engine asks for the
+/// session when a source loads and hands over every change, a refresh included; `None` means it is gone.
+#[uniffi::export(with_foreign)]
+pub trait SessionKeeper: Send + Sync {
+    fn load(&self, source: String) -> Option<String>;
+    fn save(&self, source: String, session: Option<String>);
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -431,6 +466,10 @@ impl From<Info> for SourceInfo {
             can_latest: info.can_latest,
             can_search: info.can_search,
             has_settings: info.has_settings,
+            has_sign_in: info.has_sign_in,
+            signed_in: info.signed_in,
+            locked_label: info.locked_label,
+            locked_prompts_sign_in: info.locked_prompts_sign_in,
         }
     }
 }
@@ -539,9 +578,33 @@ pub struct Engine {
     page_turns: std::sync::Mutex<BTreeMap<String, Arc<tokio::sync::Mutex<()>>>>,
     /// Voice models being downloaded now.
     installing: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// Where sessions are kept, once the app has said.
+    keeper: RwLock<Option<Arc<dyn SessionKeeper>>>,
 }
 
 impl Engine {
+    /// Puts back the session the app kept for this source, and passes on every change from now on.
+    fn keep_session(&self, source: &Source) {
+        let Some(keeper) = self.keeper.read().unwrap().clone() else {
+            return;
+        };
+        if source.def().auth.is_none() {
+            return;
+        }
+        let id = source.info().id;
+        if let Some(saved) = keeper.load(id.clone())
+            && let Ok(session) = serde_json::from_str(&saved)
+        {
+            source.restore_session(session);
+        }
+        source.watch_session(move |session| {
+            keeper.save(
+                id.clone(),
+                session.and_then(|session| serde_json::to_string(&session).ok()),
+            );
+        });
+    }
+
     fn keep_first_page(&self, source: &str, kind: &str, page: u32, found: &m::Page<m::Card>) {
         if page == 1
             && let Ok(body) = serde_json::to_string(found)
@@ -586,6 +649,7 @@ impl Engine {
             // A choice the source no longer offers is dropped quietly.
             let _ = source.choose(&key, &value);
         }
+        self.keep_session(&source);
         Ok(source)
     }
 
@@ -801,6 +865,7 @@ impl Engine {
             page_lists: Default::default(),
             page_turns: Default::default(),
             installing: Default::default(),
+            keeper: RwLock::default(),
         };
         engine.reload();
         Ok(Arc::new(engine))
@@ -865,6 +930,9 @@ impl Engine {
         if !plain_name(&id) {
             return Err(failed("that is not a source"));
         }
+        if let Some(keeper) = self.keeper.read().unwrap().as_ref() {
+            keeper.save(id.clone(), None);
+        }
         self.sources.write().unwrap().remove(&id);
         let _ = std::fs::remove_file(self.dir.join("sources").join(format!("{id}.json")));
         self.store.forget_source(&id)?;
@@ -888,6 +956,56 @@ impl Engine {
                 value: setting.value,
             })
             .collect())
+    }
+
+    // --- signing in ----------------------------------------------------------------------------
+
+    /// Says where sessions are kept. The sources already loaded get theirs back from it.
+    pub fn set_session_keeper(&self, keeper: Arc<dyn SessionKeeper>) {
+        *self.keeper.write().unwrap() = Some(keeper);
+        for source in self.sources.read().unwrap().values() {
+            self.keep_session(source);
+        }
+    }
+
+    /// What the sign-in screen needs for a source: its host and the fields to type, in order.
+    pub fn sign_in_form(&self, source: String) -> Result<SignInForm> {
+        let source = self.source(&source)?;
+        let def = source.def();
+        let host = source.host();
+        let fields = def.auth.as_ref().map_or_else(Vec::new, |auth| {
+            auth.fields
+                .iter()
+                .map(|field| SignInField {
+                    id: field.id.clone(),
+                    name: field.name.clone(),
+                    secret: field.secret,
+                })
+                .collect()
+        });
+        Ok(SignInForm { host, fields })
+    }
+
+    /// Signs in. Gives the name the site calls the person, when it says. The password goes to the site and
+    /// nowhere else.
+    pub async fn sign_in(
+        &self,
+        source: String,
+        fields: std::collections::HashMap<String, String>,
+    ) -> Result<Option<String>> {
+        let fields: BTreeMap<String, String> = fields.into_iter().collect();
+        Ok(self.source(&source)?.sign_in(&fields).await?)
+    }
+
+    /// Tells the site, when it can be told, and forgets the session.
+    pub async fn sign_out(&self, source: String) -> Result<()> {
+        self.source(&source)?.sign_out().await;
+        Ok(())
+    }
+
+    /// The name the site calls the signed-in person, when it said and someone is signed in.
+    pub fn signed_in_as(&self, source: String) -> Result<Option<String>> {
+        Ok(self.source(&source)?.session().get("user").cloned())
     }
 
     pub fn set_setting(&self, source: String, id: String, value: String) -> Result<()> {
@@ -1602,6 +1720,7 @@ impl Engine {
             title: Some(imported.title.clone()),
             date_ms: None,
             scanlator: None,
+            locked: false,
         };
         self.store.sync_chapters(DEVICE, &imported.id, &[chapter])?;
         self.store.add_to_library(DEVICE, &imported.id, now_ms())?;
@@ -1775,6 +1894,7 @@ impl Engine {
                 title: row.chapter.title,
                 date_ms: row.chapter.date_ms,
                 scanlator: row.chapter.scanlator,
+                locked: row.chapter.locked,
                 finished: row.finished,
                 page: row.page,
             })

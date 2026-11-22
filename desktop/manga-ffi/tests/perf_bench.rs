@@ -49,6 +49,7 @@ fn engine_reads_on_a_big_library() {
                     title: None,
                     date_ms: Some(1_700_000_000_000 + n * 86_400_000),
                     scanlator: None,
+                    locked: false,
                 })
                 .collect();
             store.sync_chapters("src", &id, &chapters).unwrap();

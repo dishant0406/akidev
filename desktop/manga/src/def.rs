@@ -74,6 +74,8 @@ pub enum Step {
     NonEmpty,
     /// "true" when there is anything, nothing otherwise.
     Exists,
+    /// A date (milliseconds, from `date`) that is still ahead of now gives "true"; one that has passed gives nothing.
+    InFuture,
     /// The value of the first key the lowercased text contains.
     Map(Vec<(String, String)>),
     /// The first expression that gives something.
@@ -226,6 +228,21 @@ pub struct ChapterDef {
     pub date: Option<Ex>,
     #[serde(default)]
     pub scanlator: Option<Ex>,
+    /// Whether the chapter needs an account (paid, early access). Anything but nothing, `false`, `0`, `no` or `null`
+    /// means it does. The app shows a lock and asks the person to sign in, when the source has a sign-in.
+    #[serde(default)]
+    pub locked: Option<Ex>,
+}
+
+/// What a tap on a locked chapter does while the person is signed out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum LockedAction {
+    /// Ask them to sign in first (when the source has a sign-in), then open the chapter.
+    #[default]
+    SignIn,
+    /// Open it as any chapter: the lock is only shown.
+    None,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -237,6 +254,12 @@ pub struct ChaptersDef {
     pub chapter: ChapterDef,
     #[serde(default)]
     pub order: Order,
+    /// What the apps call a locked chapter on its row ("Members only"). Without it the row shows the lock and its usual line.
+    #[serde(default)]
+    pub locked_label: Option<String>,
+    /// What a tap on a locked chapter does while signed out.
+    #[serde(default)]
+    pub locked_action: LockedAction,
     /// For a source that pages its chapter list: ask again with `{offset}` (and `{page}`) raised until
     /// `total` is reached, or until a page brings no chapter not already seen.
     #[serde(default)]
@@ -315,6 +338,39 @@ pub struct SettingDef {
     pub default: String,
 }
 
+/// One thing a person types to sign in (an email, a password, a token).
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthField {
+    /// Lower case letters, digits, dashes and underscores. A hole of the sign-in request: `{email}`.
+    pub id: String,
+    pub name: String,
+    /// Typed hidden, and never kept: only what the site answers is.
+    #[serde(default)]
+    pub secret: bool,
+}
+
+/// Signing in to a source whose paid or private titles need an account. Nothing here is a secret: the person
+/// types theirs in the app, which keeps only what the site answers (the session), never the password.
+///
+/// The session is the values `login.vars` read from the answer (`access`, `refresh`, `user`, any names).
+/// They are holes in every request afterwards, and in `headers`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthDef {
+    pub fields: Vec<AuthField>,
+    /// The request that signs in; `vars` read the session out of its answer. Without it, what the person
+    /// typed is the session (a token pasted in).
+    #[serde(default)]
+    pub login: Option<Prepare>,
+    /// Asked when a request is refused with 401, once; `vars` replace the session values they name.
+    #[serde(default)]
+    pub refresh: Option<Prepare>,
+    #[serde(default)]
+    pub logout: Option<Request>,
+    /// Added to every request to `base_url` while signed in (`"authorization": "Bearer {access}"`).
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+}
+
 fn page_size() -> u32 {
     20
 }
@@ -353,6 +409,8 @@ pub struct SourceDef {
     pub search: Option<ListDef>,
     #[serde(default)]
     pub filters: Vec<FilterDef>,
+    #[serde(default)]
+    pub auth: Option<AuthDef>,
     pub detail: DetailDef,
     pub chapters: ChaptersDef,
     pub pages: PagesDef,

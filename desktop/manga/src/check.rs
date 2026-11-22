@@ -33,6 +33,9 @@ struct Call {
     /// The filters the person chose, by filter id (a genre, an order).
     #[serde(default)]
     filters: BTreeMap<String, String>,
+    /// What the person typed to sign in, by field id: made-up values, never a real account's.
+    #[serde(default)]
+    fields: BTreeMap<String, String>,
     /// What the call must return; empty on a new call, filled in by `bless`.
     #[serde(default)]
     expect: Option<Value>,
@@ -60,6 +63,12 @@ async fn call(source: &Source, call: &Call) -> anyhow::Result<Value> {
         )?,
         "details" => serde_json::to_value(source.details(&id()?).await?)?,
         "chapters" => serde_json::to_value(source.chapters(&id()?).await?)?,
+        // The answer is only the name the site gives the person: the session is never an expectation.
+        "sign_in" => json!({ "user": source.sign_in(&call.fields).await? }),
+        "sign_out" => {
+            source.sign_out().await;
+            json!({ "signed_in": source.info().signed_in })
+        }
         "pages" => serde_json::to_value(
             source
                 .pages(call.series.as_deref().unwrap_or_default(), &id()?)

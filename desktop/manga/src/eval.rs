@@ -366,6 +366,10 @@ fn apply(step: &Step, format: Format, nodes: Vec<Node>, ctx: &Ctx) -> anyhow::Re
                 vec![Node::Text(text.clone())]
             }
         }
+        Step::InFuture => texts(nodes)
+            .filter(|text| text.trim().parse::<i64>().is_ok_and(|ms| ms > ctx.now_ms))
+            .map(|_| Node::Text("true".into()))
+            .collect(),
         Step::NonEmpty => nodes
             .into_iter()
             .filter(|node| !text_of(node).trim().is_empty())

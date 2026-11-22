@@ -2,10 +2,11 @@
 
 use crate::date;
 use crate::def::{
-    Ex, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SCHEMA, SourceDef,
+    AuthDef, Ex, LockedAction, FilterDef, FilterKind, Format, ListDef, Order, Prepare, Request, Role, SCHEMA,
+    SourceDef,
 };
 use crate::eval::{self, Ctx, check_ex, eval, eval_text, eval_texts};
-use crate::fetch::{Fetcher, Req, Unreachable};
+use crate::fetch::{Fetcher, Rejected, Req, Unreachable};
 use crate::model::{Card, Chapter, Detail, Page, PageList, Reading, Status};
 use crate::template::fill;
 use anyhow::{Context, bail, ensure};
@@ -33,6 +34,8 @@ pub struct Holes {
     pub filters: BTreeMap<String, String>,
     /// The source's settings: the person's choice, or the default.
     pub settings: BTreeMap<String, String>,
+    /// What signing in gave (`access`, `refresh`, ...); empty when signed out.
+    pub session: BTreeMap<String, String>,
 }
 
 impl Holes {
@@ -53,6 +56,7 @@ impl Holes {
                 .get(other)
                 .or_else(|| self.filters.get(other))
                 .or_else(|| self.settings.get(other))
+                .or_else(|| self.session.get(other))
                 .cloned(),
         }
     }
@@ -70,6 +74,13 @@ pub struct Info {
     pub can_latest: bool,
     pub can_search: bool,
     pub has_settings: bool,
+    /// The definition has an `auth` section: the app can offer to sign in.
+    pub has_sign_in: bool,
+    pub signed_in: bool,
+    /// The source's own word for a locked chapter, when it gives one.
+    pub locked_label: Option<String>,
+    /// A tap on a locked chapter asks to sign in first (and the source has a sign-in).
+    pub locked_prompts_sign_in: bool,
 }
 
 /// A setting as an app shows it: the choices and what is chosen now.
@@ -87,7 +98,16 @@ pub struct Source {
     now_ms: Option<i64>,
     /// The person's choices, by setting id.
     chosen: RwLock<BTreeMap<String, String>>,
+    /// What signing in gave. The app keeps it somewhere safe and puts it back with `restore_session`.
+    session: RwLock<BTreeMap<String, String>>,
+    /// Held while the session is refreshed, so two refused requests refresh it once.
+    refreshing: tokio::sync::Mutex<()>,
+    /// Told whenever the session changes (signing in, a refresh, signing out), so the app can keep it safe.
+    watcher: RwLock<Option<SessionWatcher>>,
 }
+
+/// Called with the new session, or `None` when it is gone.
+type SessionWatcher = Box<dyn Fn(Option<BTreeMap<String, String>>) + Send + Sync>;
 
 fn is_http(address: &str) -> bool {
     url::Url::parse(address)
@@ -105,6 +125,9 @@ impl Source {
             fetcher,
             now_ms: None,
             chosen: RwLock::default(),
+            session: RwLock::default(),
+            refreshing: tokio::sync::Mutex::new(()),
+            watcher: RwLock::default(),
         })
     }
 
@@ -123,6 +146,14 @@ impl Source {
     pub fn at(mut self, now_ms: i64) -> Source {
         self.now_ms = Some(now_ms);
         self
+    }
+
+    /// The site's host (`example.com`): where a sign-in goes, for a screen to say.
+    pub fn host(&self) -> String {
+        url::Url::parse(&self.def.base_url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_string))
+            .unwrap_or_default()
     }
 
     pub fn def(&self) -> &SourceDef {
@@ -145,6 +176,10 @@ impl Source {
             can_latest: def.latest.is_some(),
             can_search: def.search.is_some(),
             has_settings: !def.settings.is_empty(),
+            has_sign_in: def.auth.is_some(),
+            signed_in: !self.session.read().unwrap().is_empty(),
+            locked_label: def.chapters.locked_label.clone(),
+            locked_prompts_sign_in: def.auth.is_some() && def.chapters.locked_action == LockedAction::SignIn,
         }
     }
 
@@ -209,6 +244,7 @@ impl Source {
         Holes {
             page_size: self.def.page_size,
             settings: self.effective_settings(),
+            session: self.session.read().unwrap().clone(),
             ..Holes::default()
         }
     }
@@ -242,6 +278,18 @@ impl Source {
             headers.retain(|(have, _)| !have.eq_ignore_ascii_case(name));
             headers.push((name.clone(), text(value)?));
         }
+        // The session goes to the source's own address and nowhere else: a mirror is another host.
+        if let Some(auth) = &self.def.auth
+            && host == self.def.base_url.trim_end_matches('/')
+        {
+            for (name, value) in &auth.headers {
+                // Nothing to fill it while signed out: the header is left off.
+                if let Some(value) = text(value) {
+                    headers.retain(|(have, _)| !have.eq_ignore_ascii_case(name));
+                    headers.push((name.clone(), value));
+                }
+            }
+        }
         let mut form = Vec::new();
         for (name, value) in &request.form {
             // A form field with nothing to fill it is left out, not sent empty.
@@ -262,9 +310,25 @@ impl Source {
         })
     }
 
+    /// Asks the site. A request the site refuses with 401 while signed in is asked again once, with a
+    /// refreshed session, when the definition says how to refresh.
+    async fn ask(&self, request: &Request, holes: &Holes) -> anyhow::Result<(String, &str)> {
+        match self.ask_once(request, holes).await {
+            Err(error) if is_unauthorized(&error) && self.can_refresh() => {
+                self.refresh_unless_done(&holes.session).await?;
+                let holes = Holes {
+                    session: self.session(),
+                    ..holes.clone()
+                };
+                self.ask_once(request, &holes).await
+            }
+            other => other,
+        }
+    }
+
     /// Asks the site, trying each mirror when one cannot be reached. A site that answers with an
     /// error or a check is not retried elsewhere.
-    async fn ask(&self, request: &Request, holes: &Holes) -> anyhow::Result<(String, &str)> {
+    async fn ask_once(&self, request: &Request, holes: &Holes) -> anyhow::Result<(String, &str)> {
         let mut last = None;
         for host in self.hosts() {
             let Some(req) = self.build(request, host, holes) else {
@@ -321,6 +385,146 @@ impl Source {
             holes.vars.extend(found);
         }
         Ok(())
+    }
+
+    // --- signing in ----------------------------------------------------------------------------
+
+    /// What signing in gave, for the app to keep somewhere safe (never the password: this does not hold it).
+    pub fn session(&self) -> BTreeMap<String, String> {
+        self.session.read().unwrap().clone()
+    }
+
+    /// Puts back a session the app kept. The watcher is not told: this came from where it keeps them.
+    pub fn restore_session(&self, session: BTreeMap<String, String>) {
+        *self.session.write().unwrap() = session;
+    }
+
+    /// `watcher` is called after every change to the session, so the app keeps its copy up to date.
+    pub fn watch_session(
+        &self,
+        watcher: impl Fn(Option<BTreeMap<String, String>>) + Send + Sync + 'static,
+    ) {
+        *self.watcher.write().unwrap() = Some(Box::new(watcher));
+    }
+
+    fn set_session(&self, session: BTreeMap<String, String>) {
+        *self.session.write().unwrap() = session.clone();
+        if let Some(watcher) = self.watcher.read().unwrap().as_ref() {
+            watcher((!session.is_empty()).then_some(session));
+        }
+    }
+
+    fn can_refresh(&self) -> bool {
+        self.def
+            .auth
+            .as_ref()
+            .is_some_and(|auth| auth.refresh.is_some())
+            && !self.session.read().unwrap().is_empty()
+    }
+
+    /// An auth request goes to `base_url` only, never to a mirror, because it carries the person's password
+    /// or session.
+    async fn ask_base(&self, request: &Request, holes: &Holes) -> anyhow::Result<(String, &str)> {
+        let host = self.def.base_url.as_str();
+        let Some(req) = self.build(request, host, holes) else {
+            bail!(
+                "this source cannot sign in: its definition asks for a value the app had none of (in {}). That is a mistake in the source's definition.",
+                request.url
+            );
+        };
+        Ok((self.fetcher.send(&req).await?, host))
+    }
+
+    /// Signs in with what the person typed, by field id. Gives the name the site calls them, when the
+    /// definition reads a `user`. A refusal says so in plain words; the password is never in an error.
+    pub async fn sign_in(
+        &self,
+        fields: &BTreeMap<String, String>,
+    ) -> anyhow::Result<Option<String>> {
+        let auth = self
+            .def
+            .auth
+            .as_ref()
+            .with_context(|| format!("{} has no sign-in", self.def.name))?;
+        for field in &auth.fields {
+            ensure!(
+                fields.get(&field.id).is_some_and(|value| !value.is_empty()),
+                "{} is needed to sign in",
+                field.name
+            );
+        }
+        let session: BTreeMap<String, String> = match &auth.login {
+            // No request: what was typed is the session (a token pasted in).
+            None => fields
+                .iter()
+                .filter(|(id, _)| auth.fields.iter().any(|field| &field.id == *id))
+                .map(|(id, value)| (id.clone(), value.clone()))
+                .collect(),
+            Some(login) => {
+                let holes = Holes {
+                    vars: fields.clone(),
+                    session: BTreeMap::new(),
+                    ..self.holes()
+                };
+                let (body, host) = match self.ask_base(&login.request, &holes).await {
+                    Ok(answer) => answer,
+                    Err(error) if is_refused(&error) => bail!(
+                        "{} did not accept that sign-in: is the account right?",
+                        self.def.name
+                    ),
+                    Err(error) => return Err(error.context("could not sign in")),
+                };
+                let found = self.read_vars(&login.vars, login.format, &body, host, &holes)?;
+                ensure!(
+                    !found.is_empty(),
+                    "{} answered, but its answer holds no session: is the account right, or has the site changed?",
+                    self.def.name
+                );
+                found.into_iter().collect()
+            }
+        };
+        let user = session.get("user").cloned();
+        self.set_session(session);
+        Ok(user)
+    }
+
+    /// Tells the site, when the definition says how, and forgets the session either way.
+    pub async fn sign_out(&self) {
+        if let Some(logout) = self.def.auth.as_ref().and_then(|auth| auth.logout.as_ref()) {
+            let _ = self.ask_base(logout, &self.holes()).await;
+        }
+        self.set_session(BTreeMap::new());
+    }
+
+    /// Asks for a new session, unless someone already did since `used` was current.
+    async fn refresh_unless_done(&self, used: &BTreeMap<String, String>) -> anyhow::Result<()> {
+        let _turn = self.refreshing.lock().await;
+        if self.session() != *used {
+            return Ok(());
+        }
+        let refresh = self
+            .def
+            .auth
+            .as_ref()
+            .and_then(|auth| auth.refresh.as_ref())
+            .context("this source has no way to refresh a session")?;
+        let holes = self.holes();
+        let renewed = match self.ask_base(&refresh.request, &holes).await {
+            Ok((body, host)) => self.read_vars(&refresh.vars, refresh.format, &body, host, &holes),
+            Err(error) => Err(error),
+        };
+        match renewed {
+            Ok(found) if !found.is_empty() => {
+                let mut session = self.session();
+                session.extend(found);
+                self.set_session(session);
+                Ok(())
+            }
+            _ => {
+                self.set_session(BTreeMap::new());
+                bail!("{}: the session ended, sign in again", self.def.name)
+            }
+        }
     }
 
     // --- lists ---------------------------------------------------------------------------------
@@ -594,6 +798,12 @@ impl Source {
                 Some(ex) => eval_text(ex, def.format, row, &ctx)?,
                 None => None,
             };
+            let locked = match &def.chapter.locked {
+                Some(ex) => eval_text(ex, def.format, row, &ctx)?.is_some_and(|text| {
+                    !matches!(text.to_lowercase().as_str(), "false" | "0" | "no" | "null")
+                }),
+                None => false,
+            };
             if !chapters.iter().any(|have| have.id == chapter_id) {
                 chapters.push(Chapter {
                     id: chapter_id,
@@ -601,6 +811,7 @@ impl Source {
                     title,
                     date_ms,
                     scanlator,
+                    locked,
                 });
             }
         }
@@ -670,6 +881,20 @@ impl Source {
     }
 }
 
+/// The site refused a request as not signed in.
+fn is_unauthorized(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<Rejected>()
+        .is_some_and(|rejected| rejected.status == reqwest::StatusCode::UNAUTHORIZED)
+}
+
+/// The site refused a sign-in: wrong account, or no account allowed.
+fn is_refused(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<Rejected>()
+        .is_some_and(|rejected| matches!(rejected.status.as_u16(), 400 | 401 | 403 | 404 | 422))
+}
+
 fn absolute(base: &str, link: &str) -> Option<String> {
     let link = link.trim();
     if link.is_empty() || link.starts_with("data:") {
@@ -731,6 +956,48 @@ fn check_prepare(steps: &[Prepare], what: &str) -> anyhow::Result<()> {
         );
         check_vars(&step.vars, step.format, &format!("{what}.prepare[{index}]"))?;
     }
+    Ok(())
+}
+
+fn validate_auth(auth: &AuthDef) -> anyhow::Result<()> {
+    ensure!(!auth.fields.is_empty(), "auth needs at least one field");
+    const TAKEN: [&str; 7] = ["base", "page", "page0", "offset", "term", "id", "series"];
+    let mut seen = std::collections::HashSet::new();
+    for field in &auth.fields {
+        ensure!(
+            plain(&field.id) && !TAKEN.contains(&field.id.as_str()),
+            "auth field {:?}: an id is lowercase letters, digits, dashes and underscores, and not a name the engine uses",
+            field.id
+        );
+        ensure!(
+            seen.insert(&field.id),
+            "auth field {} is listed twice",
+            field.id
+        );
+    }
+    for (name, call) in [("login", &auth.login), ("refresh", &auth.refresh)] {
+        if let Some(call) = call {
+            check_prepare(std::slice::from_ref(call), &format!("auth.{name}"))?;
+            ensure!(
+                !call.vars.is_empty(),
+                "auth.{name}: vars say which values of the answer are the session"
+            );
+        }
+    }
+    if let Some(logout) = &auth.logout {
+        ensure!(
+            logout.url.starts_with("{base}"),
+            "auth.logout: a request's url must start with {{base}}"
+        );
+        ensure!(
+            matches!(logout.method.to_uppercase().as_str(), "GET" | "POST"),
+            "auth.logout: the method must be GET or POST"
+        );
+    }
+    ensure!(
+        auth.refresh.is_none() || auth.login.is_some(),
+        "auth.refresh needs auth.login: a session that is typed in cannot be refreshed"
+    );
     Ok(())
 }
 
@@ -810,6 +1077,9 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
             ),
         }
     }
+    if let Some(auth) = &def.auth {
+        validate_auth(auth)?;
+    }
     let mut requests: Vec<(&str, &Request)> = vec![
         ("detail", &def.detail.request),
         ("chapters", &def.chapters.request),
@@ -883,6 +1153,7 @@ pub fn validate(def: &SourceDef) -> anyhow::Result<()> {
         ("title", &chapters.chapter.title),
         ("date", &chapters.chapter.date),
         ("scanlator", &chapters.chapter.scanlator),
+        ("locked", &chapters.chapter.locked),
     ] {
         if let Some(ex) = ex {
             check_ex(ex, Role::Field, chapters.format)
@@ -928,6 +1199,9 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
+    /// 2026-11-22, for a test of a date that is ahead and one that has passed.
+    const NOW_MS: i64 = 1795305600000;
+
     fn source(extra: Value, answers: &[(&str, &str)]) -> Source {
         let mut def = json!({
             "schema": 1, "id": "t", "name": "T", "version": 1, "base_url": "https://t.test",
@@ -949,6 +1223,59 @@ mod tests {
             Fetcher::recorded(answers),
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_chapter_says_whether_it_needs_an_account() {
+        let chapters = json!({
+            "request": {"url": "{base}/c/{id}"}, "format": "json", "rows": "rows",
+            "chapter": {"id": "id", "locked": "premium"}
+        });
+        let source = source(
+            json!({"chapters": chapters}),
+            &[(
+                "/c/s",
+                r#"{"rows":[{"id":"a","premium":true},{"id":"b","premium":false},{"id":"c"},{"id":"d","premium":"yes"},{"id":"e","premium":0}]}"#,
+            )],
+        );
+        let list = source.chapters("s").await.unwrap();
+        assert_eq!(
+            list.iter()
+                .map(|c| (c.id.as_str(), c.locked))
+                .collect::<Vec<_>>(),
+            [
+                ("a", true),
+                ("b", false),
+                ("c", false),
+                ("d", true),
+                ("e", false)
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn early_access_locks_a_chapter_only_until_its_date() {
+        let chapters = json!({
+            "request": {"url": "{base}/c/{id}"}, "format": "json", "rows": "rows",
+            "chapter": {"id": "id", "locked": [{"path": "until"}, {"date": ["iso"]}, "in_future"]},
+            "locked_label": "Early access", "locked_action": "none"
+        });
+        let source = source(
+            json!({"chapters": chapters}),
+            &[(
+                "/c/s",
+                r#"{"rows":[{"id":"soon","until":"2026-12-01T10:00:00Z"},{"id":"over","until":"2026-11-01T10:00:00Z"},{"id":"never"}]}"#,
+            )],
+        )
+        .at(NOW_MS);
+        let list = source.chapters("s").await.unwrap();
+        assert_eq!(
+            list.iter().map(|c| (c.id.as_str(), c.locked)).collect::<Vec<_>>(),
+            [("soon", true), ("over", false), ("never", false)]
+        );
+        let info = source.info();
+        assert_eq!(info.locked_label.as_deref(), Some("Early access"));
+        assert!(!info.locked_prompts_sign_in);
     }
 
     #[tokio::test]

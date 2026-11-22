@@ -2,9 +2,10 @@
 //! theme and a source, browse, read a series, keep it, and come back to it in a new `Engine`.
 
 use akidev_manga::repo;
-use akimanga::{Engine, MangaError, SourceState};
+use akimanga::{Engine, MangaError, SessionKeeper, SourceState};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
@@ -803,4 +804,133 @@ async fn a_chapters_pages_are_asked_of_the_site_once_however_many_ask_at_once() 
         PAGE_ASKS.load(std::sync::atomic::Ordering::SeqCst) - before,
         1
     );
+}
+
+/// A keeper that holds sessions in memory and remembers what it was told.
+#[derive(Default)]
+struct MemoryKeeper(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+impl SessionKeeper for MemoryKeeper {
+    fn load(&self, source: String) -> Option<String> {
+        self.0.lock().unwrap().get(&source).cloned()
+    }
+    fn save(&self, source: String, session: Option<String>) {
+        let mut kept = self.0.lock().unwrap();
+        match session {
+            Some(session) => kept.insert(source, session),
+            None => kept.remove(&source),
+        };
+    }
+}
+
+/// A site that signs in anyone with the password `secret`.
+async fn serve_login() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut buffer = vec![0u8; 8192];
+                let read = socket.read(&mut buffer).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+                let (status, body) =
+                    if request.starts_with("POST /login") && request.contains("secret") {
+                        ("200 OK", r#"{"access":"token-1","name":"Reader"}"#)
+                    } else {
+                        ("401 Unauthorized", "{}")
+                    };
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    address
+}
+
+#[tokio::test]
+async fn a_session_is_kept_by_the_app_and_comes_back_in_a_new_engine() {
+    let site = serve_login().await;
+    let dir = std::env::temp_dir().join(format!("akimanga-signin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let keeper = Arc::new(MemoryKeeper::default());
+    let document = serde_json::json!({
+        "schema": 1, "id": "paid", "name": "Paid", "version": 1, "base_url": site,
+        "auth": {
+            "fields": [{ "id": "email", "name": "Email" }, { "id": "password", "name": "Password", "secret": true }],
+            "login": {
+                "request": { "method": "POST", "url": "{base}/login", "json": { "email": "{email}", "password": "{password}" } },
+                "format": "json", "vars": { "access": "access", "user": "name" }
+            },
+            "headers": { "authorization": "Bearer {access}" }
+        },
+        "popular": { "request": { "url": "{base}/l" }, "format": "json", "rows": "i", "card": { "id": "a", "title": "b" } },
+        "detail": { "request": { "url": "{base}/d" }, "format": "json", "title": "t" },
+        "chapters": { "request": { "url": "{base}/c" }, "format": "json", "rows": "r", "chapter": { "id": "i" } },
+        "pages": { "request": { "url": "{base}/p" }, "format": "json", "images": "i" }
+    })
+    .to_string();
+
+    let engine = Engine::new(dir.to_string_lossy().into()).unwrap();
+    engine.set_session_keeper(keeper.clone());
+    let info = engine.install_source(document).unwrap();
+    assert!(info.has_sign_in && !info.signed_in);
+
+    let form = engine.sign_in_form("paid".into()).unwrap();
+    assert_eq!(form.host, "127.0.0.1");
+    assert_eq!(
+        form.fields
+            .iter()
+            .map(|f| (f.id.as_str(), f.secret))
+            .collect::<Vec<_>>(),
+        [("email", false), ("password", true)]
+    );
+    let account = |password: &str| {
+        std::collections::HashMap::from([
+            ("email".to_string(), "me@example.com".to_string()),
+            ("password".to_string(), password.to_string()),
+        ])
+    };
+
+    let wrong = engine
+        .sign_in("paid".into(), account("nope"))
+        .await
+        .unwrap_err();
+    assert!(matches!(wrong, MangaError::Failed { .. }), "{wrong:?}");
+    assert!(keeper.load("paid".into()).is_none());
+
+    let user = engine
+        .sign_in("paid".into(), account("secret"))
+        .await
+        .unwrap();
+    assert_eq!(user.as_deref(), Some("Reader"));
+    let kept = keeper
+        .load("paid".into())
+        .expect("the session was handed to the keeper");
+    assert!(
+        kept.contains("token-1") && !kept.contains("secret"),
+        "{kept}"
+    );
+
+    // A new engine on the same folder has the session back, from the keeper alone.
+    let again = Engine::new(dir.to_string_lossy().into()).unwrap();
+    assert!(!again.sources()[0].signed_in);
+    again.set_session_keeper(keeper.clone());
+    assert!(again.sources()[0].signed_in);
+    assert_eq!(
+        again.signed_in_as("paid".into()).unwrap().as_deref(),
+        Some("Reader")
+    );
+
+    again.sign_out("paid".into()).await.unwrap();
+    assert!(keeper.load("paid".into()).is_none());
+
+    // Removing a source forgets its session as well.
+    keeper.save("paid".into(), Some("{}".into()));
+    again.remove_source("paid".into()).unwrap();
+    assert!(keeper.load("paid".into()).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
 }
