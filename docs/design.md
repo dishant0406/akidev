@@ -563,3 +563,11 @@ Chosen: the stage is `h-dvh` (the height you can see now), not `h-svh` (the heig
 Why: in a phone browser the bars slide away as you scroll, so the visible area is taller than the `svh` height. The stage stayed short and left a white gap under the text. The placeholder was also scaled like the 3D phone and ran into the words.
 
 Trade-off: when the bars move, the stage changes height and the 3D phone fits itself again. That is a small shift, and it is better than an empty gap.
+
+## On a narrow screen the phone is sized to the room, and the placeholder sits under the words (2026-11-23)
+
+Chosen: on a narrow screen each step's phone is sized to 60% of the stage height, worked out from the scene (`0.6 / heightFraction()` in `update()`), not set as a fixed scale. The flat placeholder phone is put just under the opening words, the same way the 3D phone is, using the `--fy` variable.
+
+Why: you sent screenshots from a real phone. The phone was taller than the room between the title and the words, so it covered both. The placeholder also sat on top of the "Free. iPhone needs iOS 26..." line.
+
+Trade-off: the phone is a little smaller on a tall screen than a fixed scale would make it, but it never covers the words, on any height.

@@ -71,6 +71,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
   const stage = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLDivElement>(null);
+  const flatPhone = useRef<HTMLDivElement>(null);
   const buttons = useRef<HTMLDivElement>(null);
   const titles = useRef<(HTMLElement | null)[]>([]);
   const bodies = useRef<(HTMLElement | null)[]>([]);
@@ -94,8 +95,10 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     const v = clamp((f - k - HOLD) / (1 - HOLD)); // 0 to 1 through the move
     const u = ease(v);
     const small = compact();
-    const a = poseFor(k, small);
-    const b = poseFor(k + 1, small);
+    // On a narrow screen the phone is sized to the room between the title (top) and the words (bottom), whatever the height.
+    const fit = (pose: Pose, index: number): Pose => (small && index > 0 && scene.current ? { ...pose, scale: 0.6 / scene.current.heightFraction() } : pose);
+    const a = fit(poseFor(k, small), k);
+    const b = fit(poseFor(k + 1, small), k + 1);
     // At the start the phone sits just under the opening words, whatever size the window is.
     const room = scene.current && hero.current ? (hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 24) / view.clientHeight : null;
     const first = (pose: Pose): Pose => {
@@ -104,6 +107,13 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
       return { ...pose, y: (0.5 - centre) * 2 };
     };
     const from = k === 0 ? first(a) : a;
+    // The flat placeholder sits under the opening words too, so it never covers them.
+    const flatBox = flatPhone.current;
+    if (flatBox && hero.current) {
+      const top = hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 24;
+      const down = Math.max(0, top + flatBox.offsetHeight / 2 - view.clientHeight / 2);
+      flatBox.style.setProperty("--fy", `${down}px`);
+    }
     const base = { x: mix(from.x, b.x, u), y: mix(from.y, b.y, u), yaw: mix(from.yaw, b.yaw, u), pitch: mix(from.pitch, b.pitch, u), scale: mix(from.scale, b.scale, u) };
     scene.current?.setPose(base);
     // The colour of the whole page follows the scroll: it moves from step to step as the phone moves, and goes back to the
@@ -294,7 +304,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
             aria-label={LABEL}
             className={cn("pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-500 motion-reduce:hidden", threeD && "opacity-0")}
           >
-            <div style={{ transform: `translate(${flat.x * 50}vw, ${-flat.y * 50}svh) scale(${flat.scale})`, transition: "transform 0.8s cubic-bezier(0.32, 0.72, 0, 1)" }}>
+            <div ref={flatPhone} style={{ transform: `translate(${flat.x * 50}vw, ${active === 0 ? "var(--fy, 35svh)" : `${-flat.y * 50}svh`}) scale(${flat.scale})`, transition: "transform 0.8s cubic-bezier(0.32, 0.72, 0, 1)" }}>
               <Phone width="var(--pw)" className="[--pw:8.5rem] md:[--pw:13rem]">
                 {steps.map((step, i) => (
                   <img
