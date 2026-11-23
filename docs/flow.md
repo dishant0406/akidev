@@ -187,18 +187,20 @@ Edge cases: with an empty cache every list is asked for (the first launch). A so
 
 1. A visitor opens `app.akidev.live` (the footer link "Phone app", or a link we share). The middleware (`src/middleware.ts`) shows the page `/app` there, with the address unchanged. `/app` on the site redirects to the host, and any other path on the host redirects to the same path on the site. The layout leaves out the top bar, the footer and every call to the API on that host, and sets `data-landing` on the page, which turns on the bright colours (`globals.css`). The page works when the API is down.
 2. The server draws all the words at once (`src/app/app/page.tsx`): the opening, the gallery, what the app opens, the privacy lines, the questions and the last block. Nothing needs JavaScript to be read.
-3. `HeroStage` (`src/components/hero-stage.tsx`) draws a flat phone that plays the app video, so the first picture is ready at once.
-4. When the browser is idle, and only if it can run WebGL and is not asked to save data, the page loads the 3D phone (`phone-scene.ts`, with the `three` package) and fades it in over the flat one. The same video plays on its screen. A visitor can drag it sideways, a mouse tilts it a little, and the page scroll turns it as it passes. A line under the panel says how to turn it.
-5. The stage draws frames only while it is on screen. A round button pauses the video.
-6. `ScreenGallery` is a row of the app's screens. It scrolls sideways with snapping and the next card peeks past the edge. On a wide window two buttons step through it.
-7. A click on "App Store" or "Google Play" (`store-button.tsx`) sends `download_clicked` and opens the store page in a new tab. The addresses are in `src/constants/site.ts`.
+3. `FeatureStory` (`src/components/feature-story.tsx`) is a tall block of scroll that holds one full-screen stage. The stage is the whole first screen: the opening words and the store buttons at the top, and a phone rising under them. The page first draws a flat phone, so the first picture is ready at once.
+4. When the browser is idle, and only if it can run WebGL and is not asked to save data, the page loads the 3D phone (`phone-scene.ts`, with the `three` package) and fades it in over the flat one. Its canvas fills the whole stage.
+5. As the visitor scrolls, the page works out where the scroll is, from 0 to 6 steps. Each step holds its pose for half its scroll, then the phone moves to the next pose. A pose is where the phone is on the stage (across and up), how it is turned and tilted, and how big it is. The opening words and buttons fade out in the first part of the first step. In the middle of each move the screen on the phone and the words change. The stage also changes colour: white, grey, the Night theme for books, and the app's yellow for read aloud.
+6. Giant words (the step's title) sit behind the phone. A short line of text sits at the side opposite to the phone, or below the phone on a narrow screen. Dots at the bottom show the step, and a click on a dot scrolls to it.
+7. The phone moves on springs, so it never snaps. A visitor can drag the stage sideways to turn the phone, and it turns back to its pose when let go. The stage draws frames only while it is on screen.
+8. `ScreenGallery` is the same screens as a plain row. It shows only for a visitor who asks for less motion.
+9. A click on "App Store" or "Google Play" (`store-button.tsx`) sends `download_clicked` and opens the store page in a new tab. The addresses are in `src/constants/site.ts`. The same buttons are in the last block of the page.
 
 Edge cases:
 - No WebGL, or the data saver is on: the flat phone stays. Nothing else changes.
-- No JavaScript: the text and links work. The phone shows the first frame of the video.
-- Reduced motion: the video does not start, the scroll does not turn the phone, and the gallery steps without smooth scrolling. Dragging still works, because the visitor does it.
-- A touch screen: the phone turns with a sideways swipe. Vertical swipes still scroll the page (`touch-action: pan-y`).
-- The video fails to load: the first frame stays as the screen.
+- No JavaScript: the text and links work. The flat phone shows the first screen.
+- Reduced motion: there is no stage. The opening words and buttons show as plain text, and the plain row of screens shows below. Nothing is pinned or turns.
+- A touch screen: the phone turns with a sideways swipe. Vertical swipes still scroll the page (`touch-action: pan-y`). The phone sits above the words.
+- A screen reader: every step is in the page as text, in order, so all six are read.
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
 Remaking the pictures: serve the repo, then run `python manga-android/store/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.

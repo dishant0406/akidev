@@ -1,6 +1,7 @@
-// A real 3D iPhone for the landing page: a dark titanium frame, a black bezel and a screen that plays the app's video.
-// Built from code (no model file), lit by a studio room, and turned by dragging, by scrolling and a little by the pointer.
-// Loaded only on a device that can run WebGL, after the page is up (see hero-stage.tsx).
+// A real 3D iPhone for the landing page: a dark titanium frame, a black bezel and a screen that shows the app. Built from
+// code (no model file) and lit by a studio room. The canvas fills the whole stage. The page sets where the phone is
+// (anywhere on the stage, any size, any turn) and which screen shows as the visitor scrolls, and the visitor can also drag
+// it. Loaded only on a device that can run WebGL, after the page is up (see feature-story.tsx).
 import {
   ACESFilmicToneMapping,
   AmbientLight,
@@ -8,7 +9,6 @@ import {
   DirectionalLight,
   ExtrudeGeometry,
   Group,
-  LinearFilter,
   Mesh,
   MeshBasicMaterial,
   MeshPhysicalMaterial,
@@ -19,11 +19,9 @@ import {
   Shape,
   ShapeGeometry,
   SRGBColorSpace,
-  VideoTexture,
+  TextureLoader,
   WebGLRenderer,
   type BufferGeometry,
-  type Material,
-  type Texture,
 } from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
@@ -36,8 +34,8 @@ const FRAME_H = SCREEN_H + 2 * (BEZEL + RING);
 const DEPTH = 0.13;
 const FRAME_R = 0.14 + BEZEL + RING;
 const FOV = 28;
-/** How far the phone may turn when dragged, in radians. */
-const MAX_YAW = 0.95;
+/** How far a drag may turn the phone away from its pose, in radians. */
+const MAX_DRAG = 0.9;
 
 function roundedRect(w: number, h: number, r: number) {
   const x = -w / 2;
@@ -64,22 +62,40 @@ function screenShape(w: number, h: number, r: number) {
   return geometry;
 }
 
+export type Pose = {
+  /** Sideways, from -1 (the left edge of the stage) to 1 (the right edge). */
+  x: number;
+  /** Up, from -1 (the bottom edge) to 1 (the top edge). */
+  y: number;
+  /** Turn around the upright axis, in radians. */
+  yaw: number;
+  /** Tilt forward or back, in radians. */
+  pitch: number;
+  /** Size, 1 is the size that fits the stage. */
+  scale: number;
+};
+
 export type PhoneScene = {
-  /** Where the page scroll has the phone, from -1 to 1. It turns the phone a little. */
-  setTurn: (u: number) => void;
+  /** Where the phone should be. It gets there on a spring, never in a jump. */
+  setPose: (pose: Pose) => void;
+  /** Which screen shows, as an index into the pictures that were given. */
+  setScreen: (index: number) => void;
   /** Draw frames only while the stage is on screen. */
   setActive: (active: boolean) => void;
+  /** How tall the phone is at size 1, as a fraction of the stage's height. */
+  heightFraction: () => number;
   dispose: () => void;
 };
 
-export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): PhoneScene {
+/** `host` gets the canvas. `events` is the element that hears the drag (the whole stage, so the words and buttons stay usable). */
+export function createPhoneScene(host: HTMLElement, events: HTMLElement, pictures: string[]): PhoneScene {
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   const canvas = renderer.domElement;
-  canvas.style.cssText = "display:block;width:100%;height:100%;touch-action:pan-y;cursor:grab";
+  canvas.style.cssText = "display:block;width:100%;height:100%;pointer-events:none";
   host.appendChild(canvas);
 
   const scene = new Scene();
@@ -89,7 +105,10 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
   scene.environment = environment;
   const key = new DirectionalLight(0xffffff, 1.1);
   key.position.set(2.5, 3, 4);
-  scene.add(key, new AmbientLight(0xffffff, 0.15));
+  // A light from behind, so the edge of the phone shows against a dark or a bright background.
+  const rim = new DirectionalLight(0xffffff, 1.6);
+  rim.position.set(-3, 2, -3);
+  scene.add(key, rim, new AmbientLight(0xffffff, 0.15));
 
   const camera = new PerspectiveCamera(FOV, 1, 0.1, 50);
   const toDispose: { dispose: () => void }[] = [pmrem, renderer, environment];
@@ -123,28 +142,40 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
   bezelMesh.position.z = front + 0.0008;
   phone.add(bezelMesh);
 
-  const texture: Texture = own(new VideoTexture(video));
-  texture.colorSpace = SRGBColorSpace;
-  texture.minFilter = LinearFilter;
-  texture.generateMipmaps = false;
-  const screen = new Mesh(own(screenShape(1, SCREEN_H, 0.14)), own(new MeshBasicMaterial({ map: texture, toneMapped: false })));
-  screen.position.z = front + 0.0016;
-  phone.add(screen);
+  // The screens: each picture, stacked. Only the chosen one is opaque; the others fade out.
+  const screenGeometry = own(screenShape(1, SCREEN_H, 0.14));
+  const loader = new TextureLoader();
+  const screens = pictures.map((url, index) => {
+    const material = own(new MeshBasicMaterial({ transparent: true, opacity: index === 0 ? 1 : 0, depthWrite: false, toneMapped: false }));
+    const mesh = new Mesh(screenGeometry, material);
+    mesh.position.z = front + 0.0016 + index * 0.00008;
+    mesh.renderOrder = index;
+    phone.add(mesh);
+    loader.load(url, (texture) => {
+      texture.colorSpace = SRGBColorSpace;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      own(texture);
+      material.map = texture;
+      material.needsUpdate = true;
+      dirty = true;
+    });
+    return { material, opacity: index === 0 ? 1 : 0 };
+  });
 
   // The glass: nearly clear, so the room shows on it as the phone turns.
-  const glassMaterial: Material = own(
-    new MeshPhysicalMaterial({ color: 0x000000, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: false }),
+  const glass = new Mesh(
+    screenGeometry,
+    own(new MeshPhysicalMaterial({ color: 0x000000, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: false })),
   );
-  const glass = new Mesh(screen.geometry, glassMaterial);
-  glass.position.z = front + 0.0024;
+  glass.position.z = front + 0.0032;
+  glass.renderOrder = 99;
   phone.add(glass);
 
   // The buttons: action and volume on the left, power on the right (from the top, as fractions of the height).
   const buttonMaterial = own(new MeshStandardMaterial({ color: 0x2c2c30, metalness: 1, roughness: 0.42 }));
   const addButton = (side: -1 | 1, from: number, length: number) => {
     const height = length * FRAME_H;
-    const geometry = own(new BoxGeometry(0.014, height, 0.05));
-    const button = new Mesh(geometry, buttonMaterial);
+    const button = new Mesh(own(new BoxGeometry(0.014, height, 0.05)), buttonMaterial);
     button.position.set(side * (FRAME_W / 2 + 0.002), FRAME_H / 2 - (from + length / 2) * FRAME_H, 0);
     phone.add(button);
   };
@@ -154,35 +185,45 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
   addButton(1, 0.22, 0.1);
 
   // Size the picture to the stage: the whole phone, with room around it.
+  const view = { w: 1, h: 1 }; // what the camera sees at the phone's distance, in screen widths
   const fit = () => {
     const w = host.clientWidth || 1;
     const h = host.clientHeight || 1;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const tan = Math.tan((FOV * Math.PI) / 360);
-    const forHeight = FRAME_H / 0.8 / (2 * tan);
+    const forHeight = FRAME_H / 0.78 / (2 * tan);
     const forWidth = FRAME_W / 0.62 / (2 * tan * camera.aspect);
-    camera.position.set(0, 0, Math.max(forHeight, forWidth));
+    const distance = Math.max(forHeight, forWidth);
+    camera.position.set(0, 0, distance);
     camera.updateProjectionMatrix();
+    view.h = 2 * distance * tan;
+    view.w = view.h * camera.aspect;
     dirty = true;
   };
 
-  // Turning: a critically damped spring (no bounce, about half a second), so it never snaps and always starts from where
-  // the phone is. The target is the scroll's turn, plus the pointer's share, or the finger while it drags.
-  const yaw = { pos: 0, vel: 0 };
-  const pitch = { pos: 0, vel: 0 };
-  let turn = 0;
+  // Motion: critically damped springs (no bounce, about 0.6 s), so the phone never snaps and always starts from where
+  // it is. Each one chases a target: the pose from the page, plus the finger while it drags.
+  type Spring = { pos: number; vel: number };
+  const spring = (pos = 0): Spring => ({ pos, vel: 0 });
+  const px = spring();
+  const py = spring();
+  const yaw = spring();
+  const pitch = spring();
+  const size = spring(1);
+  let pose: Pose = { x: 0, y: 0, yaw: 0, pitch: 0, scale: 1 };
   let pointerYaw = 0;
   let pointerPitch = 0;
   let dragging = false;
-  let dragYaw = 0;
+  let dragDelta = 0;
+  let shown = 0;
   let dirty = true;
   let active = true;
   let frame = 0;
   let last = performance.now();
 
-  const step = (axis: { pos: number; vel: number }, target: number, dt: number) => {
-    const w = (2 * Math.PI) / 0.5;
+  const step = (axis: Spring, target: number, dt: number) => {
+    const w = (2 * Math.PI) / 0.6;
     axis.vel += (w * w * (target - axis.pos) - 2 * w * axis.vel) * dt;
     axis.pos += axis.vel * dt;
     return Math.abs(target - axis.pos) > 0.0005 || Math.abs(axis.vel) > 0.0005;
@@ -193,50 +234,66 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
     if (!active) return;
     const dt = Math.min(0.032, (now - last) / 1000);
     last = now;
-    const movingYaw = step(yaw, dragging ? dragYaw : turn * 0.5 + pointerYaw, dt);
-    const movingPitch = step(pitch, dragging ? 0 : pointerPitch, dt);
-    phone.rotation.y = yaw.pos;
-    phone.rotation.x = pitch.pos;
-    // The picture changes while the video plays, so draw every frame then; otherwise only when something moved.
-    if (movingYaw || movingPitch || dirty || !video.paused) {
+    let moving = false;
+    moving = step(px, pose.x, dt) || moving;
+    moving = step(py, pose.y, dt) || moving;
+    moving = step(yaw, pose.yaw + dragDelta + pointerYaw, dt) || moving;
+    moving = step(pitch, pose.pitch + pointerPitch, dt) || moving;
+    moving = step(size, pose.scale, dt) || moving;
+    phone.rotation.set(pitch.pos, yaw.pos, 0);
+    phone.position.set((px.pos * view.w) / 2, (py.pos * view.h) / 2, 0);
+    phone.scale.setScalar(size.pos);
+
+    // The chosen screen fades in as the others fade out.
+    const fade = 1 - Math.exp(-dt * 9);
+    screens.forEach((screen, index) => {
+      const target = index === shown ? 1 : 0;
+      if (Math.abs(target - screen.opacity) > 0.002) {
+        screen.opacity += (target - screen.opacity) * fade;
+        moving = true;
+      } else screen.opacity = target;
+      screen.material.opacity = screen.opacity;
+      screen.material.visible = screen.opacity > 0.002;
+    });
+
+    // Draw only when something moved.
+    if (moving || dirty) {
       renderer.render(scene, camera);
       dirty = false;
     }
   };
 
-  // Pointer: drag to turn; a mouse over the stage tilts it a little.
+  // Pointer: drag anywhere on the stage (but not on a link or a button) to turn the phone; a mouse tilts it a little.
   let startX = 0;
-  let startYaw = 0;
+  let startDelta = 0;
   const down = (event: PointerEvent) => {
+    if ((event.target as HTMLElement).closest("a, button")) return;
     dragging = true;
     startX = event.clientX;
-    startYaw = yaw.pos;
-    dragYaw = yaw.pos;
-    canvas.setPointerCapture(event.pointerId);
-    canvas.style.cursor = "grabbing";
+    startDelta = dragDelta;
   };
   const move = (event: PointerEvent) => {
     if (dragging) {
-      dragYaw = Math.max(-MAX_YAW, Math.min(MAX_YAW, startYaw + (event.clientX - startX) * 0.009));
+      dragDelta = Math.max(-MAX_DRAG, Math.min(MAX_DRAG, startDelta + (event.clientX - startX) * 0.009));
     } else if (event.pointerType === "mouse") {
-      const box = canvas.getBoundingClientRect();
-      pointerYaw = ((event.clientX - box.left) / box.width - 0.5) * 0.3;
-      pointerPitch = ((event.clientY - box.top) / box.height - 0.5) * 0.16;
+      const box = events.getBoundingClientRect();
+      pointerYaw = ((event.clientX - box.left) / box.width - 0.5) * 0.2;
+      pointerPitch = ((event.clientY - box.top) / box.height - 0.5) * 0.12;
     }
   };
   const up = () => {
     dragging = false;
-    canvas.style.cursor = "grab";
+    dragDelta = 0; // it turns back to where the page wants it
   };
   const leave = () => {
     pointerYaw = 0;
     pointerPitch = 0;
   };
-  canvas.addEventListener("pointerdown", down);
-  canvas.addEventListener("pointermove", move);
-  canvas.addEventListener("pointerup", up);
-  canvas.addEventListener("pointercancel", up);
-  canvas.addEventListener("pointerleave", leave);
+  events.addEventListener("pointerdown", down);
+  events.addEventListener("pointermove", move);
+  events.addEventListener("pointerleave", leave);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", up);
 
   const observer = new ResizeObserver(fit);
   observer.observe(host);
@@ -244,8 +301,12 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
   frame = requestAnimationFrame(tick);
 
   return {
-    setTurn: (u) => {
-      turn = Math.max(-1, Math.min(1, u));
+    setPose: (next) => {
+      pose = next;
+    },
+    heightFraction: () => FRAME_H / view.h,
+    setScreen: (index) => {
+      shown = Math.max(0, Math.min(screens.length - 1, index));
     },
     setActive: (value) => {
       active = value;
@@ -254,11 +315,11 @@ export function createPhoneScene(host: HTMLElement, video: HTMLVideoElement): Ph
     dispose: () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      canvas.removeEventListener("pointerdown", down);
-      canvas.removeEventListener("pointermove", move);
-      canvas.removeEventListener("pointerup", up);
-      canvas.removeEventListener("pointercancel", up);
-      canvas.removeEventListener("pointerleave", leave);
+      events.removeEventListener("pointerdown", down);
+      events.removeEventListener("pointermove", move);
+      events.removeEventListener("pointerleave", leave);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       room.dispose();
       toDispose.forEach((item) => item.dispose());
       canvas.remove();

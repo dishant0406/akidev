@@ -2,7 +2,7 @@
 import { Plus } from "lucide-react";
 import type { Metadata, Viewport } from "next";
 
-import { HeroStage } from "@/components/hero-stage";
+import { FeatureStory } from "@/components/feature-story";
 import { ScreenGallery, type Slide } from "@/components/screen-gallery";
 import { StoreButton } from "@/components/store-button";
 import { APP_HOST, APP_STORE_ID, APP_STORE_URL, PLAY_STORE_URL, REPO_URL, SITE_DOMAIN } from "@/constants/site";
@@ -161,37 +161,47 @@ export default function AppPage() {
       {/* "<" is escaped so that nothing in the data can close the script tag. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(APP_DATA).replace(/</g, "\\u003c") }} />
 
-      <section className="gutter mx-auto max-w-[72rem] pb-16 pt-14 text-center md:pb-24 md:pt-16">
-        <img
-          src="/phone/app-icon.png"
-          alt=""
-          width={80}
-          height={80}
-          className="mx-auto size-20 animate-rise rounded-[22%] shadow-[0_1px_2px_rgb(0_0_0/0.16),0_12px_24px_-8px_rgb(0_0_0/0.3)]"
-        />
-        <h1
-          className="mx-auto mt-8 max-w-[16em] animate-rise text-balance font-sans text-[clamp(2.5rem,6vw,4.5rem)] font-semibold leading-[1.05] tracking-[-0.02em] text-ink"
-          style={{ animationDelay: "80ms" }}
-        >
-          Manga, comics and books in one{" "}
-          <mark className="bg-[linear-gradient(transparent_16%,rgb(var(--accent))_16%,rgb(var(--accent))_90%,transparent_90%)] px-[0.14em] text-ink [box-decoration-break:clone] [-webkit-box-decoration-break:clone]">calm</mark> reader.
-        </h1>
-        <p className="mx-auto mt-5 max-w-[34rem] animate-rise text-pretty text-[17px] leading-[1.6] text-dim md:text-[19px]" style={{ animationDelay: "160ms" }}>
-          Akidev is a reader app for iPhone and Android. It has no content of its own. You add the sources and books you already use.
-        </p>
-        <div className="mx-auto mt-8 grid max-w-[22rem] animate-rise grid-cols-2 gap-3 sm:flex sm:max-w-none sm:justify-center" style={{ animationDelay: "240ms" }}>
-          <StoreButton store="ios" />
-          <StoreButton store="android" />
-        </div>
-        <p className="mt-4 animate-rise text-[13px] leading-5 text-faint" style={{ animationDelay: "320ms" }}>
-          Free. iPhone needs iOS 26 or later. Android needs Android 10 or later.
-        </p>
-        <div className="mt-12 animate-rise text-left md:mt-14" style={{ animationDelay: "400ms" }}>
-          <HeroStage />
-        </div>
-      </section>
+      <FeatureStory
+        steps={SLIDES}
+        heading={
+          <>
+            <img
+              src="/phone/app-icon.png"
+              alt=""
+              width={56}
+              height={56}
+              className="mx-auto size-14 animate-rise rounded-[22%] shadow-[0_1px_2px_rgb(0_0_0/0.16),0_12px_24px_-8px_rgb(0_0_0/0.3)]"
+            />
+            <h1
+              className="mx-auto mt-6 max-w-[16em] animate-rise text-balance font-sans text-[clamp(2.25rem,5.2vw,4.25rem)] font-semibold leading-[1.05] tracking-[-0.02em]"
+              style={{ animationDelay: "80ms" }}
+            >
+              Manga, comics and books in one{" "}
+              <mark className="bg-[linear-gradient(transparent_16%,rgb(var(--accent))_16%,rgb(var(--accent))_90%,transparent_90%)] px-[0.14em] text-ink [box-decoration-break:clone] [-webkit-box-decoration-break:clone]">calm</mark> reader.
+            </h1>
+            <p
+              className="mx-auto mt-4 max-w-[34rem] animate-rise text-pretty text-[16px] leading-[1.55] text-[color:var(--dim)] md:text-[18px]"
+              style={{ animationDelay: "160ms" }}
+            >
+              Akidev is a reader app for iPhone and Android. It has no content of its own. You add the sources and books you already use.
+            </p>
+          </>
+        }
+        actions={
+          <>
+            <div className="mx-auto mt-6 grid max-w-[22rem] animate-rise grid-cols-2 gap-3 sm:flex sm:max-w-none sm:justify-center" style={{ animationDelay: "240ms" }}>
+              <StoreButton store="ios" />
+              <StoreButton store="android" />
+            </div>
+            <p className="mt-3 animate-rise text-[13px] leading-5 text-faint" style={{ animationDelay: "320ms" }}>
+              Free. iPhone needs iOS 26 or later. Android needs Android 10 or later.
+            </p>
+          </>
+        }
+      />
 
-      <div className="pb-20 md:pb-32">
+      {/* For a visitor who asks for less motion: the same screens as a plain row, with nothing pinned or turning. */}
+      <div className="hidden py-20 motion-reduce:block md:py-32">
         <ScreenGallery slides={SLIDES} />
       </div>
 

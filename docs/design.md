@@ -465,3 +465,37 @@ Details that matter:
 Rejected: a full-width video behind the page (the film is square and crops badly), a second phone model file (a model is a download and a licence to track, and the phone is simple), and scroll-pinned sections with a huge empty page (they looked fine on a desktop and bad on a phone).
 
 Trade-off: this adds the `three` package. On a device that can run WebGL it is one more download after the page is ready, and it uses the GPU while the stage is on screen. Devices that cannot, or that save data, get the flat phone and lose nothing else.
+
+## The phone turns through the app as you scroll (2026-11-23)
+
+Chosen: the 3D phone is now the page's main show. A tall block of scroll holds one panel that stays on screen. As you scroll, the phone turns and changes size, the screen on it changes to the next part of the app, and the words beside it change. Dots under the words show the step and jump to it. Six steps: sources, series, reading, library, books, read aloud.
+
+Why: the first version showed one phone you could drag. You asked for the phone to work and show the features as you scroll. The research (Apple's product pages, Awwwards scroll stories, the tutorials) agrees on one structure: a tall container with a pinned stage, where the scroll position drives the object.
+
+Details that matter:
+- The pose for each step is written in `POSES` in `feature-story.tsx`. The phone is always between two of them, so it is moving all the time the page scrolls. The turn alternates left and right so no two steps look alike, and the last step faces front.
+- The screen swap is a fade between stacked pictures on the phone, in the middle of the turn. The first screen is the video.
+- It is one panel, two columns on a wide window (words, then phone) and one column on a phone (phone, then words). The panel is always one screen high.
+- A visitor who asks for less motion gets the plain row of screens, not a pinned tour.
+
+Rejected: a long page of one-screen-high sections with the phone sticky beside them (the first design, which had big empty gaps and was bad on a phone), and a pre-rendered image sequence (it is heavy, and it cannot follow a drag).
+
+Trade-off: the tour is about 5.5 screens tall on a wide window. That is long for a landing page. The dots and the fast scroll help, and the rest of the page (what it opens, privacy, questions, store links) comes right after.
+
+## The tour fills the screen, with no container and no video (2026-11-23)
+
+Chosen: the tour is the whole page's first screen and fills the window. There is no grey panel and no play and pause button. The opening words are the first picture of the stage, with the phone rising under them. As you scroll, the phone flies across the stage, turns and grows, giant words sit behind it, and the stage changes colour (white, grey, the app's Night theme for books, and its yellow for read aloud). The 3D canvas is as big as the window.
+
+Why: you said the contained panel and the play button were not what you wanted, and that you wanted a full immersive 3D experience. The earlier panel was a box on a page. This is a stage.
+
+Details that matter:
+- The video is gone. Every screen is a still picture, so nothing plays on its own and no pause button is needed. The file `app-loop.mp4` was removed from `public/phone/`. `web-assets.py` can still make it.
+- Each step holds its pose for half its scroll, then moves to the next pose. Before, the phone was always in between two poses and never at rest, which was hard to read.
+- The giant words are behind the phone and the small text is in front, on the opposite side. On a narrow screen the words are above the phone and the text is below it, and the phone is smaller and nearer the middle.
+- The phone sits under the opening words whatever the window size: the page measures the words and places the phone just below them.
+- The drag works anywhere on the stage, but not on a link or a button, so the store buttons stay usable. Sideways drags turn the phone. Vertical swipes scroll the page.
+- The opening's buttons leave the tab order once they have faded out. The heading stays in the page.
+
+Rejected: keeping the video for the first screen (it needed a pause button and a loop that never stops), and a coloured background that changes for every step (we use four looks and tie two of them to the app: Night and the highlighter).
+
+Trade-off: the stage is about 6.5 screens tall. A visitor who wants the store buttons later can use the last block of the page. The page works the same without WebGL, with a flat phone that moves and changes screen.
