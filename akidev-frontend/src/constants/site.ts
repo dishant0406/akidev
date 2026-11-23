@@ -17,5 +17,6 @@ export const APP_HOST = `app.${SITE_DOMAIN}`;
 export const isAppHost = (host: string | null) => host?.trim().toLowerCase() === APP_HOST;
 
 /** The phone app in its two stores. */
-export const APP_STORE_URL = "https://apps.apple.com/app/akidev/id6825537136";
+export const APP_STORE_ID = "6825537136";
+export const APP_STORE_URL = `https://apps.apple.com/app/akidev/id${APP_STORE_ID}`;
 export const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=live.akidev.manga";

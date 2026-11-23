@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { StoreButton } from "@/components/store-button";
 import { cn } from "@/lib/utils";
 
-export type Step = { id: string; label: string; title: string; body: string; chips?: string[]; screen: string };
+export type Step = { id: string; label: string; title: string; body: string; chips?: string[]; screen: string; alt: string };
 
 /** How far the phone turns for each part of the page: [around the upright axis, around the sideways axis], in degrees. */
 const TURN: [number, number][] = [[-14, 5], [10, 3], [-9, 4], [11, 3], [-10, 4], [8, 3], [-8, 4]];
@@ -167,7 +167,7 @@ export function AppShowcase({ steps }: { steps: Step[] }) {
             <div className="relative h-full w-full overflow-hidden bg-[#0D0D0E]" style={{ borderRadius: "calc(var(--w) * 0.14)" }}>
               <video ref={video} className={layer(0)} src="/phone/app-loop.mp4" poster="/phone/app-poster.webp" muted loop playsInline />
               {steps.map((step, index) => (
-                <img key={step.id} src={step.screen} alt="" width={924} height={2160} decoding="async" className={layer(index + 1)} />
+                <img key={step.id} src={step.screen} alt={step.alt} width={924} height={2160} decoding="async" className={layer(index + 1)} />
               ))}
               <div
                 ref={sheen}
@@ -194,7 +194,7 @@ export function AppShowcase({ steps }: { steps: Step[] }) {
               Manga, comics and books. <span className={cn("inline-block", yellow)}>One calm reader.</span>
             </h1>
             <p className="mt-5 animate-rise text-pretty text-[17px] leading-7 text-dim" style={{ animationDelay: "160ms" }}>
-              Akidev has no content of its own. You add the sources and books you already use, and it gives you one place to read them.
+              Akidev is a reader app for iPhone and Android. It has no content of its own. You add the sources and books you already use, and read them all in one place.
             </p>
             <div className="mt-6 grid animate-rise grid-cols-2 gap-3 sm:mt-8 sm:flex sm:flex-wrap" style={{ animationDelay: "240ms" }}>
               <StoreButton store="ios" />
