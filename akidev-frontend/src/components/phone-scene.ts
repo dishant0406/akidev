@@ -89,7 +89,7 @@ export type PhoneScene = {
 
 /** `host` gets the canvas. `events` is the element that hears the drag (the whole stage, so the words and buttons stay usable). */
 export function createPhoneScene(host: HTMLElement, events: HTMLElement, pictures: string[]): PhoneScene {
-  const renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+  const renderer = new WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.toneMapping = ACESFilmicToneMapping;
@@ -145,22 +145,35 @@ export function createPhoneScene(host: HTMLElement, events: HTMLElement, picture
   // The screens: each picture, stacked. Only the chosen one is opaque; the others fade out.
   const screenGeometry = own(screenShape(1, SCREEN_H, 0.14));
   const loader = new TextureLoader();
-  const screens = pictures.map((url, index) => {
-    const material = own(new MeshBasicMaterial({ transparent: true, opacity: index === 0 ? 1 : 0, depthWrite: false, toneMapped: false }));
+  const screens = pictures.map((_, index) => {
+    // Until its picture arrives, a screen is the dark of the phone, not a white plane.
+    const material = own(new MeshBasicMaterial({ color: 0x0d0d0e, transparent: true, opacity: index === 0 ? 1 : 0, depthWrite: false, toneMapped: false }));
     const mesh = new Mesh(screenGeometry, material);
     mesh.position.z = front + 0.0016 + index * 0.00008;
     mesh.renderOrder = index;
     phone.add(mesh);
-    loader.load(url, (texture) => {
+    return { material, opacity: index === 0 ? 1 : 0 };
+  });
+  // The pictures come one after the other, and each goes to the graphics card as soon as it arrives. The first frame then
+  // never waits for six large uploads at once, and the pictures never compete with the page for the network.
+  let disposed = false;
+  const loadPicture = (index: number) => {
+    if (index >= pictures.length || disposed) return;
+    loader.load(pictures[index], (texture) => {
+      if (disposed) return texture.dispose();
       texture.colorSpace = SRGBColorSpace;
       texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       own(texture);
+      renderer.initTexture(texture);
+      const { material } = screens[index];
       material.map = texture;
+      material.color.set(0xffffff);
       material.needsUpdate = true;
       dirty = true;
+      loadPicture(index + 1);
     });
-    return { material, opacity: index === 0 ? 1 : 0 };
-  });
+  };
+  loadPicture(0);
 
   // The glass: nearly clear, so the room shows on it as the phone turns.
   const glass = new Mesh(
@@ -313,6 +326,7 @@ export function createPhoneScene(host: HTMLElement, events: HTMLElement, picture
       last = performance.now();
     },
     dispose: () => {
+      disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
       events.removeEventListener("pointerdown", down);

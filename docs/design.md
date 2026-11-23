@@ -571,3 +571,21 @@ Chosen: on a narrow screen each step's phone is sized to 60% of the stage height
 Why: you sent screenshots from a real phone. The phone was taller than the room between the title and the words, so it covered both. The placeholder also sat on top of the "Free. iPhone needs iOS 26..." line.
 
 Trade-off: the phone is a little smaller on a tall screen than a fixed scale would make it, but it never covers the words, on any height.
+
+## The phone loads lighter, with the same picture (2026-11-23)
+
+Chosen: three changes, and no change to what you see. (1) The 3D phone asks for the normal graphics card, not the high-power one (it was `powerPreference: "high-performance"`). (2) The six screen pictures reach the graphics card one after the other, and each goes up as soon as it arrives, so the first frame never waits for six big uploads. A screen that has not arrived yet is the dark of the phone, not a white plane. (3) The flat placeholder asks only for the picture on show and the next one.
+
+Why: you said the phone felt heavy. We measured first. The 3D code is about 144 kB gzipped in the production build and the shape has a few thousand triangles, so those are small. What was heavy was the start: every picture was fetched twice and sent to the graphics card in the first frame, and the high-power card cost battery on laptops.
+
+Left alone on purpose: the picture size (924 by 2160), mipmaps, 2x pixel ratio and antialiasing. Cutting any of them would make the phone look worse. Six pictures still take about 8 MB each in graphics memory. Going lower needs compressed textures (a new dependency) or smaller pictures, and I did not do either without asking.
+
+## Half-size pictures for narrow screens (2026-11-23)
+
+Chosen: each screen picture now also exists at 462 by 1080 (`public/phone/*-m.webp`, made from the 924 by 2160 file with Lanczos and `cwebp -q 90 -sharp_yuv`). A screen narrower than 768 px loads those for the 3D phone, so each picture takes about 2 MB in graphics memory, not 8 MB (about 12 MB in all, not 48 MB). The flat placeholder uses `srcSet`, so it always takes the small file, and its images are removed once the 3D phone is on.
+
+Why: webp helps the download, not the graphics memory, because the graphics card holds every picture as plain pixels. The only way to use less memory is fewer pixels. On a narrow screen the phone is about 450 CSS pixels tall (up to 900 device pixels), and the graphics card already read the 1080 high level of the picture there, so the half-size file looks the same.
+
+Kept at full size: wide screens. A big phone on a retina laptop needs the 2160 pixels.
+
+Rejected: compressed textures (KTX2). They cut memory too, but need an encoder step and the Basis decoder files, and the 4 by 4 block loss would show on small text in the screens.

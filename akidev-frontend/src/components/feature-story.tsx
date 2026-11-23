@@ -42,6 +42,8 @@ const clamp = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const ease = (u: number) => u * u * (3 - 2 * u);
 const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 const compact = () => window.innerWidth < 768;
+/** The same picture at half the size, for narrow screens: it looks the same there, and takes a quarter of the graphics memory. */
+const half = (src: string) => src.replace(".webp", "-m.webp");
 /** A colour between two CSS colours. `u` is 0 for `a` and 1 for `b`. */
 const blend = (a: string, b: string, u: number) => (u <= 0 ? a : u >= 1 ? b : `color-mix(in srgb, ${a}, ${b} ${Math.round(u * 100)}%)`);
 /** Once the opening has faded out, its buttons leave the tab order (the heading stays). */
@@ -169,7 +171,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
       scene.current = createPhoneScene(
         host.current,
         stage.current,
-        steps.map((step) => step.screen),
+        steps.map((step) => (compact() ? half(step.screen) : step.screen)),
       );
       setThreeD(true);
       update();
@@ -307,9 +309,12 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
             <div ref={flatPhone} style={{ transform: `translate(${flat.x * 50}vw, ${active === 0 ? "var(--fy, 35svh)" : `${-flat.y * 50}svh`}) scale(${flat.scale})`, transition: "transform 0.8s cubic-bezier(0.32, 0.72, 0, 1)" }}>
               <Phone width="var(--pw)" className="[--pw:8.5rem] md:[--pw:13rem]">
                 {steps.map((step, i) => (
-                  <img
+                  // Only the picture on show and the next one: the 3D phone fetches the rest itself, one after the other.
+                  threeD || i > Math.max(0, active - 1) + 1 ? null : <img
                     key={step.id}
                     src={step.screen}
+                    srcSet={`${half(step.screen)} 462w, ${step.screen} 924w`}
+                    sizes="(max-width: 767px) 9rem, 14rem"
                     alt=""
                     width={924}
                     height={2160}
