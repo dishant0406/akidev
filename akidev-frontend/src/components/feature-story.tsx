@@ -49,7 +49,7 @@ const fade0 = (f: number) => f > 0.45;
 /** A pose for this screen. On a narrow one the phone stays in the middle and smaller, with the title above it and the text below. */
 const poseFor = (index: number, narrow: boolean): Pose => {
   const p = POSES[index];
-  return narrow ? { ...p, x: p.x * 0.15, y: index === 0 ? p.y : 0, scale: index === 0 ? p.scale : 0.78 + (p.scale - 1) * 0.15 } : p;
+  return narrow ? { ...p, x: p.x * 0.15, y: index === 0 ? p.y : 0, scale: index === 0 ? p.scale : 1.05 + (p.scale - 1) * 0.15 } : p;
 };
 /**
  * Whether step `i`'s words show when the scroll is at `f`. They show while the phone rests at its pose. They go as soon as
@@ -252,7 +252,8 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
   }, []);
 
   const look = LOOK[active];
-  const flat = poseFor(active, narrow);
+  // The flat phone is only the placeholder (and the fallback without WebGL): it stays small, so it never reaches the words.
+  const flat = { ...poseFor(active, narrow), scale: 1 };
   const stageStyle = { color: look.fg, "--dim": look.dim, touchAction: "pan-y" } as CSSProperties;
   const words = steps.map((step, i) => ({ step, i: i + 1, side: SIDE[i + 1] }));
 
@@ -261,7 +262,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
       <div ref={track} className="relative [--step:55svh] motion-reduce:!h-auto md:[--step:70svh]" style={{ height: `calc(100svh + ${count + HOLD} * var(--step))` }}>
         <div
           ref={stage}
-          className="sticky top-0 h-svh overflow-hidden transition-colors duration-700 ease-out motion-reduce:static motion-reduce:h-auto motion-reduce:overflow-visible"
+          className="sticky top-0 h-dvh overflow-hidden transition-colors duration-700 ease-out motion-reduce:static motion-reduce:h-auto motion-reduce:overflow-visible"
           style={stageStyle}
         >
           <h2 className="sr-only">A tour of the app</h2>

@@ -555,3 +555,11 @@ Why: you said the zoom in and out looked broken, the text came and went, and the
 Rejected: zooming only on two steps (more code, and the page would feel uneven), and keeping the zoom with a softer curve (it was still in and out).
 
 Trade-off: the phone is big but never fills the whole window with its screen, so the effect is calmer than a full zoom.
+
+## The stage follows the visible height, and the phone is bigger on a phone (2026-11-23)
+
+Chosen: the stage is `h-dvh` (the height you can see now), not `h-svh` (the height with the browser bars out). On a phone the phone is about 1.05 times its first size (it was 0.78), and the flat placeholder phone never grows past its first size.
+
+Why: in a phone browser the bars slide away as you scroll, so the visible area is taller than the `svh` height. The stage stayed short and left a white gap under the text. The placeholder was also scaled like the 3D phone and ran into the words.
+
+Trade-off: when the bars move, the stage changes height and the 3D phone fits itself again. That is a small shift, and it is better than an empty gap.
