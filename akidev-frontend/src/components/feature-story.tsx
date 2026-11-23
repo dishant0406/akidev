@@ -102,7 +102,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     const a = fit(poseFor(k, small), k);
     const b = fit(poseFor(k + 1, small), k + 1);
     // At the start the phone sits just under the opening words, whatever size the window is.
-    const room = scene.current && hero.current ? (hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 24) / view.clientHeight : null;
+    const room = scene.current && hero.current ? (hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 32) / view.clientHeight : null;
     const first = (pose: Pose): Pose => {
       if (room === null || !scene.current) return pose;
       const centre = room + (scene.current.heightFraction() * pose.scale) / 2;
@@ -112,7 +112,7 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     // The flat placeholder sits under the opening words too, so it never covers them.
     const flatBox = flatPhone.current;
     if (flatBox && hero.current) {
-      const top = hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 24;
+      const top = hero.current.getBoundingClientRect().bottom - view.getBoundingClientRect().top + 32;
       const down = Math.max(0, top + flatBox.offsetHeight / 2 - view.clientHeight / 2);
       flatBox.style.setProperty("--fy", `${down}px`);
     }
@@ -188,7 +188,12 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     update();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
+    // The opening grows or shrinks when the fonts arrive or the lines wrap again: the phone follows, so it never sits on the words.
+    const watch = new ResizeObserver(onScroll);
+    if (hero.current) watch.observe(hero.current);
+    void document.fonts?.ready.then(onScroll);
     return () => {
+      watch.disconnect();
       cancelled = true;
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", onScroll);

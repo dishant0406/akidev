@@ -589,3 +589,11 @@ Why: webp helps the download, not the graphics memory, because the graphics card
 Kept at full size: wide screens. A big phone on a retina laptop needs the 2160 pixels.
 
 Rejected: compressed textures (KTX2). They cut memory too, but need an encoder step and the Basis decoder files, and the 4 by 4 block loss would show on small text in the screens.
+
+## The first phone follows the opening words (2026-11-23)
+
+Chosen: the page now watches the size of the opening (`ResizeObserver` on the hero, and `document.fonts.ready`) and puts the phone again whenever it changes. The gap between the last line of the opening and the top of the phone is 32 px (it was 24).
+
+Why: you sent a screenshot where the phone sat on the line "Free. iPhone needs iOS 26...". The phone was placed once, from the size of the opening at that moment. When the fonts arrived, the lines changed size and the phone stayed where it was.
+
+Trade-off: a little more work on each resize of the opening, which only happens a few times when the page loads.
