@@ -202,7 +202,7 @@ export function createPhoneScene(host: HTMLElement, events: HTMLElement, picture
     dirty = true;
   };
 
-  // Motion: critically damped springs (no bounce, about 0.6 s), so the phone never snaps and always starts from where
+  // Motion: critically damped springs (no bounce, about 0.4 s), so the phone never snaps and always starts from where
   // it is. Each one chases a target: the pose from the page, plus the finger while it drags.
   type Spring = { pos: number; vel: number };
   const spring = (pos = 0): Spring => ({ pos, vel: 0 });
@@ -223,7 +223,7 @@ export function createPhoneScene(host: HTMLElement, events: HTMLElement, picture
   let last = performance.now();
 
   const step = (axis: Spring, target: number, dt: number) => {
-    const w = (2 * Math.PI) / 0.6;
+    const w = (2 * Math.PI) / 0.38;
     axis.vel += (w * w * (target - axis.pos) - 2 * w * axis.vel) * dt;
     axis.pos += axis.vel * dt;
     return Math.abs(target - axis.pos) > 0.0005 || Math.abs(axis.vel) > 0.0005;

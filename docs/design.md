@@ -529,3 +529,29 @@ Details that matter:
 Rejected: keeping the giant words behind the phone (it looked deep but hid the words), and fading the words in step with the scroll (the phone rests at one exact scroll position because of snapping, so a scroll-linked fade was not finished when it rested).
 
 Trade-off: the text is smaller than before, and the phone is smaller on a phone. The page reads clearly at the cost of some drama.
+
+## The phone zooms through each step, and the page ends white (2026-11-23)
+
+Chosen: between two steps the phone no longer just turns to the next side. In the middle of each move it goes to the centre, faces front and grows until its screen covers the whole stage. It shows the part of the screen that matters for the next step (the `FOCUS` list), swaps to the next screen at the biggest point, then shrinks and settles at its next pose. The page colour follows the scroll on `html` and `body`, and in the last hold it fades from the last step's colour to the page's white. The tour ends on plain white.
+
+Why: you said turning the phone was not enough, and asked for moves that fill the screen. You also said the ending must be white and the colour must belong to the whole page, not a box.
+
+Details that matter:
+- `coverScale()` in `phone-scene.ts` gives the size at which the screen covers the stage. `focusY()` slides the screen up or down to the wanted part, but never further than the spare height of the screen, so no white strip shows at the edge.
+- The move uses a sine curve (`bump`): 0 at rest, 1 in the middle. Position, turn and tilt are multiplied by `1 - bump`, and the size goes towards the cover size by `bump`.
+- `HOLD` is 0.4 of a step (it was 0.5) and the springs answer in 0.38 s, so the move feels quicker.
+- The white fade uses the unclamped scroll (`scrolled`), because the clamped value stops at the last step and the fade would never start. This was a real bug found while testing.
+
+Rejected: a zoom that only scales (it kept the side pose and the screen crossed the words), and a separate full-screen overlay (it would need a second copy of every screen).
+
+Trade-off: the phone shows only a slice of the screen at the peak. The peak lasts a moment, so this reads as a zoom and not as a crop.
+
+## The zoom-through is gone: one smooth move, a big phone (2026-11-23)
+
+Chosen: the zoom in and then out on every step is removed. Each step now has a large phone (1.5 to 1.8 times its first size on a wide screen) on one side, and the phone moves to the next pose in one smooth turn. The words show 0.12 of a step before the phone rests and come in after only 0.1 s. `HOLD` is 0.5, so the phone rests for half of each step. The page colour still follows the scroll, and the tour still ends on plain white.
+
+Why: you said the zoom in and out looked broken, the text came and went, and the words were missing most of the time. Two things caused the missing words: the zoom made the move long, and the words came in 0.4 s late and left early. You asked for a simple zoom and then the text.
+
+Rejected: zooming only on two steps (more code, and the page would feel uneven), and keeping the zoom with a softer curve (it was still in and out).
+
+Trade-off: the phone is big but never fills the whole window with its screen, so the effect is calmer than a full zoom.
