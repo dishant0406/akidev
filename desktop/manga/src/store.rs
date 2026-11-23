@@ -2523,7 +2523,12 @@ mod tests {
         let store = Store::in_memory().unwrap();
         store.keep_listing("s", "popular", "body", 1_000).unwrap();
         assert!(store.listing_since("s", "popular", 500).unwrap().is_some());
-        assert!(store.listing_since("s", "popular", 1_000).unwrap().is_none());
+        assert!(
+            store
+                .listing_since("s", "popular", 1_000)
+                .unwrap()
+                .is_none()
+        );
         assert!(store.listing_since("s", "latest", 0).unwrap().is_none());
     }
 

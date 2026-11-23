@@ -98,7 +98,8 @@ fn compile(format: &str) -> Option<(Regex, Vec<Part>)> {
 
 /// A format is compiled once, however many dates are read with it (a chapter list has one date per row).
 fn compiled(format: &str) -> Option<(Regex, Vec<Part>)> {
-    static KNOWN: LazyLock<Mutex<HashMap<String, Option<(Regex, Vec<Part>)>>>> = LazyLock::new(Mutex::default);
+    static KNOWN: LazyLock<Mutex<HashMap<String, Option<(Regex, Vec<Part>)>>>> =
+        LazyLock::new(Mutex::default);
     KNOWN
         .lock()
         .unwrap()
@@ -184,7 +185,8 @@ fn relative(text: &str, now_ms: i64) -> Option<i64> {
         return Some(now_ms);
     }
     static AGO: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b").unwrap()
+        Regex::new(r"(\d+|an?|one)\s*(second|sec|minute|min|hour|hr|day|week|month|year|yr)s?\b")
+            .unwrap()
     });
     let found = AGO.captures(&lower)?;
     let amount: i64 = match &found[1] {
