@@ -447,3 +447,21 @@ Details: `/app` on the site redirects to the host (308), so there is one address
 Rejected: a second Next.js app or container (a second build, deploy and set of fonts for one page), and route groups with two layouts (many pages would move for one page).
 
 Trade-off: the layout now reads the `Host` header, as the middleware already did. The host name must match `app.` plus `NEXT_PUBLIC_SITE_DOMAIN`. In development, set that variable to `localhost:3100` and open `app.localhost:3100`.
+
+## The phone page is bright, with one 3D phone (2026-11-23)
+
+Chosen: the page at `app.akidev.live` is bright and quiet, like the phone app and unlike the dark site. One real 3D phone (three.js, built from code, lit by a studio room) plays the app on its screen inside one large grey panel. You can drag it, and the scroll turns it. Below it are the app's screens in a swipeable row, a short list of what the app opens, the privacy lines in large type, the questions, and a last block with the store links. The only colour besides black and white is the app's yellow, used as a highlighter on one word.
+
+Why: the first version (a dark page, glowing gradients, tilted phones, a sticky phone with a blurred glow) looked like every generated landing page. We looked at Things, Bear, Overcast, Readwise Reader, Lusion, Apple and the Dribbble results for "app landing page". The pages that look expensive are calm. They have one real object, one accent and a lot of space. The Dribbble results were mostly the gradient look we had.
+
+Details that matter:
+- The bright look is the same token names with light values (`html[data-landing]` in `globals.css`), so every colour class on the page works unchanged. This is an exception to `design/DESIGN_PLAN.md`, for this host only: the phone app has its own look (`manga-app/DESIGN.md`).
+- Type is one family (the site's Hanken Grotesk), weight 600, tracking -0.02em on large text, line height 1.05 to 1.15 on headings and 1.6 on body text. No uppercase labels. No gradients except one hard-edged highlight.
+- Store links are plain black badges drawn by us. The official badge art needs a download from Apple and Google.
+- The 3D phone is a progressive enhancement. The page draws a flat phone first and swaps in the 3D one when the browser is idle and WebGL works. The 3D code is a separate chunk (about 178 KB gzipped, measured in a production build), so the first picture never waits for it.
+- The phone turns on a critically damped spring (no bounce, about half a second), so a drag or a scroll never snaps it. Vertical swipes scroll the page, sideways swipes turn the phone.
+- There is a pause button for the video, because a loop that never stops needs one.
+
+Rejected: a full-width video behind the page (the film is square and crops badly), a second phone model file (a model is a download and a licence to track, and the phone is simple), and scroll-pinned sections with a huge empty page (they looked fine on a desktop and bad on a phone).
+
+Trade-off: this adds the `three` package. On a device that can run WebGL it is one more download after the page is ready, and it uses the GPU while the stage is on screen. Devices that cannot, or that save data, get the flat phone and lose nothing else.

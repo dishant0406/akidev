@@ -45,7 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // The tabs, sorts and genres, for every page.
   const screens = landing ? null : await getScreens();
   return (
-    <html lang="en" className={`${appFont.variable} ${titleFont.variable}`}>
+    <html lang="en" className={`${appFont.variable} ${titleFont.variable}`} data-landing={landing ? "" : undefined}>
       <body className="min-h-screen max-w-[100vw] overflow-x-hidden bg-canvas font-sans text-ink antialiased">
         {landing ? (
           <main>{children}</main>

@@ -132,3 +132,22 @@ video::-webkit-media-text-track-container {
     --faint: 170 164 154;
   }
 }
+
+/* The phone app's landing page (its own host, see layout.tsx) is bright, like the app: the same token names with light
+   values, so every colour class on that page works unchanged. Yellow is the only accent, and the app's own. */
+html[data-landing] {
+  --canvas: 255 255 255;
+  --surface: 244 244 245; /* the app's grey cards */
+  --raised: 236 236 238;
+  --line: 228 228 231;
+  --ink: 17 17 19;
+  --dim: 92 92 99;
+  --faint: 113 113 122;
+  --accent: 255 210 31; /* the app's yellow */
+  background: rgb(var(--canvas));
+  color-scheme: light;
+}
+/* Yellow on white is too faint for a focus ring, so the ring is ink here. */
+html[data-landing] :focus-visible {
+  outline-color: rgb(var(--ink));
+}

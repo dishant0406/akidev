@@ -25,7 +25,7 @@ function PlayMark() {
         fill="currentColor"
         d="M5.2 2.6c-.5.3-.8.8-.8 1.5v15.8c0 .7.3 1.2.8 1.5.5.3 1.1.2 1.7-.1l13.6-7.9c.5-.3.8-.8.8-1.3s-.3-1-.8-1.3L6.9 2.7c-.6-.3-1.2-.4-1.7-.1z"
       />
-      <path d="M4.5 3.4 13.1 12l-8.6 8.6M13.1 12l2.9-2.9M13.1 12l2.9 2.9" fill="none" stroke="rgb(255 210 31)" strokeWidth=".7" strokeLinejoin="round" />
+      <path d="M4.5 3.4 13.1 12l-8.6 8.6M13.1 12l2.9-2.9M13.1 12l2.9 2.9" fill="none" stroke="rgb(var(--ink))" strokeWidth=".7" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -39,12 +39,12 @@ export function StoreButton({ store }: { store: keyof typeof STORES }) {
       target="_blank"
       rel="noopener"
       onClick={() => track("download_clicked", { platform: store, version: null })}
-      className="group inline-flex items-center justify-center gap-2.5 rounded-xl bg-[rgb(255_210_31)] py-3 pl-3 pr-3.5 sm:gap-3 sm:pl-4 sm:pr-6 text-[#141414] shadow-[0_10px_30px_-10px_rgb(255_210_31/0.55)] transition-[transform,box-shadow] duration-200 ease-spring hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-10px_rgb(255_210_31/0.7)] active:scale-[0.97] motion-reduce:transition-none"
+      className="inline-flex h-[52px] items-center justify-center gap-2.5 rounded-md bg-ink pl-3 pr-3.5 text-canvas transition-[transform,background-color] duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none sm:gap-3 sm:pl-4 sm:pr-5 [@media(hover:hover)]:hover:bg-ink/85"
     >
       {store === "ios" ? <AppleMark /> : <PlayMark />}
       <span className="flex flex-col text-left leading-none">
-        <span className="text-[11px] font-medium opacity-70">{small}</span>
-        <span className="mt-1 text-[17px] font-bold sm:text-[19px] tracking-[-0.01em]">{name}</span>
+        <span className="text-[11px] font-medium opacity-75">{small}</span>
+        <span className="mt-1 text-[17px] font-semibold tracking-[-0.01em] sm:text-[19px]">{name}</span>
       </span>
     </a>
   );

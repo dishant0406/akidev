@@ -185,18 +185,20 @@ Edge cases: with an empty cache every list is asked for (the first launch). A so
 
 ## The phone app page, `app.akidev.live` (2026-11-23)
 
-1. A visitor opens `app.akidev.live` (the footer link "Phone app", or a link we share). The middleware (`src/middleware.ts`) shows the page `/app` there, with the address unchanged. `/app` on the site redirects to the host, and any other path on the host redirects to the same path on the site. The layout leaves out the top bar, the footer and every call to the API on that host, so the page works when the API is down.
-2. `AppShowcase` (`src/components/app-showcase.tsx`) draws the phone and one block of text for the opening and for each part. The phone shows the recording, `public/phone/app-loop.mp4`.
-3. As the visitor scrolls, an `IntersectionObserver` finds the part that sits in a thin band across the window. That part becomes the active one. Its text is full strength, the others are faded.
-4. The active part changes three things at once: the screen on the phone fades to the matching picture, the phone turns to a new angle on the spring, and the recording plays only while the opening is active.
-5. On a wide window the phone is beside the text and sticks to the top. On a narrow one it sticks above the text, and the text slides under it.
-6. A click on "App Store" or "Google Play" (`store-button.tsx`) sends `download_clicked` and opens the store page in a new tab. The addresses are in `src/constants/site.ts`.
+1. A visitor opens `app.akidev.live` (the footer link "Phone app", or a link we share). The middleware (`src/middleware.ts`) shows the page `/app` there, with the address unchanged. `/app` on the site redirects to the host, and any other path on the host redirects to the same path on the site. The layout leaves out the top bar, the footer and every call to the API on that host, and sets `data-landing` on the page, which turns on the bright colours (`globals.css`). The page works when the API is down.
+2. The server draws all the words at once (`src/app/app/page.tsx`): the opening, the gallery, what the app opens, the privacy lines, the questions and the last block. Nothing needs JavaScript to be read.
+3. `HeroStage` (`src/components/hero-stage.tsx`) draws a flat phone that plays the app video, so the first picture is ready at once.
+4. When the browser is idle, and only if it can run WebGL and is not asked to save data, the page loads the 3D phone (`phone-scene.ts`, with the `three` package) and fades it in over the flat one. The same video plays on its screen. A visitor can drag it sideways, a mouse tilts it a little, and the page scroll turns it as it passes. A line under the panel says how to turn it.
+5. The stage draws frames only while it is on screen. A round button pauses the video.
+6. `ScreenGallery` is a row of the app's screens. It scrolls sideways with snapping and the next card peeks past the edge. On a wide window two buttons step through it.
+7. A click on "App Store" or "Google Play" (`store-button.tsx`) sends `download_clicked` and opens the store page in a new tab. The addresses are in `src/constants/site.ts`.
 
 Edge cases:
-- No JavaScript: the text and links work. The phone shows the first frame of the recording.
-- Reduced motion: no turn, no autoplay, a 200 ms fade between screens.
-- A touch screen: no pointer turn, only the angle for each part.
-- The recording fails to load: the first frame stays as the screen.
+- No WebGL, or the data saver is on: the flat phone stays. Nothing else changes.
+- No JavaScript: the text and links work. The phone shows the first frame of the video.
+- Reduced motion: the video does not start, the scroll does not turn the phone, and the gallery steps without smooth scrolling. Dragging still works, because the visitor does it.
+- A touch screen: the phone turns with a sideways swipe. Vertical swipes still scroll the page (`touch-action: pan-y`).
+- The video fails to load: the first frame stays as the screen.
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
 Remaking the pictures: serve the repo, then run `python manga-android/store/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.
