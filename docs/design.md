@@ -499,3 +499,18 @@ Details that matter:
 Rejected: keeping the video for the first screen (it needed a pause button and a loop that never stops), and a coloured background that changes for every step (we use four looks and tie two of them to the app: Night and the highlighter).
 
 Trade-off: the stage is about 6.5 screens tall. A visitor who wants the store buttons later can use the last block of the page. The page works the same without WebGL, with a flat phone that moves and changes screen.
+
+## The tour snaps to its steps (2026-11-23)
+
+Chosen: one scroll gesture moves the tour by exactly one step, and none can be skipped. A wheel or trackpad is handled in code (`onWheel` in `feature-story.tsx`): the first event of a gesture scrolls smoothly to the next or the previous step, and the rest of that gesture is ignored for a moment. A touch screen and the keyboard use CSS scroll snapping with `scroll-snap-stop: always`. Snapping is on only while the stage is pinned.
+
+Why: a hard flick, or a trackpad that keeps sending events after the finger lifts, carried the page past two or three steps, so visitors missed parts of the tour. Plain CSS snapping did not fix a single mouse wheel tick, because a tick is smaller than half a step and the page snapped back to where it was.
+
+Details that matter:
+- Snap points are at the start of each step (where the phone has reached its pose and rests) and at the end of the last hold. There is no snap point past that, so scrolling down from the last step leaves the tour.
+- Snapping turns off outside the pinned range. With it on at the bottom edge, a small scroll was undone and the visitor could not leave, or could not come back.
+- It does not catch pinch zoom (Control and wheel) or sideways scrolls.
+
+Rejected: only CSS snapping (a single wheel tick did not move), and only code (touch and keyboard would still skip steps). Using both is a little more code and gives the same behaviour everywhere.
+
+Trade-off: taking over the wheel inside the tour is stronger than normal scrolling, so a visitor cannot scroll slowly through a step. The tour is the point of the page, and the rest of the page scrolls as usual.

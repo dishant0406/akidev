@@ -174,6 +174,55 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     return () => observer.disconnect();
   }, [threeD]);
 
+  // The tour moves one step for each scroll. While it is on screen the page snaps to the steps (the markers below are the
+  // snap points), which handles touch and the keyboard. A wheel or a trackpad is handled here, because a hard flick would
+  // otherwise carry the page past several steps: one gesture goes to the next step, whatever its speed.
+  useEffect(() => {
+    const el = track.current;
+    if (!el || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const root = document.documentElement;
+    // Snapping is on only while the stage is pinned, from the first step to the end of the last one. Above and below that
+    // the page scrolls freely, so nothing pulls a visitor back as they leave the tour or come back into it.
+    const syncSnap = () => {
+      const box = el.getBoundingClientRect();
+      const f = -box.top / ((box.height - window.innerHeight) / (count + HOLD));
+      root.style.scrollSnapType = f >= -0.02 && f <= count + HOLD - 0.02 ? "y mandatory" : "";
+    };
+    syncSnap();
+    window.addEventListener("scroll", syncSnap, { passive: true });
+    window.addEventListener("resize", syncSnap);
+
+    let lockedUntil = 0;
+    let lastWheel = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || Math.abs(event.deltaY) < 4) return; // a zoom, or a sideways or tiny move
+      const box = el.getBoundingClientRect();
+      const stepPx = (box.height - window.innerHeight) / (count + HOLD);
+      const f = -box.top / stepPx; // where the scroll is, in steps
+      const down = event.deltaY > 0;
+      if (f < -0.02 || f > count + HOLD + 0.02) return; // outside the tour: the page scrolls as usual
+      if (!down && f <= 0.02) return; // already at the top
+      event.preventDefault();
+      const now = performance.now();
+      const newGesture = now - lastWheel > 120; // a trackpad keeps sending events after the finger lifts
+      lastWheel = now;
+      if (!newGesture || now < lockedUntil) return;
+      lockedUntil = now + 750;
+      const target = down ? Math.floor(f + 0.02) + 1 : Math.min(count, Math.ceil(f - 0.02) - 1);
+      const start = window.scrollY + box.top;
+      const top = target > count ? start + box.height : start + target * stepPx;
+      window.scrollTo({ top, behavior: "smooth" });
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      root.style.scrollSnapType = "";
+      window.removeEventListener("scroll", syncSnap);
+      window.removeEventListener("resize", syncSnap);
+      window.removeEventListener("wheel", onWheel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- starts once; it reads only the step count
+  }, []);
+
   const jumpTo = (index: number) => {
     const el = track.current;
     if (!el) return;
@@ -281,6 +330,10 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
             ))}
           </nav>
         </div>
+        {/* The snap points: the start of each step, and the end of the last one. `snap-always` stops a fast scroll from passing one. */}
+        {[...Array.from({ length: count + 1 }, (_, i) => i), count + HOLD].map((at) => (
+          <span key={at} aria-hidden className="pointer-events-none absolute left-0 h-px w-px snap-start snap-always motion-reduce:hidden" style={{ top: `calc(${at} * var(--step))` }} />
+        ))}
       </div>
     </section>
   );
