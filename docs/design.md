@@ -514,3 +514,18 @@ Details that matter:
 Rejected: only CSS snapping (a single wheel tick did not move), and only code (touch and keyboard would still skip steps). Using both is a little more code and gives the same behaviour everywhere.
 
 Trade-off: taking over the wheel inside the tour is stronger than normal scrolling, so a visitor cannot scroll slowly through a step. The tour is the point of the page, and the rest of the page scrolls as usual.
+
+## No dots, and the words never meet the phone (2026-11-23)
+
+Chosen: the row of dots under the tour is gone. The scroll is the only control. The words and the phone each have their own half of the stage: the phone moves to one side (at 50% of the half-width, and no larger than 1.35 times its size), and the title and text take the other side. On a narrow screen the phone is in the middle and smaller, with the title above it and the text below. The words show while the phone rests, go as soon as it moves, and return a moment after it has arrived.
+
+Why: you said the dots were not wanted, and that the words and the phone overlapped too much on a phone and on a computer. The overlap had two causes: the phone was too close to the words at rest, and the words stayed on screen while the phone flew across them.
+
+Details that matter:
+- On a computer the title is at most 36% of the width wide and the phone's half starts at about 60%, so they have a gap. The step with the large phone (reading) moves it to the right half too, and no longer covers the title.
+- On a phone the phone is 40 to 45% of the height. The title is in the top 20% and the text in the bottom 20%.
+- Out is instant and in has a 0.4 s delay, so a visitor never sees the words and the phone at the same place.
+
+Rejected: keeping the giant words behind the phone (it looked deep but hid the words), and fading the words in step with the scroll (the phone rests at one exact scroll position because of snapping, so a scroll-linked fade was not finished when it rested).
+
+Trade-off: the text is smaller than before, and the phone is smaller on a phone. The page reads clearly at the cost of some drama.

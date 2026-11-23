@@ -14,12 +14,12 @@ const LABEL = "Akidev on an iPhone, turning through its screens as the page scro
 // between, so it moves the whole time the page scrolls. Step 0 sits low under the opening words (see `update`).
 const POSES: Pose[] = [
   { x: 0, y: -0.7, yaw: -0.25, pitch: 0.05, scale: 0.9 },
-  { x: 0.42, y: 0, yaw: -0.5, pitch: 0.06, scale: 1.05 },
-  { x: -0.42, y: 0, yaw: 0.5, pitch: 0.02, scale: 1.1 },
-  { x: 0.3, y: -0.05, yaw: -0.18, pitch: -0.04, scale: 1.5 },
-  { x: -0.42, y: 0, yaw: 0.5, pitch: 0.05, scale: 1.08 },
-  { x: 0.42, y: 0, yaw: -0.5, pitch: 0, scale: 1.1 },
-  { x: -0.4, y: 0, yaw: 0.4, pitch: 0.03, scale: 1.2 },
+  { x: 0.5, y: 0, yaw: -0.5, pitch: 0.06, scale: 1.05 },
+  { x: -0.5, y: 0, yaw: 0.5, pitch: 0.02, scale: 1.1 },
+  { x: 0.5, y: -0.03, yaw: -0.2, pitch: -0.04, scale: 1.35 },
+  { x: -0.5, y: 0, yaw: 0.5, pitch: 0.05, scale: 1.08 },
+  { x: 0.5, y: 0, yaw: -0.5, pitch: 0, scale: 1.1 },
+  { x: -0.5, y: 0, yaw: 0.4, pitch: 0.03, scale: 1.15 },
 ];
 // Which side the words take for each step; the phone takes the other.
 const SIDE = ["center", "left", "right", "left", "right", "left", "right"] as const;
@@ -43,11 +43,16 @@ const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 const compact = () => window.innerWidth < 768;
 /** Once the opening has faded out, its buttons leave the tab order (the heading stays). */
 const fade0 = (f: number) => f > 0.45;
-/** A pose for this screen. On a narrow one the phone stays nearer the middle and smaller, so the words have room above and below. */
+/** A pose for this screen. On a narrow one the phone stays in the middle and smaller, with the title above it and the text below. */
 const poseFor = (index: number, narrow: boolean): Pose => {
   const p = POSES[index];
-  return narrow ? { ...p, x: p.x * 0.25, y: index === 0 ? p.y : 0, scale: index === 0 ? p.scale : 0.78 + (p.scale - 1) * 0.2 } : p;
+  return narrow ? { ...p, x: p.x * 0.15, y: index === 0 ? p.y : 0, scale: index === 0 ? p.scale : 0.66 + (p.scale - 1) * 0.15 } : p;
 };
+/**
+ * Whether step `i`'s words show when the scroll is at `f`. They show while the phone rests at its pose. They go as soon as
+ * it starts to move (the second half of a step) and come back a moment after it has arrived, so it never passes over them.
+ */
+const showing = (f: number, i: number, last: boolean) => f >= i - 0.03 && (last || f <= i + 0.46);
 
 /**
  * The whole page's main show. A tall block of scroll holds one full-screen stage that stays on screen. The opening
@@ -64,6 +69,9 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
   const host = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLDivElement>(null);
   const buttons = useRef<HTMLDivElement>(null);
+  const titles = useRef<(HTMLElement | null)[]>([]);
+  const bodies = useRef<(HTMLElement | null)[]>([]);
+  const shown = useRef<boolean[]>([]);
   const scene = useRef<PhoneScene | null>(null);
   const reduced = useRef(false);
   const [threeD, setThreeD] = useState(false);
@@ -104,8 +112,20 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     setActive((current) => (current === index ? current : index));
     setNarrow(small);
     // The opening's words and buttons go as soon as the story starts.
+    for (let i = 1; i <= count; i++) {
+      const on = showing(f, i, i === count);
+      if (shown.current[i] === on) continue;
+      shown.current[i] = on;
+      for (const el of [titles.current[i - 1], bodies.current[i - 1]]) {
+        if (!el) continue;
+        // Out at once; in after the phone has had time to arrive.
+        el.style.transition = `opacity 0.4s ease-out ${on ? 0.4 : 0}s, transform 0.5s ease-out ${on ? 0.4 : 0}s`;
+        el.style.opacity = on ? "1" : "0";
+        el.style.transform = on ? "none" : "translateY(1.25rem)";
+      }
+    }
     if (hero.current) {
-      const fade = clamp(1 - (f - 0.1) / 0.45);
+      const fade = clamp(1 - (f - 0.05) / 0.35);
       hero.current.style.opacity = String(fade);
       hero.current.style.transform = `translateY(${(1 - fade) * -2}rem)`;
       hero.current.style.pointerEvents = fade < 0.4 ? "none" : "";
@@ -223,14 +243,6 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
     // eslint-disable-next-line react-hooks/exhaustive-deps -- starts once; it reads only the step count
   }, []);
 
-  const jumpTo = (index: number) => {
-    const el = track.current;
-    if (!el) return;
-    const stepPx = (el.getBoundingClientRect().height - window.innerHeight) / (count + HOLD);
-    const top = el.getBoundingClientRect().top + window.scrollY + index * stepPx + 2;
-    window.scrollTo({ top, behavior: reduced.current ? "auto" : "smooth" });
-  };
-
   const look = LOOK[active];
   const flat = poseFor(active, narrow);
   const stageStyle = { backgroundColor: look.bg, color: look.fg, "--dim": look.dim, touchAction: "pan-y" } as CSSProperties;
@@ -246,20 +258,24 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
         >
           <h2 className="sr-only">A tour of the app</h2>
 
-          {/* Giant words, behind the phone. */}
+          {/* The title of each step, large, on its own side. The phone is on the other side, so they never meet. */}
           {words.map(({ step, i, side }) => (
             <div
               key={step.id}
               aria-hidden
               className={cn(
-                "pointer-events-none absolute inset-0 z-0 flex items-center px-[5vw] transition-[opacity,transform] duration-700 ease-out max-md:items-start max-md:pt-[7svh] motion-reduce:hidden",
-                side === "left" && "justify-start text-left",
-                side === "right" && "justify-end text-right",
-                side === "center" && "justify-center text-center",
-                i === active ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0",
+                "pointer-events-none absolute inset-0 z-0 flex items-center px-[6vw] max-md:items-start max-md:px-5 max-md:pt-[6svh] motion-reduce:hidden",
+                side === "left" ? "justify-start text-left" : "justify-end text-right",
+                "max-md:justify-center max-md:text-center",
               )}
             >
-              <span className="block max-w-[10ch] text-[clamp(2.75rem,10.5vw,9.5rem)] font-semibold leading-[0.96] tracking-[-0.035em] md:max-w-[9ch]">{step.title}</span>
+              <span
+                ref={(el) => void (titles.current[i - 1] = el)}
+                style={{ opacity: 0 }}
+                className="block max-w-[36vw] text-[clamp(2.5rem,7vw,6.75rem)] font-semibold leading-[0.98] tracking-[-0.03em] max-md:max-w-[88vw] max-md:text-[clamp(2.25rem,11vw,3.5rem)]"
+              >
+                {step.title}
+              </span>
             </div>
           ))}
 
@@ -301,34 +317,18 @@ export function FeatureStory({ steps, heading, actions }: { steps: Slide[]; head
             {words.map(({ step, i, side }) => (
               <li
                 key={step.id}
+                ref={(el) => void (bodies.current[i - 1] = el)}
+                style={{ opacity: 0 }}
                 className={cn(
-                  "pointer-events-none absolute inset-x-0 bottom-[10svh] z-20 px-5 text-center transition-[opacity,transform] duration-700 ease-out md:bottom-[15svh] md:inset-x-auto md:max-w-[26rem] md:px-0 md:text-left",
-                  side === "left" && "md:left-[6vw]",
-                  side === "right" && "md:right-[6vw] md:text-right",
-                  side === "center" && "md:left-1/2 md:-translate-x-1/2 md:text-center",
-                  i === active ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
+                  "pointer-events-none absolute inset-x-0 bottom-[7svh] z-20 px-5 text-center md:bottom-[14svh] md:inset-x-auto md:max-w-[26rem] md:px-0",
+                  side === "left" ? "md:left-[6vw] md:text-left" : "md:right-[6vw] md:text-right",
                 )}
               >
                 <p className="sr-only">{step.title}.</p>
-                <p className="mx-auto max-w-[24rem] text-pretty text-[17px] leading-[1.5] text-[color:var(--dim)] md:text-[19px]">{step.body}</p>
+                <p className="mx-auto max-w-[24rem] text-pretty text-[16px] leading-[1.5] text-[color:var(--dim)] md:text-[19px]">{step.body}</p>
               </li>
             ))}
           </ol>
-
-          <nav aria-label="Steps of the tour" className="absolute inset-x-0 bottom-3 z-20 flex justify-center motion-reduce:hidden">
-            {Array.from({ length: count + 1 }, (_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => jumpTo(i)}
-                aria-label={i === 0 ? "Start of the tour" : steps[i - 1].title}
-                aria-current={i === active ? "step" : undefined}
-                className="group flex h-11 w-7 items-center justify-center"
-              >
-                <span className={cn("h-2 rounded-full bg-current transition-[width,opacity] duration-300 ease-out motion-reduce:transition-none", i === active ? "w-6 opacity-100" : "w-2 opacity-30 group-hover:opacity-60")} />
-              </button>
-            ))}
-          </nav>
         </div>
         {/* The snap points: the start of each step, and the end of the last one. `snap-always` stops a fast scroll from passing one. */}
         {[...Array.from({ length: count + 1 }, (_, i) => i), count + HOLD].map((at) => (
