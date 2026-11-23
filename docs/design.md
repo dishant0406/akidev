@@ -416,3 +416,34 @@ Not measured: the Android cover change and the iOS library change (no device scr
 Rejected: a cache inside `popular` and `latest` themselves. Pull to refresh would then need a flag in every call, and the apps already know when the person asked for fresh data.
 
 Trade-off: a list can be up to ten minutes old. New releases on a site can show up that much later unless you pull to refresh.
+
+## The phone app page: one phone that follows the text (2026-11-23)
+
+Chosen: a new page, `/app` (`akidev-frontend/src/app/app/page.tsx`), for the iPhone and Android app, with links to the App Store and Google Play. One phone stays on screen while the text scrolls past. The screen on the phone follows the text: a short recording of the app first, then a picture for each part (sources, a series, reading, library, books, read aloud). The phone turns a little for each part and follows the mouse.
+
+Why: a store link alone does not say what the app is. The film we made already has the app on a phone, so the page reuses it. `/manga` stays as it was, because the App Store listing links to it.
+
+The pictures are not the store screenshots. Those show a real series. The page uses the film's made-up art, taken by `manga-android/store/film/tools/web-assets.py`, and says so in the fine print. The words come from the Play listing and the app's own screens, nothing more. "Free" and the iOS 26 and Android 10 minimums were read from the stores and `build.gradle.kts`.
+
+Details that matter:
+- Yellow is used here (and nowhere else on the site) because this page is about the phone app, and the phone app is yellow. The rest of the site keeps amber for state.
+- The store buttons are our own: a plain Apple mark and a play triangle, with text. The official badge art needs a download from Apple and Google, so it is not in. Swap it in if you want it.
+- The phone turns on a critically damped spring (no bounce, about half a second), starting from where it is, so a new push or a new part never snaps it. Without motion allowed there is no turn, no video, and a short fade between screens.
+- The phone is sized from the screen height (`svh`), so it fits any window. On a narrow screen only its top part shows above the text, so the store buttons are in view at once.
+- A store click sends the same `download_clicked` event as the desktop page, with `ios` or `android`.
+
+Rejected: a full-width background video. The film is square and crops badly on a wide window. Also rejected: scrubbing a video with the scroll bar. It costs a lot of work for little gain over six pictures.
+
+Trade-off: the pictures and the recording are copies of the film. If the app changes, run the script again and copy the files into `akidev-frontend/public/phone/`.
+
+## The phone page lives on its own host, and has no site around it (2026-11-23)
+
+Chosen: the page is shown at `app.akidev.live`, not at `akidev.live/app`. It is the same frontend, not a second app. The middleware shows the page `/app` at the root of that host, and `layout.tsx` leaves out the top bar, the footer and the providers that call the API when the host is `app.`. Caddy and the DNS script (`scripts/cloudflare.sh`) list the new host.
+
+Why: it is a landing page. A short address is easy to say, print on a store page and share. A top bar full of anime, series and films, and a footer about downloads, would hide what the page is for.
+
+Details: `/app` on the site redirects to the host (308), so there is one address. Any other path on the host redirects to the same path on the site, so no page of the site can appear without its top bar. Links from the landing page to the site (privacy, help, desktop app) use the full `https://akidev.live/...` address, because the host has none of those pages.
+
+Rejected: a second Next.js app or container (a second build, deploy and set of fonts for one page), and route groups with two layouts (many pages would move for one page).
+
+Trade-off: the layout now reads the `Host` header, as the middleware already did. The host name must match `app.` plus `NEXT_PUBLIC_SITE_DOMAIN`. In development, set that variable to `localhost:3100` and open `app.localhost:3100`.

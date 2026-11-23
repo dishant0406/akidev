@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 
 import Footer from "@/components/footer";
 import PartyFollower from "@/components/party-follower";
 import TopBar from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
-import { SITE_DOMAIN } from "@/constants/site";
+import { SITE_DOMAIN, isAppHost } from "@/constants/site";
 import { getScreens } from "@/lib/api-server";
 import { appFont, titleFont } from "@/lib/fonts";
 import PartyProvider from "@/providers/party";
@@ -39,22 +40,28 @@ export const viewport: Viewport = { themeColor: "#0b0b0d", colorScheme: "dark" }
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The phone app's landing page is a page of its own: no top bar, no footer, and nothing that asks the API.
+  const landing = isAppHost((await headers()).get("host"));
   // The tabs, sorts and genres, for every page.
-  const screens = await getScreens();
+  const screens = landing ? null : await getScreens();
   return (
     <html lang="en" className={`${appFont.variable} ${titleFont.variable}`}>
       <body className="min-h-screen max-w-[100vw] overflow-x-hidden bg-canvas font-sans text-ink antialiased">
-        <QueryProvider>
-          <ScreensProvider screens={screens}>
-            <PartyProvider>
-              <TopBar />
-              <main className="min-h-[70vh]">{children}</main>
-              <Footer />
-              <PartyFollower />
-            </PartyProvider>
-          </ScreensProvider>
-          <Toaster />
-        </QueryProvider>
+        {landing ? (
+          <main>{children}</main>
+        ) : (
+          <QueryProvider>
+            <ScreensProvider screens={screens}>
+              <PartyProvider>
+                <TopBar />
+                <main className="min-h-[70vh]">{children}</main>
+                <Footer />
+                <PartyFollower />
+              </PartyProvider>
+            </ScreensProvider>
+            <Toaster />
+          </QueryProvider>
+        )}
       </body>
     </html>
   );

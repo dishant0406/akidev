@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { APP_HOST } from "@/constants/site";
 import { getScreens } from "@/lib/api-server";
 
 /** One quiet block at the foot of the page: the attribution the providers' licences ask for, and the pages about the app. */
@@ -16,9 +17,9 @@ export default async function Footer() {
         <Link href="/privacy" className="py-2 transition-colors hover:text-ink">
           Privacy
         </Link>
-        <Link href="/manga" className="py-2 transition-colors hover:text-ink">
-          iPhone reader
-        </Link>
+        <a href={`https://${APP_HOST}`} className="py-2 transition-colors hover:text-ink">
+          Phone app
+        </a>
       </nav>
     </footer>
   );

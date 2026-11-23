@@ -9,6 +9,7 @@ Anime, series and films from one API, served as one site and one desktop app.
 | Hostname | What it serves | Container |
 | --- | --- | --- |
 | `akidev.live` | The site: Home, Anime, Series and Films | `frontend` |
+| `app.akidev.live` | The phone app's landing page (no site around it) | `frontend` |
 | `anime.akidev.live` | Retired: redirects to `akidev.live/anime` | `frontend` |
 | `tv.akidev.live` | Retired: redirects to `akidev.live/films` | `frontend` |
 | `api.akidev.live` | The REST API and the video | `api` |
@@ -361,8 +362,8 @@ One server runs the site and the API. Three containers, defined in `docker-compo
 | `api` | The REST API and the video (`:9000`, internal only) |
 | `frontend` | Next.js, the site (`:3000`, internal only) |
 
-`caddy/Caddyfile` routes by hostname: `anime.akidev.live`, `tv.akidev.live` and `akidev.live` go
-to `frontend` (the two retired hosts so it can redirect them), `api.akidev.live` goes to the API,
+`caddy/Caddyfile` routes by hostname: `app.akidev.live`, `anime.akidev.live`, `tv.akidev.live` and `akidev.live` go
+to `frontend` (the two retired hosts so it can redirect them, and `app.` because the middleware shows the landing page there), `api.akidev.live` goes to the API,
 and `stream.akidev.live` goes to the API's video routes only. The browser loads the API directly.
 Caddy gets and renews its own Let's Encrypt certificates, kept in the `caddy-data` volume.
 Nothing else publishes a port.

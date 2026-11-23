@@ -35,6 +35,7 @@ The API must be running first. By default the frontend expects it at
 | `/search?q=` | The full results of a search, narrowed by an All / Anime / Series / Films tab |
 | `/title/[key]` | A title: banner, episodes, cast, related and recommended rows |
 | `/watch/[key]/[id]` | The player, over the whole window, with the episode panel |
+| `app.akidev.live` | The phone app's landing page (the page `/app`, shown at the root of its own host, with no top bar or footer) |
 
 Search is also a panel over any page: Cmd/Ctrl-K, or the magnifier in the top bar.
 

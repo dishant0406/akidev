@@ -31,7 +31,7 @@ esac
 
 # Hostname -> whether Cloudflare proxies it. The bare zone is the site; anime. and tv. are retired
 # and the app redirects them to it, so they still need to reach it.
-PROXIED_HOSTS=("anime.$ZONE" "tv.$ZONE" "api.$ZONE" "$ZONE")
+PROXIED_HOSTS=("app.$ZONE" "anime.$ZONE" "tv.$ZONE" "api.$ZONE" "$ZONE")
 DIRECT_HOSTS=("stream.$ZONE")
 
 run() {

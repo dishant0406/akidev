@@ -41,8 +41,9 @@
 }
 
 # The site. anime. and tv. are retired: the frontend's middleware redirects them, and sees the
-# original Host header because Caddy passes it through.
-{$SITE_DOMAIN}, anime.{$SITE_DOMAIN}, tv.{$SITE_DOMAIN} {
+# original Host header because Caddy passes it through. app. is the phone app's landing page, the same
+# frontend: the middleware shows it at the root of that host.
+{$SITE_DOMAIN}, app.{$SITE_DOMAIN}, anime.{$SITE_DOMAIN}, tv.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	reverse_proxy frontend:3000 {

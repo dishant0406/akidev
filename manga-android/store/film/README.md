@@ -57,6 +57,8 @@ python tools/score.py http://127.0.0.1:8000/manga-android/store/film/film.html o
 ffmpeg -i out/video.mp4 -i out/score.wav -c:v copy -c:a aac -b:a 256k -shortest out/akidev-launch.mp4
 ```
 
+`tools/web-assets.py` takes the clean screens and the recording for the website's `/app` page from this film (see `docs/flow.md`).
+
 `--sub 4` is the motion blur: four captures spread over each frame, averaged in linear light. `tools/pops.py` scans
 the frames for one-frame jumps (a frame that changes 3× more than both neighbours).
 
