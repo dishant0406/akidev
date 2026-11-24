@@ -56,7 +56,9 @@ enum Part {
 }
 
 /// A regular expression and the parts its groups stand for, built from a pattern like "MMM d, yyyy".
-fn compile(format: &str) -> Option<(Regex, Vec<Part>)> {
+type CompiledPattern = (Regex, Vec<Part>);
+
+fn compile(format: &str) -> Option<CompiledPattern> {
     let mut regex = String::new();
     let mut parts = Vec::new();
     let mut rest = format;
@@ -97,8 +99,8 @@ fn compile(format: &str) -> Option<(Regex, Vec<Part>)> {
 }
 
 /// A format is compiled once, however many dates are read with it (a chapter list has one date per row).
-fn compiled(format: &str) -> Option<(Regex, Vec<Part>)> {
-    static KNOWN: LazyLock<Mutex<HashMap<String, Option<(Regex, Vec<Part>)>>>> =
+fn compiled(format: &str) -> Option<CompiledPattern> {
+    static KNOWN: LazyLock<Mutex<HashMap<String, Option<CompiledPattern>>>> =
         LazyLock::new(Mutex::default);
     KNOWN
         .lock()
