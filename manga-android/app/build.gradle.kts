@@ -15,7 +15,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 10
-        versionName = "1.3"
+        versionName = "1.4"
         // The engine is built for 64-bit ARM phones only (and the emulator on an Apple-silicon Mac); JNA's own library comes for each of these.
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
