@@ -108,7 +108,9 @@ final class BookSearchAcross {
                     do {
                         // A catalogue says where it is searched on its first page.
                         guard let address = try await engine.catalogueFeed(url: catalogue.url).search else { return (catalogue.url, nil, .failed("This catalogue does not offer search.")) }
-                        return (catalogue.url, address, .done(try await engine.catalogueSearch(search: address, term: words).items))
+                        // Kept in a variable first: `try await` inside a returned value broke Release builds on a phone (see GlobalSearchView).
+                        let found = try await engine.catalogueSearch(search: address, term: words).items
+                        return (catalogue.url, address, .done(found))
                     } catch { return (catalogue.url, nil, .failed(describe(error).message)) }
                 }
             }

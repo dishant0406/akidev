@@ -597,3 +597,29 @@ Chosen: the page now watches the size of the opening (`ResizeObserver` on the he
 Why: you sent a screenshot where the phone sat on the line "Free. iPhone needs iOS 26...". The phone was placed once, from the size of the opening at that moment. When the fonts arrived, the lines changed size and the phone stayed where it was.
 
 Trade-off: a little more work on each resize of the opening, which only happens a few times when the page loads.
+
+## Search on the phone: the crash, Done, and the Home icon (2026-11-24)
+
+**The crash.** Chosen: in `GlobalSearchView.swift` the source task now keeps the search result in a variable (`let found = try await ...`) and returns it on the next line. Before, the `try await` sat inside the returned value (`return (id, .done(try await engine.search(...).items), nil)`). The same change is in `BooksBrowseView.swift` (catalogue search).
+
+Why: a TestFlight build on an iPhone 17 Pro (iOS 27.2.1) stopped with "pure virtual function called" inside Apple's task code. The crashing thread had no app code on it, so the report did not say where. We built a Release version with logs and ran it on the phone. It crashed every time (three runs, same report): four sources started, none ever reported back, the search ended in under a second, then the app aborted. With the result kept in a variable it did not crash (four runs, including one search while another had run before). The debug build on the simulator never crashed, so only a Release build on the phone shows it.
+
+Honest limit: we do not know the exact cause. Our best guess is that the Release compiler handles `try await` inside a returned tuple wrongly, so the group ends while child tasks still run. The fix matches the evidence, but it is not proven. `Feed.swift` has a similar line (`await Result { ... }` inside a returned tuple) that we did not change, because it has not crashed.
+
+Rejected: changing `for await ... where` into a plain `guard` (we tried it, the crash stayed, so it was not the cause; the loop is back to the original). Replacing the task group with one `Task` per source (more code, and the group's wait and cancel would be lost). A version of the same fix is not needed on Android: the crash is in Swift's runtime.
+
+**Done in a search field.** Chosen: the "Done" button inside the field now does what the keyboard's Search key does: it closes the keyboard and searches (`AkiInput.swift`, `AkiInput.kt`). In a password or email field it only closes the keyboard.
+
+Why: it used to only close the keyboard, so people typed a word, pressed Done, and nothing happened. That was on purpose (a way out without a search), but it is not what anyone expects from the button next to a search field.
+
+Trade-off: there is no longer a button that closes the keyboard without searching. On iPhone, scrolling the page still closes it (`scrollDismissesKeyboard`). We did not check how Android does it.
+
+**Tapping the Home icon again.** Chosen: when Home is already open and has something to undo (typed text, a search, filters, or a series opened from it), tapping the Home icon clears all of it and shows the dashboard from the top. A clean Home is left alone.
+
+On iPhone the Home screen is made again with a new identity (`.id(model.homeResets)` in `AkiMangaApp.swift`). That clears every `@State`, and closes any series page, because the whole stack goes. `HomeView` tells the model if it is "dirty" (`model.homeDirty`), and the tab bar only counts a tap when it is. On Android the state lives in `DiscoverModel`, so it is cleared in place (`DiscoverModel.goHome`), the pushed screens are closed (`Router.clear`), and the list scrolls to the top.
+
+Why only when dirty: the first version made the screen again on every tap. On a clean dashboard that reloaded the lists and the screen flickered.
+
+Rejected: a navigation path just for Home (more code, and `MangaStack` is shared with the Manga hub). Resetting the chosen source to "All sources" (the source you picked stays, as it does after a relaunch).
+
+Trade-off: on iPhone, "a series covers the screen" is known from `onAppear` and `onDisappear` of the Home screen. This was not tried on a phone with a series open at the time of writing.

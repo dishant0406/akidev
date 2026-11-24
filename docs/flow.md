@@ -206,3 +206,20 @@ Edge cases:
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
 Remaking the pictures: serve the repo, then run `python manga-android/store/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.
+
+## Searching, Done, and the Home icon (2026-11-24)
+
+1. You type in the search field on Discover (`HomeView.swift` on iPhone, `HomeScreen.kt` on Android). You press the keyboard's Search key or the "Done" button in the field. Both call the same `onSubmit` (`AkiInput.swift`, `AkiInput.kt`).
+2. `onSubmit` sets `submitted` and calls `reload()`. With "All sources" chosen, `GlobalSearchModel.search` starts one task per source (`GlobalSearchView.swift`, `GlobalSearchModel.kt`). Each source answers on its own and shows its row of covers when it arrives. A slow or broken source shows its own message.
+3. A new search cancels the one still running. Answers from an old search are dropped (`self.term == term`).
+4. With one source chosen, `BrowseModel.load` runs the search and shows one grid.
+5. You tap the Home icon in the tab bar. If another tab is open, it opens Home as before.
+6. If Home is already open, `AkiTabBar` calls `onReselect`. On iPhone, if `model.homeDirty` is true, `model.homeResets` goes up by one and the Home screen is made again (`AkiMangaApp.swift`). On Android, `DiscoverModel.goHome(router)` closes the pushed series, clears the text, search and filters, scrolls to the top and loads the dashboard.
+
+Edge cases:
+- Done on an empty field: it acts like pressing Search on an empty field. The dashboard lists show again.
+- Done in a password or email field (sign-in forms): it only closes the keyboard.
+- Home tapped on a clean dashboard: nothing happens, so nothing flickers.
+- Home tapped while a series from the results is open: the series closes and the dashboard shows. This is the case that depends on `onDisappear` on iPhone. Check it on a phone after a change to the Home screen.
+- People who read books: the Home tab is the Books home, which has no search. A tap on its icon does nothing.
+- If a search crashes the app on a phone (the old "pure virtual function called" report): see the 2026-11-24 entry in `docs/design.md`. A Release build on a real phone is the only way to see it. The simulator does not.
