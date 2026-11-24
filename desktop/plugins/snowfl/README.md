@@ -8,7 +8,7 @@ The module uses at most eight requests. It resolves missing magnets for the firs
 
 ```bash
 cargo test
-cargo build --release --target wasm32-unknown-unknown
+RUSTFLAGS="--remap-path-prefix=$HOME=/builder" cargo build --release --target wasm32-unknown-unknown
 ```
 
 The module is `target/wasm32-unknown-unknown/release/snowfl.wasm`. Put its SHA-256 value in `plugins/snowfl.json` in the sources repository.

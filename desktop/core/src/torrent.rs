@@ -841,6 +841,8 @@ mod tests {
     use librqbit::spawn_utils::BlockingSpawner;
     use librqbit::{CreateTorrentOptions, ListenerOptions, create_torrent};
 
+    static SWARM_TEST: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     /// A session that touches no network, holding one tiny torrent that is added from
     /// bytes, so no peers are needed.
     async fn session_with_torrent(name: &str) -> (Arc<Session>, Id20, PathBuf) {
@@ -1027,6 +1029,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn fresh_preserves_a_pinned_sibling_and_replaces_an_idle_pack() {
+        let _swarm = SWARM_TEST.lock().await;
         let base = std::env::temp_dir().join(format!("akidev-fresh-pack-{}", std::process::id()));
         let (seed_dir, leech_dir) = (base.join("seed"), base.join("leech"));
         std::fs::create_dir_all(&seed_dir).unwrap();
@@ -1187,6 +1190,7 @@ mod tests {
     /// 128 MiB within seconds while only 6 MiB had been read.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn streaming_fetches_a_window_and_not_the_whole_file() {
+        let _swarm = SWARM_TEST.lock().await;
         const FILE: usize = 128 * 1024 * 1024;
         const READ: u64 = 6 * 1024 * 1024;
         let base = std::env::temp_dir().join(format!("akidev-stream-{}", std::process::id()));
