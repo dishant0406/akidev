@@ -114,6 +114,7 @@ private fun Shell(model: AppModel, router: Router) {
             AkiTabBar(
                 model.tabs.map { it.item(kind, if (it == AppTab.Updates || it == AppTab.Manga) model.unreadTotal else 0) },
                 model.tab, { model.tab = it }, Modifier.navigationBarsPadding().padding(bottom = 6.dp),
+                onReselect = { if (it == AppTab.Home && kind != ReaderKind.Books) model.discover.goHome(router) },
             )
         }
         // Every pushed screen stays on the stack under the one on top, so going back finds each as it was.

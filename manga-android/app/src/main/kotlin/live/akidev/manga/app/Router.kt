@@ -31,6 +31,11 @@ class Router {
         stack.lastOrNull { !it.leaving }?.leaving = true
     }
 
+    /** Takes every pushed screen away, so the tabs show. */
+    fun clear() {
+        stack.forEach { it.leaving = true }
+    }
+
     /** Called when a screen has finished leaving. */
     fun remove(pushed: Pushed) {
         stack.remove(pushed)

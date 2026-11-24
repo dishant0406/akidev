@@ -31,7 +31,11 @@ private val Padding = 6.dp
  * corner radius of a card; the tile sits inside it with the padding taken off, so the curves are concentric.
  */
 @Composable
-fun <ID> AkiTabBar(tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> Unit, modifier: Modifier = Modifier) {
+fun <ID> AkiTabBar(
+    tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> Unit, modifier: Modifier = Modifier,
+    /** A tap on the tab that is already open. */
+    onReselect: (ID) -> Unit = {},
+) {
     val haptic = LocalHapticFeedback.current
     val selected = tabs.indexOfFirst { it.id == selection }.coerceAtLeast(0)
     val slide by animateDpAsState((CellWidth + Gap) * selected, AkiMotion.settle(), label = "tab")
@@ -44,7 +48,7 @@ fun <ID> AkiTabBar(tabs: List<AkiTabItem<ID>>, selection: ID, onSelect: (ID) -> 
                 Box(
                     Modifier.size(CellWidth, CellHeight).akiPress(label = if (tab.badge > 0) "${tab.label}, ${tab.badge} unread" else tab.label, role = Role.Tab, selected = on) {
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                        onSelect(tab.id)
+                        if (on) onReselect(tab.id) else onSelect(tab.id)
                     },
                     contentAlignment = Alignment.Center,
                 ) {

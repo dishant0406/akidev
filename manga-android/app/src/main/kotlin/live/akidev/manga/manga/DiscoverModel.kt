@@ -9,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.AppModel
+import live.akidev.manga.app.Router
 import live.akidev.manga.design.AkiMenuItem
 import uniffi.akimanga.Choice
 import uniffi.akimanga.FilterInfo
@@ -59,6 +60,23 @@ class DiscoverModel(private val app: AppModel) {
         term = ""
         choices = emptyMap()
         filters = runCatching { app.engine.sourceFilters(source) }.getOrDefault(emptyList())
+    }
+
+    /**
+     * The Home icon tapped while Home is open: closes the series opened from here, clears the search and filters, and shows the
+     * dashboard from the top. A Home with nothing to undo is left as it is.
+     */
+    fun goHome(router: Router) {
+        val searched = submitted.isNotEmpty() || choices.isNotEmpty()
+        if (router.top == null && !searched && term.isEmpty()) return
+        router.clear()
+        term = ""
+        submitted = ""
+        choices = emptyMap()
+        app.launch {
+            scroll.scrollToItem(0)
+            if (searched) reload()
+        }
     }
 
     /** What a long press on a "Continue reading" card offers: finish the series, or forget it was started. */

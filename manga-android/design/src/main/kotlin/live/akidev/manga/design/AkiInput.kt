@@ -94,8 +94,9 @@ fun AkiInput(
         if (text.isNotEmpty() && !secure) {
             Box(Modifier.akiPress(label = "Clear text") { onChange(""); onClear() }.akiTouchTarget()) { AkiIcon("close-solid", size = 16.dp, tone = AkiTone.Muted) }
         }
-        // While typing, a way out that does not need a search: closes the keyboard.
-        if (focused) AkiText("Done", AkiTextStyle.BodyStrong, Modifier.akiPress { focus.clearFocus() }.akiTouchTarget())
+        // While typing, Done does what the keyboard's action key does: it searches. A password or email field (a form) only closes the
+        // keyboard, so Done cannot send a form early.
+        if (focused) AkiText("Done", AkiTextStyle.BodyStrong, Modifier.akiPress { focus.clearFocus(); if (!secure && !email) onSubmit() }.akiTouchTarget())
     }
 }
 
