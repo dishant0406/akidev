@@ -180,13 +180,15 @@ release-list responses. Successful lists currently use `Cache-Control: private, 
 The web play-query policy keeps ready responses reusable, but makes `available: false` immediately
 stale with automatic retry disabled: revisiting/refetching can search again without a retry storm.
 
-## `GET /v1/fallback/search?q=<title>[&season=<n>][&episode=<n>]`
+## `GET /v1/fallback/search?q=<title>[&kind=anime|series|movie][&season=<n>][&episode=<n>]`
 
 Needs the header `x-akidev-fallback: 1`, which the apps send for an indexer marked `fallback` (without
 it: `400`). What Prowlarr finds in the torrent sites that have no API, for the apps to ask when the other indexers
 found nothing worth opening (the `prowlarr` indexer in `sources.json` has `fallback: true`). `q` is 1 to
-100 characters. `season` and `episode` are added to the text the way sites name it (`Show S01E05`); an
-episode alone is added as a number (an anime). Either may be empty. It takes up to about 13 seconds.
+100 characters. `kind` selects the Prowlarr category. Old clients can omit it. The server infers `series`
+from a season and episode, `anime` from an episode alone, and `movie` otherwise. `season` and `episode`
+are added to the text the way sites name it (`Show S01E05`). An episode alone is added as a number.
+Either number may be empty. It takes up to about 13 seconds.
 
 ```json
 { "results": [{ "title": "Show S01E05 1080p", "hash": "ab12...40 hex characters",
@@ -198,7 +200,8 @@ At most 100 results, best reported seed count first, each with a hash. `seeders`
 a search with unfinished link-to-hash lookups is not promoted to a complete cached answer. Failed
 requests are not cached as empty searches. `404` when
 Prowlarr is not set up (`PROWLARR_API_KEY` is empty), `502` when it did not answer, `503` (`busy`) when
-two searches are already running and none finished in time, `429` past the allowance.
+two searches are already running and none finished in time, `429` past the allowance or when Prowlarr is
+rate limited. The Prowlarr rate-limit response includes `Retry-After`.
 
 ## `GET /v1/subtitles?id=<episode or film id>`
 

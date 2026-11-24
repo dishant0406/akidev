@@ -47,6 +47,116 @@ fn task_slots() -> &'static Arc<tokio::sync::Semaphore> {
     SLOTS.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MAX_PLANNED_REQUESTS)))
 }
 
+#[derive(Default)]
+struct RequestBudget {
+    day: u64,
+    count: u32,
+    last: Option<Instant>,
+}
+
+fn request_budgets() -> &'static Mutex<HashMap<String, RequestBudget>> {
+    static BUDGETS: OnceLock<Mutex<HashMap<String, RequestBudget>>> = OnceLock::new();
+    BUDGETS.get_or_init(Default::default)
+}
+
+#[cfg(test)]
+static INTERVAL_WAITS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+fn budget_key(def: &IndexerDef) -> String {
+    def.hosts
+        .first()
+        .and_then(|host| reqwest::Url::parse(host).ok())
+        .and_then(|url| {
+            let host = url.host_str()?;
+            Some(match url.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host.to_string(),
+            })
+        })
+        .unwrap_or_else(|| def.id.clone())
+}
+
+fn current_day() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        / 86_400
+}
+
+fn budget_wait(def: &IndexerDef) -> Result<Option<Duration>, RequestOutcome> {
+    let mut budgets = request_budgets().lock().unwrap();
+    let day = current_day();
+    let budget = budgets.entry(budget_key(def)).or_default();
+    if budget.day != day {
+        budget.day = day;
+        budget.count = 0;
+        budget.last = None;
+    }
+    if def
+        .max_requests_per_day
+        .is_some_and(|limit| budget.count >= limit)
+    {
+        return Err(RequestOutcome::RateLimited);
+    }
+    let interval = Duration::from_secs(def.min_interval_secs);
+    Ok(budget.last.and_then(|last| {
+        let elapsed = Instant::now().duration_since(last);
+        (elapsed < interval).then(|| interval - elapsed)
+    }))
+}
+
+fn reserve(def: &IndexerDef) -> Result<(), RequestOutcome> {
+    let mut budgets = request_budgets().lock().unwrap();
+    let day = current_day();
+    let budget = budgets.entry(budget_key(def)).or_default();
+    if budget.day != day {
+        budget.day = day;
+        budget.count = 0;
+        budget.last = None;
+    }
+    if def
+        .max_requests_per_day
+        .is_some_and(|limit| budget.count >= limit)
+    {
+        return Err(RequestOutcome::RateLimited);
+    }
+    let interval = Duration::from_secs(def.min_interval_secs);
+    if budget
+        .last
+        .is_some_and(|last| Instant::now().duration_since(last) < interval)
+    {
+        return Err(RequestOutcome::RateLimited);
+    }
+    budget.last = Some(Instant::now());
+    budget.count = budget.count.saturating_add(1);
+    Ok(())
+}
+
+async fn wait_ready(
+    def: &IndexerDef,
+    deadline: tokio::time::Instant,
+) -> Result<(), RequestOutcome> {
+    while let Some(wait) = budget_wait(def)? {
+        #[cfg(test)]
+        INTERVAL_WAITS
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .insert(budget_key(def));
+        tokio::time::timeout_at(deadline, tokio::time::sleep(wait))
+            .await
+            .map_err(|_| RequestOutcome::Timeout)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+async fn admit(def: &IndexerDef, deadline: tokio::time::Instant) -> Result<(), RequestOutcome> {
+    wait_ready(def, deadline).await?;
+    reserve(def)
+}
+
 type FlightResult = Result<QueryAnswer, RequestOutcome>;
 type Flight = tokio::sync::watch::Sender<Option<Arc<FlightResult>>>;
 
@@ -423,10 +533,16 @@ async fn ask(
     sent: &std::sync::atomic::AtomicBool,
 ) -> anyhow::Result<Vec<Release>> {
     let deadline = tokio::time::Instant::now() + limit;
-    let _slot = tokio::time::timeout_at(deadline, request_slots().acquire())
-        .await
-        .map_err(|_| LocalCongestion)?
-        .map_err(|_| LocalCongestion)?;
+    let _slot = loop {
+        wait_ready(def, deadline).await?;
+        let slot = tokio::time::timeout_at(deadline, request_slots().acquire())
+            .await
+            .map_err(|_| LocalCongestion)?
+            .map_err(|_| LocalCongestion)?;
+        if reserve(def).is_ok() {
+            break slot;
+        }
+    };
     sent.store(true, std::sync::atomic::Ordering::SeqCst);
     let body = if let Some(export) = &def.code {
         // The plugin's own code makes the request and answers with the JSON its `response` reads.
@@ -712,6 +828,7 @@ pub enum RequestOutcome {
     BadResponse,
     LocalCongestion,
     Cooldown,
+    RateLimited,
     Unavailable,
 }
 
@@ -1323,6 +1440,101 @@ pub(crate) mod tests {
                           "fields": { "title": "title", "hash": "hash" } }
         }))
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn request_budgets_space_requests_and_stop_at_the_daily_limit() {
+        let mut spaced = local_indexer("budget-spaced", "https://spaced.example.com", "/", false);
+        spaced.min_interval_secs = 1;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let started = Instant::now();
+        admit(&spaced, deadline).await.unwrap();
+        admit(&spaced, deadline).await.unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
+
+        let mut daily = local_indexer("budget-daily", "https://daily.example.com", "/", false);
+        daily.max_requests_per_day = Some(1);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        admit(&daily, deadline).await.unwrap();
+        assert_eq!(
+            admit(&daily, deadline).await,
+            Err(RequestOutcome::RateLimited)
+        );
+    }
+
+    #[tokio::test]
+    async fn real_indexer_requests_obey_the_budget() {
+        let _guard = NETWORK_TEST.lock().await;
+        let (base, asked) = local_server().await;
+        let mut def = local_indexer("budget-http", &base, "/one", false);
+        def.min_interval_secs = 1;
+        def.max_requests_per_day = Some(2);
+        let started = Instant::now();
+
+        search_one(
+            &def,
+            "Show",
+            &options(Kind::Series),
+            &[],
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        let key = budget_key(&def);
+        INTERVAL_WAITS
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .remove(&key);
+        let second_def = def.clone();
+        let second_options = options(Kind::Series);
+        let second = tokio::spawn(async move {
+            search_one(
+                &second_def,
+                "Other",
+                &second_options,
+                &[],
+                Duration::from_secs(5),
+            )
+            .await
+        });
+        for _ in 0..1000 {
+            if INTERVAL_WAITS
+                .get_or_init(Default::default)
+                .lock()
+                .unwrap()
+                .contains(&key)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert!(
+            INTERVAL_WAITS
+                .get_or_init(Default::default)
+                .lock()
+                .unwrap()
+                .contains(&key)
+        );
+        let permits = request_slots()
+            .try_acquire_many(MAX_CONCURRENT_REQUESTS as u32)
+            .expect("an interval wait must not hold an HTTP slot");
+        drop(permits);
+        second.await.unwrap().unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 2);
+
+        let error = search_one(
+            &def,
+            "Third",
+            &options(Kind::Series),
+            &[],
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.downcast_ref::<RequestOutcome>() == Some(&RequestOutcome::RateLimited));
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
     /// A plugin that brings code, built from `plugins/code-indexer` (see its README): it signs its request
@@ -2005,12 +2217,16 @@ pub(crate) mod tests {
     fn an_id_indexer_is_asked_once_and_the_rest_once_per_term() {
         let terms = ["Breaking Bad S01E05", "Breaking Bad 105"];
         assert_eq!(
-            planned(Kind::Series, &terms, &["torrentio", "knaben", "eztv"]),
+            planned(
+                Kind::Series,
+                &terms,
+                &["torrentio", "knaben", "torrents-csv"]
+            ),
             [
                 pair("knaben", "Breaking Bad S01E05"),
                 pair("knaben", "Breaking Bad 105"),
+                pair("torrents-csv", "Breaking Bad"),
                 pair("torrentio", "Breaking Bad S01E05"),
-                pair("eztv", "Breaking Bad"),
             ]
         );
     }
@@ -2036,64 +2252,63 @@ pub(crate) mod tests {
 
     #[test]
     fn only_indexers_that_serve_the_kind_are_asked() {
-        let names = |kind| -> Vec<String> {
-            let mut ids: Vec<String> = Vec::new();
-            for (id, _) in planned(kind, &["Dhamaal 4 2024"], &[]) {
-                if !ids.contains(&id) {
-                    ids.push(id);
-                }
+        let sources = definitions();
+        for kind in Kind::BUILT_IN {
+            let asked: Vec<String> = planned(kind, &["Dhamaal 4 2024"], &[])
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
+            for id in &asked {
+                assert!(
+                    sources.indexer(id).unwrap().kinds.contains(&kind),
+                    "{id} does not serve {kind:?}"
+                );
             }
-            ids
-        };
-        assert_eq!(
-            names(Kind::Anime),
-            [
-                "subsplease",
-                "nyaa",
-                "animetosho",
-                "tokyotosho",
-                "knaben",
-                "torrents-csv",
-                "aniscraper",
-                "aniscraper-anirena",
-                "torrentio",
-                "apibay",
-                "zilean-anime",
-                "nekobt",
-                "bangumi-moe",
-                "prowlarr"
-            ]
-        );
-        assert_eq!(
-            names(Kind::Series),
-            [
-                "knaben",
-                "torrents-csv",
-                "aniscraper",
-                "aniscraper-anirena",
-                "torrentio",
-                "eztv",
-                "apibay",
-                "zilean",
-                "torrentsdb",
-                "prowlarr"
-            ]
-        );
-        assert_eq!(
-            names(Kind::Movie),
-            [
-                "knaben",
-                "torrents-csv",
-                "aniscraper",
-                "aniscraper-anirena",
-                "torrentio",
-                "yts",
-                "apibay",
-                "zilean",
-                "torrentsdb",
-                "prowlarr"
-            ]
-        );
+            let required: &[&str] = match kind {
+                Kind::Anime => &[
+                    "subsplease",
+                    "nyaa",
+                    "animetosho",
+                    "tokyotosho",
+                    "knaben",
+                    "torrents-csv",
+                    "aniscraper",
+                    "aniscraper-anirena",
+                    "torrentio",
+                    "apibay",
+                    "zilean-anime",
+                    "nekobt",
+                    "bangumi-moe",
+                    "prowlarr",
+                ],
+                Kind::Series => &[
+                    "knaben",
+                    "torrents-csv",
+                    "aniscraper",
+                    "aniscraper-anirena",
+                    "torrentio",
+                    "apibay",
+                    "zilean",
+                    "torrentsdb",
+                    "prowlarr",
+                ],
+                _ => &[
+                    "knaben",
+                    "torrents-csv",
+                    "aniscraper",
+                    "aniscraper-anirena",
+                    "torrentio",
+                    "yts",
+                    "apibay",
+                    "zilean",
+                    "torrentsdb",
+                    "prowlarr",
+                ],
+            };
+            for id in required {
+                assert!(asked.iter().any(|asked| asked == id), "{id} was not asked");
+            }
+        }
     }
 
     #[test]
@@ -2108,20 +2323,12 @@ pub(crate) mod tests {
 
     #[test]
     fn a_request_is_filled_in_from_the_search() {
-        let eztv = request("eztv", "ignored", &options(Kind::Series)).unwrap();
-        // EZTV wants the bare number: with "tt" it answers with its whole index.
-        assert_eq!(eztv.path, "/get-torrents");
-        assert!(
-            eztv.query
-                .contains(&("imdb_id".to_string(), "0903747".to_string()))
-        );
-
         let series = request("torrentio", "", &options(Kind::Series)).unwrap();
         assert_eq!(series.path, "/stream/series/tt0903747:1:5.json");
         let film = request("torrentio", "", &options(Kind::Movie)).unwrap();
         assert_eq!(film.path, "/stream/movie/tt0903747.json");
 
-        // The fallback is told the season and episode where the kind has them, and empty where it has none.
+        // The fallback is told the season and episode where the kind has them.
         let query = |kind| request("prowlarr", "Show", &options(kind)).unwrap().query;
         let pair = |name: &str, value: &str| (name.to_string(), value.to_string());
         assert!(query(Kind::Series).contains(&pair("season", "1")));
@@ -2139,18 +2346,79 @@ pub(crate) mod tests {
         let zilean = request("zilean", "", &options(Kind::Movie)).unwrap();
         assert_eq!(zilean.path, "/dmm/filtered?ImdbId=tt0903747");
 
-        let knaben = |kind| {
-            request("knaben", "bad", &options(kind))
+        let query_value = |definition: Value, kind, name| {
+            let definition: IndexerDef = serde_json::from_value(definition).unwrap();
+            Request::new(&definition, "bad", &options(kind))
                 .unwrap()
-                .json
+                .query
+                .into_iter()
+                .find(|(key, _)| key == name)
                 .unwrap()
+                .1
         };
-        assert_eq!(knaben(Kind::Anime)["categories"], json!([6_000_000]));
-        assert_eq!(
-            knaben(Kind::Movie)["categories"],
-            json!([3_000_000, 2_000_000])
-        );
-        assert_eq!(knaben(Kind::Series)["query"], "bad");
+        let knaben = |kind, name| {
+            query_value(
+                json!({
+                    "id": "knaben-v2-test",
+                    "name": "Knaben",
+                    "kinds": ["anime", "series", "movie"],
+                    "hosts": ["https://api.knaben.org/v2"],
+                    "request": {
+                        "path": "/search",
+                        "query": {
+                            "q": "{term}",
+                            "c": { "$kind": {
+                                "anime": "6000000",
+                                "series": "2000000",
+                                "movie": "3000000,2000000"
+                            } }
+                        }
+                    },
+                    "response": {
+                        "format": "json",
+                        "rows": "hits",
+                        "fields": { "title": "title", "hash": "hash" }
+                    }
+                }),
+                kind,
+                name,
+            )
+        };
+        assert_eq!(knaben(Kind::Anime, "c"), "6000000");
+        assert_eq!(knaben(Kind::Movie, "c"), "3000000,2000000");
+        assert_eq!(knaben(Kind::Series, "q"), "bad");
+
+        let bitsearch = |kind, name| {
+            query_value(
+                json!({
+                    "id": "bitsearch-test",
+                    "name": "Bitsearch",
+                    "kinds": ["anime", "series", "movie"],
+                    "hosts": ["https://bitsearch.eu"],
+                    "request": {
+                        "path": "/api/v1/search",
+                        "query": {
+                            "q": "{term}",
+                            "category": { "$kind": {
+                                "anime": "4",
+                                "series": "3",
+                                "movie": "2"
+                            } }
+                        }
+                    },
+                    "response": {
+                        "format": "json",
+                        "rows": "results",
+                        "fields": { "title": "title", "hash": "infohash" }
+                    }
+                }),
+                kind,
+                name,
+            )
+        };
+        assert_eq!(bitsearch(Kind::Anime, "category"), "4");
+        assert_eq!(bitsearch(Kind::Series, "category"), "3");
+        assert_eq!(bitsearch(Kind::Movie, "category"), "2");
     }
 
     #[test]
@@ -2176,11 +2444,11 @@ pub(crate) mod tests {
     fn a_request_that_lacks_what_it_needs_is_not_made() {
         let mut no_id = options(Kind::Series);
         no_id.imdb_id = None;
-        assert!(request("eztv", "x", &no_id).is_none());
+        assert!(request("torrentsdb", "x", &no_id).is_none());
         assert!(request("torrentio", "x", &no_id).is_none());
         // A malformed id is not sent: some indexers answer it with everything they have.
         no_id.imdb_id = Some("0903747".into());
-        assert!(request("eztv", "x", &no_id).is_none());
+        assert!(request("torrentsdb", "x", &no_id).is_none());
         assert!(request("nyaa", "", &options(Kind::Anime)).is_none());
         assert!(request("nyaa", "one piece", &options(Kind::Anime)).is_some());
     }

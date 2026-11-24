@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <item>
+      <title>[7³ACG] 葬送的芙莉莲/Sousou no Frieren S01 | 01-28+SPx11 [简繁字幕] BDrip 1080p x265 OPUS 2.0</title>
+      <guid isPermaLink="false">rel_U6lR5dHzDTZS</guid>
+      <link>https://anibt.net/api/torrent/rel_U6lR5dHzDTZS.torrent</link>
+      <comments>https://anibt.net/release/rel_U6lR5dHzDTZS</comments>
+      <pubDate>Fri, 28 Aug 2026 23:15:47 +0800</pubDate>
+      <enclosure url="https://anibt.net/api/torrent/rel_U6lR5dHzDTZS.torrent" length="52023960599" type="application/x-bittorrent" />
+      <torznab:attr name="size" value="52023960599" />
+      <torznab:attr name="category" value="5000" />
+      <torznab:attr name="category" value="5070" />
+      <torznab:attr name="infohash" value="f8651444a2c0b3ff7e3da3cbd75da58ef5f09e19" />
+      <torznab:attr name="downloadvolumefactor" value="0" />
+      <torznab:attr name="uploadvolumefactor" value="1" />
+    </item>
+  </channel>
+</rss>

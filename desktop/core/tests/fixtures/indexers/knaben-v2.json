@@ -1,0 +1,27 @@
+{
+  "hits": [
+    {
+      "bytes": 1503238553,
+      "cachedOrigin": "Nyaa.si",
+      "category": "Anime / Subbed",
+      "categoryId": [6001000, 6000000, 3008000, 3000000],
+      "date": "2026-03-27T15:00:00+00:00",
+      "description": "[Erai-raws] Sousou no Frieren 2nd Season - 10 [1080p CR WEB-DL AVC AAC][MultiSub][5A357DEE]",
+      "details": "https://nyaa.iss.ink/view/2090638",
+      "grabs": 264,
+      "hash": "bd167d148570f2c7ece6c15bd90d3901acb6d79c",
+      "id": "120b18be475d8ce20c387f2ea004709707f8c47c",
+      "lastSeen": "2026-11-24T09:42:38+00:00",
+      "link": null,
+      "livePeers": 19,
+      "liveSeeders": 649,
+      "peers": 1,
+      "score": null,
+      "seeders": 701,
+      "title": "[Erai-raws] Sousou no Frieren 2nd Season - 10 [1080p CR WEB-DL AVC AAC][MultiSub][5A357DEE]",
+      "tracker": "Nyaa.si",
+      "trackerId": "nyaasi",
+      "virusDetection": 0.1844652043509228
+    }
+  ]
+}

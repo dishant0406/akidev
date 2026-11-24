@@ -616,6 +616,8 @@ async fn the_fallback_search_is_off_until_prowlarr_is_set_up_and_checks_what_it_
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = fallback_get(&on.router, &format!("?q={}", "a".repeat(101)), true).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = fallback_get(&on.router, "?q=Show&kind=book", true).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, body) = fallback_get(&on.router, "?q=Show", true).await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_eq!(body["error"], "The search failed.");

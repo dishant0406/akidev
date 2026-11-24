@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<rss version="2.0" xmlns:torrent="http://xmlns.ezrss.it/0.1/">
+  <channel>
+    <item>
+      <title><![CDATA[Americas.Test.Kitchen.S27E10.1080p.x265]]></title>
+      <link>magnet:?xt=urn:btih:090346F8C4CC44F6A87FD3089B1F00EB6E7198A0&amp;tr=udp%3A%2F%2Fopen.stealth.si%3A80%2F</link>
+      <enclosure url="magnet:?xt=urn:btih:090346F8C4CC44F6A87FD3089B1F00EB6E7198A0&amp;tr=udp%3A%2F%2Fopen.stealth.si%3A80%2F" type="application/x-bittorrent" />
+      <guid isPermaLink="false"><![CDATA[Americas.Test.Kitchen.S27E10.1080p.x265]]></guid>
+      <pubDate>Tue, 24 Nov 2026 10:00:33 +0000</pubDate>
+      <torrent:infoHash>090346F8C4CC44F6A87FD3089B1F00EB6E7198A0</torrent:infoHash>
+      <torrent:magnetURI><![CDATA[magnet:?xt=urn:btih:090346F8C4CC44F6A87FD3089B1F00EB6E7198A0&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2F]]></torrent:magnetURI>
+    </item>
+  </channel>
+</rss>

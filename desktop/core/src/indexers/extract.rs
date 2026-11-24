@@ -600,7 +600,6 @@ mod tests {
             "yts",
             "apibay",
             "subsplease",
-            "eztv",
             "zilean",
         ] {
             assert!(
@@ -686,6 +685,15 @@ mod tests {
         .unwrap()
     }
 
+    fn run_definition_text(id: &str, fallback: Value, body: &str, term: &str) -> Vec<Release> {
+        let current = sources::current();
+        let definition = (current.version >= 47)
+            .then(|| current.indexer(id).cloned())
+            .flatten()
+            .unwrap_or_else(|| serde_json::from_value(fallback).unwrap());
+        releases(&definition, body, Kind::Series, term, &trackers()).unwrap()
+    }
+
     #[test]
     fn malformed_and_out_of_bounds_counts_remain_unknown() {
         for value in [
@@ -754,26 +762,22 @@ mod tests {
     }
 
     #[test]
-    fn nyaa_reads_an_rss_feed_and_builds_the_magnet() {
-        let feed = format!(
-            "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Nyaa - Home</title>\
-             <item><title><![CDATA[[Group] Show &amp; Co - 01 (1080p)]]></title>\
-             <link>https://nyaa.si/download/1.torrent</link><guid isPermaLink=\"true\">https://nyaa.si/view/1</guid>\
-             <nyaa:seeders>12</nyaa:seeders><nyaa:infoHash>{A}</nyaa:infoHash><nyaa:size>1.4 GiB</nyaa:size></item>\
-             <item><title>No hash</title></item></channel></rss>"
-        );
-        let found = run_text("nyaa", &feed, "Show");
+    fn nyaa_reads_a_real_mirror_feed_and_builds_the_magnet() {
+        let feed = include_str!("../../tests/fixtures/indexers/nyaa-net.xml");
+        let found = run_text("nyaa", feed, "Frieren");
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].title, "[Group] Show & Co - 01 (1080p)");
-        assert_eq!(found[0].seeders, Some(12));
+        assert_eq!(
+            found[0].title,
+            "Frieren - Oltre la Fine del Viaggio (2023) [BluRay.1080p.x265.FLAC.ITA.JPN.Subs.Ita.Eng.Jpn] [42.6GB] [stress]"
+        );
+        assert_eq!(found[0].seeders, Some(6));
         assert_eq!(
             found[0].size_bytes,
-            Some((1.4 * (1u64 << 30) as f64).round() as u64)
+            Some((42.6 * (1u64 << 30) as f64).round() as u64)
         );
-        assert!(
-            found[0]
-                .magnet
-                .starts_with(&format!("magnet:?xt=urn:btih:{A}&dn="))
+        assert_eq!(
+            found[0].info_hash,
+            "444d6b7665bf616065d4c3793642bc41c17e767e"
         );
         assert!(found[0].magnet.contains("tr=udp%3A%2F%2Ft.example%3A1"));
     }
@@ -806,21 +810,46 @@ mod tests {
     }
 
     #[test]
-    fn knaben_drops_adult_rows_whichever_category_lists_it() {
-        let body = json!({ "hits": [
-            { "title": "Show S01E01", "hash": A, "bytes": 1000, "liveSeeders": 5, "categoryId": [2000000, 2001000] },
-            { "title": "Bad", "hash": B, "bytes": 1, "liveSeeders": 9, "categoryId": [3000000, 5001000] },
-            { "title": "Bad too", "hash": B, "categoryId": "5000000" },
-            { "title": "No hash", "categoryId": [2000000] },
-            { "title": "Null seeders", "hash": "cccccccccccccccccccccccccccccccccccccccc", "liveSeeders": null }
-        ] });
-        let found = run("knaben", &body, "Show");
-        let titles: Vec<&str> = found.iter().map(|r| r.title.as_str()).collect();
-        assert_eq!(titles, ["Show S01E01", "Null seeders"]);
-        assert_eq!(found[0].seeders, Some(5));
-        assert_eq!(found[0].size_bytes, Some(1000));
-        assert_eq!(found[1].seeders, None);
-        assert_eq!(found[1].size_bytes, None);
+    fn knaben_v2_drops_adult_rows_whichever_category_lists_it() {
+        let mut body: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/indexers/knaben-v2.json"))
+                .unwrap();
+        body["hits"].as_array_mut().unwrap().extend([
+            json!({ "title": "Bad", "hash": B, "bytes": 1, "seeders": 9, "categoryId": [3000000, 5001000] }),
+            json!({ "title": "Bad too", "hash": B, "categoryId": "5000000" }),
+            json!({ "title": "No hash", "categoryId": [2000000] }),
+        ]);
+        let definition = json!({
+            "id": "knaben",
+            "name": "Knaben",
+            "kinds": ["anime", "series", "movie"],
+            "hosts": ["https://api.knaben.org/v2"],
+            "min_interval_secs": 2,
+            "request": { "path": "/search" },
+            "response": {
+                "format": "json",
+                "rows": "hits",
+                "drop": [{ "path": "categoryId", "starts_with": "5" }],
+                "fields": {
+                    "title": "title",
+                    "hash": "hash",
+                    "size": "bytes",
+                    "seeders": "seeders"
+                }
+            }
+        });
+        let found = run_definition_text("knaben", definition, &body.to_string(), "Frieren");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].title,
+            "[Erai-raws] Sousou no Frieren 2nd Season - 10 [1080p CR WEB-DL AVC AAC][MultiSub][5A357DEE]"
+        );
+        assert_eq!(found[0].seeders, Some(701));
+        assert_eq!(found[0].size_bytes, Some(1_503_238_553));
+        assert_eq!(
+            found[0].info_hash,
+            "bd167d148570f2c7ece6c15bd90d3901acb6d79c"
+        );
     }
 
     #[test]
@@ -851,6 +880,70 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].seeders, Some(24));
         assert_eq!(found[0].size_bytes, Some(6_107_202_578));
+    }
+
+    #[test]
+    fn tsukihime_reads_btih_and_size_from_its_search_api() {
+        let body = include_str!("../../tests/fixtures/indexers/tsukihime.json");
+        let definition = json!({
+            "id": "tsukihime",
+            "name": "Tsukihime",
+            "kinds": ["anime"],
+            "hosts": ["https://api.tsukihime.org"],
+            "request": { "path": "/v1/search/torrents" },
+            "response": {
+                "format": "json",
+                "rows": "results",
+                "must_contain_term": true,
+                "fields": { "title": "name", "hash": "btih", "size": "totalsize" }
+            }
+        });
+        let found = run_definition_text("tsukihime", definition, body, "Bleach");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].title,
+            "[Anime Time] Bleach: Thousand-Year Blood War - S01E49 (Dub Audio Only) [1080p][HEVC 10bit x265][AAC][ENG Signs] [Weekly] Bleach Sennen Kessen hen"
+        );
+        assert_eq!(
+            found[0].info_hash,
+            "486c68f597f1cf4fc48157786a7a9b11c100e4d0"
+        );
+        assert_eq!(found[0].size_bytes, Some(721_305_662));
+        assert_eq!(found[0].seeders, None);
+    }
+
+    #[test]
+    fn aniraws_reads_the_hash_from_guid_and_size_from_description() {
+        let feed = include_str!("../../tests/fixtures/indexers/aniraws.xml");
+        let definition = json!({
+            "id": "aniraws",
+            "name": "Aniraws",
+            "kinds": ["anime"],
+            "min_interval_secs": 1,
+            "hosts": ["https://aniraws.org"],
+            "request": { "path": "/rss2" },
+            "response": {
+                "format": "rss",
+                "must_contain_term": true,
+                "fields": {
+                    "title": "title",
+                    "hash": { "regex": { "from": "guid", "pattern": "(?i)btih:([0-9a-f]{40})" } },
+                    "size": { "regex": { "from": "description", "pattern": "Total size: ([0-9]+) bytes" } }
+                }
+            }
+        });
+        let found = run_definition_text("aniraws", definition, feed, "Frieren");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].title,
+            "[Erai-raws] Sousou no Frieren 2nd Season [1080p CR WEBRip HEVC AAC][MultiSub] (unofficial batch)"
+        );
+        assert_eq!(
+            found[0].info_hash,
+            "ef3e7ad1b12bdd9fc341691d8866cd1fa8374a4b"
+        );
+        assert_eq!(found[0].size_bytes, Some(7_117_034_662));
+        assert_eq!(found[0].seeders, None);
     }
 
     #[test]
@@ -894,6 +987,40 @@ mod tests {
             sources::current().indexer("prowlarr").unwrap().fallback,
             "it must only be asked when the others found nothing"
         );
+    }
+
+    #[test]
+    fn bitsearch_reads_hashes_and_swarm_counts_and_is_only_a_fallback() {
+        let body = include_str!("../../tests/fixtures/indexers/bitsearch.json");
+        let definition = json!({
+            "id": "bitsearch",
+            "name": "Bitsearch",
+            "kinds": ["anime", "series", "movie"],
+            "fallback": true,
+            "max_requests_per_day": 200,
+            "hosts": ["https://bitsearch.eu"],
+            "request": { "path": "/api/v1/search" },
+            "response": {
+                "format": "json",
+                "rows": "results",
+                "must_contain_term": true,
+                "fields": {
+                    "title": "title",
+                    "hash": "infohash",
+                    "size": "size",
+                    "seeders": "seeders"
+                }
+            }
+        });
+        let found = run_definition_text("bitsearch", definition, body, "Sintel");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "Sintel (2010) [720p] [BluRay] [YTS.MX]");
+        assert_eq!(
+            found[0].info_hash,
+            "a779fa758f2229586eebc2e5960eb32fe5659596"
+        );
+        assert_eq!(found[0].size_bytes, Some(143_156_284));
+        assert_eq!(found[0].seeders, Some(751));
     }
 
     #[test]
@@ -1024,16 +1151,95 @@ mod tests {
     }
 
     #[test]
-    fn eztv_reads_its_torrent_list() {
-        let body = json!({ "torrents": [
-            { "filename": "Breaking.Bad.S01E01.720p", "hash": A, "size_bytes": "1000", "seeds": 0 },
-            { "filename": "", "hash": B }
-        ] });
-        let found = run("eztv", &body, "x");
+    fn internet_archive_reads_public_domain_torrent_hashes() {
+        let body = include_str!("../../tests/fixtures/indexers/archive-public-domain.json");
+        let definition = json!({
+            "id": "archive-public-domain",
+            "name": "Internet Archive Public Domain",
+            "kinds": ["movie"],
+            "hosts": ["https://archive.org"],
+            "request": { "path": "/advancedsearch.php" },
+            "response": {
+                "format": "json",
+                "rows": "response.docs",
+                "must_contain_term": true,
+                "fields": { "title": "title", "hash": "btih", "size": "item_size" }
+            }
+        });
+        let found =
+            run_definition_text("archive-public-domain", definition, body, "Duck And Cover");
         assert_eq!(found.len(), 1);
-        // The size arrives as text here.
-        assert_eq!(found[0].size_bytes, Some(1000));
-        assert_eq!(found[0].seeders, Some(0));
+        assert_eq!(
+            found[0].title,
+            "Duck And Cover Closing Credits If It Was Remade In 1980"
+        );
+        assert_eq!(
+            found[0].info_hash,
+            "83a525b68ba1a4704780f50db4864e3bc0d9e352"
+        );
+        assert_eq!(found[0].size_bytes, Some(27_363_993));
+        assert_eq!(found[0].seeders, None);
+    }
+
+    #[test]
+    fn rss_ftp_eztv_reads_magnet_links_and_keeps_the_searched_title() {
+        let feed = include_str!("../../tests/fixtures/indexers/rss-ftp-eztv.xml");
+        let definition = json!({
+            "id": "rss-ftp-eztv",
+            "name": "RSS-FTP EZTV",
+            "kinds": ["series"],
+            "fanout": "per-title",
+            "hosts": ["https://rss.ftp.sh"],
+            "request": { "path": "/eztv-1080p-x265-rss.xml" },
+            "response": {
+                "format": "rss",
+                "must_contain_term": true,
+                "fields": {
+                    "title": "title",
+                    "hash": { "magnet_hash": "link" },
+                    "magnet": "link"
+                }
+            }
+        });
+        let found = run_definition_text("rss-ftp-eztv", definition, feed, "Americas Test Kitchen");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "Americas.Test.Kitchen.S27E10.1080p.x265");
+        assert_eq!(
+            found[0].info_hash,
+            "090346f8c4cc44f6a87fd3089b1f00eb6e7198a0"
+        );
+        assert_eq!(found[0].seeders, None);
+        assert_eq!(found[0].size_bytes, None);
+    }
+
+    #[test]
+    fn rss_ftp_ettv_reads_magnet_links_from_the_recent_tv_feed() {
+        let feed = include_str!("../../tests/fixtures/indexers/rss-ftp-ettv.xml");
+        let definition = json!({
+            "id": "rss-ftp-ettv",
+            "name": "RSS-FTP ETTV",
+            "kinds": ["series"],
+            "fanout": "per-title",
+            "fallback": true,
+            "hosts": ["https://rss.ftp.sh"],
+            "request": { "path": "/ettv-rss.xml" },
+            "response": {
+                "format": "rss",
+                "must_contain_term": true,
+                "fields": {
+                    "title": "title",
+                    "hash": { "magnet_hash": "link" },
+                    "magnet": "link"
+                }
+            }
+        });
+        let found = run_definition_text("rss-ftp-ettv", definition, feed, "FBI");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].title, "FBI S09E08 22 Minutes 480p x264-mSD");
+        assert_eq!(
+            found[0].info_hash,
+            "6dd3762ec21e9341fc5370897806560935f4fdc9"
+        );
     }
 
     #[test]
@@ -1086,6 +1292,40 @@ mod tests {
         assert_eq!(found[0].size_bytes, Some(25_551_692_518));
         assert_eq!(found[0].seeders, Some(59));
         assert_eq!(found[0].source, "animetosho");
+    }
+
+    #[test]
+    fn anibt_reads_its_public_torznab_feed() {
+        let feed = include_str!("../../tests/fixtures/indexers/anibt.xml");
+        let definition = json!({
+            "id": "anibt",
+            "name": "AniBT",
+            "kinds": ["anime"],
+            "min_interval_secs": 1,
+            "hosts": ["https://anibt.net/torznab"],
+            "request": { "path": "/api" },
+            "response": {
+                "format": "rss",
+                "fields": {
+                    "title": "title",
+                    "hash": "torznab:attr@infohash",
+                    "size": "torznab:attr@size"
+                }
+            }
+        });
+        let found = run_definition_text("anibt", definition, feed, "Frieren");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].title,
+            "[7³ACG] 葬送的芙莉莲/Sousou no Frieren S01 | 01-28+SPx11 [简繁字幕] BDrip 1080p x265 OPUS 2.0"
+        );
+        assert_eq!(
+            found[0].info_hash,
+            "f8651444a2c0b3ff7e3da3cbd75da58ef5f09e19"
+        );
+        assert_eq!(found[0].size_bytes, Some(52_023_960_599));
+        assert_eq!(found[0].seeders, None);
+        assert_eq!(found[0].source, "anibt");
     }
 
     #[test]

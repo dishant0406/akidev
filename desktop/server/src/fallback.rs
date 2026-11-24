@@ -12,12 +12,13 @@
 //! gone, and the same search asked twice at once runs once.
 
 use akidev_core::magnet::{info_hash_from_magnet, to_hex_info_hash};
+use akidev_core::model::Kind;
 use futures::FutureExt;
 use futures::future::{BoxFuture, Shared};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::Semaphore;
 
 /// Searches that may run at once. Prowlarr asks every site it knows, which is slow and heavy.
@@ -54,10 +55,17 @@ pub struct Hit {
 pub enum Failure {
     /// Two searches are already running and none finished in time.
     Busy,
+    /// Prowlarr asked the client to wait before it asks again.
+    RateLimited(Option<u64>),
     Failed,
 }
 
 type Flight = Shared<BoxFuture<'static, Result<Vec<Hit>, Failure>>>;
+
+enum AskError {
+    Failed(anyhow::Error),
+    RateLimited(Option<u64>),
+}
 
 /// One result as Prowlarr's search answers it.
 #[derive(Deserialize)]
@@ -74,6 +82,8 @@ struct Row {
     seeders: Option<u32>,
     indexer: Option<String>,
     protocol: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_categories")]
+    categories: Vec<u32>,
 }
 
 pub struct Fallback {
@@ -86,6 +96,7 @@ pub struct Fallback {
     answers: Mutex<HashMap<String, (Instant, Vec<Hit>)>>,
     hashes: Mutex<HashMap<String, (Instant, Option<String>)>>,
     running: Mutex<HashMap<String, Flight>>,
+    rate_limited_until: Mutex<Option<Instant>>,
 }
 
 /// What is searched for: the title, with the season and episode the way sites name them (`S01E05`),
@@ -96,6 +107,39 @@ fn search_text(query: &str, season: Option<u32>, episode: Option<u32>) -> String
         (None, Some(episode)) => format!("{query} {episode:02}"),
         _ => query.to_string(),
     }
+}
+
+/// Prowlarr categories for the media kind. An empty category list on a result means unknown.
+fn categories(kind: Kind) -> &'static [u32] {
+    match kind {
+        Kind::Anime => &[5070],
+        Kind::Series => &[5000],
+        _ => &[2000],
+    }
+}
+
+fn category_allowed(kind: Kind, category: u32) -> bool {
+    match kind {
+        Kind::Anime => category == 5070,
+        Kind::Series => (5000..6000).contains(&category),
+        _ => (2000..3000).contains(&category),
+    }
+}
+
+fn cache_key(text: &str, kind: Kind) -> String {
+    format!("{}:{text}", kind.as_str()).to_lowercase()
+}
+
+fn retry_after(value: &str) -> Option<u64> {
+    if let Ok(seconds) = value.parse() {
+        return Some(seconds);
+    }
+    let date = httpdate::parse_http_date(value).ok()?;
+    Some(
+        date.duration_since(SystemTime::now())
+            .unwrap_or_default()
+            .as_secs(),
+    )
 }
 
 impl Fallback {
@@ -119,6 +163,7 @@ impl Fallback {
             answers: Mutex::default(),
             hashes: Mutex::default(),
             running: Mutex::default(),
+            rate_limited_until: Mutex::new(None),
         })
     }
 
@@ -126,21 +171,23 @@ impl Fallback {
     pub fn cached(
         &self,
         query: &str,
+        kind: Kind,
         season: Option<u32>,
         episode: Option<u32>,
     ) -> Option<Vec<Hit>> {
-        self.remembered(&search_text(query, season, episode).to_lowercase())
+        self.remembered(&cache_key(&search_text(query, season, episode), kind))
     }
 
     /// What Prowlarr finds for `query`. The same search asked while it is running joins it.
     pub async fn search(
         self: &Arc<Self>,
         query: &str,
+        kind: Kind,
         season: Option<u32>,
         episode: Option<u32>,
     ) -> Result<Vec<Hit>, Failure> {
         let text = search_text(query, season, episode);
-        let key = text.to_lowercase();
+        let key = cache_key(&text, kind);
         if let Some(hits) = self.remembered(&key) {
             return Ok(hits);
         }
@@ -152,7 +199,7 @@ impl Fallback {
             .or_insert_with(|| {
                 let (me, key) = (self.clone(), key.clone());
                 let task = tokio::spawn(async move {
-                    let result = me.find(&text, &key).await;
+                    let result = me.find(&text, &key, kind).await;
                     me.running.lock().unwrap().remove(&key);
                     result
                 });
@@ -204,17 +251,43 @@ impl Fallback {
         (when.elapsed() < ANSWER_TTL).then(|| hits.clone())
     }
 
-    async fn find(self: &Arc<Self>, text: &str, key: &str) -> Result<Vec<Hit>, Failure> {
+    fn rate_limit_wait(&self) -> Option<u64> {
+        let until = *self.rate_limited_until.lock().unwrap();
+        let wait = until?.checked_duration_since(Instant::now())?;
+        Some(wait.as_secs().max(1))
+    }
+
+    fn remember_rate_limit(&self, retry: u64) {
+        *self.rate_limited_until.lock().unwrap() =
+            Some(Instant::now() + Duration::from_secs(retry));
+    }
+
+    async fn find(
+        self: &Arc<Self>,
+        text: &str,
+        key: &str,
+        kind: Kind,
+    ) -> Result<Vec<Hit>, Failure> {
         let _turn = tokio::time::timeout(QUEUE_FOR, self.turns.acquire())
             .await
             .map_err(|_| Failure::Busy)?
             .map_err(|_| Failure::Failed)?;
+        if let Some(wait) = self.rate_limit_wait() {
+            return Err(Failure::RateLimited(Some(wait)));
+        }
         let deadline = Instant::now() + TOTAL_TIME;
-        let rows = self.ask(text).await.map_err(|error| {
-            tracing::warn!("[fallback] search for {text:?} failed: {error}");
-            Failure::Failed
+        let rows = self.ask(text, kind).await.map_err(|error| match error {
+            AskError::RateLimited(retry) => {
+                let retry = retry.unwrap_or(30);
+                self.remember_rate_limit(retry);
+                Failure::RateLimited(Some(retry))
+            }
+            AskError::Failed(error) => {
+                tracing::warn!("[fallback] search for {text:?} failed: {error}");
+                Failure::Failed
+            }
         })?;
-        let (hits, complete) = self.hits(rows, deadline).await;
+        let (hits, complete) = self.hits(rows, deadline, kind).await;
         tracing::info!("[fallback] {text:?}: {} results", hits.len());
         // An answer that is missing links still being followed is not kept, so the next search for
         // it finds them in the hash memory, which they fill when they finish.
@@ -228,26 +301,56 @@ impl Fallback {
         Ok(hits)
     }
 
-    async fn ask(&self, text: &str) -> anyhow::Result<Vec<Row>> {
-        let response = self
+    async fn ask(&self, text: &str, kind: Kind) -> Result<Vec<Row>, AskError> {
+        let mut request = self
             .client
             .get(format!("{}/api/v1/search", self.base))
             .header("X-Api-Key", &self.key)
-            .query(&[("query", text), ("type", "search"), ("limit", "100")])
+            .query(&[("query", text), ("type", "search"), ("limit", "100")]);
+        for category in categories(kind) {
+            request = request.query(&[("categories", *category)]);
+        }
+        let response = request
             .timeout(SEARCH_TIMEOUT)
             .send()
-            .await?
-            .error_for_status()?;
-        Ok(response.json().await?)
+            .await
+            .map_err(|error| AskError::Failed(error.into()))?;
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(retry_after);
+            return Err(AskError::RateLimited(retry));
+        }
+        let response = response
+            .error_for_status()
+            .map_err(|error| AskError::Failed(error.into()))?;
+        response
+            .json()
+            .await
+            .map_err(|error| AskError::Failed(error.into()))
     }
 
     /// The torrent results that have a hash, or whose hash was found by `deadline`, best seeded
     /// first, and whether every link that was followed finished in time.
-    async fn hits(self: &Arc<Self>, rows: Vec<Row>, deadline: Instant) -> (Vec<Hit>, bool) {
+    async fn hits(
+        self: &Arc<Self>,
+        rows: Vec<Row>,
+        deadline: Instant,
+        kind: Kind,
+    ) -> (Vec<Hit>, bool) {
         let mut known = Vec::new();
         let mut without = Vec::new();
         for row in rows {
             if row.protocol.as_deref().is_some_and(|p| p != "torrent") {
+                continue;
+            }
+            if !row
+                .categories
+                .iter()
+                .any(|category| category_allowed(kind, *category))
+            {
                 continue;
             }
             match hash_in(&row) {
@@ -339,6 +442,30 @@ impl Fallback {
     }
 }
 
+/// Prowlarr returns category objects. Older versions and test doubles can return numbers.
+fn deserialize_categories<'de, D>(deserializer: D) -> Result<Vec<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let Some(items) = value.as_array() else {
+        return Ok(Vec::new());
+    };
+    Ok(items.iter().filter_map(category_id).collect())
+}
+
+fn category_id(value: &serde_json::Value) -> Option<u32> {
+    match value {
+        serde_json::Value::Number(number) => number.as_u64().and_then(|id| u32::try_from(id).ok()),
+        serde_json::Value::String(text) => text.parse().ok(),
+        serde_json::Value::Object(object) => object
+            .get("id")
+            .or_else(|| object.get("ID"))
+            .and_then(category_id),
+        _ => None,
+    }
+}
+
 /// Missing or malformed provider counts are unknown, never a fabricated zero.
 fn deserialize_seeders<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
 where
@@ -359,6 +486,7 @@ fn hash_in(row: &Row) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use akidev_core::model::Kind;
     use axum::extract::{Query, State};
     use axum::http::{HeaderMap, StatusCode, header};
     use axum::response::IntoResponse;
@@ -377,6 +505,7 @@ mod tests {
         searches: AtomicUsize,
         links: AtomicUsize,
         last_query: Mutex<String>,
+        last_categories: Mutex<Vec<String>>,
     }
 
     /// A stand-in for Prowlarr: a search (which takes a moment) with a result that has a hash, one
@@ -396,13 +525,16 @@ mod tests {
                         }
                         seen.searches.fetch_add(1, Ordering::SeqCst);
                         *seen.last_query.lock().unwrap() = query["query"].clone();
+                        *seen.last_categories.lock().unwrap() =
+                            query.get("categories").cloned().into_iter().collect();
                         tokio::time::sleep(Duration::from_millis(200)).await;
                         let link = |name: &str| format!("http://nowhere.invalid:9696/1/download?apikey=x&link={name}");
                         Json(json!([
-                            { "title": "Has hash", "infoHash": A, "seeders": 5, "size": 10, "indexer": "one", "protocol": "torrent" },
-                            { "title": "Magnet only", "magnetUrl": format!("magnet:?xt=urn:btih:{B}&dn=x"), "seeders": 2, "indexer": "two", "protocol": "torrent" },
-                            { "title": "Link only", "downloadUrl": link("good"), "seeders": 9, "indexer": "three", "protocol": "torrent" },
-                            { "title": "Dead link", "downloadUrl": link("dead"), "seeders": 1, "indexer": "three", "protocol": "torrent" },
+                            { "title": "Has hash", "infoHash": A, "seeders": 5, "size": 10, "indexer": "one", "protocol": "torrent", "categories": [{ "id": 5040, "name": "TV" }] },
+                            { "title": "Magnet only", "magnetUrl": format!("magnet:?xt=urn:btih:{B}&dn=x"), "seeders": 2, "indexer": "two", "protocol": "torrent", "categories": [{ "ID": "5000" }] },
+                            { "title": "Link only", "downloadUrl": link("good"), "seeders": 9, "indexer": "three", "protocol": "torrent", "categories": [{ "id": 5000 }] },
+                            { "title": "Dead link", "downloadUrl": link("dead"), "seeders": 1, "indexer": "three", "protocol": "torrent", "categories": [{ "id": 5000 }] },
+                            { "title": "Music", "infoHash": A, "categories": [{ "id": 3000, "name": "Audio" }], "indexer": "audio", "protocol": "torrent" },
                             { "title": "Usenet", "infoHash": B, "protocol": "usenet" }
                         ]))
                         .into_response()
@@ -445,7 +577,10 @@ mod tests {
         let (base, seen) = prowlarr().await;
         let fallback = fallback(&base);
 
-        let hits = fallback.search("Show", None, None).await.unwrap();
+        let hits = fallback
+            .search("Show", Kind::Series, None, None)
+            .await
+            .unwrap();
 
         let by_title: HashMap<&str, &str> = hits
             .iter()
@@ -456,6 +591,7 @@ mod tests {
         // Its link names another host, and was followed at Prowlarr's own address all the same.
         assert_eq!(by_title["Link only"], C);
         assert!(!by_title.contains_key("Dead link"));
+        assert!(!by_title.contains_key("Music"));
         assert!(!by_title.contains_key("Usenet"));
         // Best seeded first, and nothing handed out carries the key.
         assert_eq!(hits[0].title, "Link only");
@@ -464,17 +600,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_media_kind_selects_categories_and_is_part_of_the_cache_key() {
+        let (base, seen) = prowlarr().await;
+        let fallback = fallback(&base);
+
+        fallback
+            .search("Show", Kind::Anime, None, Some(1))
+            .await
+            .unwrap();
+        assert_eq!(*seen.last_categories.lock().unwrap(), ["5070"]);
+
+        fallback
+            .search("Show", Kind::Series, Some(1), Some(1))
+            .await
+            .unwrap();
+        assert_eq!(*seen.last_categories.lock().unwrap(), ["5000"]);
+
+        fallback
+            .search("Show", Kind::Movie, None, None)
+            .await
+            .unwrap();
+        assert_eq!(*seen.last_categories.lock().unwrap(), ["2000"]);
+        assert_eq!(seen.searches.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn retry_after_accepts_an_http_date() {
+        let date = httpdate::fmt_http_date(SystemTime::now() + Duration::from_secs(30));
+        let wait = retry_after(&date).unwrap();
+        assert!((25..=30).contains(&wait));
+    }
+
+    #[tokio::test]
+    async fn a_provider_rate_limit_keeps_its_retry_after_value() {
+        let searches = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route(
+                "/api/v1/search",
+                get(|State(searches): State<Arc<AtomicUsize>>| async move {
+                    searches.fetch_add(1, Ordering::SeqCst);
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        [(header::RETRY_AFTER, "7")],
+                        Json(json!({ "error": "slow down" })),
+                    )
+                }),
+            )
+            .with_state(searches.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let fallback = fallback(&format!("http://{address}"));
+        let result = fallback.search("Show", Kind::Movie, None, None).await;
+        assert!(matches!(result, Err(Failure::RateLimited(Some(7)))));
+        let result = fallback.search("Other", Kind::Movie, None, None).await;
+        assert!(matches!(result, Err(Failure::RateLimited(Some(wait))) if wait > 0));
+        assert_eq!(searches.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
     async fn the_same_search_twice_asks_prowlarr_once() {
         let (base, seen) = prowlarr().await;
         let fallback = fallback(&base);
 
-        fallback.search("Show", None, None).await.unwrap();
-        assert!(fallback.cached("SHOW", None, None).is_some());
-        fallback.search("SHOW", None, None).await.unwrap();
+        fallback
+            .search("Show", Kind::Series, None, None)
+            .await
+            .unwrap();
+        assert!(fallback.cached("SHOW", Kind::Series, None, None).is_some());
+        fallback
+            .search("SHOW", Kind::Series, None, None)
+            .await
+            .unwrap();
         assert_eq!(seen.searches.load(Ordering::SeqCst), 1);
 
         // A different title is a different search, but the links already followed are remembered.
-        fallback.search("Other", None, None).await.unwrap();
+        fallback
+            .search("Other", Kind::Series, None, None)
+            .await
+            .unwrap();
         assert_eq!(seen.searches.load(Ordering::SeqCst), 2);
         assert_eq!(seen.links.load(Ordering::SeqCst), 2);
     }
@@ -484,7 +689,7 @@ mod tests {
         let (base, seen) = prowlarr().await;
         let fallback = fallback(&base);
 
-        let asks = (0..4).map(|_| fallback.search("Show", None, None));
+        let asks = (0..4).map(|_| fallback.search("Show", Kind::Series, None, None));
         let answers = join_all(asks).await;
 
         assert!(
@@ -502,19 +707,19 @@ mod tests {
 
         let asker = {
             let fallback = fallback.clone();
-            tokio::spawn(async move { fallback.search("Show", None, None).await })
+            tokio::spawn(async move { fallback.search("Show", Kind::Series, None, None).await })
         };
         tokio::time::sleep(Duration::from_millis(50)).await;
         asker.abort();
 
         // It finishes by itself, and the next one to ask has the answer at once.
         for _ in 0..50 {
-            if fallback.cached("Show", None, None).is_some() {
+            if fallback.cached("Show", Kind::Series, None, None).is_some() {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        assert!(fallback.cached("Show", None, None).is_some());
+        assert!(fallback.cached("Show", Kind::Series, None, None).is_some());
         assert_eq!(seen.searches.load(Ordering::SeqCst), 1);
     }
 
@@ -523,10 +728,16 @@ mod tests {
         let (base, seen) = prowlarr().await;
         let fallback = fallback(&base);
 
-        fallback.search("Show", Some(1), Some(5)).await.unwrap();
+        fallback
+            .search("Show", Kind::Series, Some(1), Some(5))
+            .await
+            .unwrap();
         assert_eq!(*seen.last_query.lock().unwrap(), "Show S01E05");
 
-        fallback.search("Show", None, Some(5)).await.unwrap();
+        fallback
+            .search("Show", Kind::Anime, None, Some(5))
+            .await
+            .unwrap();
         assert_eq!(*seen.last_query.lock().unwrap(), "Show 05");
     }
 
@@ -535,13 +746,19 @@ mod tests {
         let (base, _) = prowlarr().await;
         let wrong = Arc::new(Fallback::new(&base, "not the key").unwrap());
         assert_eq!(
-            wrong.search("Show", None, None).await.unwrap_err(),
+            wrong
+                .search("Show", Kind::Series, None, None)
+                .await
+                .unwrap_err(),
             Failure::Failed
         );
 
         let nobody = fallback("http://127.0.0.1:1");
         assert_eq!(
-            nobody.search("Show", None, None).await.unwrap_err(),
+            nobody
+                .search("Show", Kind::Series, None, None)
+                .await
+                .unwrap_err(),
             Failure::Failed
         );
     }
@@ -556,6 +773,7 @@ mod tests {
             seeders: Some(3),
             indexer: None,
             protocol: Some("torrent".into()),
+            categories: vec![5000],
         }
     }
 
@@ -570,7 +788,11 @@ mod tests {
 
         let started = Instant::now();
         let (hits, complete) = fallback
-            .hits(rows, Instant::now() + Duration::from_millis(200))
+            .hits(
+                rows,
+                Instant::now() + Duration::from_millis(200),
+                Kind::Series,
+            )
             .await;
 
         assert!(started.elapsed() < Duration::from_millis(900));
@@ -584,6 +806,7 @@ mod tests {
             .hits(
                 vec![row("Slow", None, &base, "slow")],
                 Instant::now() + Duration::from_millis(200),
+                Kind::Series,
             )
             .await;
         assert!(complete);
@@ -653,7 +876,7 @@ mod tests {
             Some(json!(0)),
             Some(json!(u32::MAX)),
         ] {
-            let mut body = json!({ "title": "Count", "infoHash": A });
+            let mut body = json!({ "title": "Count", "infoHash": A, "categories": [5000] });
             if let Some(value) = seeders.clone() {
                 body["seeders"] = value;
             }
@@ -662,13 +885,59 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.as_u64())
                 .and_then(|count| u32::try_from(count).ok());
-            let (hits, complete) = fallback.hits(vec![row], Instant::now()).await;
+            let (hits, complete) = fallback.hits(vec![row], Instant::now(), Kind::Series).await;
             assert!(complete);
             assert_eq!(hits[0].seeders, expected);
             assert_eq!(
                 serde_json::to_value(&hits[0]).unwrap()["seeders"],
                 json!(expected)
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn anime_results_must_use_the_anime_category() {
+        let fallback = fallback("http://127.0.0.1:1");
+        let mut tv = row("Show", Some(A), "http://127.0.0.1:1", "unused");
+        tv.categories = vec![5040];
+        let (hits, _) = fallback.hits(vec![tv], Instant::now(), Kind::Anime).await;
+        assert!(hits.is_empty());
+
+        let mut anime = row("Show", Some(A), "http://127.0.0.1:1", "unused");
+        anime.categories = vec![5070];
+        let (hits, _) = fallback
+            .hits(vec![anime], Instant::now(), Kind::Anime)
+            .await;
+        assert_eq!(hits.len(), 1);
+
+        let mut unknown = row("Show", Some(A), "http://127.0.0.1:1", "unused");
+        unknown.categories.clear();
+        let (hits, _) = fallback
+            .hits(vec![unknown], Instant::now(), Kind::Anime)
+            .await;
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn prowlarr_categories_can_be_objects_numbers_strings_or_null() {
+        for categories in [
+            json!([{ "id": 5040, "name": "TV" }]),
+            json!([5040]),
+            json!(["5040"]),
+            json!(null),
+        ] {
+            let expected = if categories.is_null() {
+                Vec::new()
+            } else {
+                vec![5040]
+            };
+            let row: Row = serde_json::from_value(json!({
+                "title": "Show",
+                "infoHash": A,
+                "categories": categories,
+            }))
+            .unwrap();
+            assert_eq!(row.categories, expected);
         }
     }
 

@@ -1,0 +1,39 @@
+{
+  "error": false,
+  "limit": 10,
+  "start": 0,
+  "total": 2876,
+  "results": [
+    {
+      "id": 41671,
+      "state": "completed",
+      "has_nzb": 1,
+      "main_source": 1,
+      "nyaa_id": 2189802,
+      "sukebei_id": 0,
+      "nekobt_id": 0,
+      "tt_id": 0,
+      "name": "[Anime Time] Bleach: Thousand-Year Blood War - S01E49 (Dub Audio Only) [1080p][HEVC 10bit x265][AAC][ENG Signs] [Weekly] Bleach Sennen Kessen hen",
+      "btih": "486c68f597f1cf4fc48157786a7a9b11c100e4d0",
+      "is_adult": 0,
+      "totalsize": 721305662,
+      "filecount": 1,
+      "audiolangs": ["en"],
+      "sublangs": ["en"],
+      "episode_no": 9,
+      "source_date": 1795474326,
+      "added_date": 1795474562,
+      "anime": {
+        "id": 9403,
+        "title": "BLEACH: Sennen Kessen-hen - Kashin-tan",
+        "english_title": "BLEACH: Thousand-Year Blood War - The Calamity",
+        "thumbnail": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx185874-aU3e6tBT6wwA.jpg"
+      },
+      "group": {
+        "id": 2,
+        "name": "Anime Time",
+        "is_fansub": 0
+      }
+    }
+  ]
+}

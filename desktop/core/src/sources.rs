@@ -959,6 +959,14 @@ mod tests {
             changed(|d| d["indexers"][0]["cooldown_secs"] = json!(u64::MAX)),
         );
         refused(
+            "an endless request interval",
+            changed(|d| d["indexers"][0]["min_interval_secs"] = json!(3601)),
+        );
+        refused(
+            "a zero daily request limit",
+            changed(|d| d["indexers"][0]["max_requests_per_day"] = json!(0)),
+        );
+        refused(
             "a version that cannot be replaced",
             changed(|d| d["version"] = json!(u64::MAX)),
         );

@@ -236,6 +236,12 @@ pub struct IndexerDef {
     pub hosts: Vec<String>,
     #[serde(default = "a_minute")]
     pub cooldown_secs: u64,
+    /// Minimum space between indexer requests on this service host. Zero permits the normal schedule.
+    #[serde(default)]
+    pub min_interval_secs: u64,
+    /// Maximum indexer requests on this service host in one UTC day for the current process.
+    #[serde(default)]
+    pub max_requests_per_day: Option<u32>,
     /// The id mapper (see `MapperDef`) whose id fills this indexer's request: the holes `{kitsu}` and
     /// `{kitsu_kind}` for the mapper `kitsu`. Absent: the indexer needs no mapping.
     #[serde(default)]
@@ -393,6 +399,14 @@ impl IndexerDef {
             "needs between 1 and 8 hosts"
         );
         ensure!(self.cooldown_secs <= 3600, "rests longer than an hour");
+        ensure!(
+            self.min_interval_secs <= 3600,
+            "request interval is longer than an hour"
+        );
+        ensure!(
+            self.max_requests_per_day.is_none_or(|limit| limit > 0),
+            "daily request limit must be greater than zero"
+        );
         for host in &self.hosts {
             check_url(host)?;
         }

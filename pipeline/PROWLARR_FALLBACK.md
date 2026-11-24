@@ -10,8 +10,8 @@ date by itself, so none of them is written or translated here.
  web app ──► api ──┐ 1. the indexers in sources.json (1.5-3 s)
  desktop app ──────┤
                    └ 2. only if that found nothing worth opening:
-                      GET api.akidev.live/v1/fallback/search?q=...   (cached, 2 searches at a time)
-                              └─► Prowlarr (internal network only) ─► LimeTorrents, TorrentKitty, DMHY, Mikan
+                      GET api.akidev.live/v1/fallback/search?q=...&kind=...   (cached, 2 searches at a time)
+                              └─► Prowlarr (internal network only) ─► LimeTorrents, DMHY, Mikan
 ```
 
 ## What is where
@@ -48,12 +48,13 @@ Prowlarr is not published and Caddy does not route to it. Nothing but the `api` 
 
 ## Things to know
 
-- **Hashes.** DMHY, Mikan and TorrentKitty put the hash in the result. LimeTorrents gives only a link,
+- **Media kind:** the app sends `kind=anime`, `kind=series`, or `kind=movie`. The server sends the matching Prowlarr category. It removes rows with a conflicting category. Old apps can omit `kind`. The server infers it from the season and episode.
+- **Hashes.** DMHY and Mikan put the hash in the result. LimeTorrents gives only a link,
   which Prowlarr answers with a redirect to a magnet after fetching the site's page: slow, and Prowlarr asks
   a site one thing at a time. So only the best 4 such results are followed, within the 13 seconds a search
   may take, and a result whose hash is not found in time is left out. Sites that give a `.torrent` file and no
   magnet (ACG.RIP) cannot be used.
-- **Time.** A search takes 8-10 seconds against five sites, and the apps wait 15. It is only paid when the
+- **Time.** A search takes 8-10 seconds against the enabled sites, and the apps wait 15. It is only paid when the
   normal search found nothing. The same search again is served from memory for ten minutes.
 - **Cloudflare.** From the server's address 1337x, ExtraTorrent, the Kickass mirrors, TorrentKitty, UIndex,
   TorrentDownload and TorrentProject all answer "blocked by CloudFlare Protection", so only DMHY, Mikan and

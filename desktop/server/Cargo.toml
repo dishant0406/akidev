@@ -17,6 +17,7 @@ tracing.workspace = true
 axum = "0.8"
 bytes = "1"
 getrandom = "0.3"
+httpdate = "1"
 webp = { version = "0.3", default-features = false }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 tokio-util = { version = "0.7", features = ["io"] }

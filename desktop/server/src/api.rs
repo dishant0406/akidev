@@ -470,6 +470,7 @@ async fn search_route(
 #[derive(Deserialize)]
 struct FallbackQuery {
     q: Option<String>,
+    kind: Option<String>,
     season: Option<String>,
     episode: Option<String>,
 }
@@ -504,8 +505,24 @@ async fn fallback_search(
     // The apps send these empty for what has none (a film has no season).
     let number = |text: Option<String>| text.and_then(|text| text.parse::<u32>().ok());
     let (season, episode) = (number(query.season), number(query.episode));
+    let kind = match query.kind.as_deref() {
+        Some("anime") => Kind::Anime,
+        Some("series") => Kind::Series,
+        Some("movie") => Kind::Movie,
+        Some(_) => {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "kind must be anime, series or movie.",
+            );
+        }
+        None => match (season, episode) {
+            (Some(_), Some(_)) => Kind::Series,
+            (None, Some(_)) => Kind::Anime,
+            _ => Kind::Movie,
+        },
+    };
     // A search made lately costs nothing, so it is not counted against the client.
-    if let Some(results) = fallback.cached(term, season, episode) {
+    if let Some(results) = fallback.cached(term, kind, season, episode) {
         return found(results);
     }
     let client = client_of(&headers, Some(peer));
@@ -517,11 +534,24 @@ async fn fallback_search(
     ) {
         return too_many();
     }
-    match fallback.search(term, season, episode).await {
+    match fallback.search(term, kind, season, episode).await {
         Ok(results) => found(results),
         Err(Failure::Busy) => error(StatusCode::SERVICE_UNAVAILABLE, "busy"),
+        Err(Failure::RateLimited(retry)) => fallback_rate_limited(retry),
         Err(Failure::Failed) => error(StatusCode::BAD_GATEWAY, "The search failed."),
     }
+}
+
+fn fallback_rate_limited(retry: Option<u64>) -> Response {
+    let mut response = error(
+        StatusCode::TOO_MANY_REQUESTS,
+        "The fallback provider is rate limited.",
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("retry-after"),
+        HeaderValue::from_str(&retry.unwrap_or(30).to_string()).unwrap(),
+    );
+    response
 }
 
 fn found(results: Vec<Hit>) -> Response {
