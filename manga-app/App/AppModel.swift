@@ -20,6 +20,11 @@ final class AppModel {
     private enum LibraryRead { case idle, loading, loadingAndChanged }
     private var libraryRead = LibraryRead.idle
     var tab: AppTab = .home
+    /// Counts taps on the Home icon while Home is open and has something to undo (`homeDirty`). The Home screen is made again,
+    /// so its search, filters and any series opened from it are gone and the dashboard shows. A clean Home is left alone.
+    var homeResets = 0
+    /// Set by the Home screen: a search, a filter or a series opened from it is showing.
+    var homeDirty = false
     /// The tabs, with what the person mostly reads first.
     var tabs: [AppTab] { AppTab.order(for: prefs.readerKind) }
     /// Set to open the file picker on the Books tab (from the Sources screen).

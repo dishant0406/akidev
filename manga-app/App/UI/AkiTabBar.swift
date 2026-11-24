@@ -6,6 +6,8 @@ struct AkiTabBar: View {
     var kind: ReaderKind?
     @Binding var selection: AppTab
     var badge: [AppTab: Int] = [:]
+    /// A tap on the tab that is already open.
+    var onReselect: (AppTab) -> Void = { _ in }
     @Namespace private var space
     /// The bar has the corner radius of a card; the selected item sits inside it with the padding taken off, so the curves are concentric.
     private let padding: CGFloat = 6
@@ -20,7 +22,7 @@ struct AkiTabBar: View {
                 ForEach(tabs, id: \.self) { tab in
                     let on = tab == selection
                     Button {
-                        withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab }
+                        if on { onReselect(tab) } else { withAnimation(AkiMotion.settle(reduceMotion)) { selection = tab } }
                     } label: {
                         AkiIcon(tab.symbol(selected: on), size: 24, tone: on ? .onPrimary : .muted)
                             .frame(width: 62, height: 58)

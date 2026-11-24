@@ -36,7 +36,14 @@ final class GlobalSearchModel {
         await withTaskGroup(of: (String, State, Error?).self) { group in
             for source in groups.map(\.source) {
                 group.addTask {
-                    do { return (source.id, .done(try await engine.search(source: source.id, term: term, page: 1, choices: []).items), nil) } catch { return (source.id, .failed(describe(error).message), error) }
+                    // The result is kept in a variable first: with the `try await` inside the returned value, Release builds on a phone
+                    // ended the group while sources were still running, and the app stopped ("pure virtual function called").
+                    do {
+                        let found = try await engine.search(source: source.id, term: term, page: 1, choices: []).items
+                        return (source.id, .done(found), nil)
+                    } catch {
+                        return (source.id, .failed(describe(error).message), error)
+                    }
                 }
             }
             for await (id, state, error) in group where self.term == term {

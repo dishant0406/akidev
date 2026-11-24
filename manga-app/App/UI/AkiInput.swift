@@ -39,9 +39,13 @@ struct AkiInput: View {
                     .padding(14).contentShape(Rectangle()).padding(-14)
                     .accessibilityLabel("Clear text")
             }
-            // While typing, a way out that does not need a search: closes the keyboard.
+            // While typing, Done does what the keyboard's Return key does: it searches. A password or email field (a form) only
+            // closes the keyboard, so Done cannot send a form early.
             if focused {
-                Button { focused = false } label: { AkiText("Done", .bodyStrong, tone: .text) }
+                Button {
+                    focused = false
+                    if !secure && !email { onSubmit() }
+                } label: { AkiText("Done", .bodyStrong, tone: .text) }
                     .buttonStyle(.plain)
                     .padding(10).contentShape(Rectangle()).padding(-10)
                     .transition(.opacity)

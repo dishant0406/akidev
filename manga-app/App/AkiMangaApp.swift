@@ -121,7 +121,7 @@ struct RootView: View {
                 }
             }
             if !model.tabBarHidden {
-                AkiTabBar(tabs: model.tabs, kind: model.prefs.readerKind, selection: $model.tab, badge: [.updates: model.unreadTotal, .manga: model.unreadTotal])
+                AkiTabBar(tabs: model.tabs, kind: model.prefs.readerKind, selection: $model.tab, badge: [.updates: model.unreadTotal, .manga: model.unreadTotal], onReselect: { if $0 == .home && model.homeDirty { model.homeResets += 1 } })
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -145,7 +145,7 @@ struct RootView: View {
 extension RootView {
     @ViewBuilder fileprivate func screen(of tab: AppTab) -> some View {
         switch tab {
-        case .home: if model.prefs.readerKind == .books { BooksHomeView() } else { HomeView() }
+        case .home: Group { if model.prefs.readerKind == .books { BooksHomeView() } else { HomeView() } }.id(model.homeResets)
         case .library: LibraryView()
         case .books: BooksView()
         case .updates: UpdatesView()

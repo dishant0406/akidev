@@ -75,6 +75,11 @@ struct HomeView: View {
     @State private var choices: [String: String] = [:]
     @State private var filtering = false
     @State private var global = GlobalSearchModel()
+    @Environment(\.mangaPart) private var part
+    /// True while a series opened from here covers this screen.
+    @State private var covered = false
+    /// Something the Home icon would undo when tapped again: a search, a filter or an open series.
+    private var dirty: Bool { covered || !term.isEmpty || !submitted.isEmpty || !choices.isEmpty }
     /// The sources the lists on screen were asked from, so coming back to this tab does not ask again.
     @State private var loadedKey = ""
     private static let everySource = "*"
@@ -120,6 +125,10 @@ struct HomeView: View {
             .background(AkiBackdrop())
             .akiNoNavigationBar()
             .akiDestination(for: SeriesRef.self) { SeriesView(ref: $0) }
+            .onAppear { covered = false }
+            .onDisappear { covered = true }
+            // Only the Home tab's own screen reports: the Manga hub shows this view too.
+            .onChange(of: dirty, initial: true) { if part == nil { model.homeDirty = dirty } }
             .onChange(of: source) { UserDefaults.standard.set(source, forKey: "source"); submitted = ""; term = ""; choices = [:]; filters = (try? model.engine.sourceFilters(source: source)) ?? []; Task { await reload() } }
             .akiSheet(isPresented: $filtering) { FiltersSheet(filters: otherFilters, choices: $choices) { Task { await reload() } } }
             .task(id: model.sourcesKey) {
