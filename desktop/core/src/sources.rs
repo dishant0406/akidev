@@ -111,6 +111,7 @@ impl Sources {
     }
 
     /// The document's alias sources, or the built-in ones when it predates them.
+    #[cfg(feature = "streaming")]
     pub(crate) fn aliases_or_built_in(&self) -> &Aliases {
         if self.aliases.identity.is_empty() && self.aliases.catalogue.is_empty() {
             &built_in().aliases
