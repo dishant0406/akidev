@@ -223,3 +223,23 @@ Edge cases:
 - Home tapped while a series from the results is open: the series closes and the dashboard shows. This is the case that depends on `onDisappear` on iPhone. Check it on a phone after a change to the Home screen.
 - People who read books: the Home tab is the Books home, which has no search. A tap on its icon does nothing.
 - If a search crashes the app on a phone (the old "pure virtual function called" report): see the 2026-11-24 entry in `docs/design.md`. A Release build on a real phone is the only way to see it. The simulator does not.
+
+## Asian drama release search (2026-11-25)
+
+1. `Streamer::plan` reads the series detail from Cinemeta.
+2. If the detail has one title, `tvmaze_series_aliases` asks TVmaze for the same IMDb id or TV database id. It adds at most two names. It also records whether the title is ambiguous. It copies country and language data when the primary catalog has none.
+3. `series_search_terms` makes the episode forms for each known name.
+4. The indexer engine asks the normal sources first. If none finds enough, it asks the two Nyaa live-action sources. Each Nyaa source asks once per title.
+5. `rank_series_releases_by` applies the country filter only for an ambiguous title. The release name must have a country token. A year-bearing pack must match the series year.
+6. `rank_releases_by` puts named episodes first. It then puts single-file fallbacks, season packs, and year-bearing packs for file inspection.
+7. The torrent engine or debrid service reads the file list. `pick_video_file_for_release` must find the requested episode before playback starts.
+
+Edge cases:
+
+- TVmaze fails or answers slowly. Akidev keeps the Cinemeta title and continues the release search.
+- TVmaze returns a different IMDb id and TV database id. Akidev does not use its alternate names.
+- The title is ambiguous and no release has the correct country token. Akidev returns no source.
+- A year-bearing pack has the wrong year. Akidev drops it before file inspection.
+- A Nyaa request fails or returns no rows. The other sources continue.
+- A year-bearing pack has no file for the requested episode. Playback rejects it.
+- A release names a different episode or season. The existing hard filters reject it.

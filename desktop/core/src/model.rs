@@ -311,6 +311,18 @@ pub struct Detail {
     pub recommended: Vec<Media>,
     /// Streaming search keys the stream layer needs. Not rendered.
     pub imdb_id: Option<String>,
+    /// TV database id, used to confirm a catalog match when IMDb is missing.
+    #[serde(default)]
+    pub tvdb_id: Option<String>,
+    /// Country of origin, when the provider reports one.
+    #[serde(default)]
+    pub country: Option<String>,
+    /// Original language, when the provider reports one.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// True when another catalog title has the same name and year.
+    #[serde(default)]
+    pub title_ambiguous: bool,
 }
 
 /// One torrent an indexer found.

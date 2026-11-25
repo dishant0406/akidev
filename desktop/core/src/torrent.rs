@@ -1031,6 +1031,7 @@ mod tests {
     async fn fresh_preserves_a_pinned_sibling_and_replaces_an_idle_pack() {
         let _swarm = SWARM_TEST.lock().await;
         let base = std::env::temp_dir().join(format!("akidev-fresh-pack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
         let (seed_dir, leech_dir) = (base.join("seed"), base.join("leech"));
         std::fs::create_dir_all(&seed_dir).unwrap();
         std::fs::create_dir_all(&leech_dir).unwrap();
@@ -1183,6 +1184,9 @@ mod tests {
                 .await
                 .is_err()
         );
+        drop(engine);
+        drop(seeder);
+        let _ = std::fs::remove_dir_all(base);
     }
 
     /// The point of the engine: playing a file must fetch what is read and a window ahead of

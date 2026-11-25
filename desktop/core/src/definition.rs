@@ -913,6 +913,12 @@ pub struct DetailDef {
     #[serde(default)]
     pub imdb_id: Option<Expression>,
     #[serde(default)]
+    pub tvdb_id: Option<Expression>,
+    #[serde(default)]
+    pub country: Option<Expression>,
+    #[serde(default)]
+    pub language: Option<Expression>,
+    #[serde(default)]
     pub studios: Option<Expression>,
     #[serde(default)]
     pub trailer: Option<TrailerMap>,
@@ -1029,7 +1035,14 @@ impl ProviderDef {
             check.check()?;
         }
         self.card.check()?;
-        let optional = [&detail.imdb_id, &detail.studios, &detail.description];
+        let optional = [
+            &detail.imdb_id,
+            &detail.tvdb_id,
+            &detail.country,
+            &detail.language,
+            &detail.studios,
+            &detail.description,
+        ];
         for expression in optional.into_iter().flatten() {
             expression.check()?;
         }

@@ -274,6 +274,18 @@ pub async fn search(kind: Kind, term: &str) -> anyhow::Result<Page> {
     Ok(page)
 }
 
+/// A search within one named provider. Used to enrich a title without changing the chain order.
+pub async fn search_provider(id: &str, kind: Kind, term: &str) -> anyhow::Result<Page> {
+    let sources = sources::current();
+    let def = sources
+        .provider(id)
+        .filter(|def| def.kinds.contains(&kind))
+        .ok_or_else(|| anyhow::anyhow!("there is no provider {id} for {}", kind.as_str()))?;
+    list::search(def, kind, term)
+        .await
+        .map(|page| mark_page(def, page))
+}
+
 /// A title in full. `id` is a title key such as `series-tt0903747`; an episode id is accepted too
 /// and reduced to its title.
 pub async fn detail(id: &str) -> Option<Detail> {

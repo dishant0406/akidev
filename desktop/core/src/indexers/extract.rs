@@ -783,6 +783,29 @@ mod tests {
     }
 
     #[test]
+    fn nyaa_live_action_sources_read_real_rss_rows() {
+        let translated = include_str!("../../tests/fixtures/indexers/nyaa-live-action.xml");
+        let found = run_text("nyaa-live-action", translated, "Crash Landing on You");
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].seeders, Some(28));
+        assert_eq!(
+            found[0].info_hash,
+            "190edcfafba510b407749fa0fb81061be5d66235"
+        );
+        assert_eq!(found[0].source, "nyaa-live-action");
+
+        let raw = include_str!("../../tests/fixtures/indexers/nyaa-live-action-raw.xml");
+        let found = run_text("nyaa-live-action-raw", raw, "Itaewon Class S01E01");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].seeders, Some(0));
+        assert_eq!(
+            found[0].info_hash,
+            "2c747799cc634ba7e42bc28a0d7b8c00a4ce8ad4"
+        );
+        assert_eq!(found[0].source, "nyaa-live-action-raw");
+    }
+
+    #[test]
     fn tokyotosho_reads_the_hash_from_the_magnet_in_its_link() {
         // The feed names the hash in base32 and sends the magnet as the item's link.
         let feed = "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Tokyo Toshokan</title>\

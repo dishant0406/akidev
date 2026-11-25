@@ -644,10 +644,15 @@ fn tvmaze_show() -> Value {
         "premiered": "2008-01-20", "averageRuntime": 60, "weight": 98,
         "rating": {"average": 9.2}, "genres": ["Drama", "Crime"],
         "image": {"medium": "https://m/169.jpg", "original": "https://o/169.jpg"},
-        "network": {"id": 20, "name": "AMC", "country": {"code": "US"}},
-        "externals": {"imdb": "tt0903747"},
+        "network": {"id": 20, "name": "AMC", "country": {"code": "US", "name": "United States"}},
+        "language": "English",
+        "externals": {"imdb": "tt0903747", "thetvdb": 81189},
         "summary": "<p>A teacher &amp; <b>cook</b>.<br>Second line.</p>",
         "_embedded": {
+            "akas": [
+                {"name": "Breaking Bad: Original"},
+                {"name": "Breaking Bad"}
+            ],
             "episodes": [
                 {"season": 1, "number": 5, "name": "Gray Matter", "airdate": "2008-02-10"},
                 {"season": 1, "number": null, "name": "Special"}
@@ -663,6 +668,10 @@ fn a_tvmaze_show_maps_onto_the_card_shape() {
     let card = media("tvmaze", Kind::Series, &tvmaze_show()).unwrap();
     assert_eq!(card.id, "series-169");
     assert_eq!(card.title, "Breaking Bad");
+    assert_eq!(
+        card.title_variants,
+        vec!["Breaking Bad", "Breaking Bad: Original"]
+    );
     assert_eq!(card.poster.as_deref(), Some("https://o/169.jpg"));
     assert_eq!(card.banner, None);
     assert_eq!(card.format.as_deref(), Some("Scripted"));
@@ -680,6 +689,9 @@ fn a_tvmaze_show_maps_onto_the_card_shape() {
 fn a_tvmaze_detail_carries_episodes_cast_and_the_imdb_id() {
     let detail = read_for_test(&def("tvmaze"), Kind::Series, &tvmaze_show(), [None, None]).unwrap();
     assert_eq!(detail.imdb_id.as_deref(), Some("tt0903747"));
+    assert_eq!(detail.tvdb_id.as_deref(), Some("81189"));
+    assert_eq!(detail.country.as_deref(), Some("United States"));
+    assert_eq!(detail.language.as_deref(), Some("English"));
     assert_eq!(detail.studios, vec!["AMC"]);
     // The episode with no number cannot be addressed, so it is dropped.
     assert_eq!(detail.episodes.len(), 1);
@@ -692,6 +704,15 @@ fn a_tvmaze_detail_carries_episodes_cast_and_the_imdb_id() {
         detail.media.description.as_deref(),
         Some("A teacher & cook.\nSecond line.")
     );
+}
+
+#[test]
+fn a_tvmaze_detail_reads_country_from_a_web_channel() {
+    let mut show = tvmaze_show();
+    show["network"] = Value::Null;
+    show["webChannel"] = json!({"name": "Tencent QQ", "country": {"name": "China"}});
+    let detail = read_for_test(&def("tvmaze"), Kind::Series, &show, [None, None]).unwrap();
+    assert_eq!(detail.country.as_deref(), Some("China"));
 }
 
 #[test]

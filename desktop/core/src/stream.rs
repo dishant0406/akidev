@@ -10,7 +10,7 @@ use crate::model::{Detail, Kind, Release, Shape};
 use crate::releases::{
     Audio, Codec, is_batch, is_playable_codec, movie_search_terms, normalize_title, parse_audio,
     parse_codec, parse_resolution, rank_movie_releases, rank_movie_releases_by, rank_releases,
-    rank_releases_by, search_terms, series_search_terms,
+    rank_releases_by, rank_series_releases_by, search_terms, series_search_terms,
 };
 use crate::torrent::{Engine, StreamStats};
 use crate::{providers, serve, sources};
@@ -649,12 +649,29 @@ fn validate_request_at(id: &str, detail: &Detail, now_ms: i64) -> Result<MediaId
 /// The search terms, the releases they found that can be played, best first, and the others
 /// that fit but may not decode.
 async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -> FoundReleases {
-    let media = &detail.media;
-    let titles = if media.title_variants.is_empty() {
+    let media = detail.media.clone();
+    let mut titles = if media.title_variants.is_empty() {
         vec![media.title.clone()]
     } else {
         media.title_variants.clone()
     };
+    if parsed.kind.shape() == Shape::Series
+        && titles.len() == 1
+        && (detail.imdb_id.is_some() || detail.tvdb_id.is_some())
+    {
+        let imdb_id = detail.imdb_id.clone();
+        let tvdb_id = detail.tvdb_id.clone();
+        let aliases = tokio::time::timeout(
+            Duration::from_secs(2),
+            tvmaze_series_aliases(&media, imdb_id.as_deref(), tvdb_id.as_deref(), detail),
+        )
+        .await
+        .unwrap_or_default();
+        if !aliases.is_empty() {
+            titles = aliases;
+            detail.media.title_variants = titles.clone();
+        }
+    }
     let found = find_releases_named(config, parsed, detail, &titles).await;
     if !found.1.is_empty() || parsed.kind.shape() == Shape::Anime {
         return found;
@@ -663,7 +680,7 @@ async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -
     // named by another ("Tomei na Yoru ni Kakeru Kimi to" is "Love Unseen Beneath the Clear Night
     // Sky" at the indexers). When nothing was found, the anime catalogue is asked for the names
     // it knows the same title by, and the search is made again with them.
-    let aliases = alias_titles(media).await;
+    let aliases = alias_titles(&media).await;
     if aliases.is_empty() {
         return found;
     }
@@ -719,6 +736,66 @@ fn merge_searches(mut first: FoundReleases, second: FoundReleases) -> FoundRelea
         (a, b) => a.or(b),
     };
     first
+}
+
+/// Confirms the same series, then copies missing origin data and returns its other names.
+fn match_series_identity(
+    media: &crate::model::Media,
+    candidate: &Detail,
+    imdb_id: Option<&str>,
+    tvdb_id: Option<&str>,
+    detail: &mut Detail,
+) -> Option<Vec<String>> {
+    let imdb_conflict =
+        matches!((imdb_id, candidate.imdb_id.as_deref()), (Some(a), Some(b)) if a != b);
+    let tvdb_conflict =
+        matches!((tvdb_id, candidate.tvdb_id.as_deref()), (Some(a), Some(b)) if a != b);
+    let same_imdb = matches!((imdb_id, candidate.imdb_id.as_deref()), (Some(a), Some(b)) if a == b);
+    let same_tvdb = matches!((tvdb_id, candidate.tvdb_id.as_deref()), (Some(a), Some(b)) if a == b);
+    if imdb_conflict
+        || tvdb_conflict
+        || (!same_imdb && !same_tvdb)
+        || !is_same_title(media, &candidate.media, &known_names(&candidate.media))
+    {
+        return None;
+    }
+    detail.country = candidate.country.clone().or(detail.country.clone());
+    detail.language = candidate.language.clone().or(detail.language.clone());
+    let mut names = vec![media.title.clone()];
+    for name in known_names(&candidate.media) {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names.truncate(2);
+    (names.len() > 1).then_some(names)
+}
+
+async fn tvmaze_series_aliases(
+    media: &crate::model::Media,
+    imdb_id: Option<&str>,
+    tvdb_id: Option<&str>,
+    detail: &mut Detail,
+) -> Vec<String> {
+    let Ok(page) = providers::search_provider("tvmaze", Kind::Series, &media.title).await else {
+        return Vec::new();
+    };
+    detail.title_ambiguous = page
+        .results
+        .iter()
+        .take(10)
+        .filter(|candidate| is_same_title(media, candidate, &known_names(candidate)))
+        .count()
+        > 1;
+    for candidate in page.results.into_iter().take(5) {
+        let Some(found) = providers::detail(&candidate.id).await else {
+            continue;
+        };
+        if let Some(names) = match_series_identity(media, &found, imdb_id, tvdb_id, detail) {
+            return names;
+        }
+    }
+    Vec::new()
 }
 
 /// The other names the anime catalogue knows `media` by, when it has the very same title.
@@ -853,13 +930,45 @@ async fn find_releases_named(
         }
         (Shape::Series, Some(episode)) => {
             let terms = series_search_terms(titles, parsed.season, Some(episode));
+            let country = detail
+                .title_ambiguous
+                .then_some(detail.country.as_deref().or(detail.language.as_deref()))
+                .flatten();
             let outcome = search_all_report(config, &terms, &options, |found| {
-                !rank_releases(found, episode, &media.title, titles, parsed.season).is_empty()
+                !rank_series_releases_by(
+                    found,
+                    episode,
+                    &media.title,
+                    titles,
+                    parsed.season,
+                    true,
+                    country,
+                    year,
+                )
+                .is_empty()
             })
             .await;
             let found = outcome.releases;
-            let ranked = rank_releases(&found, episode, &media.title, titles, parsed.season);
-            let all = rank_releases_by(&found, episode, &media.title, titles, parsed.season, false);
+            let ranked = rank_series_releases_by(
+                &found,
+                episode,
+                &media.title,
+                titles,
+                parsed.season,
+                true,
+                country,
+                year,
+            );
+            let all = rank_series_releases_by(
+                &found,
+                episode,
+                &media.title,
+                titles,
+                parsed.season,
+                false,
+                country,
+                year,
+            );
             (terms, ranked, all, outcome.sources, outcome.live)
         }
         (Shape::Anime, Some(_)) if is_film(media) => {
@@ -1002,6 +1111,16 @@ impl Plan {
             return self.clone();
         };
         let names = known_names(&self.detail.media);
+        let country = self
+            .detail
+            .title_ambiguous
+            .then_some(
+                self.detail
+                    .country
+                    .as_deref()
+                    .or(self.detail.language.as_deref()),
+            )
+            .flatten();
         let year = self
             .detail
             .media
@@ -1024,6 +1143,16 @@ impl Plan {
             _ if is_film(&self.detail.media) => {
                 rank_movie_releases_by(&filtered, year, &self.detail.media.title, &names, false)
             }
+            Some(episode) if self.parsed.kind.shape() == Shape::Series => rank_series_releases_by(
+                &filtered,
+                episode,
+                &self.detail.media.title,
+                &names,
+                self.parsed.season,
+                false,
+                country,
+                year,
+            ),
             Some(episode) => rank_releases_by(
                 &filtered,
                 episode,
@@ -1049,6 +1178,16 @@ impl Plan {
             _ if is_film(&self.detail.media) => {
                 rank_movie_releases(&filtered, year, &self.detail.media.title, &names)
             }
+            Some(episode) if self.parsed.kind.shape() == Shape::Series => rank_series_releases_by(
+                &filtered,
+                episode,
+                &self.detail.media.title,
+                &names,
+                self.parsed.season,
+                true,
+                country,
+                year,
+            ),
             Some(episode) => rank_releases(
                 &filtered,
                 episode,
@@ -1072,6 +1211,16 @@ impl Plan {
             _ if is_film(&self.detail.media) => {
                 rank_movie_releases(&plan.ranked, year, &self.detail.media.title, &names)
             }
+            Some(episode) if self.parsed.kind.shape() == Shape::Series => rank_series_releases_by(
+                &plan.ranked,
+                episode,
+                &self.detail.media.title,
+                &names,
+                self.parsed.season,
+                true,
+                country,
+                year,
+            ),
             Some(episode) => rank_releases(
                 &plan.ranked,
                 episode,
@@ -2142,6 +2291,58 @@ mod tests {
         assert!(!is_same_title(&show, &old, &known_names(&old)));
     }
 
+    #[test]
+    fn tvmaze_identity_accepts_a_matching_tvdb_id_and_copies_origin_data() {
+        let mut wanted = plan_with(Vec::new(), Vec::new()).detail;
+        wanted.media = card("The Gifted", &[], Some(2017));
+        wanted.imdb_id = Some("tt9136312".into());
+        wanted.tvdb_id = Some("350952".into());
+
+        let mut us = plan_with(Vec::new(), Vec::new()).detail;
+        us.media = card("The Gifted", &[], Some(2017));
+        us.imdb_id = Some("tt4396630".into());
+        us.tvdb_id = Some("328552".into());
+        let media = wanted.media.clone();
+        let imdb = wanted.imdb_id.clone();
+        let tvdb = wanted.tvdb_id.clone();
+        assert!(
+            match_series_identity(&media, &us, imdb.as_deref(), tvdb.as_deref(), &mut wanted,)
+                .is_none()
+        );
+
+        let mut thai = plan_with(Vec::new(), Vec::new()).detail;
+        thai.media = card("The Gifted", &["The Gifted", "นักเรียนพลังกิฟต์"], Some(2018));
+        thai.imdb_id = None;
+        thai.tvdb_id = Some("350952".into());
+        thai.country = Some("Thailand".into());
+        thai.language = Some("Thai".into());
+        assert_eq!(
+            match_series_identity(&media, &thai, imdb.as_deref(), tvdb.as_deref(), &mut wanted,),
+            Some(vec!["The Gifted".into(), "นักเรียนพลังกิฟต์".into()])
+        );
+        assert_eq!(wanted.country.as_deref(), Some("Thailand"));
+        assert_eq!(wanted.language.as_deref(), Some("Thai"));
+    }
+
+    #[test]
+    fn tvmaze_alias_cap_keeps_the_requested_title_first() {
+        let mut wanted = plan_with(Vec::new(), Vec::new()).detail;
+        wanted.media = card("The Gifted", &[], Some(2017));
+        wanted.imdb_id = Some("tt9136312".into());
+        let mut candidate = plan_with(Vec::new(), Vec::new()).detail;
+        candidate.media = card(
+            "The Gifted Thailand",
+            &["First alias", "Second alias", "The Gifted"],
+            Some(2018),
+        );
+        candidate.imdb_id = Some("tt9136312".into());
+        let media = wanted.media.clone();
+        assert_eq!(
+            match_series_identity(&media, &candidate, Some("tt9136312"), None, &mut wanted,),
+            Some(vec!["The Gifted".into(), "The Gifted Thailand".into()])
+        );
+    }
+
     fn plan_with(ranked: Vec<Release>, extra: Vec<Release>) -> Plan {
         use crate::model::Media;
         Plan {
@@ -2173,6 +2374,10 @@ mod tests {
                 related: Vec::new(),
                 recommended: Vec::new(),
                 imdb_id: None,
+                tvdb_id: None,
+                country: None,
+                language: None,
+                title_ambiguous: false,
             },
             terms: Vec::new(),
             source_reports: Vec::new(),

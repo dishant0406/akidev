@@ -105,6 +105,8 @@ static EPISODE_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         pattern(r"(?i)\bEpisode\s+(\d{1,4})\b"),
         pattern(r"\s-\s(\d{1,4})(?:\s|\[|\(|\.|$)"),
         pattern(r"第\s?(\d{1,4})\s?[话話]"),
+        pattern(r"第\s?(\d{1,4})\s?回"),
+        pattern(r"제\s?(\d{1,4})\s?회"),
         pattern(r"\b(\d{1,4})\s*(?:v\d)?\s*\["),
     ]
 });
@@ -149,6 +151,13 @@ fn bare_number(title: &str, forbidden: &[u8], brackets: bool) -> Option<(usize, 
         if rest.starts_with(['p', 'P']) {
             continue;
         }
+        if brackets
+            && run.len() == 4
+            && rest.starts_with(')')
+            && (1900..=2099).contains(&title[run.clone()].parse::<u32>().unwrap_or(0))
+        {
+            continue;
+        }
         let tail_matches = if brackets {
             let rest = rest.trim_start_matches(char::is_whitespace);
             let rest = match rest.strip_prefix('v') {
@@ -173,23 +182,26 @@ fn bare_number(title: &str, forbidden: &[u8], brackets: bool) -> Option<(usize, 
 
 /// Tries the episode pattern at `step` (in priority order) against the title.
 fn episode_candidate(step: usize, title: &str) -> Option<(usize, u32)> {
-    match step {
-        0..=5 => EPISODE_PATTERNS[step].captures(title).and_then(|found| {
+    if step < EPISODE_PATTERNS.len() {
+        return EPISODE_PATTERNS[step].captures(title).and_then(|found| {
             let whole = found.get(0).expect("group 0 always exists");
             found[1].parse().ok().map(|number| (whole.start(), number))
-        }),
+        });
+    }
+    match step - EPISODE_PATTERNS.len() {
         // Fansub style with the episode number bare before a bracketed quality tag:
         // "[HatSubs] One Piece 1104 (WEB 1080p)". Without this the release parsed as
         // "no episode number", which made episode 1104 an eligible candidate for
         // episode 1. The look-behind keeps decimals ("5.1") from matching, and the
         // look-ahead keeps resolutions ("1080p") from matching.
-        6 => bare_number(title, b".-", true),
+        0 => bare_number(title, b".-", true),
         // The bare form, where the number is followed by a space and a word:
         // "Naruto Shippuden 163 Remaster (BDRip 1080p)" and "One Piece 1000 WEB-DL".
         // Without this the release parsed as "no episode number", which put it in the
         // fallback bucket where it could be served for any episode. Letters that
         // introduce a collection ("S01", "Part 1") are excluded by the look-behind.
-        _ => bare_number(title, b".-(Ss", false),
+        1 => bare_number(title, b".-(Ss", false),
+        _ => None,
     }
 }
 
@@ -209,7 +221,7 @@ pub fn parse_episode(title: &str) -> Option<u32> {
     // episode number. parse_season and is_batch normalise both separators through
     // words(), which is safe for them because neither has a bare-number pattern.
     let title = title.replace('_', " ");
-    for step in 0..8 {
+    for step in 0..EPISODE_PATTERNS.len() + 2 {
         let Some((start, number)) = episode_candidate(step, &title) else {
             continue;
         };
@@ -333,9 +345,12 @@ fn has_multiple_episodes(title: &str) -> bool {
         LazyLock::new(|| pattern(r"(?i)(?:S\s*\d{1,2}\s*)?E(?:P|pisode)?\s*[ .]?\s*(\d{1,4})\b"));
     static JOINED: LazyLock<Regex> =
         LazyLock::new(|| pattern(r"(?i)E(\d{1,4})((?:E\d{1,4}|\s*[-+~&]\s*E?\d{1,4})+)\b"));
+    static NATIVE: LazyLock<Regex> =
+        LazyLock::new(|| pattern(r"(?:第|제)\s*(\d{1,4})\s*(?:话|話|回|회)"));
     let text = words(title);
     let numbers: Vec<u32> = EXPLICIT
         .captures_iter(&text)
+        .chain(NATIVE.captures_iter(&text))
         .filter_map(|c| c[1].parse().ok())
         .collect();
     has_distinct_range(&text)
@@ -578,7 +593,7 @@ fn structured_identity_tail(tail: &str, title: &str) -> bool {
 fn identity_tail(tail: &str) -> bool {
     static TAIL: LazyLock<Regex> = LazyLock::new(|| {
         pattern(
-            r"(?i)^(?:\d{1,4}(?:\b|p|v\d)|s(?:eason)?\s*\d{1,2}|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}|batch\b|complete\b|box\b|set\b|part\b|vol(?:ume)?\b|cour\b|web\b|webrip\b|webdl\b|bluray\b|bdrip\b|bd\b|remux\b|remaster\b|x26[45]\b|h\s*26[45]\b|hevc\b|av1\b|aac\b|flac\b|dual\b|multi\b|hindi\b|english\b|japanese\b|tamil\b|telugu\b|proper\b|repack\b|mkv\b|mp4\b)",
+            r"(?i)^(?:\d{1,4}(?:\b|p|v\d)|s(?:eason)?\s*\d{1,2}|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}|제\s*\d{1,4}|batch\b|complete\b|box\b|set\b|part\b|vol(?:ume)?\b|cour\b|web\b|webrip\b|webdl\b|bluray\b|bdrip\b|bd\b|remux\b|remaster\b|x26[45]\b|h\s*26[45]\b|hevc\b|av1\b|aac\b|flac\b|dual\b|multi\b|hindi\b|english\b|japanese\b|korean\b|chinese\b|mandarin\b|cantonese\b|thai\b|dub\b|sub\b|tamil\b|telugu\b|proper\b|repack\b|mkv\b|mp4\b)",
         )
     });
     TAIL.is_match(tail)
@@ -831,6 +846,22 @@ fn known_titles(title: &str, titles: &[String]) -> Vec<String> {
     }
 }
 
+static LEADING_YEAR: LazyLock<Regex> = LazyLock::new(|| {
+    pattern(
+        r"(?i)^\s*((?:19|20)\d{2})\s+(?:complete|batch|box|set|part|vol(?:ume)?|cour|web|bluray|bdrip|bd|remux|x26[45]|h\s*26[45]|hevc|aac|flac|dual|multi|audio|korean|japanese|chinese|thai|english|hindi|dub|sub)\b",
+    )
+});
+
+fn episode_tail(release_title: &str, tail: &str) -> String {
+    if let Some(found) = LEADING_YEAR.captures(tail)
+        && release_title.contains(&format!("({})", &found[1]))
+    {
+        LEADING_YEAR.replace_all(tail, "").trim_start().to_string()
+    } else {
+        tail.to_string()
+    }
+}
+
 /// Rejects a release that names an episode other than the one requested, and for a
 /// series also rejects a release from a different season.
 ///
@@ -1027,6 +1058,7 @@ pub fn rank_releases_by(
         .filter(|release| matches_any_title(&release.title, &titles))
         .filter(|release| {
             let tail = matching_title_tail(&release.title, &titles);
+            let tail = episode_tail(&release.title, &tail);
             matches_episode(&tail, episode, season)
                 && !is_extra(&tail)
                 && !has_multiple_episodes(&release.title)
@@ -1065,10 +1097,21 @@ pub fn rank_releases_by(
             && !is_likely_movie(&release.title)
             && pack_season_matches(&release.title, season)
     };
+    // A year in brackets makes a release look like a film. Asian drama packs often
+    // carry one. Keep them last and let file inspection prove the episode.
+    let is_inspect = |release: &Release| {
+        season.is_some()
+            && !is_named(release)
+            && !is_fallback(release)
+            && !is_pack(release)
+            && !is_extra(&matching_title_tail(&release.title, &titles))
+            && is_likely_movie(&release.title)
+    };
 
     let named: Vec<&Release> = usable.iter().copied().filter(|r| is_named(r)).collect();
     let fallback: Vec<&Release> = usable.iter().copied().filter(|r| is_fallback(r)).collect();
     let packs: Vec<&Release> = usable.iter().copied().filter(|r| is_pack(r)).collect();
+    let inspect: Vec<&Release> = usable.iter().copied().filter(|r| is_inspect(r)).collect();
 
     let mut ranked = score_all(named);
     // The anime path has no season to filter on, so a release naming another season
@@ -1079,7 +1122,97 @@ pub fn rank_releases_by(
     }
     ranked.extend(score_all(fallback));
     ranked.extend(score_packs(packs));
+    ranked.extend(score_packs(inspect));
     ranked.into_iter().cloned().collect()
+}
+
+/// Country evidence stops a same-name show from another country. The filter only
+/// applies to the Asian countries where this problem was measured. A year-bearing
+/// pack must also match the series year when the catalog reports one.
+#[allow(clippy::too_many_arguments)]
+pub fn rank_series_releases_by(
+    releases: &[Release],
+    episode: u32,
+    title: &str,
+    titles: &[String],
+    season: Option<u32>,
+    playable_codecs_only: bool,
+    country: Option<&str>,
+    year: Option<u32>,
+) -> Vec<Release> {
+    let titles = known_titles(title, titles);
+    let year_matches: Vec<Release> = releases
+        .iter()
+        .filter(|release| {
+            let named = matching_title_year(&release.title, &titles);
+            !is_likely_movie(&release.title) || year.is_none() || named.is_none() || named == year
+        })
+        .cloned()
+        .collect();
+    let releases = &year_matches;
+    let Some(markers) = country_markers(country) else {
+        return rank_releases_by(
+            releases,
+            episode,
+            title,
+            &titles,
+            season,
+            playable_codecs_only,
+        );
+    };
+    let filtered: Vec<Release> = releases
+        .iter()
+        .filter(|release| {
+            let words: Vec<String> = release
+                .title
+                .to_ascii_lowercase()
+                .split(|character: char| !character.is_ascii_alphanumeric())
+                .filter(|word| !word.is_empty())
+                .map(str::to_string)
+                .collect();
+            markers
+                .iter()
+                .any(|marker| words.iter().any(|word| word == marker))
+        })
+        .cloned()
+        .collect();
+    rank_releases_by(
+        &filtered,
+        episode,
+        title,
+        &titles,
+        season,
+        playable_codecs_only,
+    )
+}
+
+fn country_markers(country: Option<&str>) -> Option<&'static [&'static str]> {
+    let country = country?.to_ascii_lowercase();
+    if country.contains("korea") || country.contains("korean") {
+        Some(&["korean", "kor", "ko"])
+    } else if country.contains("japan") || country.contains("japanese") {
+        Some(&["japanese", "jpn", "jp"])
+    } else if country.contains("china")
+        || country.contains("taiwan")
+        || country.contains("hong kong")
+        || country.contains("chinese")
+    {
+        Some(&[
+            "chinese",
+            "mandarin",
+            "cantonese",
+            "chs",
+            "cht",
+            "taiwanese",
+            "cn",
+            "zh",
+            "hk",
+        ])
+    } else if country.contains("thailand") || country.contains("thai") {
+        Some(&["thai", "th"])
+    } else {
+        None
+    }
 }
 
 // Builds the search terms used against the indexers.
@@ -1492,7 +1625,8 @@ pub fn pick_video_file_for_release<'a>(
         || is_sample(&listing_tail)
         || unwanted_feature(&listing_tail)
         || episode.is_some_and(|ep| {
-            !matches_episode(&listing_tail, ep, season)
+            let tail = episode_tail(release_title, &listing_tail);
+            !matches_episode(&tail, ep, season)
                 || is_extra(&listing_tail)
                 || has_multiple_episodes(release_title)
         })
@@ -1514,7 +1648,7 @@ pub fn pick_video_file_for_release<'a>(
             pattern(
                 // Every token must be a known label or technical metadata. A numeric
                 // prefix alone cannot establish identity for "01 Other Show".
-                r"(?i)^(?:\d{1,4}(?:v\d+)?|s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|tamil|telugu|proper|repack))*$",
+                r"(?i)^(?:\d{1,4}(?:v\d+)?|s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}(?:\s*(?:话|話|回))?|제\s*\d{1,4}(?:\s*회)?|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|korean|chinese|mandarin|cantonese|thai|dub|sub|tamil|telugu|proper|repack))*$",
             )
         });
         GENERIC.is_match(&text)
@@ -2085,6 +2219,235 @@ mod tests {
         }
     }
 
+    #[test]
+    fn asian_language_tokens_anchor_series_and_file_identity() {
+        for (title, language) in [
+            ("Crash Landing on You", "Korean"),
+            ("The Untamed", "Chinese"),
+            ("The Gifted", "Thai"),
+        ] {
+            let listing = format!("{title} {language} S01E01 1080p");
+            assert_eq!(
+                rank_releases(&[release(&listing, 10, "ok")], 1, title, &[], Some(1)).len(),
+                1,
+                "{listing}"
+            );
+            let files = [file(&format!("01 {language} 1080p.mkv"), 900_000_000)];
+            assert!(
+                pick_video_file_for_release(
+                    &files,
+                    Some(1),
+                    0,
+                    Some(1),
+                    &format!("{title} S01 Complete"),
+                    title,
+                    &[],
+                    None
+                )
+                .is_some(),
+                "{language}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unnumbered_year_bearing_series_pack_can_be_inspected() {
+        let listing = "Shut Up Flower Boy Band (2012) (WEB-DL 1080p h264 AAC-AppleTor)";
+        assert!(matches_any_title(
+            listing,
+            &["Shut Up Flower Boy Band".into()]
+        ));
+        assert_eq!(parse_episode(listing), None);
+        assert!(matches_episode(listing, 1, Some(1)));
+        assert!(is_likely_movie(listing));
+        let tail = matching_title_tail(listing, &["Shut Up Flower Boy Band".into()]);
+        let tail = episode_tail(listing, &tail);
+        assert!(matches_episode(&tail, 1, Some(1)), "tail={tail}");
+        assert!(!is_extra(&tail), "tail={tail}");
+        assert!(!has_multiple_episodes(listing));
+        assert!(is_playable_codec(listing));
+        let ranked = rank_releases(
+            &[release(listing, 0, "pack")],
+            1,
+            "Shut Up Flower Boy Band",
+            &[],
+            Some(1),
+        );
+        assert_eq!(ranked.len(), 1);
+        let files = [
+            file("Shut Up Flower Boy Band S01E01.mkv", 900_000_000),
+            file("Shut Up Flower Boy Band S01E02.mkv", 900_000_000),
+        ];
+        assert_eq!(
+            pick_video_file_for_release(
+                &files,
+                Some(1),
+                0,
+                Some(1),
+                listing,
+                "Shut Up Flower Boy Band",
+                &[],
+                Some(2012)
+            ),
+            Some(&files[0])
+        );
+    }
+
+    #[test]
+    fn a_bare_episode_number_is_not_treated_as_a_year() {
+        let episode = release("Show 2000 WEB-DL", 10, "episode");
+        assert!(rank_releases(&[episode], 1, "Show", &[], Some(1)).is_empty());
+        let later_year = release("Show 2000 WEB-DL (2012)", 10, "later-year");
+        assert!(rank_releases(&[later_year], 1, "Show", &[], Some(1)).is_empty());
+        let pack = release("Show (2012) WEB-DL", 1, "pack");
+        assert_eq!(
+            rank_series_releases_by(&[pack], 1, "Show", &[], Some(1), true, None, Some(2012),)
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn native_combined_episode_labels_are_rejected() {
+        assert!(has_multiple_episodes("Show 제1회 제2회"));
+        assert!(has_multiple_episodes("Show 第1回 第2回"));
+    }
+
+    #[test]
+    fn generic_video_names_accept_native_episode_labels() {
+        let files = [file("제12회 1080p.mkv", 900_000_000)];
+        assert!(
+            pick_video_file_for_release(
+                &files,
+                Some(12),
+                0,
+                Some(1),
+                "Show S01 Complete",
+                "Show",
+                &[],
+                None,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn asian_identity_tokens_accept_native_episode_forms_and_languages() {
+        for listing in [
+            "Show 제12회 1080p",
+            "Show Mandarin S01E01 1080p",
+            "Show Cantonese S01E01 1080p",
+        ] {
+            assert!(is_relevant(listing, "Show"), "{listing}");
+        }
+    }
+
+    #[test]
+    fn only_a_bracketed_year_with_pack_metadata_is_not_an_episode_number() {
+        let tail = episode_tail("Show (2012) Complete 1080p", "2012 complete 1080p");
+        assert!(matches_episode(&tail, 1, Some(1)));
+        assert!(!matches_episode("2000 1080p", 1, Some(1)));
+    }
+
+    #[test]
+    fn a_year_bearing_pack_must_match_the_series_year() {
+        let wrong = release("Show (2011) Complete 1080p", 10, "wrong");
+        assert!(
+            rank_series_releases_by(&[wrong], 1, "Show", &[], Some(1), true, None, Some(2012))
+                .is_empty()
+        );
+        assert_eq!(
+            hashes(&rank_series_releases_by(
+                &[release("Show (2012) Complete 1080p", 1, "right")],
+                1,
+                "Show",
+                &[],
+                Some(1),
+                true,
+                None,
+                Some(2012),
+            )),
+            ["right"]
+        );
+    }
+
+    #[test]
+    fn asian_country_evidence_rejects_a_same_name_show_from_another_country() {
+        let wrong = release("The Gifted S01E01 eXposed 1080p AMZN", 100, "us");
+        let right = release("The Gifted S01E01 Thai 1080p", 5, "th");
+        let titles = strings(&["The Gifted", "นักเรียนพลังกิฟต์", "Одарённые"]);
+        let foreign = release("Одарённые (Season 01) 1080p", 10, "foreign");
+        assert!(
+            rank_series_releases_by(
+                &[foreign],
+                1,
+                "The Gifted",
+                &titles,
+                Some(1),
+                true,
+                Some("Thailand"),
+                Some(2018),
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            rank_series_releases_by(
+                &[wrong.clone(), right.clone()],
+                1,
+                "The Gifted",
+                &titles,
+                Some(1),
+                true,
+                None,
+                Some(2018),
+            )
+            .len(),
+            2
+        );
+        assert_eq!(
+            hashes(&rank_series_releases_by(
+                &[wrong, right],
+                1,
+                "The Gifted",
+                &titles,
+                Some(1),
+                true,
+                Some("Thailand"),
+                Some(2018),
+            )),
+            ["th"]
+        );
+        let cantonese = release("Show Cantonese S01E01 1080p", 5, "hk");
+        assert_eq!(
+            hashes(&rank_series_releases_by(
+                &[cantonese],
+                1,
+                "Show",
+                &[],
+                Some(1),
+                true,
+                Some("Hong Kong"),
+                None,
+            )),
+            ["hk"]
+        );
+        let hindi = release("Crash Landing on You S01E01 Hindi 720p", 50, "hindi");
+        let korean = release("Crash Landing on You S01E01 Korean 1080p", 5, "korean");
+        assert_eq!(
+            hashes(&rank_series_releases_by(
+                &[hindi, korean],
+                1,
+                "Crash Landing on You",
+                &[],
+                Some(1),
+                true,
+                Some("South Korea"),
+                Some(2019),
+            )),
+            ["korean"]
+        );
+    }
+
     fn release(title: &str, seeders: u32, info_hash: &str) -> Release {
         Release {
             title: title.to_string(),
@@ -2175,6 +2538,8 @@ mod tests {
         assert_eq!(parse_episode("Show E05"), Some(5));
         assert_eq!(parse_episode("Show EP.102"), Some(102));
         assert_eq!(parse_episode("Show 第12话"), Some(12));
+        assert_eq!(parse_episode("Show 제12회"), Some(12));
+        assert_eq!(parse_episode("Show 第12回"), Some(12));
     }
 
     #[test]

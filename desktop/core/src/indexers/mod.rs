@@ -230,8 +230,15 @@ fn serving(indexers: &[IndexerDef], kind: Kind, on_server: bool) -> Vec<&Indexer
 pub fn title_of(term: &str) -> String {
     static TOKEN: OnceLock<Regex> = OnceLock::new();
     let token = TOKEN.get_or_init(|| {
-        Regex::new(r"\s+(?:S[0-9]{1,2}E[0-9]{1,4}|S[0-9]{1,2}|[0-9]{1,4})$").unwrap()
+        Regex::new(r"\s+(?:S[0-9]{1,2}E[0-9]{1,4}|S[0-9]{1,2}|([0-9]{1,4}))$").unwrap()
     });
+    if let Some(found) = token.captures(term)
+        && let Some(number) = found.get(1)
+        && number.len() == 4
+        && (1900..=2099).contains(&number.as_str().parse::<u32>().unwrap_or(0))
+    {
+        return term.to_string();
+    }
     let title = token.replace(term, "").trim().to_string();
     if title.is_empty() {
         term.to_string()
@@ -264,8 +271,23 @@ fn plan<'a>(indexers: &[&'a IndexerDef], terms: &[String]) -> Vec<(&'a IndexerDe
                     let mut seen = HashSet::new();
                     queries
                         .iter()
-                        .map(|term| title_of(term))
-                        .filter(|title| seen.insert(title.clone()))
+                        .filter_map(|term| {
+                            let title = title_of(term);
+                            let numbered_form = seen.iter().any(|base: &String| {
+                                term.strip_prefix(base)
+                                    .and_then(|rest| rest.strip_prefix(' '))
+                                    .is_some_and(|rest| {
+                                        !rest.is_empty()
+                                            && rest.len() <= 4
+                                            && rest.bytes().all(|byte| byte.is_ascii_digit())
+                                    })
+                            });
+                            if numbered_form {
+                                None
+                            } else {
+                                seen.insert(title.clone()).then_some(title)
+                            }
+                        })
                         .collect()
                 }
                 Fanout::PerTerm => queries.iter().map(|term| (*term).clone()).collect(),
@@ -532,10 +554,11 @@ async fn ask(
     limit: Duration,
     sent: &std::sync::atomic::AtomicBool,
 ) -> anyhow::Result<Vec<Release>> {
-    let deadline = tokio::time::Instant::now() + limit;
+    let admission_deadline =
+        tokio::time::Instant::now() + limit + Duration::from_secs(def.min_interval_secs);
     let _slot = loop {
-        wait_ready(def, deadline).await?;
-        let slot = tokio::time::timeout_at(deadline, request_slots().acquire())
+        wait_ready(def, admission_deadline).await?;
+        let slot = tokio::time::timeout_at(admission_deadline, request_slots().acquire())
             .await
             .map_err(|_| LocalCongestion)?
             .map_err(|_| LocalCongestion)?;
@@ -543,6 +566,8 @@ async fn ask(
             break slot;
         }
     };
+    // A host's request interval must not consume the time allowed for its HTTP exchange.
+    let deadline = tokio::time::Instant::now() + limit;
     sent.store(true, std::sync::atomic::Ordering::SeqCst);
     let body = if let Some(export) = &def.code {
         // The plugin's own code makes the request and answers with the JSON its `response` reads.
@@ -795,7 +820,7 @@ async fn ask_hosts(
         if error.downcast_ref::<LocalCongestion>().is_none() {
                                         mark_down(host, pause);
                                     }
-                tracing::debug!(indexer = %def.id, "mirror request failed");
+                tracing::debug!(indexer = %def.id, outcome = ?error.downcast_ref::<RequestOutcome>(), "mirror request failed");
                                     last = Some(error);
                                 }
                             },
@@ -1463,6 +1488,40 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_rate_limit_wait_does_not_use_the_http_timeout() {
+        let _guard = NETWORK_TEST.lock().await;
+        let (base, asked) = local_server().await;
+        let mut first = local_indexer("budget-timeout", &base, "/one", false);
+        first.min_interval_secs = 1;
+        search_one(
+            &first,
+            "First",
+            &options(Kind::Series),
+            &[],
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+
+        let mut second = first.clone();
+        second.request.path = json!("/slow");
+        let started = Instant::now();
+        let found = search_one(
+            &second,
+            "Second",
+            &options(Kind::Series),
+            &[],
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(found.len(), 1);
+        assert!(started.elapsed() >= Duration::from_secs(1));
+        assert!(started.elapsed() < Duration::from_millis(1800));
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
     async fn real_indexer_requests_obey_the_budget() {
         let _guard = NETWORK_TEST.lock().await;
         let (base, asked) = local_server().await;
@@ -1618,6 +1677,7 @@ pub(crate) mod tests {
         use axum::{Router, http::StatusCode, routing::get};
         let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counted = asked.clone();
+        let slow_counted = counted.clone();
         let app = Router::new()
             .route(
                 "/empty",
@@ -1627,6 +1687,15 @@ pub(crate) mod tests {
                 "/one",
                 get(move || async move {
                     counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    json!({ "items": [{ "title": "Show S01E01", "hash": "a".repeat(40) }] })
+                        .to_string()
+                }),
+            )
+            .route(
+                "/slow",
+                get(move || async move {
+                    slow_counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(400)).await;
                     json!({ "items": [{ "title": "Show S01E01", "hash": "a".repeat(40) }] })
                         .to_string()
                 }),
@@ -2191,6 +2260,8 @@ pub(crate) mod tests {
         assert_eq!(title_of("BOCCHI THE ROCK S01"), "BOCCHI THE ROCK");
         assert_eq!(title_of("ONE PIECE 001"), "ONE PIECE");
         assert_eq!(title_of("Attack on Titan"), "Attack on Titan");
+        assert_eq!(title_of("Reply 1997"), "Reply 1997");
+        assert_eq!(title_of("Reply 1997 S01E01"), "Reply 1997");
         assert_eq!(title_of("Shingeki no Kyojin"), "Shingeki no Kyojin");
         assert_eq!(title_of("進撃の巨人"), "進撃の巨人");
         // A term that is only a number keeps itself.
@@ -2209,6 +2280,65 @@ pub(crate) mod tests {
             [
                 pair("subsplease", "Attack on Titan"),
                 pair("subsplease", "Shingeki no Kyojin")
+            ]
+        );
+    }
+
+    #[test]
+    fn nyaa_live_action_asks_four_times_for_two_names() {
+        let terms = ["Show S01E01", "Show 01", "Alias S01E01", "Alias 01"];
+        assert_eq!(
+            planned(
+                Kind::Series,
+                &terms,
+                &["nyaa-live-action", "nyaa-live-action-raw"]
+            ),
+            [
+                pair("nyaa-live-action", "Show"),
+                pair("nyaa-live-action", "Alias"),
+                pair("nyaa-live-action-raw", "Show"),
+                pair("nyaa-live-action-raw", "Alias"),
+            ]
+        );
+    }
+
+    #[test]
+    fn nyaa_live_action_keeps_a_numeric_title_year() {
+        let terms = [
+            "Reply 1997 S01E01",
+            "Reply 1997 01",
+            "Alias S01E01",
+            "Alias 01",
+        ];
+        assert_eq!(
+            planned(
+                Kind::Series,
+                &terms,
+                &["nyaa-live-action", "nyaa-live-action-raw"]
+            ),
+            [
+                pair("nyaa-live-action", "Reply 1997"),
+                pair("nyaa-live-action", "Alias"),
+                pair("nyaa-live-action-raw", "Reply 1997"),
+                pair("nyaa-live-action-raw", "Alias"),
+            ]
+        );
+    }
+
+    #[test]
+    fn nyaa_live_action_does_not_add_episode_2000_as_a_title() {
+        let terms = ["Show S01E2000", "Show 2000", "Alias S01E01", "Alias 1"];
+        assert_eq!(
+            planned(
+                Kind::Series,
+                &terms,
+                &["nyaa-live-action", "nyaa-live-action-raw"]
+            ),
+            [
+                pair("nyaa-live-action", "Show"),
+                pair("nyaa-live-action", "Alias"),
+                pair("nyaa-live-action-raw", "Show"),
+                pair("nyaa-live-action-raw", "Alias"),
             ]
         );
     }
@@ -2282,6 +2412,8 @@ pub(crate) mod tests {
                     "prowlarr",
                 ],
                 Kind::Series => &[
+                    "nyaa-live-action",
+                    "nyaa-live-action-raw",
                     "knaben",
                     "torrents-csv",
                     "aniscraper",

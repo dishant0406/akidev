@@ -623,3 +623,23 @@ Why only when dirty: the first version made the screen again on every tap. On a 
 Rejected: a navigation path just for Home (more code, and `MangaStack` is shared with the Manga hub). Resetting the chosen source to "All sources" (the source you picked stays, as it does after a relaunch).
 
 Trade-off: on iPhone, "a series covers the screen" is known from `onAppear` and `onDisappear` of the Home screen. This was not tried on a phone with a series open at the time of writing.
+
+## Asian drama title and source matching (2026-11-25)
+
+Chosen. Cinemeta remains the first series catalog. When a title has one name, Akidev asks TVmaze for the same IMDb id or TV database id. It adds at most two TVmaze names to the release search. TVmaze also supplies country and language data.
+
+Chosen. Akidev adds two fallback Nyaa live-action sources. Category `4_1` and category `4_4` each search once per title. The engine asks them only when the normal sources find nothing worth opening. The fallback search has a longer time limit.
+
+Chosen. Release matching accepts Korean, Chinese, Thai, Mandarin, and Cantonese language tokens. It also accepts Korean `제N회` and Japanese `第N回` episode forms.
+
+Chosen. A year in brackets no longer makes a series pack impossible to inspect. Akidev puts these packs last. The pack year must match the series year. The torrent or debrid file list must still prove the episode number.
+
+Chosen. Akidev applies a strict country filter only when TVmaze finds more than one same-name title from the same year. An ambiguous title must have a country token in the release name. A foreign native alias cannot bypass this filter. This stops the US The Gifted from answering a request for the Thai The Gifted.
+
+Chosen. A host rate-limit wait has its own time limit. It does not reduce the time allowed for the HTTP request.
+
+Why. The old search used one English title. It had no live-action Asian source. It treated every year-bearing pack as a film. It also accepted a same-name show from another country.
+
+Turned down. A hardcoded alias list. It would become stale. A blanket language filter would hide valid packs that do not name their language. Private trackers need accounts that this work does not have.
+
+Costs. A series detail can add one TVmaze search and detail request. The limit is two seconds. Nyaa can rate-limit a busy host. An ambiguous title with no correct country evidence shows no source instead of a wrong show.

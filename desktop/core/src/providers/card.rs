@@ -129,6 +129,10 @@ pub fn detail(
 
     Some(Detail {
         imdb_id: def.imdb_id.as_ref().and_then(|e| evaluate(e, row)),
+        tvdb_id: def.tvdb_id.as_ref().and_then(|e| evaluate(e, row)),
+        country: def.country.as_ref().and_then(|e| evaluate(e, row)),
+        language: def.language.as_ref().and_then(|e| evaluate(e, row)),
+        title_ambiguous: false,
         media,
         studios: def
             .studios
