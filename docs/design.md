@@ -643,3 +643,16 @@ Why. The old search used one English title. It had no live-action Asian source. 
 Turned down. A hardcoded alias list. It would become stale. A blanket language filter would hide valid packs that do not name their language. Private trackers need accounts that this work does not have.
 
 Costs. A series detail can add one TVmaze search and detail request. The limit is two seconds. Nyaa can rate-limit a busy host. An ambiguous title with no correct country evidence shows no source instead of a wrong show.
+
+## Languages, countries and fallback sites are data again (2026-11-25)
+
+Chosen. The sources document has three new parts. `languages` holds the codes, names, release words, short tags and country names. `aliases` says which provider gives a title's other names and which catalogue is searched when nothing was found. The `prowlarr` indexer has a `prowlarr` block with the sites to set up and the category range of each kind.
+
+Why. The Asian drama work (see the entry above) put four countries and a list of language words into `releases.rs`, the name `tvmaze` and the anime catalogue into `stream.rs`, and Prowlarr category numbers into `fallback.rs`. A new country or site then needed a build. Now it needs a publish.
+
+How. `languages.rs` is the one place that reads the list: the subtitle sources, the country filter and the three release patterns all use it. The patterns that name languages are built from the document in use and kept until the document changes. `subtitles.rs` no longer has its own table. The server reads the category range with `sources::prowlarr()`, and the deploy script reads the site list from the published document.
+
+Turned down. A second language table only for ranking: two lists would drift. Putting the ranking rules themselves in the document: they are engine behaviour and the README says so. Only their words moved.
+
+Costs. A document without these parts uses the copy built into the app, so a server or app can ship before the publish, but the new words only reach users with the publish. Old apps ignore the new fields and keep their built-in words. The country words and the Prowlarr sites in the live document must be published before the deploy script can sync them. Words in a `languages` entry must be lower case letters and digits, so a pattern can never be broken by the document.
+

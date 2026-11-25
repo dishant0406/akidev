@@ -3,7 +3,7 @@
 use crate::config::Settings;
 use crate::deliver::{self, Deliverer, Registry};
 use crate::dto::{DetailOut, HomeOut, PageOut, RowOut, media_list};
-use crate::fallback::{Failure, Fallback, Hit};
+use crate::fallback::{Failure, Fallback, Hit, categories};
 use crate::hls::Hls;
 use crate::limits::{Limiter, Usage, client_of};
 use crate::party;
@@ -506,21 +506,22 @@ async fn fallback_search(
     let number = |text: Option<String>| text.and_then(|text| text.parse::<u32>().ok());
     let (season, episode) = (number(query.season), number(query.episode));
     let kind = match query.kind.as_deref() {
-        Some("anime") => Kind::Anime,
-        Some("series") => Kind::Series,
-        Some("movie") => Kind::Movie,
-        Some(_) => {
-            return error(
-                StatusCode::BAD_REQUEST,
-                "kind must be anime, series or movie.",
-            );
-        }
+        Some(name) => match Kind::parse(name) {
+            Some(kind) => kind,
+            None => return error(StatusCode::BAD_REQUEST, "That kind is not known."),
+        },
         None => match (season, episode) {
             (Some(_), Some(_)) => Kind::Series,
             (None, Some(_)) => Kind::Anime,
             _ => Kind::Movie,
         },
     };
+    if categories(kind).is_none() {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "There is no fallback search for that kind.",
+        );
+    }
     // A search made lately costs nothing, so it is not counted against the client.
     if let Some(results) = fallback.cached(term, kind, season, episode) {
         return found(results);

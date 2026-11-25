@@ -655,7 +655,8 @@ async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -
     } else {
         media.title_variants.clone()
     };
-    if parsed.kind.shape() == Shape::Series
+    let aliases = sources::current().aliases_or_built_in().clone();
+    if let Some(provider) = aliases.identity.get(&parsed.kind)
         && titles.len() == 1
         && (detail.imdb_id.is_some() || detail.tvdb_id.is_some())
     {
@@ -663,7 +664,14 @@ async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -
         let tvdb_id = detail.tvdb_id.clone();
         let aliases = tokio::time::timeout(
             Duration::from_secs(2),
-            tvmaze_series_aliases(&media, imdb_id.as_deref(), tvdb_id.as_deref(), detail),
+            identity_aliases(
+                provider,
+                parsed.kind,
+                &media,
+                imdb_id.as_deref(),
+                tvdb_id.as_deref(),
+                detail,
+            ),
         )
         .await
         .unwrap_or_default();
@@ -673,14 +681,17 @@ async fn find_releases(config: &Config, parsed: &MediaId, detail: &mut Detail) -
         }
     }
     let found = find_releases_named(config, parsed, detail, &titles).await;
-    if !found.1.is_empty() || parsed.kind.shape() == Shape::Anime {
+    let Some(catalogue) = aliases.catalogue.get(&parsed.kind) else {
+        return found;
+    };
+    if !found.1.is_empty() {
         return found;
     }
     // A catalogue of films and series knows a Japanese show by one spelling, and releases are
     // named by another ("Tomei na Yoru ni Kakeru Kimi to" is "Love Unseen Beneath the Clear Night
-    // Sky" at the indexers). When nothing was found, the anime catalogue is asked for the names
-    // it knows the same title by, and the search is made again with them.
-    let aliases = alias_titles(&media).await;
+    // Sky" at the indexers). When nothing was found, the catalogue the document names for this kind
+    // is asked for the names it knows the same title by, and the search is made again with them.
+    let aliases = alias_titles(*catalogue, &media).await;
     if aliases.is_empty() {
         return found;
     }
@@ -771,13 +782,15 @@ fn match_series_identity(
     (names.len() > 1).then_some(names)
 }
 
-async fn tvmaze_series_aliases(
+async fn identity_aliases(
+    provider: &str,
+    kind: Kind,
     media: &crate::model::Media,
     imdb_id: Option<&str>,
     tvdb_id: Option<&str>,
     detail: &mut Detail,
 ) -> Vec<String> {
-    let Ok(page) = providers::search_provider("tvmaze", Kind::Series, &media.title).await else {
+    let Ok(page) = providers::search_provider(provider, kind, &media.title).await else {
         return Vec::new();
     };
     detail.title_ambiguous = page
@@ -799,9 +812,9 @@ async fn tvmaze_series_aliases(
 }
 
 /// The other names the anime catalogue knows `media` by, when it has the very same title.
-async fn alias_titles(media: &crate::model::Media) -> Vec<String> {
+async fn alias_titles(catalogue: Kind, media: &crate::model::Media) -> Vec<String> {
     for query in alias_queries(&media.title) {
-        let Ok(found) = crate::search::search_kind(Kind::Anime, &query).await else {
+        let Ok(found) = crate::search::search_kind(catalogue, &query).await else {
             continue;
         };
         for candidate in found.iter().take(3) {

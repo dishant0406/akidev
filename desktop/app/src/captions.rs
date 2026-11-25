@@ -2,6 +2,7 @@
 //! with, the language the viewer last chose, and the downloaded files mpv reads.
 
 use crate::player::SubtitleTrack;
+use akidev_core::languages;
 use akidev_core::subtitles::{self, Subtitle};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -38,7 +39,7 @@ pub fn group(found: Vec<Subtitle>) -> Vec<Group> {
 
 /// "en", "pt-BR" and "eng" all start with the language they are for.
 fn base(code: &str) -> String {
-    let shown = subtitles::language(code).map_or(code, |(shown, _)| shown);
+    let shown = languages::find(code).map_or_else(|| code.to_string(), |(shown, _)| shown);
     shown
         .split(['-', '_'])
         .next()
@@ -53,8 +54,8 @@ pub fn same_language(track_lang: &str, code: &str) -> bool {
 
 /// "English" for "eng", or the code as the file has it.
 pub fn track_name(track: &SubtitleTrack) -> String {
-    match subtitles::language(&track.lang) {
-        Some((_, name)) => name.to_string(),
+    match languages::find(&track.lang) {
+        Some((_, name)) => name,
         None if track.lang.is_empty() => "Unknown".to_string(),
         None => track.lang.to_uppercase(),
     }

@@ -109,21 +109,17 @@ fn search_text(query: &str, season: Option<u32>, episode: Option<u32>) -> String
     }
 }
 
-/// Prowlarr categories for the media kind. An empty category list on a result means unknown.
-fn categories(kind: Kind) -> &'static [u32] {
-    match kind {
-        Kind::Anime => &[5070],
-        Kind::Series => &[5000],
-        _ => &[2000],
-    }
+/// The first and the last Prowlarr category a kind's results may carry, from the sources document. Prowlarr
+/// is asked for the first, which also gives the ones under it. An empty category list on a result means unknown.
+pub fn categories(kind: Kind) -> Option<[u32; 2]> {
+    akidev_core::sources::prowlarr()?
+        .categories
+        .get(&kind)
+        .copied()
 }
 
 fn category_allowed(kind: Kind, category: u32) -> bool {
-    match kind {
-        Kind::Anime => category == 5070,
-        Kind::Series => (5000..6000).contains(&category),
-        _ => (2000..3000).contains(&category),
-    }
+    categories(kind).is_some_and(|[first, last]| (first..=last).contains(&category))
 }
 
 fn cache_key(text: &str, kind: Kind) -> String {
@@ -307,8 +303,8 @@ impl Fallback {
             .get(format!("{}/api/v1/search", self.base))
             .header("X-Api-Key", &self.key)
             .query(&[("query", text), ("type", "search"), ("limit", "100")]);
-        for category in categories(kind) {
-            request = request.query(&[("categories", *category)]);
+        if let Some([first, _]) = categories(kind) {
+            request = request.query(&[("categories", first)]);
         }
         let response = request
             .timeout(SEARCH_TIMEOUT)

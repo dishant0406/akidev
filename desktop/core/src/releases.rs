@@ -15,11 +15,13 @@
 //! letter such as "é" next to a number is a boundary exactly as it was.
 //! The two patterns that used look-behind are matched by hand in `bare_number`.
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use regex::Regex;
 
+use crate::languages;
 use crate::model::Release;
+use crate::sources::{self, Sources};
 
 /// Compiles a pattern written with JavaScript's ASCII `\b` and `\d`.
 fn pattern(source: &str) -> Regex {
@@ -587,16 +589,54 @@ fn structured_identity_tail(tail: &str, title: &str) -> bool {
     })
 }
 
+/// The patterns that read a language word in a release name. The words come from the `languages` of the
+/// sources document in use, so they are built again when a new document is adopted.
+struct LanguagePatterns {
+    identity_tail: Regex,
+    leading_year: Regex,
+    generic: Regex,
+}
+
+fn language_patterns() -> Arc<LanguagePatterns> {
+    static BUILT: Mutex<Option<(Arc<Sources>, Arc<LanguagePatterns>)>> = Mutex::new(None);
+    let sources = sources::current();
+    let mut built = BUILT.lock().unwrap();
+    if let Some((from, patterns)) = &*built
+        && Arc::ptr_eq(from, &sources)
+    {
+        return patterns.clone();
+    }
+    let words = languages::words(&sources);
+    // Each pattern takes the words as one alternative, or none when no language has any.
+    let alternative = |after: &str| match words.is_empty() {
+        true => String::new(),
+        false => format!("(?:{}){after}|", words.join("|")),
+    };
+    let patterns = Arc::new(LanguagePatterns {
+        identity_tail: pattern(&format!(
+            r"(?i)^(?:\d{{1,4}}(?:\b|p|v\d)|s(?:eason)?\s*\d{{1,2}}|e(?:p|pisode)?\s*\d{{1,4}}|第\s*\d{{1,4}}|제\s*\d{{1,4}}|batch\b|complete\b|box\b|set\b|part\b|vol(?:ume)?\b|cour\b|web\b|webrip\b|webdl\b|bluray\b|bdrip\b|bd\b|remux\b|remaster\b|x26[45]\b|h\s*26[45]\b|hevc\b|av1\b|aac\b|flac\b|dual\b|multi\b|{}dub\b|sub\b|proper\b|repack\b|mkv\b|mp4\b)",
+            alternative(r"\b")
+        )),
+        leading_year: pattern(&format!(
+            r"(?i)^\s*((?:19|20)\d{{2}})\s+(?:{}complete|batch|box|set|part|vol(?:ume)?|cour|web|bluray|bdrip|bd|remux|x26[45]|h\s*26[45]|hevc|aac|flac|dual|multi|audio|dub|sub)\b",
+            alternative("")
+        )),
+        // Every token must be a known label or technical metadata. A numeric prefix alone cannot
+        // establish identity for "01 Other Show".
+        generic: pattern(&format!(
+            r"(?i)^(?:\d{{1,4}}(?:v\d+)?|s\s*\d{{1,2}}(?:\s*e(?:p|pisode)?\s*\d{{1,4}})?|e(?:p|pisode)?\s*\d{{1,4}}|第\s*\d{{1,4}}(?:\s*(?:话|話|回))?|제\s*\d{{1,4}}(?:\s*회)?|(?:video|film|movie|feature|episode|main)(?:\s*\d{{1,4}})?)(?:\s+(?:\d{{3,4}}p(?:\d{{1,2}}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{{1,2}}bit|dual|multi|audio|{}dub|sub|proper|repack))*$",
+            alternative("")
+        )),
+    });
+    *built = Some((sources, patterns.clone()));
+    patterns
+}
+
 // A title prefix alone is not identity: the next token must introduce release
 // metadata, not an unexplained subtitle/sequel. Once anchored, episode titles,
 // guests and uploader tags remain free-form.
 fn identity_tail(tail: &str) -> bool {
-    static TAIL: LazyLock<Regex> = LazyLock::new(|| {
-        pattern(
-            r"(?i)^(?:\d{1,4}(?:\b|p|v\d)|s(?:eason)?\s*\d{1,2}|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}|제\s*\d{1,4}|batch\b|complete\b|box\b|set\b|part\b|vol(?:ume)?\b|cour\b|web\b|webrip\b|webdl\b|bluray\b|bdrip\b|bd\b|remux\b|remaster\b|x26[45]\b|h\s*26[45]\b|hevc\b|av1\b|aac\b|flac\b|dual\b|multi\b|hindi\b|english\b|japanese\b|korean\b|chinese\b|mandarin\b|cantonese\b|thai\b|dub\b|sub\b|tamil\b|telugu\b|proper\b|repack\b|mkv\b|mp4\b)",
-        )
-    });
-    TAIL.is_match(tail)
+    language_patterns().identity_tail.is_match(tail)
 }
 
 static SERIES_EPISODE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)\bS\d{1,2}E\d{1,4}\b"));
@@ -846,17 +886,16 @@ fn known_titles(title: &str, titles: &[String]) -> Vec<String> {
     }
 }
 
-static LEADING_YEAR: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(
-        r"(?i)^\s*((?:19|20)\d{2})\s+(?:complete|batch|box|set|part|vol(?:ume)?|cour|web|bluray|bdrip|bd|remux|x26[45]|h\s*26[45]|hevc|aac|flac|dual|multi|audio|korean|japanese|chinese|thai|english|hindi|dub|sub)\b",
-    )
-});
-
 fn episode_tail(release_title: &str, tail: &str) -> String {
-    if let Some(found) = LEADING_YEAR.captures(tail)
+    let patterns = language_patterns();
+    if let Some(found) = patterns.leading_year.captures(tail)
         && release_title.contains(&format!("({})", &found[1]))
     {
-        LEADING_YEAR.replace_all(tail, "").trim_start().to_string()
+        patterns
+            .leading_year
+            .replace_all(tail, "")
+            .trim_start()
+            .to_string()
     } else {
         tail.to_string()
     }
@@ -1127,7 +1166,7 @@ pub fn rank_releases_by(
 }
 
 /// Country evidence stops a same-name show from another country. The filter only
-/// applies to the Asian countries where this problem was measured. A year-bearing
+/// applies to a country that a language of the sources document claims. A year-bearing
 /// pack must also match the series year when the catalog reports one.
 #[allow(clippy::too_many_arguments)]
 pub fn rank_series_releases_by(
@@ -1150,7 +1189,7 @@ pub fn rank_series_releases_by(
         .cloned()
         .collect();
     let releases = &year_matches;
-    let Some(markers) = country_markers(country) else {
+    let Some(markers) = country.and_then(languages::markers_for) else {
         return rank_releases_by(
             releases,
             episode,
@@ -1184,35 +1223,6 @@ pub fn rank_series_releases_by(
         season,
         playable_codecs_only,
     )
-}
-
-fn country_markers(country: Option<&str>) -> Option<&'static [&'static str]> {
-    let country = country?.to_ascii_lowercase();
-    if country.contains("korea") || country.contains("korean") {
-        Some(&["korean", "kor", "ko"])
-    } else if country.contains("japan") || country.contains("japanese") {
-        Some(&["japanese", "jpn", "jp"])
-    } else if country.contains("china")
-        || country.contains("taiwan")
-        || country.contains("hong kong")
-        || country.contains("chinese")
-    {
-        Some(&[
-            "chinese",
-            "mandarin",
-            "cantonese",
-            "chs",
-            "cht",
-            "taiwanese",
-            "cn",
-            "zh",
-            "hk",
-        ])
-    } else if country.contains("thailand") || country.contains("thai") {
-        Some(&["thai", "th"])
-    } else {
-        None
-    }
 }
 
 // Builds the search terms used against the indexers.
@@ -1644,14 +1654,7 @@ pub fn pick_video_file_for_release<'a>(
     let generic = |name: &str| {
         let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
         let text = normalize_title(strip_leading_tags(stem));
-        static GENERIC: LazyLock<Regex> = LazyLock::new(|| {
-            pattern(
-                // Every token must be a known label or technical metadata. A numeric
-                // prefix alone cannot establish identity for "01 Other Show".
-                r"(?i)^(?:\d{1,4}(?:v\d+)?|s\s*\d{1,2}(?:\s*e(?:p|pisode)?\s*\d{1,4})?|e(?:p|pisode)?\s*\d{1,4}|第\s*\d{1,4}(?:\s*(?:话|話|回))?|제\s*\d{1,4}(?:\s*회)?|(?:video|film|movie|feature|episode|main)(?:\s*\d{1,4})?)(?:\s+(?:\d{3,4}p(?:\d{1,2}bit)?|x26[45]|h\s*26[45]|hevc|av1|aac(?:\d(?:\s*\d)?)?|flac|opus|ac3|eac3|ddp(?:\d(?:\s*\d)?)?|web(?:\s*dl|\s*rip)?|webrip|webdl|bd|bdrip|bluray|remux|\d{1,2}bit|dual|multi|audio|hindi|english|japanese|korean|chinese|mandarin|cantonese|thai|dub|sub|tamil|telugu|proper|repack))*$",
-            )
-        });
-        GENERIC.is_match(&text)
+        language_patterns().generic.is_match(&text)
     };
     let title_matches = |name: &str| known.iter().any(|title| is_relevant(name, title));
     let acronym_matches = |name: &str| {

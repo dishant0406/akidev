@@ -1,4 +1,4 @@
-// Makes Prowlarr's list of indexers match WANTED. Run by the deploy inside the frontend container
+// Makes Prowlarr's list of indexers match the `prowlarr.sites` of the sources document. Run by the deploy inside the frontend container
 // (it has node), once Prowlarr is healthy:
 //
 //   docker compose exec -T -e PROWLARR_API_KEY frontend node - < scripts/prowlarr-sync.js
@@ -7,13 +7,14 @@
 // and the next deploy tries again. Nothing here fails the deploy. Prowlarr keeps the definitions of the
 // sites it has up to date by itself.
 
-// The `definitionName` of each site, as in https://github.com/Prowlarr/Indexers/tree/master/definitions/v11.
-const WANTED = ["dmhy", "mikan", "limetorrents"];
-// Tried from the server and left out: 1337x, the Kickass mirrors, ExtraTorrent, TorrentKitty, UIndex,
+// The sites are the `definitionName` of each, as in https://github.com/Prowlarr/Indexers/tree/master/definitions/v11.
+// The list is published with the document, so changing it needs no deploy of this repository.
+// Tried from the server and left out of it: 1337x, the Kickass mirrors, ExtraTorrent, TorrentKitty, UIndex,
 // TorrentDownload and TorrentProject are all behind Cloudflare's challenge. A solver (Byparr) got two of
 // them added and then timed out on every search from this address, so none is worth a try without an
 // address Cloudflare trusts.
 
+const sourcesUrl = process.env.SOURCES_URL || "https://sources.akidev.live/sources.json";
 const base = process.env.PROWLARR_URL || "http://prowlarr:9696";
 const headers = { "X-Api-Key": process.env.PROWLARR_API_KEY || "", "Content-Type": "application/json" };
 
@@ -30,7 +31,18 @@ async function call(method, path, body) {
   return data;
 }
 
+// The sites the published document asks for. Without them nothing is added and nothing is removed.
+async function wantedSites() {
+  const response = await fetch(sourcesUrl, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`the sources document answered ${response.status}`);
+  const document = await response.json();
+  const entry = document.indexers.find((indexer) => indexer.prowlarr);
+  if (!entry) throw new Error("the sources document has no prowlarr entry yet");
+  return entry.prowlarr.sites;
+}
+
 async function main() {
+  const WANTED = await wantedSites();
   const [existing, schema, profiles] = await Promise.all([
     call("GET", "/api/v1/indexer"),
     call("GET", "/api/v1/indexer/schema"),

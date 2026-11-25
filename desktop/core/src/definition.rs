@@ -261,8 +261,40 @@ pub struct IndexerDef {
     /// For a slow service that should not be paid for on every search.
     #[serde(default)]
     pub fallback: bool,
+    /// For the server's own search through Prowlarr: the sites to set up in it, and the category range
+    /// each kind's results must fall in. Only the entry that is `server_only` has one.
+    #[serde(default)]
+    pub prowlarr: Option<ProwlarrDef>,
     pub request: RequestDef,
     pub response: ResponseDef,
+}
+
+/// How the server searches through Prowlarr.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProwlarrDef {
+    /// The `definitionName` of each Prowlarr site to set up, as in the Prowlarr indexers repository.
+    pub sites: Vec<String>,
+    /// For each kind, the first and the last Prowlarr category its results may carry. Prowlarr is asked
+    /// for the first, which also gives the ones under it. A kind that is not here has no fallback.
+    pub categories: BTreeMap<Kind, [u32; 2]>,
+}
+
+impl ProwlarrDef {
+    fn check(&self) -> anyhow::Result<()> {
+        ensure!(self.sites.len() <= 32, "too many Prowlarr sites");
+        ensure!(
+            self.sites.iter().all(|site| (1..=64).contains(&site.len())
+                && site.bytes().all(|byte| byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || byte == b'-')),
+            "a Prowlarr site is a lower case name"
+        );
+        ensure!(
+            self.categories.values().all(|[first, last]| first <= last),
+            "a category range ends before it starts"
+        );
+        Ok(())
+    }
 }
 
 fn per_term() -> Fanout {
@@ -415,6 +447,9 @@ impl IndexerDef {
                 .with_context(|| format!("\"{name}\" is not a header name"))?;
             reqwest::header::HeaderValue::from_str(value)
                 .with_context(|| format!("the value of header {name} is not allowed"))?;
+        }
+        if let Some(prowlarr) = &self.prowlarr {
+            prowlarr.check()?;
         }
         self.response.check()?;
         crate::indexers::check(self)

@@ -227,10 +227,10 @@ Edge cases:
 ## Asian drama release search (2026-11-25)
 
 1. `Streamer::plan` reads the series detail from Cinemeta.
-2. If the detail has one title, `tvmaze_series_aliases` asks TVmaze for the same IMDb id or TV database id. It adds at most two names. It also records whether the title is ambiguous. It copies country and language data when the primary catalog has none.
+2. If `aliases.identity` names a provider for this kind and the detail has one title, `identity_aliases` asks that provider (TVmaze today) for the same IMDb id or TV database id. It adds at most two names. It also records whether the title is ambiguous. It copies country and language data when the primary catalog has none.
 3. `series_search_terms` makes the episode forms for each known name.
 4. The indexer engine asks the normal sources first. If none finds enough, it asks the two Nyaa live-action sources. Each Nyaa source asks once per title.
-5. `rank_series_releases_by` applies the country filter only for an ambiguous title. The release name must have a country token. A year-bearing pack must match the series year.
+5. `rank_series_releases_by` applies the country filter only for an ambiguous title. The release name must have a word or tag of the language that `languages` links to that country (`languages::markers_for`). A country no language claims is not filtered. A year-bearing pack must match the series year.
 6. `rank_releases_by` puts named episodes first. It then puts single-file fallbacks, season packs, and year-bearing packs for file inspection.
 7. The torrent engine or debrid service reads the file list. `pick_video_file_for_release` must find the requested episode before playback starts.
 
@@ -243,3 +243,12 @@ Edge cases:
 - A Nyaa request fails or returns no rows. The other sources continue.
 - A year-bearing pack has no file for the requested episode. Playback rejects it.
 - A release names a different episode or season. The existing hard filters reject it.
+
+## Where the words come from (2026-11-25)
+
+- The language words in release names, the country filter and the subtitle language names all read `languages` from the sources document in use (`core/src/languages.rs`). A document without it uses the built-in copy.
+- When a new document is adopted, the three release patterns that hold language words are built again on the next use (`language_patterns` in `releases.rs`).
+- When no release is found for a film or a series, `aliases.catalogue` says which kind's catalogue is asked for other names. A kind that is not listed asks nobody.
+- The fallback search: `GET /v1/fallback/search` finds the kind with `Kind::parse`. A kind with no `prowlarr.categories` entry answers 400 "There is no fallback search for that kind." The category range comes from `sources::prowlarr()`, and results outside it are dropped.
+- The deploy: `scripts/prowlarr-sync.js` reads `prowlarr.sites` from `https://sources.akidev.live/sources.json`. If the document cannot be read or has no `prowlarr` entry yet, it logs that and changes nothing. Publish the document before the deploy.
+

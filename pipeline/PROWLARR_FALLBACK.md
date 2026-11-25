@@ -21,9 +21,9 @@ date by itself, so none of them is written or translated here.
 | `desktop/server/src/fallback.rs` | Asks Prowlarr, returns `{title, hash, size, seeders, source}`, finds a hash for the results that have none, caches. Each search is a task of its own: it finishes and is kept if the asker has gone, and the same search asked twice at once runs once. |
 | `desktop/server/src/api.rs` | The route, its allowance, and the `fallback` block of `/health`. |
 | `desktop/core/src/indexers/mod.rs`, `definition.rs`, `config.rs` | `fallback: true` on an indexer: asked after the others, only if `enough` says they found nothing, with `fallback_timeout_ms` (15 s) to answer, and sent with the header `x-akidev-fallback`. |
-| `desktop/sources/sources.json` | The `prowlarr` indexer, pointing at `https://api.akidev.live/v1/fallback/search`. |
+| `desktop/sources/sources.json` | The `prowlarr` indexer, pointing at `https://api.akidev.live/v1/fallback/search`, with its `prowlarr` block: the sites to set up and the category range of each kind. |
 | `docker-compose.yml` | The `prowlarr` service: pinned image, 400 MB limit, no published port, profile `fallback`. |
-| `scripts/prowlarr-sync.js` | Makes Prowlarr's indexers match its `WANTED` list; run by the deploy. |
+| `scripts/prowlarr-sync.js` | Makes Prowlarr's indexers match the `prowlarr.sites` of the published sources document; run by the deploy. |
 | `.github/workflows/deploy.yml` | Passes the secret, and checks the route after a deploy (a warning, never a failure). |
 
 ## Turning it on and off
@@ -41,8 +41,8 @@ Prowlarr is not published and Caddy does not route to it. Nothing but the `api` 
 
 - **Site definitions:** Prowlarr's own task `IndexerDefinitionUpdate` fetches them from
   `Prowlarr/Indexers` daily, into the `prowlarr-config` volume.
-- **Which sites are used:** edit `WANTED` in `scripts/prowlarr-sync.js` (a site's `definitionName`, as
-  in `Prowlarr/Indexers/definitions/v11`) and deploy. Prowlarr tests a site before adding it, so one that is
+- **Which sites are used:** edit `prowlarr.sites` of the `prowlarr` indexer in the sources document (a site's
+  `definitionName`, as in `Prowlarr/Indexers/definitions/v11`), publish it, and deploy. The sync reads the published document, so publish first. Prowlarr tests a site before adding it, so one that is
   down or behind Cloudflare is reported in the deploy log and left out; the next deploy tries again.
 - **Prowlarr itself:** the image tag in `docker-compose.yml` is pinned. Raise it when wanted; the deploy pulls it.
 

@@ -9,6 +9,7 @@ pub mod definition;
 pub mod expression;
 pub mod http;
 pub mod indexers;
+pub mod languages;
 pub mod magnet;
 pub mod media_id;
 pub mod model;

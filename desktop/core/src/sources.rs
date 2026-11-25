@@ -7,7 +7,8 @@
 //! otherwise the app keeps what it has. Nothing here runs downloaded code: a definition only
 //! says which requests to make and which fields to read.
 
-use crate::definition::{IndexerDef, MapperDef, ProviderDef, SubtitleDef};
+use crate::definition::{IndexerDef, MapperDef, ProviderDef, ProwlarrDef, SubtitleDef};
+use crate::languages::Language;
 use crate::model::Kind;
 use crate::plugin::Plugin;
 use crate::screens::Screens;
@@ -59,6 +60,14 @@ pub struct Sources {
     /// Where subtitle files come from. Absent in a document from before there were any.
     #[serde(default)]
     pub subtitles: Vec<SubtitleDef>,
+    /// Where a title's other names come from. Absent in a document from before there was any: the
+    /// built-in ones are used.
+    #[serde(default)]
+    pub aliases: Aliases,
+    /// The languages the engine knows. Absent in a document from before there were any: the built-in
+    /// ones are used.
+    #[serde(default)]
+    pub languages: Vec<Language>,
     /// Services that turn a release into a playable link. Only a plugin brings one: a signed document
     /// that did is refused, and in use this holds the plugins' own.
     #[serde(default)]
@@ -77,6 +86,19 @@ pub struct Sources {
     pub min_version_message: Option<String>,
 }
 
+/// The catalogues asked for the other names of a title, by the kind of the title being played.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Aliases {
+    /// The provider of the same kind asked for the names, the country and the language of a title that
+    /// has one name, found by its IMDb or TV database id.
+    #[serde(default)]
+    pub identity: BTreeMap<Kind, String>,
+    /// The kind whose catalogue is searched for other names when no release was found. A film or a
+    /// series may be a Japanese show that the catalogue of its own kind knows by one spelling only.
+    #[serde(default)]
+    pub catalogue: BTreeMap<Kind, Kind>,
+}
+
 impl Sources {
     /// The document's screens, or the built-in ones when it predates them.
     pub(crate) fn screens_or_built_in(&self) -> Screens {
@@ -86,6 +108,24 @@ impl Sources {
                 .clone()
                 .expect("the embedded definitions have screens")
         })
+    }
+
+    /// The document's alias sources, or the built-in ones when it predates them.
+    pub(crate) fn aliases_or_built_in(&self) -> &Aliases {
+        if self.aliases.identity.is_empty() && self.aliases.catalogue.is_empty() {
+            &built_in().aliases
+        } else {
+            &self.aliases
+        }
+    }
+
+    /// The document's languages, or the built-in ones when it predates them.
+    pub(crate) fn languages_or_built_in(&self) -> &[Language] {
+        if self.languages.is_empty() {
+            &built_in().languages
+        } else {
+            &self.languages
+        }
     }
 
     /// A mapper by id.
@@ -209,6 +249,32 @@ impl Sources {
                 .is_none_or(|message| message.chars().count() <= 300),
             "min_version_message is too long"
         );
+        for (kind, id) in &self.aliases.identity {
+            ensure!(
+                self.provider(id)
+                    .is_some_and(|provider| provider.kinds.contains(kind)),
+                "aliases ask {id} about {kind:?}, which it does not serve"
+            );
+        }
+        for (kind, from) in &self.aliases.catalogue {
+            ensure!(
+                !self.chain(*from).is_empty(),
+                "aliases for {kind:?} ask the {from:?} catalogue, which has no providers"
+            );
+        }
+        ensure!(self.languages.len() <= 256, "too many languages");
+        for (index, language) in self.languages.iter().enumerate() {
+            language
+                .check()
+                .with_context(|| format!("language {}", language.code))?;
+            ensure!(
+                self.languages[..index]
+                    .iter()
+                    .all(|other| other.code != language.code),
+                "language {} appears twice",
+                language.code
+            );
+        }
         ensure!(self.subtitles.len() <= 16, "too many subtitle sources");
         for (index, source) in self.subtitles.iter().enumerate() {
             ensure!(
@@ -399,6 +465,17 @@ pub(crate) fn use_plugins(plugins: &[Plugin]) -> Vec<Result<(), String>> {
 fn built_in() -> &'static Sources {
     static BUILT_IN: OnceLock<Sources> = OnceLock::new();
     BUILT_IN.get_or_init(|| parse(EMBEDDED.as_bytes()).expect("the embedded definitions are valid"))
+}
+
+/// How the server searches through Prowlarr, from the document in use or else the built-in one.
+pub fn prowlarr() -> Option<ProwlarrDef> {
+    let find = |sources: &Sources| {
+        sources
+            .indexers
+            .iter()
+            .find_map(|indexer| indexer.prowlarr.clone())
+    };
+    find(&current()).or_else(|| find(built_in()))
 }
 
 /// The screens in use: the document's own, or the built-in ones when it predates them.
@@ -918,6 +995,34 @@ mod tests {
         refused(
             "a page of no rows",
             changed(|d| d["providers"][1]["list"]["paging"]["per_page"] = json!(0)),
+        );
+        refused(
+            "an alias provider that does not serve the kind",
+            changed(|d| d["aliases"]["identity"]["series"] = json!("yts")),
+        );
+        refused(
+            "an alias provider that is not there",
+            changed(|d| d["aliases"]["identity"]["series"] = json!("nobody")),
+        );
+        refused(
+            "a category range that ends before it starts",
+            changed(|d| {
+                let prowlarr = d["indexers"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|indexer| indexer.get("prowlarr").is_some())
+                    .unwrap();
+                prowlarr["prowlarr"]["categories"]["movie"] = json!([3000, 2000]);
+            }),
+        );
+        refused(
+            "two languages with one code",
+            changed(|d| d["languages"][1]["code"] = json!("en")),
+        );
+        refused(
+            "a language word that is not a plain word",
+            changed(|d| d["languages"][0]["words"] = json!(["(a|b)"])),
         );
         refused(
             "a window of something that cannot be asked",

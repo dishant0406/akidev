@@ -74,77 +74,6 @@ pub struct Subtitle {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Languages
-// ---------------------------------------------------------------------------------------------
-
-/// (codes the sources use, the code shown, the name). The three-letter forms come in two
-/// spellings for some languages ("fre" and "fra"), and some sources use a region.
-const LANGUAGES: &[(&[&str], &str, &str)] = &[
-    (&["en", "eng"], "en", "English"),
-    (&["es", "spa"], "es", "Spanish"),
-    (&["fr", "fre", "fra"], "fr", "French"),
-    (&["de", "ger", "deu"], "de", "German"),
-    (&["it", "ita"], "it", "Italian"),
-    (&["pt", "por"], "pt", "Portuguese"),
-    (&["pob", "pt-br", "ptbr"], "pt-BR", "Portuguese (Brazil)"),
-    (&["ru", "rus"], "ru", "Russian"),
-    (&["ja", "jpn"], "ja", "Japanese"),
-    (&["ko", "kor"], "ko", "Korean"),
-    (&["zh", "chi", "zho", "zhc"], "zh", "Chinese"),
-    (
-        &["zht", "zh-tw", "zh-hant"],
-        "zh-TW",
-        "Chinese (Traditional)",
-    ),
-    (&["ar", "ara"], "ar", "Arabic"),
-    (&["hi", "hin"], "hi", "Hindi"),
-    (&["tr", "tur"], "tr", "Turkish"),
-    (&["pl", "pol"], "pl", "Polish"),
-    (&["nl", "dut", "nld"], "nl", "Dutch"),
-    (&["sv", "swe"], "sv", "Swedish"),
-    (&["no", "nor", "nob"], "no", "Norwegian"),
-    (&["da", "dan"], "da", "Danish"),
-    (&["fi", "fin"], "fi", "Finnish"),
-    (&["el", "gre", "ell"], "el", "Greek"),
-    (&["he", "heb"], "he", "Hebrew"),
-    (&["hu", "hun"], "hu", "Hungarian"),
-    (&["cs", "cze", "ces"], "cs", "Czech"),
-    (&["ro", "rum", "ron"], "ro", "Romanian"),
-    (&["bg", "bul"], "bg", "Bulgarian"),
-    (&["uk", "ukr"], "uk", "Ukrainian"),
-    (&["vi", "vie"], "vi", "Vietnamese"),
-    (&["th", "tha"], "th", "Thai"),
-    (&["id", "ind"], "id", "Indonesian"),
-    (&["ms", "may", "msa"], "ms", "Malay"),
-    (&["bn", "ben"], "bn", "Bengali"),
-    (&["ta", "tam"], "ta", "Tamil"),
-    (&["te", "tel"], "te", "Telugu"),
-    (&["ur", "urd"], "ur", "Urdu"),
-    (&["fa", "per", "fas"], "fa", "Persian"),
-    (&["hr", "hrv"], "hr", "Croatian"),
-    (&["sr", "srp"], "sr", "Serbian"),
-    (&["sl", "slv"], "sl", "Slovenian"),
-    (&["sk", "slo", "slk"], "sk", "Slovak"),
-    (&["ca", "cat"], "ca", "Catalan"),
-    (&["eu", "baq", "eus"], "eu", "Basque"),
-    (&["gl", "glg"], "gl", "Galician"),
-    (&["et", "est"], "et", "Estonian"),
-    (&["lv", "lav"], "lv", "Latvian"),
-    (&["lt", "lit"], "lt", "Lithuanian"),
-    (&["is", "ice", "isl"], "is", "Icelandic"),
-];
-
-/// The code and the name to show for a code a source used, or `None` for a language that is not
-/// known (the subtitle is then left out: a menu entry nobody can read is no help).
-pub fn language(code: &str) -> Option<(&'static str, &'static str)> {
-    let wanted = code.trim().to_lowercase().replace('_', "-");
-    LANGUAGES
-        .iter()
-        .find(|(codes, _, _)| codes.contains(&wanted.as_str()))
-        .map(|(_, shown, name)| (*shown, *name))
-}
-
-// ---------------------------------------------------------------------------------------------
 // Asking
 // ---------------------------------------------------------------------------------------------
 
@@ -376,7 +305,7 @@ pub fn read(def: &SubtitleDef, document: &Value, kind: Kind) -> Vec<Subtitle> {
         ) else {
             continue;
         };
-        let Some((lang, language)) = language(&code) else {
+        let Some((lang, language)) = crate::languages::find(&code) else {
             continue;
         };
         let format = fields
@@ -830,18 +759,6 @@ mod tests {
             .find(|def| def.id == "opensubtitles")
             .expect("the definitions have OpenSubtitles")
             .clone()
-    }
-
-    #[test]
-    fn a_languages_codes_are_normalised_and_an_unknown_one_is_not_guessed() {
-        assert_eq!(language("eng"), Some(("en", "English")));
-        assert_eq!(language("EN"), Some(("en", "English")));
-        assert_eq!(language("fre"), Some(("fr", "French")));
-        assert_eq!(language("fra"), Some(("fr", "French")));
-        assert_eq!(language("pob"), Some(("pt-BR", "Portuguese (Brazil)")));
-        assert_eq!(language("zh_TW"), Some(("zh-TW", "Chinese (Traditional)")));
-        assert_eq!(language("xx"), None);
-        assert_eq!(language(""), None);
     }
 
     #[test]
