@@ -568,6 +568,71 @@ enum Copy {
         static let sortRandom = "Random"
         static func chapterCount(_ count: Int) -> String { count == 1 ? "\(count) chapter" : "\(count) chapters" }
     }
+    enum Sources {
+        static func installedCount(_ count: Int) -> String { count == 1 ? "\(count) source installed" : "\(count) sources installed" }
+        static let installed = "Installed"
+        static let noSourcesYet = "No sources yet. Add a repository, then install a source from it."
+        static func sourceLine(_ languages: String, _ version: String) -> String { "\(languages) · v\(version)" }
+        static func sourceLineAdult(_ languages: String, _ version: String) -> String { "\(languages) · v\(version) · 18+" }
+        static func repositoryLanguagesAdult(_ languages: String) -> String { "\(languages) · 18+" }
+        static func notWorking(_ problem: String) -> String { "Not working: \(problem)" }
+        static let removeSource = "Remove source"
+        static func removeSourceQuestionIos(_ name: String) -> String { "Remove \(name)?" }
+        static func removeSourceQuestionAndroid(_ name: String) -> String { "Remove “\(name)”?" }
+        static let removeSourceMessage = "Its series stay in your library but cannot be read until you install it again."
+        static let addSource = "Add a source"
+        static let pasteSourceHint = "Paste the text of a source. It is checked before anything is kept."
+        static let sourceText = "Source text"
+        static func replacesSource(_ name: String, _ origin: String) -> String { "This replaces the \(name) installed from \(origin). A pasted source does not update itself, and the repository no longer updates it." }
+        static let installSource = "Install source"
+        static let checkSource = "Check source"
+        static let installing = "Installing…"
+        static func installingSourceNamed(_ name: String) -> String { "Installing \(name)" }
+        static let checking = "Checking…"
+        static let sourceDisclaimer = "Akidev does not include, offer or endorse any source. Only add one you trust: it decides which sites the app contacts."
+        static let couldNotAddSource = "Could not add this source"
+        static let couldNotReadSource = "Could not read this source"
+        static let install = "Install"
+        static func installSourceNamed(_ name: String) -> String { "Install \(name)" }
+        static func updateSourceNamed(_ name: String) -> String { "Update \(name)" }
+        static let needsNewerApp = "Needs a newer app"
+        static let cancel = "Cancel"
+        static let addRepository = "Add a repository"
+        static let addRepositoryMessage = "Enter the address of a repository folder on GitHub, or of any web folder that lists sources."
+        static let previewRepository = "Preview repository"
+        static let addRepositoryButton = "Add repository"
+        static let adding = "Adding…"
+        static let repositoryPreviewSigned = "Signed, so the app notices if it changes hands."
+        static let repositoryPreviewNotSigned = "Not signed. You are trusting this address."
+        static let repositoryDisclaimer = "Akidev does not include, offer or endorse any repository. Only add one you trust."
+        static let couldNotReadRepository = "Could not read this repository"
+        static let couldNotAddRepository = "Could not add this repository"
+        static let couldNotLoadRepository = "Could not load this repository"
+        static let loadingRepository = "Loading repository"
+        static let removeRepository = "Remove repository"
+        static let repositories = "Repositories"
+        static let repositoriesFooter = "A repository is a folder of sources, usually on GitHub. Paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a source decides which sites the app contacts."
+        static let noRepositoriesYet = "No repositories yet. Add one to find sources."
+        static let signed = "Signed"
+        static let notSigned = "Not signed"
+        static let signedRepository = "Signed repository"
+        static let repositorySigned = "This repository is signed, so the app notices if it changes hands."
+        static let repositoryNotSigned = "This repository is not signed. You are trusting its address."
+        static let noSourcesInRepository = "This repository lists no sources."
+        static let booksFooter = "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone."
+        static let addEpub = "Add an EPUB"
+        static let addCatalogueMessage = "Enter the address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed."
+        static func signInTitle(_ name: String) -> String { "Sign in to \(name)" }
+        static func signInDetails(_ host: String) -> String { "Your details go to \(host) only. Akidev keeps a session, not your password." }
+        static let signingIn = "Signing in…"
+        static let signIn = "Sign in"
+        static let signOut = "Sign out"
+        static let couldNotLoadSignIn = "Could not load the sign-in form. Close this and try again."
+        static let signedIn = "Signed in"
+        static let notSignedIn = "Not signed in"
+        static let account = "Account"
+        static let noSettingsForSource = "This source has no settings."
+    }
     enum Welcome {
         static let title = "Welcome to Akidev"
         static let body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

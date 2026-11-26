@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.SeriesRef
-import live.akidev.manga.app.plural
 import live.akidev.manga.app.SeriesRoute
 import live.akidev.manga.app.shortDate
 import live.akidev.manga.design.*

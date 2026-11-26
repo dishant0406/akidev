@@ -60,19 +60,19 @@ fun SignInSheet(source: String, onSignedIn: () -> Unit = {}, onDismiss: () -> Un
         Column(Modifier.imePadding().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AkiLogo(size = 36.dp)
-                AkiText("Sign in to ${model.name(source)}", AkiTextStyle.Title, Modifier.semantics { heading() })
+                AkiText(Copy.Sources.signInTitle(model.name(source)), AkiTextStyle.Title, Modifier.semantics { heading() })
             }
             if (form != null) {
                 form.fields.forEach { field ->
                     AkiField(field.name, values[field.id].orEmpty(), { values[field.id] = it; problem = null }, secure = field.secret, email = field.id.contains("email"), onSubmit = ::signIn)
                 }
                 problem?.let { AkiText(it, AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive) }
-                AkiButton(if (working) "Signing in…" else "Sign in", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = ready && !working) { signIn() }
-                AkiText("Your details go to ${form.host} only. Akidev keeps a session, not your password.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiButton(if (working) Copy.Sources.signingIn else Copy.Sources.signIn, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = ready && !working) { signIn() }
+                AkiText(Copy.Sources.signInDetails(form.host), AkiTextStyle.Caption, tone = AkiTone.Muted)
             } else {
-                AkiText("Could not load the sign-in form. Close this and try again.", AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive)
+                AkiText(Copy.Sources.couldNotLoadSignIn, AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive)
             }
-            AkiButton("Cancel", variant = AkiButtonVariant.Ghost, fullWidth = true) { onDismiss() }
+            AkiButton(Copy.Sources.cancel, variant = AkiButtonVariant.Ghost, fullWidth = true) { onDismiss() }
         }
     }
 }

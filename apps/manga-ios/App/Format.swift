@@ -14,11 +14,6 @@ func chapterName(number: Double?, title: String?) -> String {
     return Copy.Home.chapter
 }
 
-/// "1 source", "2 sources": the count with the right word, joined by a no-break space so they never part at the end of a line.
-func plural(_ count: Int, _ one: String, _ many: String) -> String {
-    count == 1 ? "1\u{00A0}\(one)" : "\(count)\u{00A0}\(many)"
-}
-
 /// "120 chapters" for a card, when its source said how many there are.
 func chaptersLabel(_ count: UInt32?) -> String? {
     guard let count, count > 0 else { return nil }

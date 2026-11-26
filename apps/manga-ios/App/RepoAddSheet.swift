@@ -16,26 +16,26 @@ struct RepoAddSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 AkiLogo(size: 36)
-                AkiText("Add a repository", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Sources.addRepository, .title).accessibilityAddTraits(.isHeader)
             }
             if let error {
-                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } }))
+                AkiEmptyState(title: error.title, message: error.message, action: (Copy.Home.tryAgain, { Task { await load() } }))
             } else if let view {
                 AkiText(view.info.name, .heading).accessibilityAddTraits(.isHeader)
-                AkiText(view.info.signed ? "Signed, so the app notices if it changes hands." : "Not signed. You are trusting this address.", .caption, tone: .muted)
+                AkiText(view.info.signed ? Copy.Sources.repositoryPreviewSigned : Copy.Sources.repositoryPreviewNotSigned, .caption, tone: .muted)
                 AkiCard(padding: 4) {
                     VStack(spacing: 0) {
                         ForEach(view.sources, id: \.id) { source in
-                            AkiRow(title: source.name, subtitle: "\(source.languages.joined(separator: ", ").uppercased())\(source.nsfw ? " · 18+" : "")")
+                            AkiRow(title: source.name, subtitle: source.nsfw ? Copy.Sources.repositoryLanguagesAdult(source.languages.joined(separator: ", ").uppercased()) : source.languages.joined(separator: ", ").uppercased())
                         }
                     }
                 }
-                AkiText("Akidev does not include, offer or endorse any repository. Only add one you trust.", .caption, tone: .muted)
-                AkiButton("Add repository", variant: .primary, size: .large, fullWidth: true) { Task { await add(view) } }
+                AkiText(Copy.Sources.repositoryDisclaimer, .caption, tone: .muted)
+                AkiButton(Copy.Sources.addRepositoryButton, variant: .primary, size: .large, fullWidth: true) { Task { await add(view) } }
             } else {
                 AkiSpinner().frame(maxWidth: .infinity, minHeight: 160)
             }
-            AkiButton("Cancel", variant: .ghost, fullWidth: true) { dismiss() }
+            AkiButton(Copy.Sources.cancel, variant: .ghost, fullWidth: true) { dismiss() }
         }
         .padding(24)
         }
@@ -44,7 +44,7 @@ struct RepoAddSheet: View {
 
     private func load() async {
         error = nil
-        do { view = try await model.engine.previewRepo(link: pending.address) } catch { self.error = describe(error, "Could not read this repository") }
+        do { view = try await model.engine.previewRepo(link: pending.address) } catch { self.error = describe(error, Copy.Sources.couldNotReadRepository) }
     }
 
     private func add(_ view: RepoView) async {
@@ -56,6 +56,6 @@ struct RepoAddSheet: View {
             model.refresh()
             model.tab = .sources
             dismiss()
-        } catch { self.error = describe(error, "Could not add this repository") }
+        } catch { self.error = describe(error, Copy.Sources.couldNotAddRepository) }
     }
 }

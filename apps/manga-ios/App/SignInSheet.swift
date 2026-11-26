@@ -22,21 +22,21 @@ struct SignInSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
                     AkiLogo(size: 36)
-                    AkiText("Sign in to \(model.name(of: source))", .title).accessibilityAddTraits(.isHeader)
+                    AkiText(Copy.Sources.signInTitle(model.name(of: source)), .title).accessibilityAddTraits(.isHeader)
                 }
                 if let form {
                     ForEach(form.fields, id: \.id) { field in
                         AkiField(label: field.name, text: binding(field.id), secure: field.secret, email: field.id.contains("email")) { Task { await signIn() } }
                     }
                     if let problem { AkiText(problem, .caption, tone: .destructive) }
-                    AkiButton(working ? "Signing in…" : "Sign in", variant: .primary, size: .large, fullWidth: true) { Task { await signIn() } }
+                    AkiButton(working ? Copy.Sources.signingIn : Copy.Sources.signIn, variant: .primary, size: .large, fullWidth: true) { Task { await signIn() } }
                         .disabled(working || !ready)
-                    AkiText("Your details go to \(form.host) only. Akidev keeps a session, not your password.", .caption, tone: .muted)
+                    AkiText(Copy.Sources.signInDetails(form.host), .caption, tone: .muted)
                 } else if loadFailed {
-                    AkiText("Could not load the sign-in form. Close this and try again.", .caption, tone: .destructive)
-                        .onAppear { akiAnnounce("Could not load the sign-in form. Close this and try again.") }
+                    AkiText(Copy.Sources.couldNotLoadSignIn, .caption, tone: .destructive)
+                        .onAppear { akiAnnounce(Copy.Sources.couldNotLoadSignIn) }
                 }
-                AkiButton("Cancel", variant: .ghost, fullWidth: true) { dismiss() }
+                AkiButton(Copy.Sources.cancel, variant: .ghost, fullWidth: true) { dismiss() }
             }
             .padding(24)
         }

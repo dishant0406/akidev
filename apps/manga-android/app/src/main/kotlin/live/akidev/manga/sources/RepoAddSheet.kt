@@ -58,22 +58,22 @@ fun RepoAddSheet(pending: PendingRepo, onDismiss: () -> Unit) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AkiLogo(size = 36.dp)
-                AkiText("Add a repository", AkiTextStyle.Title, Modifier.semantics { heading() })
+                AkiText(Copy.Sources.addRepository, AkiTextStyle.Title, Modifier.semantics { heading() })
             }
             val state = preview
             if (state is RepoPreview.Failed) {
-                AkiEmptyState(state.problem.title, state.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again") { attempt += 1 })
+                AkiEmptyState(state.problem.title, state.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction(Copy.Home.tryAgain) { attempt += 1 })
             } else if (state is RepoPreview.Ready) {
                 val loaded = state.view
                 AkiText(loaded.info.name, AkiTextStyle.Heading)
-                AkiText(if (loaded.info.signed) "Signed, so the app notices if it changes hands." else "Not signed. You are trusting this address.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiText(if (loaded.info.signed) Copy.Sources.repositoryPreviewSigned else Copy.Sources.repositoryPreviewNotSigned, AkiTextStyle.Caption, tone = AkiTone.Muted)
                 AkiCard(padding = 4.dp) {
                     for (source in loaded.sources) {
-                        AkiRow(source.name, subtitle = source.languages.joinToString(", ").uppercase() + if (source.nsfw) " · 18+" else "")
+                        AkiRow(source.name, subtitle = if (source.nsfw) Copy.Sources.repositoryLanguagesAdult(source.languages.joinToString(", ").uppercase()) else source.languages.joinToString(", ").uppercase())
                     }
                 }
-                AkiText("Akidev does not include, offer or endorse any repository. Only add one you trust.", AkiTextStyle.Caption, tone = AkiTone.Muted)
-                AkiButton(if (adding) "Adding…" else "Add repository", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = !adding) {
+                AkiText(Copy.Sources.repositoryDisclaimer, AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiButton(if (adding) Copy.Sources.adding else Copy.Sources.addRepositoryButton, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = !adding) {
                     if (adding) return@AkiButton
                     adding = true
                     scope.launch {
@@ -89,9 +89,9 @@ fun RepoAddSheet(pending: PendingRepo, onDismiss: () -> Unit) {
                     }
                 }
             } else {
-                Box(Modifier.fillMaxWidth().heightIn(min = 160.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Loading repository") }
+                Box(Modifier.fillMaxWidth().heightIn(min = 160.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = Copy.Sources.loadingRepository) }
             }
-            AkiButton("Cancel", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = onDismiss)
+            AkiButton(Copy.Sources.cancel, variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = onDismiss)
         }
     }
 }

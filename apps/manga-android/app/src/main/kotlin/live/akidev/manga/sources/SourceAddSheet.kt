@@ -75,30 +75,30 @@ fun SourceAddSheet(onDismiss: () -> Unit) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 AkiLogo(size = 36.dp)
-                AkiText("Add a source", AkiTextStyle.Title, Modifier.semantics { heading() })
+                AkiText(Copy.Sources.addSource, AkiTextStyle.Title, Modifier.semantics { heading() })
             }
-            AkiText("Paste the text of a source. It is checked before anything is kept.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(Copy.Sources.pasteSourceHint, AkiTextStyle.Caption, tone = AkiTone.Muted)
             AkiPasteButton { pasted -> text = pasted; step = PasteStep.Idle }
-            AkiTextArea(text, { text = it; step = PasteStep.Idle }, label = "Source text")
+            AkiTextArea(text, { text = it; step = PasteStep.Idle }, label = Copy.Sources.sourceText)
 
             val state = step
             if (state is PasteStep.Failed) {
-                AkiEmptyState(state.problem.title, state.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction("Try again") { check() })
+                AkiEmptyState(state.problem.title, state.problem.message, Modifier.heightIn(min = 240.dp), action = AkiAction(Copy.Home.tryAgain) { check() })
             } else if (state is PasteStep.Found) {
                 val found = state.source
                 AkiCard(padding = 16.dp) {
                     AkiText(found.name, AkiTextStyle.Heading)
-                    AkiText(found.languages.joinToString(", ").uppercase() + " · v${found.version}" + if (found.nsfw) " · 18+" else "", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText(if (found.nsfw) Copy.Sources.sourceLineAdult(found.languages.joinToString(", ").uppercase(), "${found.version}") else Copy.Sources.sourceLine(found.languages.joinToString(", ").uppercase(), "${found.version}"), AkiTextStyle.Caption, tone = AkiTone.Muted)
                 }
                 model.engine.installedOrigin(found.id)?.let { origin ->
-                    AkiText("This replaces the ${found.name} installed from $origin. A pasted source does not update itself, and the repository no longer updates it.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText(Copy.Sources.replacesSource(found.name, origin), AkiTextStyle.Caption, tone = AkiTone.Muted)
                 }
-                AkiButton(if (installing) "Installing…" else "Install source", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = !installing) { install() }
+                AkiButton(if (installing) Copy.Sources.installing else Copy.Sources.installSource, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true, enabled = !installing) { install() }
             } else {
-                AkiButton(if (state == PasteStep.Checking) "Checking…" else "Check source", size = AkiButtonSize.Large, fullWidth = true, enabled = state != PasteStep.Checking && json.isNotEmpty()) { check() }
+                AkiButton(if (state == PasteStep.Checking) Copy.Sources.checking else Copy.Sources.checkSource, size = AkiButtonSize.Large, fullWidth = true, enabled = state != PasteStep.Checking && json.isNotEmpty()) { check() }
             }
-            AkiText("Akidev does not include, offer or endorse any source. Only add one you trust: it decides which sites the app contacts.", AkiTextStyle.Caption, tone = AkiTone.Muted)
-            AkiButton("Cancel", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = onDismiss)
+            AkiText(Copy.Sources.sourceDisclaimer, AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiButton(Copy.Sources.cancel, variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = onDismiss)
         }
     }
 }

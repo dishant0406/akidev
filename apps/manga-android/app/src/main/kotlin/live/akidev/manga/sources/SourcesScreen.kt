@@ -18,7 +18,6 @@ import live.akidev.manga.app.CatalogueRoute
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
-import live.akidev.manga.app.plural
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.ReaderKind
 import live.akidev.manga.app.RepoRoute
@@ -42,10 +41,10 @@ fun SourcesScreen() {
     AkiRefreshable({ model.updateSources(); model.refresh() }, Modifier.fillMaxSize()) {
         AkiPage {
             item {
-                AkiHeader("Sources", subtitle = "${plural(model.sources.size, "source", "sources")} installed") {
+                AkiHeader(Copy.Home.sources, subtitle = Copy.Sources.installedCount(model.sources.size)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AkiIconButton("settings", "Settings") { router.push(SettingsRoute) }
-                        AkiIconButton("add", "Add a repository", tint = Aki.colors.primary) { sheet = SourcesSheet.Repository }
+                        AkiIconButton("settings", Copy.Settings.title) { router.push(SettingsRoute) }
+                        AkiIconButton("add", Copy.Sources.addRepository, tint = Aki.colors.primary) { sheet = SourcesSheet.Repository }
                     }
                 }
             }
@@ -61,12 +60,12 @@ fun SourcesScreen() {
     }
     when (sheet) {
         SourcesSheet.Repository -> AkiPrompt(
-            "Add a repository", "Enter the address of a repository folder on GitHub, or of any web folder that lists sources.", "github.com/owner/repository", "Preview repository",
+            Copy.Sources.addRepository, Copy.Sources.addRepositoryMessage, Copy.Welcome.AddRepository.placeholder, Copy.Sources.previewRepository,
             onDismiss = { sheet = null }, onConfirm = { sheet = null; model.propose(it) },
         )
         SourcesSheet.Source -> SourceAddSheet { sheet = null }
         SourcesSheet.Catalogue -> AkiPrompt(
-            "Add a book catalogue", "Enter the address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add catalogue", { sheet = null },
+            Copy.Books.addBookCatalogue, Copy.Sources.addCatalogueMessage, Copy.Books.catalogueAddressPlaceholder, Copy.Books.addCatalogueConfirm, { sheet = null },
             onConfirm = { address ->
                 sheet = null
                 scope.launch {
@@ -95,17 +94,17 @@ private fun BooksSection(catalogues: List<uniffi.akimanga.CatalogueInfo>, onAddC
     val model = LocalApp.current
     val router = LocalRouter.current
     AkiSection(
-        "Books",
-        footer = "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.",
+        Copy.Home.books,
+        footer = Copy.Sources.booksFooter,
     ) {
         for (catalogue in catalogues) {
-            val remove = AkiMenuItem("Remove catalogue", "trash", destructive = true) { model.engine.removeCatalogue(catalogue.url); onChanged() }
+            val remove = AkiMenuItem(Copy.Books.removeCatalogue, "trash", destructive = true) { model.engine.removeCatalogue(catalogue.url); onChanged() }
             AkiTapMenu(listOf(remove), onClick = { router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) {
                 AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true)
             }
         }
-        AkiButton("Add an EPUB", icon = "book", fullWidth = true) { model.tab = AppTab.Books; model.addingBook = true }
-        AkiButton("Add a book catalogue", icon = "add", fullWidth = true, onClick = onAddCatalogue)
+        AkiButton(Copy.Sources.addEpub, icon = "book", fullWidth = true) { model.tab = AppTab.Books; model.addingBook = true }
+        AkiButton(Copy.Books.addBookCatalogue, icon = "add", fullWidth = true, onClick = onAddCatalogue)
     }
 }
 
@@ -113,21 +112,21 @@ private fun BooksSection(catalogues: List<uniffi.akimanga.CatalogueInfo>, onAddC
 private fun InstalledSection(onAdd: () -> Unit) {
     val model = LocalApp.current
     val router = LocalRouter.current
-    AkiSection("Installed") {
-        if (model.sources.isEmpty()) AkiCard(padding = 16.dp) { AkiText("No sources yet. Add a repository, then install a source from it.", tone = AkiTone.Muted) }
+    AkiSection(Copy.Sources.installed) {
+        if (model.sources.isEmpty()) AkiCard(padding = 16.dp) { AkiText(Copy.Sources.noSourcesYet, tone = AkiTone.Muted) }
         for (source in model.sources) {
             val problem = model.sourceProblems[source.id]
-            val remove = AkiMenuItem("Remove source", "trash", destructive = true) { model.engine.removeSource(source.id); model.refresh() }
+            val remove = AkiMenuItem(Copy.Sources.removeSource, "trash", destructive = true) { model.engine.removeSource(source.id); model.refresh() }
             AkiTapMenu(listOf(remove), onClick = { router.push(SourceSettingsRoute(source.id)) }) {
                 AkiRow(
                     source.name,
-                    subtitle = problem?.let { "Not working: $it" } ?: (source.languages.joinToString(", ").uppercase() + " · v${source.version}" + if (source.nsfw) " · 18+" else ""),
+                    subtitle = problem?.let { Copy.Sources.notWorking(it) } ?: if (source.nsfw) Copy.Sources.sourceLineAdult(source.languages.joinToString(", ").uppercase(), "${source.version}") else Copy.Sources.sourceLine(source.languages.joinToString(", ").uppercase(), "${source.version}"),
                     icon = if (problem == null) "sources-solid" else "warning-solid",
                     showsChevron = true,
                 )
             }
         }
-        AkiButton("Add a source", icon = "add", fullWidth = true, onClick = onAdd)
+        AkiButton(Copy.Sources.addSource, icon = "add", fullWidth = true, onClick = onAdd)
     }
 }
 
@@ -136,16 +135,16 @@ private fun RepositoriesSection(onAdd: () -> Unit) {
     val model = LocalApp.current
     val router = LocalRouter.current
     AkiSection(
-        "Repositories",
-        footer = "A repository is a folder of sources, usually on GitHub. Paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a source decides which sites the app contacts.",
+        Copy.Sources.repositories,
+        footer = Copy.Sources.repositoriesFooter,
     ) {
-        if (model.repos.isEmpty()) AkiCard(padding = 16.dp) { AkiText("No repositories yet. Add one to find sources.", tone = AkiTone.Muted) }
+        if (model.repos.isEmpty()) AkiCard(padding = 16.dp) { AkiText(Copy.Sources.noRepositoriesYet, tone = AkiTone.Muted) }
         for (repo in model.repos) {
-            val remove = AkiMenuItem("Remove repository", "trash", destructive = true) { model.engine.removeRepo(repo.base); model.refresh() }
+            val remove = AkiMenuItem(Copy.Sources.removeRepository, "trash", destructive = true) { model.engine.removeRepo(repo.base); model.refresh() }
             AkiTapMenu(listOf(remove), onClick = { router.push(RepoRoute(repo)) }) {
-                AkiRow(repo.name, subtitle = if (repo.signed) "Signed" else "Not signed", icon = "server-solid", showsChevron = true)
+                AkiRow(repo.name, subtitle = if (repo.signed) Copy.Sources.signed else Copy.Sources.notSigned, icon = "server-solid", showsChevron = true)
             }
         }
-        AkiButton("Add a repository", icon = "add", fullWidth = true, onClick = onAdd)
+        AkiButton(Copy.Sources.addRepository, icon = "add", fullWidth = true, onClick = onAdd)
     }
 }

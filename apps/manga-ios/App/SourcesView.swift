@@ -17,11 +17,11 @@ struct SourcesView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Sources", subtitle: "\(plural(model.sources.count, "source", "sources")) installed") {
+                    AkiHeader(title: Copy.Home.sources, subtitle: Copy.Sources.installedCount(model.sources.count)) {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
-                                AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "settings", label: "Settings", action: {}).face }.akiGlass(.circle)
-                                AkiIconButton(symbol: "add", label: "Add a repository", tint: Aki.primary) { adding = true }
+                                AkiLink(value: SettingsRoute.root) { AkiIconButton(symbol: "settings", label: Copy.Settings.title, action: {}).face }.akiGlass(.circle)
+                                AkiIconButton(symbol: "add", label: Copy.Sources.addRepository, tint: Aki.primary) { adding = true }
                             }
                         }
                     }
@@ -52,59 +52,59 @@ struct SourcesView: View {
             .akiDestination(for: VoiceChoiceRoute.self) { _ in VoiceChoiceView() }
             .akiSheet(isPresented: $pasting) { SourceAddSheet() }
             .onAppear(perform: loadCatalogues)
-            .akiPrompt("Add a book catalogue", message: "Enter the address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add catalogue", text: $catalogueAddress, isPresented: $addingCatalogue) {
+            .akiPrompt(Copy.Books.addBookCatalogue, message: Copy.Sources.addCatalogueMessage, placeholder: Copy.Books.catalogueAddressPlaceholder, confirm: Copy.Books.addCatalogueConfirm, text: $catalogueAddress, isPresented: $addingCatalogue) {
                 let address = catalogueAddress
                 catalogueAddress = ""
                 Task {
                     do {
                         _ = try await model.engine.addCatalogue(url: address)
                         loadCatalogues()
-                    } catch { catalogueProblem = describe(error, "Could not add the catalogue") }
+                    } catch { catalogueProblem = describe(error, Copy.Books.couldNotAddCatalogue) }
                 }
             }
             .akiAlert(catalogueProblem?.title ?? "", message: catalogueProblem?.message, isPresented: Binding(get: { catalogueProblem != nil }, set: { if !$0 { catalogueProblem = nil } }))
-            .akiPrompt("Add a repository", message: "Enter the address of a repository folder on GitHub, or of any web folder that lists sources.", placeholder: "github.com/owner/repository", confirm: "Preview repository", text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
+            .akiPrompt(Copy.Sources.addRepository, message: Copy.Sources.addRepositoryMessage, placeholder: Copy.Welcome.AddRepository.placeholder, confirm: Copy.Sources.previewRepository, text: $link, isPresented: $adding) { model.propose(repository: link); link = "" }
         }
     }
 }
 
 extension SourcesView {
     @ViewBuilder fileprivate var installedSection: some View {
-                    AkiSection(title: "Installed") {
-                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText("No sources yet. Add a repository, then install a source from it.", tone: .muted) } }
+                    AkiSection(title: Copy.Sources.installed) {
+                        if model.sources.isEmpty { AkiCard(padding: 16) { AkiText(Copy.Sources.noSourcesYet, tone: .muted) } }
                         ForEach(model.sources, id: \.id) { source in
                             AkiLink(value: source.id) {
-                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { "Not working: \($0)" } ?? "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")", icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
+                                AkiRow(title: source.name, subtitle: model.sourceProblems[source.id].map { Copy.Sources.notWorking($0) } ?? (source.nsfw ? Copy.Sources.sourceLineAdult(source.languages.joined(separator: ", ").uppercased(), "\(source.version)") : Copy.Sources.sourceLine(source.languages.joined(separator: ", ").uppercased(), "\(source.version)")), icon: model.sourceProblems[source.id] == nil ? "sources-solid" : "warning-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove source", icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
+                            .akiContextMenu([AkiMenuItem(title: Copy.Sources.removeSource, icon: "trash", destructive: true) { try? model.engine.removeSource(id: source.id); model.refresh() }])
                         }
-                        AkiButton("Add a source", icon: "add", fullWidth: true) { pasting = true }
+                        AkiButton(Copy.Sources.addSource, icon: "add", fullWidth: true) { pasting = true }
                     }
     }
 
     @ViewBuilder fileprivate var booksSection: some View {
-                    AkiSection(title: "Books", footer: "Add an EPUB from your device, or a catalogue of books by its address (an OPDS feed). Akidev does not include, offer or endorse any catalogue. Books are read in the Books tab and stay on this phone.") {
+                    AkiSection(title: Copy.Home.books, footer: Copy.Sources.booksFooter) {
                         ForEach(catalogues, id: \.url) { catalogue in
                             AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
                                 AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove catalogue", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
+                            .akiContextMenu([AkiMenuItem(title: Copy.Books.removeCatalogue, icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); loadCatalogues() }])
                         }
-                        AkiButton("Add an EPUB", icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
-                        AkiButton("Add a book catalogue", icon: "add", fullWidth: true) { addingCatalogue = true }
+                        AkiButton(Copy.Sources.addEpub, icon: "book", fullWidth: true) { model.tab = .books; model.addingBook = true }
+                        AkiButton(Copy.Books.addBookCatalogue, icon: "add", fullWidth: true) { addingCatalogue = true }
                     }
     }
 
     @ViewBuilder fileprivate var repositoriesSection: some View {
-                    AkiSection(title: "Repositories", footer: "A repository is a folder of sources, usually on GitHub. Paste its address. Akidev does not include, offer or endorse any. Only add repositories you trust: a source decides which sites the app contacts.") {
-                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText("No repositories yet. Add one to find sources.", tone: .muted) } }
+                    AkiSection(title: Copy.Sources.repositories, footer: Copy.Sources.repositoriesFooter) {
+                        if model.repos.isEmpty { AkiCard(padding: 16) { AkiText(Copy.Sources.noRepositoriesYet, tone: .muted) } }
                         ForEach(model.repos, id: \.base) { repo in
                             AkiLink(value: repo) {
-                                AkiRow(title: repo.name, subtitle: repo.signed ? "Signed" : "Not signed", icon: "server-solid", showsChevron: true)
+                                AkiRow(title: repo.name, subtitle: repo.signed ? Copy.Sources.signed : Copy.Sources.notSigned, icon: "server-solid", showsChevron: true)
                             }
-                            .akiContextMenu([AkiMenuItem(title: "Remove repository", icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
+                            .akiContextMenu([AkiMenuItem(title: Copy.Sources.removeRepository, icon: "trash", destructive: true) { try? model.engine.removeRepo(base: repo.base); model.refresh() }])
                         }
-                        AkiButton("Add a repository", icon: "add", fullWidth: true) { adding = true }
+                        AkiButton(Copy.Sources.addRepository, icon: "add", fullWidth: true) { adding = true }
                     }
     }
 }
@@ -127,17 +127,17 @@ struct RepoScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiBackHeader(title: repo.name, subtitle: signed ? "Signed repository" : "Not signed", back: { dismiss() })
+                AkiBackHeader(title: repo.name, subtitle: signed ? Copy.Sources.signedRepository : Copy.Sources.notSigned, back: { dismiss() })
                 if let error {
-                    AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load() } })).frame(minHeight: 260)
+                    AkiEmptyState(title: error.title, message: error.message, action: (Copy.Home.tryAgain, { Task { await load() } })).frame(minHeight: 260)
                 } else if !loaded {
                     AkiSpinner().frame(maxWidth: .infinity, minHeight: 200)
                 } else {
-                    if sources.isEmpty { AkiText("This repository lists no sources.", tone: .muted) }
+                    if sources.isEmpty { AkiText(Copy.Sources.noSourcesInRepository, tone: .muted) }
                     ForEach(sources, id: \.id) { source in
-                        AkiRow(title: source.name, subtitle: "\(source.languages.joined(separator: ", ").uppercased()) · v\(source.version)\(source.nsfw ? " · 18+" : "")") { action(for: source) }
+                        AkiRow(title: source.name, subtitle: (source.nsfw ? Copy.Sources.sourceLineAdult(source.languages.joined(separator: ", ").uppercased(), "\(source.version)") : Copy.Sources.sourceLine(source.languages.joined(separator: ", ").uppercased(), "\(source.version)"))) { action(for: source) }
                     }
-                    AkiText(signed ? "This repository is signed, so the app notices if it changes hands." : "This repository is not signed. You are trusting its address.", .caption, tone: .muted)
+                    AkiText(signed ? Copy.Sources.repositorySigned : Copy.Sources.repositoryNotSigned, .caption, tone: .muted)
                 }
             }
             .akiPage(narrow: true)
@@ -154,10 +154,10 @@ struct RepoScreen: View {
             AkiSpinner()
         } else {
             switch source.state {
-            case .notInstalled: AkiButton("Install", variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel("Install \(source.name)")
-            case .updateAvailable: AkiButton("Update", variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel("Update \(source.name)")
-            case .installed: AkiBadge("Installed", icon: "tick")
-            case .needsNewerApp: AkiBadge("Needs a newer app")
+            case .notInstalled: AkiButton(Copy.Sources.install, variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel(Copy.Sources.installSourceNamed(source.name))
+            case .updateAvailable: AkiButton(Copy.Listen.update, variant: .primary, size: .small) { Task { await install(source) } }.accessibilityLabel(Copy.Sources.updateSourceNamed(source.name))
+            case .installed: AkiBadge(Copy.Sources.installed, icon: "tick")
+            case .needsNewerApp: AkiBadge(Copy.Sources.needsNewerApp)
             }
         }
     }
@@ -169,7 +169,7 @@ struct RepoScreen: View {
             sources = view.sources.filter { !$0.nsfw }
             signed = view.info.signed
             loaded = true
-        } catch { self.error = describe(error, "Could not load this repository") }
+        } catch { self.error = describe(error, Copy.Sources.couldNotLoadRepository) }
     }
 
     private func install(_ source: RepoSource) async {
@@ -179,7 +179,7 @@ struct RepoScreen: View {
             _ = try await model.engine.installFromRepo(base: repo.base, source: source.id)
             model.refresh()
             await load()
-        } catch { self.error = describe(error, "Could not add this source") }
+        } catch { self.error = describe(error, Copy.Sources.couldNotAddSource) }
     }
 }
 
@@ -196,9 +196,9 @@ struct SourceSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiBackHeader(title: model.name(of: source), subtitle: "Settings", back: { dismiss() })
+                AkiBackHeader(title: model.name(of: source), subtitle: Copy.Settings.title, back: { dismiss() })
                 if let info = model.sources.first(where: { $0.id == source }), info.hasSignIn { accountRow(signedIn: info.signedIn) }
-                if settings.isEmpty && !hasAccount { AkiText("This source has no settings.", tone: .muted) }
+                if settings.isEmpty && !hasAccount { AkiText(Copy.Sources.noSettingsForSource, tone: .muted) }
                 ForEach(settings, id: \.id) { setting in
                     AkiCard(padding: 16) {
                         AkiSelect(title: setting.name, selection: Binding(
@@ -211,14 +211,14 @@ struct SourceSettingsView: View {
                         ), options: setting.options.map { ($0.value, $0.name) })
                     }
                 }
-                AkiButton("Remove source", icon: "trash", variant: .destructive, fullWidth: true) { removing = true }.padding(.top, 8)
+                AkiButton(Copy.Sources.removeSource, icon: "trash", variant: .destructive, fullWidth: true) { removing = true }.padding(.top, 8)
             }
             .akiPage(narrow: true)
         }
         .background(AkiBackdrop())
         .akiNoNavigationBar()
         .hidesTabBar()
-        .akiConfirm("Remove \(model.name(of: source))?", message: "Its series stay in your library but cannot be read until you install it again.", confirm: "Remove source", isPresented: $removing) {
+        .akiConfirm(Copy.Sources.removeSourceQuestionIos(model.name(of: source)), message: Copy.Sources.removeSourceMessage, confirm: Copy.Sources.removeSource, isPresented: $removing) {
             try? model.engine.removeSource(id: source)
             model.refresh()
             dismiss()
@@ -232,12 +232,12 @@ struct SourceSettingsView: View {
 
     @ViewBuilder private func accountRow(signedIn: Bool) -> some View {
         if signedIn {
-            AkiRow(title: signedInAs ?? "Account", subtitle: "Signed in") {
-                AkiButton("Sign out", size: .small) { Task { try? await model.engine.signOut(source: source); model.refresh() } }
+            AkiRow(title: signedInAs ?? Copy.Sources.account, subtitle: Copy.Sources.signedIn) {
+                AkiButton(Copy.Sources.signOut, size: .small) { Task { try? await model.engine.signOut(source: source); model.refresh() } }
             }
         } else {
-            AkiRow(title: "Account", subtitle: "Not signed in") {
-                AkiButton("Sign in", variant: .primary, size: .small) { signingIn = true }
+            AkiRow(title: Copy.Sources.account, subtitle: Copy.Sources.notSignedIn) {
+                AkiButton(Copy.Sources.signIn, variant: .primary, size: .small) { signingIn = true }
             }
         }
     }

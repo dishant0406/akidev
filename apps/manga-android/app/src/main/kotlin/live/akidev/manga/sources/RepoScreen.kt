@@ -59,21 +59,21 @@ fun RepoScreen(repo: RepoInfo) {
         AkiPage(underTabBar = false) {
             val loaded = view
             val problem = error
-            item { AkiBackHeader(repo.name, back = router::back, subtitle = if (loaded?.info?.signed == true) "Signed repository" else "Not signed") }
+            item { AkiBackHeader(repo.name, back = router::back, subtitle = if (loaded?.info?.signed == true) Copy.Sources.signedRepository else Copy.Sources.notSigned) }
             if (problem != null) {
-                item { AkiEmptyState(problem.title, problem.message, Modifier.heightIn(min = 260.dp), action = AkiAction("Try again") { scope.launch { load() } }) }
+                item { AkiEmptyState(problem.title, problem.message, Modifier.heightIn(min = 260.dp), action = AkiAction(Copy.Home.tryAgain) { scope.launch { load() } }) }
             } else if (loaded == null) {
                 item { Box(Modifier.fillMaxWidth().heightIn(min = 200.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
             } else {
                 items(loaded.sources.size) { index ->
                     val source = loaded.sources[index]
-                    AkiRow(source.name, subtitle = source.languages.joinToString(", ").uppercase() + " · v${source.version}" + if (source.nsfw) " · 18+" else "") {
+                    AkiRow(source.name, subtitle = if (source.nsfw) Copy.Sources.sourceLineAdult(source.languages.joinToString(", ").uppercase(), "${source.version}") else Copy.Sources.sourceLine(source.languages.joinToString(", ").uppercase(), "${source.version}")) {
                         RepoAction(source, installing = source.id in working) { install(source) }
                     }
                 }
                 item {
                     AkiText(
-                        if (loaded.info.signed) "This repository is signed, so the app notices if it changes hands." else "This repository is not signed. You are trusting its address.",
+                        if (loaded.info.signed) Copy.Sources.repositorySigned else Copy.Sources.repositoryNotSigned,
                         AkiTextStyle.Caption, tone = AkiTone.Muted,
                     )
                 }
@@ -85,13 +85,13 @@ fun RepoScreen(repo: RepoInfo) {
 @Composable
 private fun RepoAction(source: RepoSource, installing: Boolean, onInstall: () -> Unit) {
     if (installing) {
-        AkiSpinner(label = "Installing ${source.name}")
+        AkiSpinner(label = Copy.Sources.installingSourceNamed(source.name))
         return
     }
     when (source.state) {
-        SourceState.NOT_INSTALLED -> AkiButton("Install", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Install ${source.name}", onClick = onInstall)
-        SourceState.UPDATE_AVAILABLE -> AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Update ${source.name}", onClick = onInstall)
-        SourceState.INSTALLED -> AkiBadge("Installed", icon = "tick")
-        SourceState.NEEDS_NEWER_APP -> AkiBadge("Needs a newer app")
+        SourceState.NOT_INSTALLED -> AkiButton(Copy.Sources.install, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = Copy.Sources.installSourceNamed(source.name), onClick = onInstall)
+        SourceState.UPDATE_AVAILABLE -> AkiButton(Copy.Listen.update, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = Copy.Sources.updateSourceNamed(source.name), onClick = onInstall)
+        SourceState.INSTALLED -> AkiBadge(Copy.Sources.installed, icon = "tick")
+        SourceState.NEEDS_NEWER_APP -> AkiBadge(Copy.Sources.needsNewerApp)
     }
 }
