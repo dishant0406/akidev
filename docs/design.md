@@ -669,3 +669,22 @@ what both phone apps share.
 **Trade-off.** Nothing here refreshes the trackers each day or signs a publish any more. The built plugin files are in the
 sources repo, but the plugins' Rust source is only in this repo's git history, before this commit.
 
+## One copy and one set of tokens for both phone apps (2026-11-26)
+
+**Chosen.** The words and the design tokens of the iPhone and Android apps live in `content/manga/`: `tokens.json` and one
+`copy/<area>.json` per area of the app. `content/manga/generate.py` writes typed constants from them: `Copy.Home.title`
+in Swift (`App/UI/Generated/Copy.swift`, `TokenValues.swift`) and in Kotlin (`AkiCopy.kt`, `AkiTokenValues.kt`). The generated files are
+committed. `generate.py --check` and `check-copy.sh` run at the start of both release scripts.
+
+**Why.** The two apps said the same things in two places, so a fix or a new word had to be made twice. One source also lets
+the store text and the apps share words later.
+
+**Turned down.** Native string files (`Localizable.xcstrings`, `strings.xml`): translation-ready, but every call site changes,
+placeholders differ between the platforms and plurals need extra rules. The app is English only. Moving to native files later
+is a change inside `generate.py` and one call-site pattern.
+
+**Trade-off.** There is no translation support today. Plurals are English only (`one` and `other`). Where the two apps used
+different words for the same thing, both words were kept under keys that end in `Ios` and `Android`; the owner settles them
+one by one. A few places in the code still compare against English text (`said.endsWith("is in your library.")` in `AppModel.kt`,
+`contains("could not reach")` in `ShareModel.kt`): they break silently if that copy changes.
+

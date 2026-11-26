@@ -26,6 +26,7 @@ done
 [ -n "$notes" ] || { echo "Pass the release notes as an argument."; exit 1; }
 
 require_clean_tree
+check_content
 echo "== 0/3 Set the version"
 fastlane android bump ${version_arg[@]+"${version_arg[@]}"}
 commit_version Android

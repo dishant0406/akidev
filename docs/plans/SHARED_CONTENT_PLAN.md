@@ -1,6 +1,6 @@
 # Shared content plan: one copy and one set of tokens for both phone apps
 
-Goal: the iPhone app and the Android app say the same words and use the same colors. Today each app keeps its own copy of both. This plan puts one source of truth in `content/manga/` and generates the Swift and Kotlin code from it. This is a plan. Nothing here is built yet.
+Goal: the iPhone app and the Android app say the same words and use the same colors. Today each app keeps its own copy of both. This plan puts one source of truth in `content/manga/` and generates the Swift and Kotlin code from it. Status (2026-11-26): steps 1 to 4 are done on the branch `repo-structure` (typed constants, one JSON file per area). Step 5 (store text) is not done. Settle the `Ios`/`Android` key pairs one by one.
 
 ## What exists today
 

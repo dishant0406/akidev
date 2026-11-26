@@ -253,3 +253,13 @@ Edge cases:
 - The fallback search: `GET /v1/fallback/search` finds the kind with `Kind::parse`. A kind with no `prowlarr.categories` entry answers 400 "There is no fallback search for that kind." The category range comes from `sources::prowlarr()`, and results outside it are dropped.
 - The deploy: `scripts/prowlarr-sync.js` reads `prowlarr.sites` from `https://sources.akidev.live/sources.json`. If the document cannot be read or has no `prowlarr` entry yet, it logs that and changes nothing. Publish the document before the deploy.
 
+## Changing a word or a color of the phone apps (2026-11-26)
+
+1. Edit the value in `content/manga/copy/<area>.json` (a word) or `content/manga/tokens.json` (a color, an opacity, a radius).
+2. Run `python3 content/manga/generate.py`. It rewrites `Copy.swift`, `TokenValues.swift`, `AkiCopy.kt` and `AkiTokenValues.kt`.
+3. Use the new key as `Copy.<Area>.<key>` in both apps. A value inside a sentence is a function: `Copy.Library.seriesCount(n)`.
+4. Commit the JSON and the generated files together. `python3 content/manga/generate.py --check` fails if they differ.
+5. `bash content/manga/check-copy.sh` fails when text is written directly in a screen. A deliberate exception ends its line with `// copy: ok`.
+6. Both release scripts run steps 4 and 5 first and stop if one fails.
+Text that comes from a source or a server, icon names, saved setting values and format patterns stay in code.
+

@@ -16,3 +16,9 @@ commit_version() {
   git commit -q -m "Version $version: $1"
   git push
 }
+
+# The shared copy and tokens must match the generated Swift and Kotlin, and no screen may hold text of its own.
+check_content() {
+  python3 content/manga/generate.py --check
+  bash content/manga/check-copy.sh
+}

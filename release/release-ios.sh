@@ -28,6 +28,7 @@ done
 : "${ASC_ISSUER_ID:?ASC_ISSUER_ID is not set. Run: source ~/.zshrc}"
 
 require_clean_tree
+check_content
 echo "== 0/2 Set the version"
 fastlane ios bump ${version_arg[@]+"${version_arg[@]}"}
 commit_version iPhone
