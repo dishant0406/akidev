@@ -30,21 +30,18 @@ fun WelcomeScreen() {
     ) {
         AkiLogo(Modifier.shadow(20.dp, AkiShapes.rounded(26.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow), size = 120.dp)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            AkiText("Welcome to Akidev", AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
-            AkiText(
-                "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer.",
-                AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center,
-            )
+            AkiText(Copy.Welcome.title, AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
+            AkiText(Copy.Welcome.body, AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
         }
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AkiPasteButton { model.propose(it) }
-            AkiButton("Type an address", Modifier.fillMaxWidth(), icon = "keyboard", fullWidth = true) { typing = true }
+            AkiButton(Copy.Welcome.typeAddressButton, Modifier.fillMaxWidth(), icon = "keyboard", fullWidth = true) { typing = true }
         }
-        AkiText("Only add repositories you trust.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
+        AkiText(Copy.Welcome.caption, AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
     }
     if (typing) {
         AkiPrompt(
-            "Add a repository", "Enter the address of a repository, for example a folder on GitHub.", "github.com/owner/repository", "Continue",
+            Copy.Welcome.AddRepository.title, Copy.Welcome.AddRepository.message, Copy.Welcome.AddRepository.placeholder, Copy.Welcome.AddRepository.confirm,
             onDismiss = { typing = false }, onConfirm = { typing = false; model.propose(it) },
         )
     }

@@ -12,20 +12,20 @@ struct WelcomeView: View {
             AkiLogo(size: 120)
                 .shadow(color: Aki.shadow, radius: 20, y: 8)
             VStack(spacing: 10) {
-                AkiText("Welcome to Akidev", .display, align: .center)
-                AkiText("Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer.", .body, tone: .muted, align: .center)
+                AkiText(Copy.Welcome.title, .display, align: .center)
+                AkiText(Copy.Welcome.body, .body, tone: .muted, align: .center)
             }
             VStack(spacing: 12) {
                 AkiPasteButton { model.propose(repository: $0) }
-                AkiButton("Type an address", icon: "keyboard", fullWidth: true) { typing = true }
+                AkiButton(Copy.Welcome.typeAddressButton, icon: "keyboard", fullWidth: true) { typing = true }
             }
             .padding(.top, 8)
-            AkiText("Only add repositories you trust.", .caption, tone: .muted, align: .center)
+            AkiText(Copy.Welcome.caption, .caption, tone: .muted, align: .center)
             Spacer(minLength: 40)
         }
         .padding(.horizontal, 28)
         .frame(maxWidth: .infinity, minHeight: 560)
-        .akiPrompt("Add a repository", message: "Enter the address of a repository, for example a folder on GitHub.", placeholder: "github.com/owner/repository", confirm: "Continue", text: $typed, isPresented: $typing) {
+        .akiPrompt(Copy.Welcome.AddRepository.title, message: Copy.Welcome.AddRepository.message, placeholder: Copy.Welcome.AddRepository.placeholder, confirm: Copy.Welcome.AddRepository.confirm, text: $typed, isPresented: $typing) {
             model.propose(repository: typed)
             typed = ""
         }
