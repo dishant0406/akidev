@@ -1,0 +1,18 @@
+# Shared by release-ios.sh and release-android.sh. Source it; do not run it.
+
+# A release must match a commit, so stop if tracked files have uncommitted changes.
+require_clean_tree() {
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "Commit or stash your changes first. A release must match a commit."
+    exit 1
+  fi
+}
+
+# Commit and push the version files, only if the bump changed them. Argument: a label such as "iPhone".
+commit_version() {
+  git add manga-app/project.yml manga-android/app/build.gradle.kts
+  git diff --cached --quiet && return
+  version="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' manga-app/project.yml)"
+  git commit -q -m "Version $version: $1"
+  git push
+}

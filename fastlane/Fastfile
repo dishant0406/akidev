@@ -1,0 +1,196 @@
+# Release lanes for the iPhone and Android apps. Run them from the repo root, for example:
+#   fastlane ios upload
+#   fastlane ios release rollout:phased
+#   fastlane android release
+# Every lane takes options as name:value. Run `fastlane lanes` to see them all.
+
+ROOT = File.expand_path("..", __dir__)
+BUNDLE_ID = "live.akidev.manga"
+TRACKS = %w[internal alpha beta production]
+GRADLE_FILE = "#{ROOT}/manga-android/app/build.gradle.kts"
+PROJECT_YML = "#{ROOT}/manga-app/project.yml"
+
+# ---------- helpers ----------
+
+# Version numbers live in the app projects, so the lanes read them from there.
+def ios_version
+  File.read(PROJECT_YML)[/MARKETING_VERSION:\s*"([^"]+)"/, 1]
+end
+
+def android_version_code
+  File.read(GRADLE_FILE)[/versionCode\s*=\s*(\d+)/, 1]
+end
+
+def android_version_name
+  File.read(GRADLE_FILE)[/versionName\s*=\s*"([^"]+)"/, 1]
+end
+
+# Writes one version name into both apps, so they never drift apart.
+def write_version(version)
+  yml = File.read(PROJECT_YML).sub(/(MARKETING_VERSION:\s*)"[^"]*"/, "\\1\"#{version}\"")
+  File.write(PROJECT_YML, yml)
+  gradle = File.read(GRADLE_FILE).sub(/versionName\s*=\s*"[^"]*"/, %(versionName = "#{version}"))
+  File.write(GRADLE_FILE, gradle)
+end
+
+def make_sure_versions_match
+  return if ios_version == android_version_name
+  UI.user_error!("iPhone is #{ios_version} but Android is #{android_version_name}. Pass --version to set both.")
+end
+
+# Release notes come from the notes: option. A release without notes stops.
+def release_notes(options)
+  options[:notes] || UI.user_error!('No release notes. Pass notes:"..."')
+end
+
+def asc_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: ENV.fetch("ASC_KEY_PATH")
+  )
+end
+
+def newest_build(app)
+  app.get_builds(sort: "-uploadedDate", limit: 1).first
+end
+
+def play_options
+  { package_name: BUNDLE_ID, json_key_data: ENV.fetch("PLAY_JSON_KEY_DATA") }
+end
+
+# Tells Play to send only what we pass, and nothing from the store listing.
+SKIP_LISTING = {
+  skip_upload_metadata: true, skip_upload_images: true,
+  skip_upload_screenshots: true, skip_upload_changelogs: true
+}
+
+# ---------- iPhone ----------
+
+platform :ios do
+  desc "Archive the app and upload it to TestFlight. Options: build_only:true (no upload), wait:true (wait until Apple has processed the new build)"
+  lane :upload do |options|
+    asc_key
+    app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
+    before = newest_build(app)&.version
+    sh({ "BUILD_ONLY" => options[:build_only] ? "1" : nil }.compact, "#{ROOT}/manga-app/scripts/testflight.sh")
+    next if options[:build_only] || !options[:wait]
+
+    # Apple needs a few minutes: wait until a build newer than `before` is processed (40 minutes at most).
+    ready = false
+    80.times do
+      build = newest_build(app)
+      UI.message("newest build: #{build&.version} #{build&.processing_state}")
+      if build && build.version != before
+        UI.user_error!("Apple rejected build #{build.version}") if build.processing_state == "INVALID"
+        ready = build.processing_state == "VALID"
+      end
+      break if ready
+      sleep 30
+    end
+    UI.user_error!("The build was not ready after 40 minutes. Run `fastlane ios status` later.") unless ready
+  end
+
+  desc "Set the version in both apps. Option: version:<x.y> (default: keep). Stops if that version is already on the App Store"
+  lane :bump do |options|
+    asc_key
+    write_version(options[:version]) if options[:version]
+    make_sure_versions_match
+    live = Spaceship::ConnectAPI::App.find(BUNDLE_ID).get_app_store_versions.find { |v| v.version_string == ios_version && v.app_store_state == "READY_FOR_SALE" }
+    UI.user_error!("#{ios_version} is already on the App Store. Pass --version with a higher number.") if live
+  end
+
+  desc "Show the latest TestFlight builds and App Store versions"
+  lane :status do
+    asc_key
+    app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
+    UI.header("TestFlight builds")
+    app.get_builds(sort: "-uploadedDate").first(3).each { |b| UI.message("build #{b.version}  #{b.processing_state}") }
+    UI.header("App Store versions")
+    app.get_app_store_versions.first(3).each { |v| UI.message("#{v.version_string}  #{v.app_store_state}") }
+  end
+
+  desc "Send a TestFlight build to the App Store. Options: build:<number> (default: newest), version:<x.y> (default: project.yml), rollout:phased (7-day phased release), manual:true (do not release by itself after approval), notes:\"...\""
+  lane :release do |options|
+    key = asc_key
+    build = options[:build] || latest_testflight_build_number(api_key: key, app_identifier: BUNDLE_ID)
+    version = options[:version] || ios_version
+    notes = release_notes(options)
+    UI.important("Submitting #{version} (build #{build}) for review")
+
+    deliver(
+      api_key: key, app_identifier: BUNDLE_ID,
+      app_version: version, build_number: build.to_s,
+      skip_binary_upload: true, skip_screenshots: true,
+      metadata_path: Dir.mktmpdir, # empty on purpose: only the release notes below are sent
+      release_notes: { "en-US" => notes },
+      submit_for_review: true, force: true,
+      automatic_release: !options[:manual],
+      phased_release: options[:rollout] == "phased",
+      run_precheck_before_submit: false
+    )
+  end
+end
+
+# ---------- Android ----------
+
+platform :android do
+  desc "Set the version in both apps and raise versionCode above every code on Play (only if needed). Option: version:<x.y> (default: keep)"
+  lane :bump do |options|
+    write_version(options[:version]) if options[:version]
+    make_sure_versions_match
+    play_max = TRACKS.flat_map { |t| google_play_track_version_codes(**play_options, track: t) }.map(&:to_i).max.to_i
+    code = [android_version_code.to_i, play_max + 1].max
+    File.write(GRADLE_FILE, File.read(GRADLE_FILE).sub(/versionCode\s*=\s*\d+/, "versionCode = #{code}"))
+    UI.message("Android versionCode is #{code} (Play has #{play_max})")
+  end
+
+  desc "Build the signed release bundle (.aab)"
+  lane :build do
+    sh("cd #{ROOT}/manga-android && scripts/build-engine.sh")
+    java = "export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ANDROID_HOME=/opt/homebrew/share/android-commandlinetools; source ~/.gradle/aki-env.sh"
+    sh("bash", "-c", "#{java}; cd #{ROOT}/manga-android && ./gradlew :app:bundleRelease")
+  end
+
+  desc "Build and upload to a Play track. Options: track:internal|alpha|beta|production (default: internal), rollout:0.1 (share of users, production only), notes:\"...\", build:false (reuse the last .aab)"
+  lane :upload do |options|
+    track = options[:track] || "internal"
+    UI.user_error!("track must be one of #{TRACKS.join(', ')}") unless TRACKS.include?(track)
+    build unless options[:build] == false
+
+    # Play reads the notes from a file named after the version code.
+    meta = Dir.mktmpdir
+    FileUtils.mkdir_p("#{meta}/en-US/changelogs")
+    File.write("#{meta}/en-US/changelogs/#{android_version_code}.txt", release_notes(options))
+
+    upload_to_play_store(
+      **play_options, **SKIP_LISTING, skip_upload_changelogs: false,
+      track: track, rollout: options[:rollout]&.to_s, metadata_path: meta,
+      aab: "#{ROOT}/manga-android/app/build/outputs/bundle/release/app-release.aab"
+    )
+  end
+
+  desc "Move a build that is already on one track to another (no new upload). Options: from:internal (default), to:production (default), rollout:0.1"
+  lane :promote do |options|
+    from = options[:from] || "internal"
+    to = options[:to] || "production"
+    UI.user_error!("from and to must be one of #{TRACKS.join(', ')}") unless (TRACKS.include?(from) && TRACKS.include?(to))
+    upload_to_play_store(
+      **play_options, **SKIP_LISTING, skip_upload_aab: true, skip_upload_apk: true,
+      track: from, track_promote_to: to, rollout: options[:rollout]&.to_s
+    )
+  end
+
+  desc "Build and send straight to production (what you do today). Options: rollout:0.1, notes:\"...\""
+  lane :release do |options|
+    upload(options.merge(track: "production"))
+  end
+
+  desc "Show the version codes on each Play track"
+  lane :status do
+    TRACKS.each do |track|
+      codes = google_play_track_version_codes(**play_options, track: track)
+      UI.message("#{track}: #{codes.empty? ? '-' : codes.join(', ')}")
+    end
+  end
+end
