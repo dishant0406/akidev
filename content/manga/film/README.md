@@ -42,15 +42,15 @@ python3 -m http.server 8000 --directory /Users/dishants/projects/akidev
 The scripts need Python with `playwright` (Chromium), `numpy`, `pillow`, `scipy` and `librosa`, plus `ffmpeg`.
 
 ```bash
-python tools/stills.py http://127.0.0.1:8000/manga-android/store/film/film.html out/stills 14.9 44.7
+python tools/stills.py http://127.0.0.1:8000/content/manga/film/film.html out/stills 14.9 44.7
 ```
 
 ```bash
-python tools/render.py http://127.0.0.1:8000/manga-android/store/film/film.html out/video.mp4 --fps 60 --scale 1 --sub 4 --workers 12 --seconds 59.5349 --frames-dir out/frames
+python tools/render.py http://127.0.0.1:8000/content/manga/film/film.html out/video.mp4 --fps 60 --scale 1 --sub 4 --workers 12 --seconds 59.5349 --frames-dir out/frames
 ```
 
 ```bash
-python tools/score.py http://127.0.0.1:8000/manga-android/store/film/film.html out/score.wav
+python tools/score.py http://127.0.0.1:8000/content/manga/film/film.html out/score.wav
 ```
 
 ```bash

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Builds the Play Store phone screenshots: a headline on a flat colour with the app screen inside an Android phone frame.
-# Usage: scripts/store-shots.sh   (reads store/screenshots, writes store/play-marketing)
+# Usage: scripts/store-shots.sh   (reads content/manga/store/android/screenshots, writes content/manga/store/android/play-marketing)
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/store"
+cd "$ROOT/../content/manga/store/android"
 FONT="$ROOT/app/src/main/res/font/atkinson_bold.ttf"
 TMP="$(mktemp -d)"
 W=1080; H=1920

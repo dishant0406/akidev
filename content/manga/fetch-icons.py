@@ -29,7 +29,7 @@ STYLES = {"": "linear", "-solid": "bold"}
 # Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which
 # keeps the app smaller. Add a name here when the app starts to use "<name>-solid".
 SOLID = {"book", "bookmark", "check", "close", "home", "inbox", "library", "lock", "play", "server", "sources", "warning"}
-root = pathlib.Path(__file__).resolve().parent.parent / "App" / "Assets.xcassets"
+root = pathlib.Path(__file__).resolve().parent.parent.parent / "manga-app" / "App" / "Assets.xcassets"
 root.mkdir(exist_ok=True)
 (root / "Contents.json").write_text(json.dumps({"info": {"author": "xcode", "version": 1}}, indent=2))
 
@@ -108,7 +108,7 @@ for icon, (name, suffix) in sorted(wanted.items(), key=lambda item: item[1]):
     entries.append(f'    "{name}{suffix}" to R.drawable.{resource},')
 (android / "kotlin" / "live" / "akidev" / "manga" / "design" / "AkiIconSet.kt").write_text(
     "package live.akidev.manga.design\n\n"
-    "// Written by manga-app/scripts/fetch-icons.py: do not edit.\n"
+    "// Written by content/manga/fetch-icons.py: do not edit.\n"
     "internal val akiIconSet: Map<String, Int> = mapOf(\n" + "\n".join(entries) + "\n)\n"
 )
 print(f"{len(wanted)} Android icons written")

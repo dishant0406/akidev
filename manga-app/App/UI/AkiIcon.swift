@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// An icon from the Solar set (see scripts/fetch-icons.py): `name` is the outline, `name-solid` the filled one.
+/// An icon from the Solar set (see content/manga/fetch-icons.py): `name` is the outline, `name-solid` the filled one.
 /// The size follows Dynamic Type, up to 1.4x so bars and buttons keep their shape.
 struct AkiIcon: View {
     let name: String

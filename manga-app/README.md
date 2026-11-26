@@ -8,7 +8,7 @@ engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The 
 App/                    the SwiftUI app (Home, Library, Updates, Series, Reader, Sources)
 Packages/AkiManga/      the Swift package: the generated bindings and the xcframework (both generated)
 scripts/build-ffi.sh    builds the Rust engine for device and simulator and fills the package
-scripts/demo-server.py  a fake Madara site for driving the app with no real site
+../content/manga/demo-server.py  a fake Madara site for driving the app with no real site
 project.yml             the Xcode project (xcodegen); AkiManga.xcodeproj is generated, not committed
 ```
 
@@ -27,7 +27,7 @@ bindings from the Rust code, so they cannot drift). The scheme is `AkiMangaApp`:
 ## Driving it without a real site
 
 ```bash
-python3 manga-app/scripts/demo-server.py 8770
+python3 content/manga/demo-server.py 8770
 xcrun simctl launch booted live.akidev.manga -demoRepo http://127.0.0.1:8770/_demo/repo/ -source local
 ```
 
@@ -39,7 +39,7 @@ HTML is the hand-written fixtures in `desktop/manga/testdata/fixtures/madara-exa
 
 Other debug-only launch arguments for scripted runs: `-autoSeries "local|solo-leveling|Title"` opens straight on
 a series, `-autoContinue YES` then opens the reader where it left off, and `-mode.<source>.<series> strip|paged|rtl`
-picks the reading mode. `DEMO_LOG=1 python3 scripts/demo-server.py` prints every request.
+picks the reading mode. `DEMO_LOG=1 python3 content/manga/demo-server.py` prints every request.
 
 ## Books
 

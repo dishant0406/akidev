@@ -53,7 +53,7 @@ The only tint is yellow, and it marks the current choice or the main action.
 
 Icons are the Solar set (480 Design, CC BY 4.0), drawn as template images in `App/Assets.xcassets` and shown only through
 `AkiIcon`: `name` is the outline, `name-solid` the bold one (used for the selected tab, saved and read states). To add one,
-put its Solar name in `scripts/fetch-icons.py` and run it; the credit is in Settings > About.
+put its Solar name in `content/manga/fetch-icons.py` and run it; the credit is in Settings > About.
 
 ## Colours
 

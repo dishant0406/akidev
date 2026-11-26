@@ -66,8 +66,8 @@ pids
 marketing/
 design/shots/
 manga-app/build-rel/
-manga-android/store/film/inputs/
-manga-android/store/film/out/
+content/manga/film/inputs/
+content/manga/film/out/
 
 # Release keys for fastlane (App Store and Google Play)
 fastlane/.env

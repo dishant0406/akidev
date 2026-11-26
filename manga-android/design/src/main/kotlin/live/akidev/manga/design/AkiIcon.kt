@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 
-/** An icon from the Solar set (see manga-app/scripts/fetch-icons.py): `name` is the outline, `name-solid` the filled one. */
+/** An icon from the Solar set (see content/manga/fetch-icons.py): `name` is the outline, `name-solid` the filled one. */
 @Composable
 fun AkiIcon(name: String, modifier: Modifier = Modifier, size: Dp = 18.dp, tone: AkiTone = AkiTone.Text) {
     val resource = akiIconSet[name] ?: error("No icon called $name")

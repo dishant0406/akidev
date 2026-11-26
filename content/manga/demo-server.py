@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A fake Madara site for driving the app without any real site: `python3 scripts/demo-server.py [port]`.
+"""A fake Madara site for driving the app without any real site: `python3 content/manga/demo-server.py [port]`.
 
 Serves the hand-written fixtures from desktop/manga/testdata/fixtures/madara-example, with the page and cover
 images replaced by generated pictures on this server, plus a repository under /_demo/repo/ (an index.json

@@ -150,7 +150,7 @@ The engine part, and the iPhone and Android screens that sit on it.
 
 **On the phone.** Sources tab, the source, then the Account row. "Sign in" opens a sheet titled "Sign in to <source>" with one labelled field per entry in `auth.fields` and the line "Sent to <host> only. Akidev keeps a session, not your password." The Sign in button stays off until every field has text. A refused sign-in shows the message under the fields and clears it as soon as a field changes. On success the sheet closes and the row shows the name the site gave and a Sign out button. Sign out tells the site (if the definition says how) and removes the session from the Keychain or Keystore. Removing the source removes its session too.
 
-**Checked on the iPhone simulator** against `manga-app/scripts/demo-server.py` (its `paid` source): a wrong password, a right one, the name shown, a relaunch that gets the session back from the Keychain, and a premium chapter that opens after the server refuses the old token (`DEMO_EXPIRE=1`), with the refreshed session saved back.
+**Checked on the iPhone simulator** against `content/manga/demo-server.py` (its `paid` source): a wrong password, a right one, the name shown, a relaunch that gets the session back from the Keychain, and a premium chapter that opens after the server refuses the old token (`DEMO_EXPIRE=1`), with the refreshed session saved back.
 
 **A locked chapter.** The chapter list shows a lock in the place of the read mark on a chapter the source flagged (`chapters.chapter.locked`), while the person is signed out. If the source gives `chapters.locked_label`, that word replaces the small line above the title. Tapping it opens the sign-in sheet (the default, `locked_action: "sign_in"`, and only when the source has a sign-in), and when sign-in works the sheet closes and the chapter opens at its place. With `locked_action: "none"` the lock is only shown and the tap opens the chapter. A date can lock a chapter only while it is ahead (`in_future`). Signed in, it opens like any chapter. If it still fails (the account does not cover it), the reader shows the site's own error. A source with no sign-in still shows the lock when it flags a chapter, and opens it as before. The library keeps the flag with the chapter (`chapter.locked`), so the mark is there offline.
 
@@ -205,7 +205,7 @@ Edge cases:
 - A screen reader: every step is in the page as text, in order, so all six are read.
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
-Remaking the pictures: serve the repo, then run `python manga-android/store/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.
+Remaking the pictures: serve the repo, then run `python content/manga/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.
 
 ## Searching, Done, and the Home icon (2026-11-24)
 

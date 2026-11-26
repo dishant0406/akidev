@@ -423,7 +423,7 @@ Chosen: a new page, `/app` (`akidev-frontend/src/app/app/page.tsx`), for the iPh
 
 Why: a store link alone does not say what the app is. The film we made already has the app on a phone, so the page reuses it. `/manga` stays as it was, because the App Store listing links to it.
 
-The pictures are not the store screenshots. Those show a real series. The page uses the film's made-up art, taken by `manga-android/store/film/tools/web-assets.py`, and says so in the fine print. The words come from the Play listing and the app's own screens, nothing more. "Free" and the iOS 26 and Android 10 minimums were read from the stores and `build.gradle.kts`.
+The pictures are not the store screenshots. Those show a real series. The page uses the film's made-up art, taken by `content/manga/film/tools/web-assets.py`, and says so in the fine print. The words come from the Play listing and the app's own screens, nothing more. "Free" and the iOS 26 and Android 10 minimums were read from the stores and `build.gradle.kts`.
 
 Details that matter:
 - Yellow is used here (and nowhere else on the site) because this page is about the phone app, and the phone app is yellow. The rest of the site keeps amber for state.

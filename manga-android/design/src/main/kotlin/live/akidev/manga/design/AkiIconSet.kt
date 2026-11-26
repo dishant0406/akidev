@@ -1,6 +1,6 @@
 package live.akidev.manga.design
 
-// Written by manga-app/scripts/fetch-icons.py: do not edit.
+// Written by content/manga/fetch-icons.py: do not edit.
 internal val akiIconSet: Map<String, Int> = mapOf(
     "add" to R.drawable.aki_icon_add,
     "back" to R.drawable.aki_icon_back,

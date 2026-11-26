@@ -79,7 +79,7 @@ final class AppModel {
             Task { _ = await UpdateAlerts.requestPermission(); try? await Task.sleep(for: .seconds(6)); await refreshLibrary(force: true, background: true) }
         }
         // `-demoRepo http://127.0.0.1:8770/_demo/repo/` adds that repository and installs its `local` source at
-        // start, so the app can be driven without any real site (see scripts/demo-server.py).
+        // start, so the app can be driven without any real site (see content/manga/demo-server.py).
         if let demo = UserDefaults.standard.string(forKey: "demoRepo") {
             Task { await installDemo(from: demo) }
         }

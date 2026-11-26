@@ -10,7 +10,7 @@ from playwright.async_api import async_playwright
 SR = 48000
 BPM = 129; B = 60 / BPM; BEATS = 128
 N = int(round(BEATS * B * SR))
-IN = '/Users/dishants/projects/akidev/manga-android/store/film/inputs'
+IN = '/Users/dishants/projects/akidev/content/manga/film/inputs'
 rng = np.random.default_rng(7)
 at = lambda beat: int(round(beat * B * SR))
 
