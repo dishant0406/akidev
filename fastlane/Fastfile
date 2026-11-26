@@ -7,8 +7,8 @@
 ROOT = File.expand_path("..", __dir__)
 BUNDLE_ID = "live.akidev.manga"
 TRACKS = %w[internal alpha beta production]
-GRADLE_FILE = "#{ROOT}/manga-android/app/build.gradle.kts"
-PROJECT_YML = "#{ROOT}/manga-app/project.yml"
+GRADLE_FILE = "#{ROOT}/apps/manga-android/app/build.gradle.kts"
+PROJECT_YML = "#{ROOT}/apps/manga-ios/project.yml"
 
 # ---------- helpers ----------
 
@@ -73,7 +73,7 @@ platform :ios do
     asc_key
     app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
     before = newest_build(app)&.version
-    sh({ "BUILD_ONLY" => options[:build_only] ? "1" : nil }.compact, "#{ROOT}/manga-app/scripts/testflight.sh")
+    sh({ "BUILD_ONLY" => options[:build_only] ? "1" : nil }.compact, "#{ROOT}/apps/manga-ios/scripts/testflight.sh")
     next if options[:build_only] || !options[:wait]
 
     # Apple needs a few minutes: wait until a build newer than `before` is processed (40 minutes at most).
@@ -147,9 +147,9 @@ platform :android do
 
   desc "Build the signed release bundle (.aab)"
   lane :build do
-    sh("cd #{ROOT}/manga-android && scripts/build-engine.sh")
+    sh("cd #{ROOT}/apps/manga-android && scripts/build-engine.sh")
     java = "export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ANDROID_HOME=/opt/homebrew/share/android-commandlinetools; source ~/.gradle/aki-env.sh"
-    sh("bash", "-c", "#{java}; cd #{ROOT}/manga-android && ./gradlew :app:bundleRelease")
+    sh("bash", "-c", "#{java}; cd #{ROOT}/apps/manga-android && ./gradlew :app:bundleRelease")
   end
 
   desc "Build and upload to a Play track. Options: track:internal|alpha|beta|production (default: internal), rollout:0.1 (share of users, production only), notes:\"...\", build:false (reuse the last .aab)"
@@ -166,7 +166,7 @@ platform :android do
     upload_to_play_store(
       **play_options, **SKIP_LISTING, skip_upload_changelogs: false,
       track: track, rollout: options[:rollout]&.to_s, metadata_path: meta,
-      aab: "#{ROOT}/manga-android/app/build/outputs/bundle/release/app-release.aab"
+      aab: "#{ROOT}/apps/manga-android/app/build/outputs/bundle/release/app-release.aab"
     )
   end
 

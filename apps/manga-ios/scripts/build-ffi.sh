@@ -4,8 +4,8 @@
 # Packages/AkiManga/Sources/AkiManga/akimanga.swift (both generated, not committed).
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-package="$root/manga-app/Packages/AkiManga"
+root="$(cd "$(dirname "$0")/../../.." && pwd)"
+package="$root/apps/manga-ios/Packages/AkiManga"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 # `ios` is the size-optimised profile in Cargo.toml; PROFILE=debug builds without optimisation.

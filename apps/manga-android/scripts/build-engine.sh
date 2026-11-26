@@ -4,8 +4,8 @@
 # Needs: cargo-ndk, the Android NDK (r28 or newer, so the library is 16 KB aligned as Google Play requires).
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-engine="$root/manga-android/engine/src/main"
+root="$(cd "$(dirname "$0")/../../.." && pwd)"
+engine="$root/apps/manga-android/engine/src/main"
 : "${ANDROID_HOME:=/opt/homebrew/share/android-commandlinetools}"
 : "${ANDROID_NDK_HOME:=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)}"
 export ANDROID_HOME ANDROID_NDK_HOME

@@ -2,7 +2,7 @@
 
 How people move through the app: every screen, the flows between them, and what is built. It rests on research
 into existing manga and manhwa apps (section 1) and on what Akidev is: a **renderer** with **no sources of its own**,
-which reads plugins people install from repositories they add by address. The look is in [design/manga.md](../design/manga.md). The Android app (`manga-android/`) follows this same flow screen for screen.
+which reads plugins people install from repositories they add by address. The look is in [design/manga.md](../../design/manga.md). The Android app (`apps/manga-android/`) follows this same flow screen for screen.
 
 ## 0. The product in one paragraph
 

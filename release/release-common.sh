@@ -10,9 +10,9 @@ require_clean_tree() {
 
 # Commit and push the version files, only if the bump changed them. Argument: a label such as "iPhone".
 commit_version() {
-  git add manga-app/project.yml manga-android/app/build.gradle.kts
+  git add apps/manga-ios/project.yml apps/manga-android/app/build.gradle.kts
   git diff --cached --quiet && return
-  version="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' manga-app/project.yml)"
+  version="$(sed -n 's/.*MARKETING_VERSION: "\(.*\)"/\1/p' apps/manga-ios/project.yml)"
   git commit -q -m "Version $version: $1"
   git push
 }

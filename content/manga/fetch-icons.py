@@ -2,7 +2,7 @@
 """Downloads the Solar icons the app uses into App/Assets.xcassets.
 
 Solar is by 480 Design, licensed CC BY 4.0 (credit is given in Settings > About). It writes the iOS app's asset catalog and
-the Android app's vector drawables (manga-android/design) from the same download. Each name below is what the app
+the Android app's vector drawables (apps/manga-android/design) from the same download. Each name below is what the app
 calls an icon; `name` is the outline version and `name-solid` the bold one (only for the names in SOLID). Run it again after
 adding a name.
 """
@@ -29,7 +29,7 @@ STYLES = {"": "linear", "-solid": "bold"}
 # Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which
 # keeps the app smaller. Add a name here when the app starts to use "<name>-solid".
 SOLID = {"book", "bookmark", "check", "close", "home", "inbox", "library", "lock", "play", "server", "sources", "warning"}
-root = pathlib.Path(__file__).resolve().parent.parent.parent / "manga-app" / "App" / "Assets.xcassets"
+root = pathlib.Path(__file__).resolve().parent.parent.parent / "apps" / "manga-ios" / "App" / "Assets.xcassets"
 root.mkdir(exist_ok=True)
 (root / "Contents.json").write_text(json.dumps({"info": {"author": "xcode", "version": 1}}, indent=2))
 
@@ -61,7 +61,7 @@ print(f"{len(wanted)} icons written")
 
 # ---- Android: one vector drawable per icon, and the list that `AkiIcon` looks them up in -----------------------------------
 
-android = root.parent.parent.parent / "manga-android" / "design" / "src" / "main"
+android = pathlib.Path(__file__).resolve().parent.parent.parent / "apps" / "manga-android" / "design" / "src" / "main"
 
 
 def circle_path(cx, cy, r):

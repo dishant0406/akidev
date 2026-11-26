@@ -10,10 +10,10 @@
   Serve the repository root over http (fonts, icons and inputs are read by relative path).
 -->
 <style>
-@font-face { font-family: Nunito; src: url(../../../manga-android/design/src/main/res/font/nunito.ttf); font-weight: 200 1000; }
-@font-face { font-family: Lora; src: url(../../../manga-android/app/src/main/res/font/lora_roman.ttf); font-weight: 400 700; }
+@font-face { font-family: Nunito; src: url(../../../apps/manga-android/design/src/main/res/font/nunito.ttf); font-weight: 200 1000; }
+@font-face { font-family: Lora; src: url(../../../apps/manga-android/app/src/main/res/font/lora_roman.ttf); font-weight: 400 700; }
 :root {
-  /* The app's dark tokens (manga-app/App/UI/Tokens.swift). */
+  /* The app's dark tokens (apps/manga-ios/App/UI/Tokens.swift). */
   --bg: #0D0D0E; --card: #1B1B1D; --chip: #2C2C2F; --text: #F5F5F5; --muted: #A1A1A8;
   --sheet: #1B1B1D; --menu: #232326; --line: #3A3A3E;
   --y: #FFD21F; --on-y: #141414; --red: #E5484D;
@@ -113,7 +113,7 @@ const world = document.getElementById('world');
 const frameEl = document.getElementById('frame');
 const defs = document.getElementById('defs');
 const ASSETS = 'inputs/', WEB = 'inputs/web/';
-const ICON = name => `../../../manga-app/App/Assets.xcassets/solar-${name}.imageset/${name}.svg`;
+const ICON = name => `../../../apps/manga-ios/App/Assets.xcassets/solar-${name}.imageset/${name}.svg`;
 const icon = (name, size, x, y, extra = '') =>
   `<div class="icon" style="--src:url(${ICON(name)});width:${size}px;height:${size}px;left:${x}px;top:${y}px;${extra}"></div>`;
 const face = (n, s = 22, extra = '') => `<div class="icon" style="--src:url(${ICON(n)});width:${s}px;height:${s}px;position:relative;${extra}"></div>`;

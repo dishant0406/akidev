@@ -17,5 +17,5 @@ Reuse those components and tokens instead of adding colours or button styles. Us
 for motion, responsiveness and interaction details. The two apps should look like one product: when a
 screen changes in one, check the other.
 
-The manga app (`manga-app/`, with `crates/manga*`) is a separate product with its own look, described in
+The manga app (`apps/manga-ios/` and `apps/manga-android/`, with `crates/manga*`) is a separate product with its own look, described in
 `design/manga.md`: it does not follow `design/DESIGN_PLAN.md`.

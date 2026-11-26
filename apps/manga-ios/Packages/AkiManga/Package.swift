@@ -2,7 +2,7 @@
 import PackageDescription
 
 // The Rust engine (see crates/manga and crates/manga-ffi) and its generated Swift bindings.
-// Run manga-app/scripts/build-ffi.sh to produce Akimanga.xcframework and akimanga.swift.
+// Run apps/manga-ios/scripts/build-ffi.sh to produce Akimanga.xcframework and akimanga.swift.
 let package = Package(
     name: "AkiManga",
     platforms: [.iOS("26.0")],

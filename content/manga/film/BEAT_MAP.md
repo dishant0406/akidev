@@ -8,7 +8,7 @@ The app's spring (critically damped, 0.35 s) takes about 0.7 beat to settle, so 
 before the next one. Half beats (x.5) carry the overflow where a scene has more actions than beats.
 "Carry" is what survives into the next row. An empty carry would be a cut, and there are none.
 
-Copy marked (film) is made up for the film. Everything else is real UI copy (checked in `manga-app/App/*.swift`
+Copy marked (film) is made up for the film. Everything else is real UI copy (checked in `apps/manga-ios/App/*.swift`
 and the Android screens) or the Play listing.
 
 Film names used: covers are titled (film) "The Last Lantern" (cover-01, also the strip), "Parcel Run" (02),

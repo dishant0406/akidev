@@ -2,13 +2,13 @@
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
 engine in `crates/manga` through the uniffi facade in `crates/manga-ffi`. The plan and the reasoning are in
-[docs/plans/MANGA_PLAN.md](../docs/plans/MANGA_PLAN.md); the look is described in [design/manga.md](../design/manga.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
+[docs/plans/MANGA_PLAN.md](../../docs/plans/MANGA_PLAN.md); the look is described in [design/manga.md](../../design/manga.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
 
 ```
 App/                    the SwiftUI app (Home, Library, Updates, Series, Reader, Sources)
 Packages/AkiManga/      the Swift package: the generated bindings and the xcframework (both generated)
 scripts/build-ffi.sh    builds the Rust engine for device and simulator and fills the package
-../content/manga/demo-server.py  a fake Madara site for driving the app with no real site
+../../content/manga/demo-server.py  a fake Madara site for driving the app with no real site
 project.yml             the Xcode project (xcodegen); AkiManga.xcodeproj is generated, not committed
 ```
 
@@ -16,8 +16,8 @@ project.yml             the Xcode project (xcodegen); AkiManga.xcodeproj is gene
 
 ```bash
 brew install xcodegen          # once
-./manga-app/scripts/build-ffi.sh
-cd manga-app && xcodegen generate
+./apps/manga-ios/scripts/build-ffi.sh
+cd apps/manga-ios && xcodegen generate
 xcodebuild -project AkiManga.xcodeproj -scheme AkiMangaApp -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath build build
 ```
 

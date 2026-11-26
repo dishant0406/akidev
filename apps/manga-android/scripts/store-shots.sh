@@ -3,7 +3,7 @@
 # Usage: scripts/store-shots.sh   (reads content/manga/store/android/screenshots, writes content/manga/store/android/play-marketing)
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/../content/manga/store/android"
+cd "$ROOT/../../content/manga/store/android"
 FONT="$ROOT/app/src/main/res/font/atkinson_bold.ttf"
 TMP="$(mktemp -d)"
 W=1080; H=1920

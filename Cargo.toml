@@ -26,7 +26,7 @@ tracing = "0.1"
 librqbit = { path = "vendor/librqbit" }
 
 # What the iPhone app links: the smallest binary, since the app's size is a store figure people see. The desktop app and
-# the server keep the plain release profile. See manga-app/scripts/build-ffi.sh.
+# the server keep the plain release profile. See apps/manga-ios/scripts/build-ffi.sh.
 [profile.ios]
 inherits = "release"
 opt-level = "z"
