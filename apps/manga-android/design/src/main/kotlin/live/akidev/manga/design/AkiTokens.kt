@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 
 /**
  * The design tokens. Screens and components use these names only, never a raw colour (see design/manga.md: the Android
@@ -29,34 +28,34 @@ class AkiColors(
     val secondary: Color,
     val text: Color,
     val textMuted: Color,
-    val primary: Color = Color(0xFFFFD21F),
-    val onPrimary: Color = Color(0xFF141414),
-    val destructive: Color = Color(0xFFE5484D),
-    val onMedia: Color = Color(0xFFFFFFFF),
+    val primary: Color = AkiTokenValues.primary,
+    val onPrimary: Color = AkiTokenValues.onPrimary,
+    val destructive: Color = AkiTokenValues.destructive,
+    val onMedia: Color = AkiTokenValues.onMedia,
 ) {
     /** The soft glows behind every screen, drawn from `primary`. */
-    val accent = primary.copy(alpha = 0.30f)
-    val accentSoft = primary.copy(alpha = 0.16f)
+    val accent = primary.copy(alpha = AkiTokenValues.accentOpacity)
+    val accentSoft = primary.copy(alpha = AkiTokenValues.accentSoftOpacity)
 
-    val scrim = Color.Black.copy(alpha = 0.35f)
-    val scrimTop = Color.Black.copy(alpha = 0.35f)
-    val scrimBottom = Color.Black.copy(alpha = 0.78f)
-    val scrimStrong = Color.Black.copy(alpha = 0.7f)
-    val shadow = Color.Black.copy(alpha = 0.12f)
+    val scrim = Color.Black.copy(alpha = AkiTokenValues.scrimOpacity)
+    val scrimTop = Color.Black.copy(alpha = AkiTokenValues.scrimTopOpacity)
+    val scrimBottom = Color.Black.copy(alpha = AkiTokenValues.scrimBottomOpacity)
+    val scrimStrong = Color.Black.copy(alpha = AkiTokenValues.scrimStrongOpacity)
+    val shadow = Color.Black.copy(alpha = AkiTokenValues.shadowOpacity)
 
     /** The reader's two backdrops. */
-    val stage = Color.Black
-    val stageAlt = Color(0xFF1C1C1C)
+    val stage = AkiTokenValues.stage
+    val stageAlt = AkiTokenValues.stageAlt
 }
 
 private val lightColors = AkiColors(
-    dark = false, background = Color(0xFFFFFFFF), surface = Color(0xFFF4F4F5), secondary = Color(0xFFE8E8EB),
-    text = Color(0xFF111111), textMuted = Color(0xFF6E6E73),
+    dark = false, background = AkiTokenValues.lightBackground, surface = AkiTokenValues.lightSurface,
+    secondary = AkiTokenValues.lightSecondary, text = AkiTokenValues.lightText, textMuted = AkiTokenValues.lightTextMuted,
 )
 
 private val darkColors = AkiColors(
-    dark = true, background = Color(0xFF0D0D0E), surface = Color(0xFF1B1B1D), secondary = Color(0xFF2C2C2F),
-    text = Color(0xFFF5F5F5), textMuted = Color(0xFFA1A1A8),
+    dark = true, background = AkiTokenValues.darkBackground, surface = AkiTokenValues.darkSurface,
+    secondary = AkiTokenValues.darkSecondary, text = AkiTokenValues.darkText, textMuted = AkiTokenValues.darkTextMuted,
 )
 
 private val LocalAkiColors = staticCompositionLocalOf { lightColors }
@@ -66,9 +65,9 @@ object Aki {
         @Composable get() = LocalAkiColors.current
 
     /** Inside a card with 10dp of padding the thumbnail's corner is the card's minus that padding, so the two curves are concentric. */
-    val cardRadius = 28.dp
-    val thumbRadius = 18.dp
-    val sheetRadius = 32.dp
+    val cardRadius = AkiTokenValues.cardRadius
+    val thumbRadius = AkiTokenValues.thumbRadius
+    val sheetRadius = AkiTokenValues.sheetRadius
 }
 
 /**
