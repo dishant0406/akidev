@@ -19,7 +19,7 @@ a guest, in any mix.
 ## Messages
 
 One JSON object per data-channel message, as text. `t` says which. The Rust list is
-`party/src/protocol.rs`, the web one `akidev-frontend/src/lib/party/protocol.ts`.
+`party/src/protocol.rs`, the web one `apps/web/src/lib/party/protocol.ts`.
 
 | `t` | from | fields | meaning |
 | --- | --- | --- | --- |

@@ -17,14 +17,14 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-COPY akidev-frontend/package.json ./akidev-frontend/
+COPY apps/web/package.json ./apps/web/
 
 # The build needs devDependencies (Next, Tailwind, TypeScript, ESLint), so
 # --omit=dev is deliberately absent here. --ignore-scripts because none of the
 # frontend's own dependencies has an install script that is needed.
 RUN npm ci --workspace=akidev --include=dev --ignore-scripts --no-audit --no-fund
 
-COPY akidev-frontend ./akidev-frontend
+COPY apps/web ./apps/web
 
 # Next inlines NEXT_PUBLIC_* into the browser bundle at build time, so both have to be
 # present now. Changing either therefore requires a rebuild, not a restart.
@@ -60,11 +60,11 @@ ENV HOSTNAME=0.0.0.0
 # The standalone output is rooted at the workspace directory, so it is unpacked into
 # the same relative path and run from there. server.js resolves its own files
 # relative to itself, which is why the nesting is preserved.
-COPY --from=build /app/akidev-frontend/.next/standalone ./
-COPY --from=build /app/akidev-frontend/.next/static ./akidev-frontend/.next/static
-COPY --from=build /app/akidev-frontend/public ./akidev-frontend/public
+COPY --from=build /app/apps/web/.next/standalone ./
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app/apps/web/public ./apps/web/public
 
-WORKDIR /app/akidev-frontend
+WORKDIR /app/apps/web
 
 # next/image writes optimised images to <distDir>/cache/images. COPY leaves those
 # directories owned by root, so a container running as `node` could not write to them

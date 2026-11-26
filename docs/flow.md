@@ -205,7 +205,7 @@ Edge cases:
 - A screen reader: every step is in the page as text, in order, so all six are read.
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
-Remaking the pictures: serve the repo, then run `python content/manga/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `akidev-frontend/public/phone/`.
+Remaking the pictures: serve the repo, then run `python content/manga/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `apps/web/public/phone/`.
 
 ## Searching, Done, and the Home icon (2026-11-24)
 

@@ -18,7 +18,7 @@ Anime, series and films from one API, served as one site and one desktop app.
 | --- | --- | --- |
 | `apps/server/` | The API: a Rust binary, `akidev-server`. Catalogue from AniList, Cinemeta and TVMaze, releases from torrent indexers, video from a debrid CDN, a torrent swarm or the Internet Archive, converted for the browser only as far as it has to be. See [apps/server/API.md](apps/server/API.md). | 9000 |
 | `crates/core/` | The library the server and the desktop app share: providers, indexers, ranking, the torrent engine. | |
-| `akidev-frontend/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. | 3000 |
+| `apps/web/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. | 3000 |
 | `apps/desktop/` | The native macOS app, with the same backend built in. See [apps/desktop/README.md](apps/desktop/README.md). | |
 
 The server and the desktop app are built on **one library**, so there is one copy of every indexer,
@@ -33,10 +33,10 @@ The frontend's UI began as a derivative of [Kitsune](https://github.com/Dovakiin
 
 There is **one frontend image and one frontend container**, and one site: Home, Anime,
 Series and Films tabs over the same catalogue the desktop app shows, with the same design
-(`akidev-frontend/src/constants/site.ts` holds the catalogues, sorts and genres).
+(`apps/web/src/constants/site.ts` holds the catalogues, sorts and genres).
 
 `anime.akidev.live` and `tv.akidev.live` are retired. The middleware
-(`akidev-frontend/src/middleware.ts`) redirects them with a 308 to `/anime` and `/films` on
+(`apps/web/src/middleware.ts`) redirects them with a 308 to `/anime` and `/films` on
 the bare zone, and keeps the path for anything deeper, so old title and watch links work.
 They still have to reach the container, so their DNS records stay and Caddy serves them.
 
@@ -58,7 +58,7 @@ means the watch page knows what it is looking at from the URL alone.
 
 The provider's own id is alphanumeric rather than digits-only because providers do not
 agree on a form: AniList and TVMaze use numbers, Cinemeta uses IMDb ids
-(`tt27548557`). `crates/core/src/media_id.rs` and `akidev-frontend/src/lib/media-id.ts`
+(`tt27548557`). `crates/core/src/media_id.rs` and `apps/web/src/lib/media-id.ts`
 must agree.
 
 ## Adding a provider or an indexer
@@ -159,7 +159,7 @@ host's connection carries a few hundred bytes a second. `api.akidev.live` is onl
 different networks can find each other, keeps a party in memory until its host stops asking for
 guests, and never sees what is played. The messages and the rules that keep a guest in step are in
 `crates/party/PROTOCOL.md`; the app has them in `crates/party`, the site in
-`akidev-frontend/src/lib/party`.
+`apps/web/src/lib/party`.
 
 Most connections go direct. Some networks (strict NATs, some mobile and corporate ones) cannot, and
 those guests need a TURN relay, or they cannot join. The relay is Cloudflare's Realtime TURN: make a
@@ -180,7 +180,7 @@ trip, or not waiting for it.
   server with the API's answer in the page, over the internal network, so the first paint does not
   wait for the scripts to arrive and then for a request of their own. A move between pages inside an
   open browser does not ask for that data again: the router's request is answered at once
-  (`isClientNavigation` in `akidev-frontend/src/lib/api-server.ts`) and the page appears in place and
+  (`isClientNavigation` in `apps/web/src/lib/api-server.ts`) and the page appears in place and
   fills in. A link that has been hovered, and the four tabs, are fetched ahead.
 - **There is no page loader.** The old full-height spinner replaced the whole page while the server
   worked, which on a title that was not cached took five seconds and shifted the layout under the
@@ -327,7 +327,7 @@ required for this reliability scope.
 
 ```bash
 npm install                                    # the site
-cp akidev-frontend/.env.example akidev-frontend/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
 The server reads its settings from the environment and every one has a default that suits a small

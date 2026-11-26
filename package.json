@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "workspaces": [
-    "akidev-frontend"
+    "apps/web"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=akidev",

@@ -9,8 +9,8 @@ button looks, state cards for empty and error screens, translucent chrome).
 
 The values live in code and are the source of truth for numbers:
 
-- Web: `akidev-frontend/src/app/globals.css` and `tailwind.config.ts`, with the components in
-  `akidev-frontend/src/components`.
+- Web: `apps/web/src/app/globals.css` and `tailwind.config.ts`, with the components in
+  `apps/web/src/components`.
 - Desktop: `apps/desktop/src/design/` (`tokens.rs`, `button.rs`, `state.rs`).
 
 Reuse those components and tokens instead of adding colours or button styles. Use the `apple-design` skill

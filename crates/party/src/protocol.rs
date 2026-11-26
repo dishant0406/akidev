@@ -1,5 +1,5 @@
 //! The messages devices send each other, as JSON text on one data channel. The web app has the
-//! same list in `akidev-frontend/src/lib/party/protocol.ts`; change them together.
+//! same list in `apps/web/src/lib/party/protocol.ts`; change them together.
 
 use serde::{Deserialize, Serialize};
 

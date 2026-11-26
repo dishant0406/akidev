@@ -2,7 +2,7 @@
 
 ## UI
 
-The user interface in `akidev-frontend/` was first derived from **Kitsune**
+The user interface in `apps/web/` was first derived from **Kitsune**
 (https://github.com/Dovakiin0/Kitsune), which is licensed under the MIT License. It has since
 been redesigned to match the desktop app, and its components were rewritten rather than
 adapted, so little if any of that code remains. The notice stays, as the licence asks of
@@ -56,4 +56,4 @@ Anime metadata comes from **AniList** (https://anilist.co) by default, and from
 Both apps set their text in two open fonts, each under the SIL Open Font License 1.1: **Hanken Grotesk**
 (Hanken Design Co.) for the interface and **Shippori Mincho** (FONTWORKS Inc.) for titles. The
 copies in the repository are subsets (Latin letters, punctuation and 秋 for Shippori Mincho) made
-with fonttools, in `akidev-frontend/src/assets/fonts/` and `apps/desktop/assets/fonts/`.
+with fonttools, in `apps/web/src/assets/fonts/` and `apps/desktop/assets/fonts/`.

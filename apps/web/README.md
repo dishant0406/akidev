@@ -1,10 +1,10 @@
 # Akidev frontend
 
 Next.js app (App Router, TypeScript) for Akidev. It talks to the Akidev API
-(`../apps/server`, contract in `../apps/server/API.md`) over REST and plays the video URL the API returns.
+(`../server`, contract in `../server/API.md`) over REST and plays the video URL the API returns.
 
 The UI began as a derivative of [Kitsune](https://github.com/Dovakiin0/Kitsune) (MIT) and has
-since been redesigned to match the desktop app. See [../ATTRIBUTION.md](../ATTRIBUTION.md).
+since been redesigned to match the desktop app. See [ATTRIBUTION.md](../../ATTRIBUTION.md).
 
 ## Setup
 
@@ -45,7 +45,7 @@ and `tv.akidev.live` redirect to `/anime` and `/films` (see `src/middleware.ts`)
 
 ## Design
 
-The look is the desktop app's (`../apps/desktop/src/design/tokens.rs`): a near-black canvas,
+The look is the desktop app's (`../desktop/src/design/tokens.rs`): a near-black canvas,
 grey steps for surfaces, white for the one action on a screen and amber for progress and the
 active tab, in Inter. The colours are CSS variables in `src/app/globals.css` and Tailwind
 names in `tailwind.config.ts` (`canvas`, `surface`, `raised`, `line`, `ink`, `dim`, `faint`,

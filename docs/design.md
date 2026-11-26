@@ -366,7 +366,7 @@ The fade behind a row's arrow was drawn backwards: solid on the side facing the 
 
 ## The search icon always ends on a page of titles, and the web palette opens at once (2026-11-22)
 
-The magnifier in the top bar now does the same in both apps. On a screen that is not a browse screen it goes to Browse (the app: `Route::Browse`, the site: `/search`, which with nothing typed shows every catalogue) and opens the Cmd-K panel on top, so closing the panel leaves the viewer on a page of titles and not on whatever screen they came from. On a browse screen (any catalogue tab or Browse) it just opens the panel. In the app the music screens keep their own panel, as before. The code is in `apps/desktop/src/app.rs` and `akidev-frontend/src/components/topbar.tsx`.
+The magnifier in the top bar now does the same in both apps. On a screen that is not a browse screen it goes to Browse (the app: `Route::Browse`, the site: `/search`, which with nothing typed shows every catalogue) and opens the Cmd-K panel on top, so closing the panel leaves the viewer on a page of titles and not on whatever screen they came from. On a browse screen (any catalogue tab or Browse) it just opens the panel. In the app the music screens keep their own panel, as before. The code is in `apps/desktop/src/app.rs` and `apps/web/src/components/topbar.tsx`.
 
 The site's panel felt slow for three reasons, all removed: the dimmed backdrop faded in over 0.7 s (now it appears at once), the panel animated for 0.16 s (now 0.08 s, in a new `snap` animation in `tailwind.config.ts`), and the panel's code was only downloaded on the first open (now it is fetched one second after the page loads). Measured in the browser: the panel is on screen about 6 to 8 ms after the click. The party panel keeps the 0.16 s animation.
 
@@ -419,7 +419,7 @@ Trade-off: a list can be up to ten minutes old. New releases on a site can show 
 
 ## The phone app page: one phone that follows the text (2026-11-23)
 
-Chosen: a new page, `/app` (`akidev-frontend/src/app/app/page.tsx`), for the iPhone and Android app, with links to the App Store and Google Play. One phone stays on screen while the text scrolls past. The screen on the phone follows the text: a short recording of the app first, then a picture for each part (sources, a series, reading, library, books, read aloud). The phone turns a little for each part and follows the mouse.
+Chosen: a new page, `/app` (`apps/web/src/app/app/page.tsx`), for the iPhone and Android app, with links to the App Store and Google Play. One phone stays on screen while the text scrolls past. The screen on the phone follows the text: a short recording of the app first, then a picture for each part (sources, a series, reading, library, books, read aloud). The phone turns a little for each part and follows the mouse.
 
 Why: a store link alone does not say what the app is. The film we made already has the app on a phone, so the page reuses it. `/manga` stays as it was, because the App Store listing links to it.
 
@@ -434,7 +434,7 @@ Details that matter:
 
 Rejected: a full-width background video. The film is square and crops badly on a wide window. Also rejected: scrubbing a video with the scroll bar. It costs a lot of work for little gain over six pictures.
 
-Trade-off: the pictures and the recording are copies of the film. If the app changes, run the script again and copy the files into `akidev-frontend/public/phone/`.
+Trade-off: the pictures and the recording are copies of the film. If the app changes, run the script again and copy the files into `apps/web/public/phone/`.
 
 ## The phone page lives on its own host, and has no site around it (2026-11-23)
 

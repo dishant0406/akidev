@@ -150,7 +150,7 @@ services:
     image: ${FRONTEND_IMAGE}
     build:
       context: .
-      dockerfile: akidev-frontend/Dockerfile
+      dockerfile: apps/web/Dockerfile
       args:
         # Both are baked into the bundle at build time, so they are build arguments
         # rather than runtime variables. Changing either requires a rebuild. The site

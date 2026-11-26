@@ -14,7 +14,7 @@ canvas, grey surfaces and one amber accent, so the artwork is the colour on scre
 decoded by [libmpv](https://mpv.io).
 
 The same library also runs the website's backend: `apps/server/` is a REST server built on `core`, and
-`../../akidev-frontend` is the site that talks to it. See [apps/server/API.md](../server/API.md).
+`../../apps/web` is the site that talks to it. See [apps/server/API.md](../server/API.md).
 
 ## What is in it
 
@@ -50,7 +50,7 @@ ones. The messages, and the rules that keep a guest in step, are in
 [`apps/server/API.md`](../server/API.md).
 
 `crates/party/` is `akidev-party`: the messages, the sync rules and the WebRTC connection, for the app. The
-website has the same in `akidev-frontend/src/lib/party`. `AKIDEV_API` points a development build at
+website has the same in `apps/web/src/lib/party`. `AKIDEV_API` points a development build at
 another server (`AKIDEV_API=http://localhost:9000 cargo run -p akidev`).
 
 ## Downloads
