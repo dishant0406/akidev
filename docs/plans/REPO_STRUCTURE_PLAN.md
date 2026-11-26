@@ -82,12 +82,14 @@ Rule for the layout: `apps/` holds what ships, `crates/` holds Rust code that mo
 Each step is one commit. Use `git mv` so file history stays. Run the check at the end of each step before the next one.
 
 1. **Docs and design.** Move `pipeline/` to `docs/plans/`. Gather `design/`, `design-shots/`, `branding/` and `manga-app/DESIGN.md`. Check: links in `CLAUDE.md`, `README.md` and the memory notes still point to real files.
-2. **Infra and release scripts.** Move to `infra/` and `release/`. Fix the paths inside the scripts, `docker-compose.yml` and the GitHub workflows. Check: `docker compose config` works, and `bash -n` passes on every script.
+2. **Release scripts.** Move `scripts/release-*.sh` to `release/`. Check: `bash -n` passes, and `fastlane lanes` still loads. Done 2026-11-26. The server deploy files are NOT moved here: see step 8.
 3. **Content.** Move `sources`, `plugins` and the shared phone material. Fix `publish-sources.sh`, the plugin loader paths and `fetch-icons.py`. Check: the core tests that load plugins and `sources.json` pass.
 4. **Rust workspace.** Move the crates and the two Rust apps. Put `Cargo.toml` at the root with explicit members. Fix `path =` lines, the `[patch]` and `exclude` lines, the Dockerfile of the server and the desktop bundle scripts. Check: `cargo test` for the workspace, and the server Docker build.
 5. **Phone apps.** Move `manga-app` and `manga-android`. Fix `build-ffi.sh` and `build-engine.sh` (they point at the engine), `project.yml`, the Gradle files and `fastlane/Fastfile` (`ROOT` paths, `testflight.sh`). Check: `xcodegen` plus an iOS archive with `BUILD_ONLY=1`, `./gradlew :app:bundleRelease`, and `fastlane lanes`.
 6. **Website.** Move `akidev-frontend` to `apps/web`. Fix `package.json` workspaces, the Dockerfile and the `docker-compose.yml` context. Check: `npm run build` and `npm test`.
 7. **Cleanup.** Update `README.md` with a map of the folders. Add a short README to each top folder. Update the memory notes and `CLAUDE.md` paths.
+
+8. **Infra, last and with care.** Move `caddy/`, `docker-compose.yml`, `.env.deploy.example`, `scripts/deploy.sh`, `cloudflare*.sh`, `setup-server.sh` and `prowlarr-sync.js` to `infra/`. This one changes how the live server deploys: the workflow runs `bash scripts/deploy.sh` over SSH, and `deploy.sh` and the compose file use paths relative to the repo root on the server (`/opt/konflix`). Check before merging: `docker compose config` gives the same output before and after (save it first), and read the deploy workflow line by line. Do it only with the owner at hand, because the first deploy after the move cannot be tested here.
 
 Do the steps on a branch. Merge only when all checks pass. Touch no other code in these commits, so any failure comes from a path.
 

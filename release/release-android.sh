@@ -2,16 +2,16 @@
 # Builds the Android app and sends it to Google Play through the fastlane lanes in fastlane/Fastfile.
 #
 # Usage:
-#   scripts/release-android.sh "Fixed search"                    # internal, then alpha, then asks about production
-#   scripts/release-android.sh "Fixed search" --prod             # builds and goes straight to production
-#   scripts/release-android.sh "Fixed search" --version 1.5      # set 1.5 in both apps first
+#   release/release-android.sh "Fixed search"                    # internal, then alpha, then asks about production
+#   release/release-android.sh "Fixed search" --prod             # builds and goes straight to production
+#   release/release-android.sh "Fixed search" --version 1.5      # set 1.5 in both apps first
 #
 # versionCode is raised above every code on Play when needed. The version files are
 # changed, committed and pushed for you. The Play key comes from fastlane/.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export LC_ALL=en_US.UTF-8
-source scripts/release-common.sh
+source release/release-common.sh
 
 notes=""
 prod=""

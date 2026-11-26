@@ -3,16 +3,16 @@
 # Everything goes through the fastlane lanes in fastlane/Fastfile.
 #
 # Usage:
-#   scripts/release-ios.sh "Fixed search"                      # keep the current version
-#   scripts/release-ios.sh "Fixed search" --version 1.5        # set 1.5 in both apps first
-#   scripts/release-ios.sh "Fixed search" --phased             # 7-day phased release
+#   release/release-ios.sh "Fixed search"                      # keep the current version
+#   release/release-ios.sh "Fixed search" --version 1.5        # set 1.5 in both apps first
+#   release/release-ios.sh "Fixed search" --phased             # 7-day phased release
 #
 # The version files are changed, committed and pushed for you when needed.
 # ASC_ISSUER_ID must be exported in ~/.zshrc; the other values come from fastlane/.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export LC_ALL=en_US.UTF-8
-source scripts/release-common.sh
+source release/release-common.sh
 
 notes=""
 version_arg=()
