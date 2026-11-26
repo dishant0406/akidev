@@ -684,7 +684,9 @@ placeholders differ between the platforms and plurals need extra rules. The app 
 is a change inside `generate.py` and one call-site pattern.
 
 **Trade-off.** There is no translation support today. Plurals are English only (`one` and `other`). Where the two apps used
-different words for the same thing, both words were kept under keys that end in `Ios` and `Android`; the owner settles them
-one by one. A few places in the code still compare against English text (`said.endsWith("is in your library.")` in `AppModel.kt`,
+different words for the same thing, the owner chose one text for both (same day, commit "Make the iPhone and Android copy the
+same"). Only three things differ on purpose: the reading font names (each platform has its own fonts), the 18+ footer in
+Settings (`contentFooterNoSwitch` and `contentFooterWithSwitch`: Android has a switch, the iPhone has none) and the Android-only
+font credit (`aboutFontCredit`). A few places in the code still compare against English text (`said.endsWith("is in your library.")` in `AppModel.kt`,
 `contains("could not reach")` in `ShareModel.kt`): they break silently if that copy changes.
 
