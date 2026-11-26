@@ -8,14 +8,14 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 package="$root/manga-app/Packages/AkiManga"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-# `ios` is the size-optimised profile in desktop/Cargo.toml; PROFILE=debug builds without optimisation.
+# `ios` is the size-optimised profile in Cargo.toml; PROFILE=debug builds without optimisation.
 profile="${PROFILE:-ios}"
 flag="--profile $profile"; [ "$profile" = debug ] && flag=""
 
 # The app is iOS 26 only; rustls's crypto library needs a deployment target newer than Rust's default (iOS 10).
 export IPHONEOS_DEPLOYMENT_TARGET=26.0
 
-cd "$root/desktop"
+cd "$root"
 for target in aarch64-apple-ios aarch64-apple-ios-sim; do
   cargo build $flag -p akidev-manga-ffi --lib --target "$target"
 done

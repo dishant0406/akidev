@@ -1,5 +1,5 @@
 // Tests for the watch party's messages and the rules that keep a guest in step. The same cases
-// as desktop/party/src/{protocol,sync}.rs, so the two apps agree.
+// as crates/party/src/{protocol,sync}.rs, so the two apps agree.
 
 import assert from "node:assert/strict";
 import test from "node:test";

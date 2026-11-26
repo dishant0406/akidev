@@ -2,7 +2,7 @@
 //! This is what stops a change to a theme from quietly breaking the definitions that extend it.
 //!
 //! These are synthetic fixtures (the `madara` theme and the `madara-example` / `madara-protected`
-//! definitions that exercise it), kept under `desktop/manga/testdata`. The catalogue of real source
+//! definitions that exercise it), kept under `crates/manga/testdata`. The catalogue of real source
 //! definitions lives in its own repository, `github.com/dishant0406/manga-sources`, and is checked there.
 
 use akidev_manga::{check, theme::Themes};

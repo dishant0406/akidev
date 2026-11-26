@@ -2,7 +2,7 @@
   "name": "akidev-monorepo",
   "version": "2.0.0",
   "private": true,
-  "description": "Akidev monorepo: the Next.js site, plus the Rust server and desktop app in desktop/",
+  "description": "Akidev monorepo: the Next.js site, plus the Rust server and desktop app in apps/ and crates/ (one Cargo workspace at the root)",
   "license": "AGPL-3.0",
   "engines": {
     "node": ">=22.0.0"
@@ -12,10 +12,10 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=akidev",
-    "dev:api": "cd desktop && cargo run -p akidev-server",
-    "start": "cd desktop && cargo run --release -p akidev-server",
+    "dev:api": "cargo run -p akidev-server",
+    "start": "cargo run --release -p akidev-server",
     "build": "npm run build --workspace=akidev",
-    "test": "npm test --workspace=akidev && cd desktop && cargo test -p akidev-server -p akidev-core",
+    "test": "npm test --workspace=akidev && cargo test -p akidev-server -p akidev-core",
     "lint": "npm run lint --workspace=akidev"
   },
   "overrides": {

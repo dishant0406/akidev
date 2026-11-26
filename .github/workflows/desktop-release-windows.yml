@@ -2,11 +2,11 @@ name: Desktop release (Windows)
 
 # Builds the Windows app, packs it into an installer and a zip, kept as workflow artifacts, then
 # starts it once and keeps a screenshot as proof that it opens. The installer is signed through
-# SignPath when the repository has the SignPath settings (see desktop/signing/README.md); without
+# SignPath when the repository has the SignPath settings (see apps/desktop/signing/README.md); without
 # them it is left unsigned.
 #
 # Run it by hand from the Actions tab, or push a tag named desktop-windows-v<version> (the version in
-# desktop/Cargo.toml).
+# Cargo.toml at the root).
 
 on:
   workflow_dispatch:
@@ -30,9 +30,6 @@ env:
 jobs:
   zip:
     runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,8 +47,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop
 
       # dumpbin and lib, which make the import library for libmpv, live in the Visual Studio tools.
       - uses: ilammy/msvc-dev-cmd@v1
@@ -64,7 +59,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           # The PostHog project token, compiled in. Public by design (it only lets events in).
           POSTHOG_TOKEN: ${{ secrets.POSTHOG_TOKEN }}
-        run: ./scripts/bundle-windows.ps1
+        run: ./apps/desktop/scripts/bundle-windows.ps1
 
       - name: Start it, wait, and take a picture
         # A runner has no GPU, so this can fail where a real PC would not: it reports and
@@ -88,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: akidev-windows-unsigned
-          path: desktop/target/release/bundle/*-setup.exe
+          path: target/release/bundle/*-setup.exe
           if-no-files-found: error
           retention-days: 1
 
@@ -105,7 +100,7 @@ jobs:
           signing-policy-slug: release-signing
           github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
           wait-for-completion: true
-          output-artifact-directory: desktop/target/signed
+          output-artifact-directory: target/signed
 
       - name: Put the signed installer in place of the unsigned one
         if: steps.signed.outcome == 'success'
@@ -127,10 +122,10 @@ jobs:
         with:
           name: akidev-windows
           path: |
-            desktop/target/release/bundle/*.zip
-            desktop/target/release/bundle/*-setup.exe
-            desktop/target/release/bundle/*-setup.exe.sha256
-            desktop/target/release/bundle/windows-smoke.png
+            target/release/bundle/*.zip
+            target/release/bundle/*-setup.exe
+            target/release/bundle/*-setup.exe.sha256
+            target/release/bundle/windows-smoke.png
           if-no-files-found: error
           retention-days: 30
 

@@ -1,5 +1,5 @@
 // The two ends of a party over WebRTC: the host that holds it and the guest that follows. The
-// desktop app does the same in desktop/party/src/{host,guest}.rs, and the numbers below are the same.
+// desktop app does the same in crates/party/src/{host,guest}.rs, and the numbers below are the same.
 
 import { itemId, itemKey, parseMessage, type Member, type Message, type Readiness } from "./protocol.ts";
 import * as signal from "./signal.ts";

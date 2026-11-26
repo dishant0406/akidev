@@ -1,4 +1,4 @@
-// Tests for reading media ids. They agree with desktop/core/src/media_id.rs.
+// Tests for reading media ids. They agree with crates/core/src/media_id.rs.
 
 import assert from "node:assert/strict";
 import test from "node:test";

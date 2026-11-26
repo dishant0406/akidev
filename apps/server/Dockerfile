@@ -5,9 +5,9 @@
 # gigabytes of memory for a few minutes on every deploy, and this way the host only unpacks 20MB.
 #
 # To build one by hand:
-#   docker run --rm -v "$PWD/..:/src" -w /src rust:1-bookworm \
+#   docker run --rm -v "$PWD/../..:/src" -w /src rust:1-bookworm \
 #     cargo build --release --locked -p akidev-server
-#   mkdir -p dist && cp ../target/release/akidev-server dist/
+#   mkdir -p dist && cp ../../target/release/akidev-server dist/
 #   docker build -t akidev-server .
 FROM debian:bookworm-slim
 

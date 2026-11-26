@@ -17,8 +17,8 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\Akidev.exe
-SetupIconFile=..\app\assets\akidev.ico
-OutputDir=..\target\release\bundle
+SetupIconFile=..\assets\akidev.ico
+OutputDir=..\..\..\target\release\bundle
 OutputBaseFilename=Akidev-{#AppVersion}-x86_64-setup
 Compression=lzma2
 SolidCompression=yes
@@ -29,8 +29,8 @@ DisableProgramGroupPage=yes
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
-Source: "..\target\release\bundle\Akidev\Akidev.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\release\bundle\Akidev\libmpv-2.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\..\target\release\bundle\Akidev\Akidev.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\..\target\release\bundle\Akidev\libmpv-2.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
 ; Links from the website (akidev://download?id=...) open the app.

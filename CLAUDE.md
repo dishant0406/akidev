@@ -11,11 +11,11 @@ The values live in code and are the source of truth for numbers:
 
 - Web: `akidev-frontend/src/app/globals.css` and `tailwind.config.ts`, with the components in
   `akidev-frontend/src/components`.
-- Desktop: `desktop/app/src/design/` (`tokens.rs`, `button.rs`, `state.rs`).
+- Desktop: `apps/desktop/src/design/` (`tokens.rs`, `button.rs`, `state.rs`).
 
 Reuse those components and tokens instead of adding colours or button styles. Use the `apple-design` skill
 for motion, responsiveness and interaction details. The two apps should look like one product: when a
 screen changes in one, check the other.
 
-The manga app (`manga-app/`, with `desktop/manga*`) is a separate product with its own look, described in
+The manga app (`manga-app/`, with `crates/manga*`) is a separate product with its own look, described in
 `design/manga.md`: it does not follow `design/DESIGN_PLAN.md`.

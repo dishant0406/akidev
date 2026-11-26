@@ -5,7 +5,7 @@
 //! `download` fetches its installer, only from GitHub's own hosts, and keeps it only if its
 //! SHA-256 matches the one published next to it. The hash guards against a corrupt download;
 //! what makes an installer trustworthy is its code signature, which the app checks before it
-//! installs anything (see `desktop/app/src/updater.rs`).
+//! installs anything (see `apps/desktop/src/updater.rs`).
 
 use anyhow::{Context, bail, ensure};
 use reqwest::Url;

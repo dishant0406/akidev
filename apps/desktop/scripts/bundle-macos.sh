@@ -8,7 +8,7 @@
 # and every library in it with that identity, with the hardened runtime and a timestamp, as
 # notarisation requires. Without it the bundle is signed ad hoc, which is enough to run locally.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 
 APP=target/release/bundle/Akidev.app
 FRAMEWORKS="$APP/Contents/Frameworks"
@@ -21,12 +21,12 @@ cp target/release/akidev "$APP/Contents/MacOS/Akidev"
 # and the whole bundle is signed again at the end.
 codesign --remove-signature "$APP/Contents/MacOS/Akidev"
 
-# The Dock and Finder icon, made from assets/icon.png at the sizes macOS asks for.
+# The Dock and Finder icon, made from apps/desktop/packaging/icon.png at the sizes macOS asks for.
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET" "$APP/Contents/Resources"
 for size in 16 32 128 256 512; do
-  sips -z "$size" "$size" assets/icon.png --out "$ICONSET/icon_${size}x${size}.png" > /dev/null
-  sips -z "$((size * 2))" "$((size * 2))" assets/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" > /dev/null
+  sips -z "$size" "$size" apps/desktop/packaging/icon.png --out "$ICONSET/icon_${size}x${size}.png" > /dev/null
+  sips -z "$((size * 2))" "$((size * 2))" apps/desktop/packaging/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" > /dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 rm -rf "$(dirname "$ICONSET")"
@@ -97,7 +97,7 @@ if [ -n "${SIGN_IDENTITY:-}" ]; then
   for library in "$FRAMEWORKS"/*; do
     codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$library"
   done
-  codesign --force --options runtime --timestamp --entitlements assets/entitlements.plist --sign "$SIGN_IDENTITY" "$APP"
+  codesign --force --options runtime --timestamp --entitlements apps/desktop/packaging/entitlements.plist --sign "$SIGN_IDENTITY" "$APP"
 else
   for library in "$FRAMEWORKS"/*; do codesign --force --sign - "$library" 2>/dev/null; done
   codesign --force --sign - "$APP"

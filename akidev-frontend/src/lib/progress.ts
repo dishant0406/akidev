@@ -1,7 +1,7 @@
 "use client";
 
 // Where the viewer got to in each title, so the home page can offer to carry on. Kept in the
-// browser, like the app keeps it in a file: the same rules as desktop/app/src/progress.rs.
+// browser, like the app keeps it in a file: the same rules as apps/desktop/src/progress.rs.
 
 import { useSyncExternalStore } from "react";
 

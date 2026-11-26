@@ -21,7 +21,7 @@
 // `movie-myprovider~abc_2d12` is the film `abc-12` of `myprovider`. Only the desktop app has plugins,
 // but a link or a party can carry one of these ids to the site.
 //
-// This mirrors desktop/core/src/media_id.rs. The server is the contract, so the two must
+// This mirrors crates/core/src/media_id.rs. The server is the contract, so the two must
 // agree; they are kept deliberately small so that stays obvious.
 
 export type ContentType = "anime" | "series" | "movie";

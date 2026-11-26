@@ -1,6 +1,6 @@
 // The messages devices send each other in a watch party: JSON text on one data channel. The
-// desktop app has the same list in desktop/party/src/protocol.rs, described in
-// desktop/party/PROTOCOL.md. Change them together.
+// desktop app has the same list in crates/party/src/protocol.rs, described in
+// crates/party/PROTOCOL.md. Change them together.
 
 /** Something to play. Every device finds its own stream from the id, so no address travels. */
 export type Item = {

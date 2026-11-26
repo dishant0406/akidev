@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* The desktop app's palette (desktop/app/src/design/tokens.rs), as RGB channels. */
+/* The desktop app's palette (apps/desktop/src/design/tokens.rs), as RGB channels. */
 :root {
   /* Warm ink, not blue-grey: the film frame the title cards sit on. */
   --canvas: 12 11 10; /* #0c0b0a: the window background */

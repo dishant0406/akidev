@@ -55,8 +55,8 @@ if [ -z "${SKIP_ARCH_CHECK:-}" ] && [ "$(uname -m)" != "x86_64" ]; then
   echo "Error: this host is $(uname -m), but the api binary is built for x86_64." >&2
   exit 1
 fi
-if [ ! -f desktop/server/dist/akidev-server ]; then
-  echo "Error: desktop/server/dist/akidev-server is missing: the workflow builds it and uploads it." >&2
+if [ ! -f apps/server/dist/akidev-server ]; then
+  echo "Error: apps/server/dist/akidev-server is missing: the workflow builds it and uploads it." >&2
   exit 1
 fi
 

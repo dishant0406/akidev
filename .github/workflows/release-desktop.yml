@@ -2,7 +2,7 @@ name: Release desktop
 
 # One button for a desktop release. Run it from the Actions tab: type the version (or leave it
 # empty to raise the patch number by one) and choose the platforms. It sets the version in
-# desktop/Cargo.toml, commits that to main, tags it (desktop-mac-v<version> and
+# Cargo.toml, commits that to main, tags it (desktop-mac-v<version> and
 # desktop-windows-v<version>), and then builds, signs and publishes each platform's release.
 
 on:
@@ -35,7 +35,7 @@ jobs:
           REQUESTED: ${{ inputs.version }}
           PLATFORMS: ${{ inputs.platforms }}
         run: |
-          current=$(sed -n 's/^version = "\(.*\)"/\1/p' desktop/Cargo.toml | head -n 1)
+          current=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
           version="${REQUESTED:-}"
           if [ -z "$version" ]; then
             IFS=. read -r major minor patch <<< "$current"
@@ -59,8 +59,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ "$version" != "$current" ]; then
-            sed -i "0,/^version = \".*\"/s//version = \"$version\"/" desktop/Cargo.toml
-            (cd desktop && cargo update --workspace)
+            sed -i "0,/^version = \".*\"/s//version = \"$version\"/" Cargo.toml
+            cargo update --workspace
             git commit -am "Version $version"
             git push origin HEAD
           fi

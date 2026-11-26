@@ -28,7 +28,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 zip = { version = "7", default-features = false, features = ["deflate"], optional = true }
-ytmapi-rs = { path = "../vendor/ytmapi-rs", default-features = false, features = ["default-tls", "simplified-queries"], optional = true }
+ytmapi-rs = { path = "../../vendor/ytmapi-rs", default-features = false, features = ["default-tls", "simplified-queries"], optional = true }
 tracing.workspace = true
 toml = "0.8"
 librqbit = { version = "9.0.1", optional = true }

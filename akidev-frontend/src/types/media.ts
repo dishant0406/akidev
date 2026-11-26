@@ -1,6 +1,6 @@
 // The shapes the API returns.
 //
-// These mirror desktop/server/API.md, which is the contract; nothing here is invented locally.
+// These mirror apps/server/API.md, which is the contract; nothing here is invented locally.
 
 export type Kind = "anime" | "series" | "movie";
 

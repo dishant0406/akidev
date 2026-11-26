@@ -1,5 +1,5 @@
 // Keeping a guest's player in step with the host's. The same rules, and the same tests, as
-// desktop/party/src/sync.rs.
+// crates/party/src/sync.rs.
 
 import type { Choosing, Item } from "./protocol.ts";
 

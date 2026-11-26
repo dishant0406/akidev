@@ -183,7 +183,7 @@ dash, because a key is split at the first one after the provider.
 ## The data lives in its own repo (2026-11-21)
 
 **Chosen.** `sources.json` and its README moved to a public repo, `dishant0406/akidev-sources`. This repo keeps only code.
-`desktop/core/build.rs` downloads the file to `content/sources/sources.json` (git-ignored) when it is missing, so every
+`crates/core/build.rs` downloads the file to `content/sources/sources.json` (git-ignored) when it is missing, so every
 build, local or CI, gets a built-in copy without any workflow step. `publish-sources.sh` needs `SOURCES_DIR`, a checkout of
 the new repo, so what gets published is always what is committed there.
 
@@ -294,7 +294,7 @@ generated. The new one says only what a person needs to act.
 
 ## Manga sources can sign in (2026-11-22)
 
-**Chosen.** A manga source can have an `auth` section. It says which fields the person types (an email, a password), which request signs in, and where in the answer the session is (`access`, `refresh`, `user`). Those session values become holes (`{access}`) in every later request, and an `authorization` header is added to requests to `base_url`. If a request gets 401, the engine asks the `refresh` request once and tries again. The code is `desktop/manga/src/source.rs` (`sign_in`, `sign_out`, `refresh_unless_done`) and the shapes are in `def.rs` (`AuthDef`).
+**Chosen.** A manga source can have an `auth` section. It says which fields the person types (an email, a password), which request signs in, and where in the answer the session is (`access`, `refresh`, `user`). Those session values become holes (`{access}`) in every later request, and an `authorization` header is added to requests to `base_url`. If a request gets 401, the engine asks the `refresh` request once and tries again. The code is `crates/manga/src/source.rs` (`sign_in`, `sign_out`, `refresh_unless_done`) and the shapes are in `def.rs` (`AuthDef`).
 
 **Why.** Some sites (Asura is the one we looked at) have free titles and paid ones behind an account. Their sign-in is a plain POST that answers a token, so it fits the idea that the JSON controls everything. A company that wants to give us a source can give a token endpoint or an API key the same way.
 
@@ -310,7 +310,7 @@ generated. The new one says only what a person needs to act.
 - Sign in with Google and other redirects. They need a browser, and the app has no web view.
 - A captcha or Turnstile token. Nothing here can pass a check.
 
-**In the apps (same day).** The engine does not store the session itself. The app gives it a `SessionKeeper` (a small interface in `desktop/manga-ffi/src/lib.rs`, with two calls: `load` and `save`). The engine calls `load` when a source loads and `save` every time the session changes, a refresh included. So the apps only hold a safe key-value store: `manga-app/App/SessionKeychain.swift` (Keychain, this device only, after first unlock) and `manga-android/.../sources/SessionKeystore.kt` (AES-GCM with a key that lives in the Android Keystore). All the sign-in logic stays in Rust.
+**In the apps (same day).** The engine does not store the session itself. The app gives it a `SessionKeeper` (a small interface in `crates/manga-ffi/src/lib.rs`, with two calls: `load` and `save`). The engine calls `load` when a source loads and `save` every time the session changes, a refresh included. So the apps only hold a safe key-value store: `manga-app/App/SessionKeychain.swift` (Keychain, this device only, after first unlock) and `manga-android/.../sources/SessionKeystore.kt` (AES-GCM with a key that lives in the Android Keystore). All the sign-in logic stays in Rust.
 
 The screen is one sheet, drawn from the fields the definition lists, with the host the account goes to: `SignInSheet.swift` and `SignInSheet.kt`, opened from the source's own settings page (an "Account" row: Sign in, or the person's name and Sign out). It uses the app's small components only. Two new ones: a secure field and a labelled field (`AkiField`), because a form field keeps its name above it when it fills.
 
@@ -336,7 +336,7 @@ The screen is one sheet, drawn from the fields the definition lists, with the ho
 
 Video felt laggy on 4K files. We measured it: the picture reached the screen about every 61 ms (roughly 16 fps) for a 24 fps film, and mpv dropped about 8 frames a second. Decoding and drawing were not the problem (a frame draws in about 6 ms, no decoder drops).
 
-The cause was the loop in `desktop/app/src/player.rs` that both reads mpv events and draws frames. It waited up to 50 ms for events, so frames were drawn late and mpv threw them away. Now it waits at most 4 ms. The same file then played at a steady 24 fps (frames 42 ms apart) and mpv dropped one frame in 40 seconds. CPU is about 30% of one core for 4K.
+The cause was the loop in `apps/desktop/src/player.rs` that both reads mpv events and draws frames. It waited up to 50 ms for events, so frames were drawn late and mpv threw them away. Now it waits at most 4 ms. The same file then played at a steady 24 fps (frames 42 ms apart) and mpv dropped one frame in 40 seconds. CPU is about 30% of one core for 4K.
 
 Rejected for now: drawing on the GPU instead of the CPU, which mpv's own header suggests for speed. The CPU path costs little on Apple silicon (about 20% of one core for 1080p), and the GPU path needs a large change in how GPUI shows frames. We will do it only if a real file still stutters.
 
@@ -346,9 +346,9 @@ Not tested: Windows, and files at 60 fps.
 
 We measured the desktop app before changing anything. Home scrolls at 120 fps, a title page needs one request (about 120 ms), and the window opens in about 215 ms, most of it the graphics framework. The gap was in the network: a cold start made about 19 requests, and the banner waited for the slowest.
 
-The cause: for a catalogue that pages by skip (Cinemeta, 48 titles a page), `desktop/core/src/providers/list.rs` always asked for one page more than the row needed, "in case" titles were left out. The banner needs 6 titles and a row 24, so the extra page of about 120 KB was almost never used, but the banner waited for it.
+The cause: for a catalogue that pages by skip (Cinemeta, 48 titles a page), `crates/core/src/providers/list.rs` always asked for one page more than the row needed, "in case" titles were left out. The banner needs 6 titles and a row 24, so the extra page of about 120 KB was almost never used, but the banner waited for it.
 
-Now one page is asked for. If it comes up short after titles are left out (not out yet, twice) and the catalogue goes on, one more page is asked for. Three cold launches each, alternating old and new: banner median 1808 ms before, 384 ms after; first row 546 ms before, about 270 ms after. Two tests in `desktop/core/src/providers/read_tests.rs` cover both cases.
+Now one page is asked for. If it comes up short after titles are left out (not out yet, twice) and the catalogue goes on, one more page is asked for. Three cold launches each, alternating old and new: banner median 1808 ms before, 384 ms after; first row 546 ms before, about 270 ms after. Two tests in `crates/core/src/providers/read_tests.rs` cover both cases.
 
 Not changed, on purpose:
 - Rows that read a window of 3 pages (the date sort and genre rows). Reading fewer would show older titles in "New Releases", and Cinemeta's own genre address did not give matching titles in a test.
@@ -362,11 +362,11 @@ What this tells us: a Play start of 10 to 20 s on a 4K WEB-DL is limited by how 
 
 ## The arrows at the ends of a row fade the right way (2026-11-22)
 
-The fade behind a row's arrow was drawn backwards: solid on the side facing the posters and clear at the edge of the screen. That gave a hard vertical line across the poster, with a bare arrow on it. In `desktop/app/src/row.rs` the fade is now solid at the screen edge and clears toward the posters, 96 px wide instead of 64, and the arrow sits in a quiet disc (the same wash as the hover on a button) so it reads as a button. Checked on screen at both ends of a row. Not done: the website's rows, which were not looked at.
+The fade behind a row's arrow was drawn backwards: solid on the side facing the posters and clear at the edge of the screen. That gave a hard vertical line across the poster, with a bare arrow on it. In `apps/desktop/src/row.rs` the fade is now solid at the screen edge and clears toward the posters, 96 px wide instead of 64, and the arrow sits in a quiet disc (the same wash as the hover on a button) so it reads as a button. Checked on screen at both ends of a row. Not done: the website's rows, which were not looked at.
 
 ## The search icon always ends on a page of titles, and the web palette opens at once (2026-11-22)
 
-The magnifier in the top bar now does the same in both apps. On a screen that is not a browse screen it goes to Browse (the app: `Route::Browse`, the site: `/search`, which with nothing typed shows every catalogue) and opens the Cmd-K panel on top, so closing the panel leaves the viewer on a page of titles and not on whatever screen they came from. On a browse screen (any catalogue tab or Browse) it just opens the panel. In the app the music screens keep their own panel, as before. The code is in `desktop/app/src/app.rs` and `akidev-frontend/src/components/topbar.tsx`.
+The magnifier in the top bar now does the same in both apps. On a screen that is not a browse screen it goes to Browse (the app: `Route::Browse`, the site: `/search`, which with nothing typed shows every catalogue) and opens the Cmd-K panel on top, so closing the panel leaves the viewer on a page of titles and not on whatever screen they came from. On a browse screen (any catalogue tab or Browse) it just opens the panel. In the app the music screens keep their own panel, as before. The code is in `apps/desktop/src/app.rs` and `akidev-frontend/src/components/topbar.tsx`.
 
 The site's panel felt slow for three reasons, all removed: the dimmed backdrop faded in over 0.7 s (now it appears at once), the panel animated for 0.16 s (now 0.08 s, in a new `snap` animation in `tailwind.config.ts`), and the panel's code was only downloaded on the first open (now it is fetched one second after the page loads). Measured in the browser: the panel is on screen about 6 to 8 ms after the click. The party panel keeps the 0.16 s animation.
 
@@ -394,7 +394,7 @@ Chosen: a long press on a "Continue reading" card offers "Mark all as read" and 
 
 Why: the shelf had no way to drop a series you stopped reading. The library cards already use a long press menu, so this looks the same.
 
-"Remove from history" is one engine call, `forget_history` (`desktop/manga/src/store.rs`, exported in `desktop/manga-ffi/src/lib.rs`). It deletes every progress row of that one series. History is built from progress, so there is no separate history table to clear.
+"Remove from history" is one engine call, `forget_history` (`crates/manga/src/store.rs`, exported in `crates/manga-ffi/src/lib.rs`). It deletes every progress row of that one series. History is built from progress, so there is no separate history table to clear.
 
 Trade-off: this also forgets which chapters were read. Rejected: deleting only the unfinished row. The series would then stay in the History list, which is not what "remove" says. Another cost: it acts at once, with no question, like the other menu items in the library.
 
@@ -402,8 +402,8 @@ Trade-off: this also forgets which chapters were read. Rejected: deleting only t
 
 I timed things before and after, on a Mac and on the iPhone simulator. The numbers are the reason for each choice.
 
-- Date and chapter-number reading built its regular expressions on every call. A chapter list reads two per row. They are now built once (`desktop/manga/src/date.rs`). 2000 rows went from 1069 ms to 40 ms on the Mac. A phone is slower, so the win there is bigger in real time.
-- The HTTP client spoke only HTTP/1.1. I turned on `http2` and `brotli` in `desktop/manga/Cargo.toml`. Twelve parallel requests to one host went from about 252 ms to about 135 ms. The first request costs the same. It only helps a site that speaks HTTP/2 (a site that does not still works as before).
+- Date and chapter-number reading built its regular expressions on every call. A chapter list reads two per row. They are now built once (`crates/manga/src/date.rs`). 2000 rows went from 1069 ms to 40 ms on the Mac. A phone is slower, so the win there is bigger in real time.
+- The HTTP client spoke only HTTP/1.1. I turned on `http2` and `brotli` in `crates/manga/Cargo.toml`. Twelve parallel requests to one host went from about 252 ms to about 135 ms. The first request costs the same. It only helps a site that speaks HTTP/2 (a site that does not still works as before).
 - The home feed asked every source for its popular and new lists on every open. A list the engine kept in the last ten minutes is now shown and not asked for again (`Engine.fresh_listing`). Pull to refresh and "Try again" still ask again. On the simulator a relaunch went from 3 listing requests to 0. The first launch with an empty cache is unchanged (4 requests). At most four sites are asked at a time, so the first sources answer first. Reading what was kept now happens off the main thread.
 - A series that was opened in the last ten minutes no longer asks again for its details when the stored ones exist (it already skipped the chapter list).
 - The library sorted its whole list up to three times for each screen draw (iOS). It now sorts once.

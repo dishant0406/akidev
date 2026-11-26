@@ -1,7 +1,7 @@
 # Akidev
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
-engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The plan and the reasoning are in
+engine in `crates/manga` through the uniffi facade in `crates/manga-ffi`. The plan and the reasoning are in
 [docs/plans/MANGA_PLAN.md](../docs/plans/MANGA_PLAN.md); the look is described in [design/manga.md](../design/manga.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
 
 ```
@@ -21,7 +21,7 @@ cd manga-app && xcodegen generate
 xcodebuild -project AkiManga.xcodeproj -scheme AkiMangaApp -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath build build
 ```
 
-Run `build-ffi.sh` again after any change in `desktop/manga` or `desktop/manga-ffi` (it regenerates the Swift
+Run `build-ffi.sh` again after any change in `crates/manga` or `crates/manga-ffi` (it regenerates the Swift
 bindings from the Rust code, so they cannot drift). The scheme is `AkiMangaApp`: `AkiManga` is the package.
 
 ## Driving it without a real site
@@ -34,8 +34,8 @@ xcrun simctl launch booted live.akidev.manga -demoRepo http://127.0.0.1:8770/_de
 The server is a fake Madara site and a repository (`/_demo/repo/`: an index naming the madara theme and a source
 called `local`, with hashes). `-demoRepo` (debug builds only) adds that repository at start and installs `local`
 (or the id in `-demoInstall`); `-source local` opens Browse on it. `/_demo/sources/` serves the demo repository
-folder, `desktop/manga/testdata/`. The pages are generated pictures; the
-HTML is the hand-written fixtures in `desktop/manga/testdata/fixtures/madara-example`.
+folder, `crates/manga/testdata/`. The pages are generated pictures; the
+HTML is the hand-written fixtures in `crates/manga/testdata/fixtures/madara-example`.
 
 Other debug-only launch arguments for scripted runs: `-autoSeries "local|solo-leveling|Title"` opens straight on
 a series, `-autoContinue YES` then opens the reader where it left off, and `-mode.<source>.<series> strip|paged|rtl`
@@ -43,7 +43,7 @@ picks the reading mode. `DEMO_LOG=1 python3 content/manga/demo-server.py` prints
 
 ## Books
 
-The Books tab reads EPUB files from the device. The engine (`desktop/manga/src/book`) opens the zip, reads the package, contents
+The Books tab reads EPUB files from the device. The engine (`crates/manga/src/book`) opens the zip, reads the package, contents
 and chapters, and turns a chapter's XHTML and CSS into blocks of styled text with positions; the app (`App/UI/BookLayout.swift`,
 `BookPage.swift`) sets those in type with Core Text, paginates on a background queue and draws the pages itself: no web view and no
 reading library. A format is a `BookFile` in the engine, so another format is one more implementation. Debug-only launch arguments:
@@ -53,11 +53,11 @@ with `AKI_BOOK_CORPUS=/folder cargo test -p akidev-manga --test book corpus -- -
 ## Reading aloud
 
 A book can be read aloud by a voice model that runs on the phone (Phonon 31M today). Models come from a **voices repository**, a
-folder with the same signed-index layout as the source repositories (`desktop/manga/src/repo.rs`, `voices/<id>.json`); the one
+folder with the same signed-index layout as the source repositories (`crates/manga/src/repo.rs`, `voices/<id>.json`); the one
 the app asks is [dishant0406/akidev-voices](https://github.com/dishant0406/akidev-voices), which is the only address built in
 (models are not content). Settings asks it when Settings is opened, never at launch, and shows Reading aloud only if it answered.
 A model is downloaded, checked (it must say a test sentence) and kept in `voices/<id>/`; after that reading needs no network.
-The engine side is `desktop/manga/src/voice.rs` (definitions, download, speaking with the `ptts` crate) and
+The engine side is `crates/manga/src/voice.rs` (definitions, download, speaking with the `ptts` crate) and
 `src/book/speech.rs` (a chapter's sentences with their places); the app side is `App/Reading/` (`BookListener` makes the speech a
 few sentences ahead and queues it on an `AVAudioEngine`; the page follows the sentence). Adding a model needs no app release as long
 as it is a kind the app runs (`family`, only `ptts` now): see `docs/plans/TTS_PLAN.md`, section 11. Debug builds take
@@ -96,7 +96,7 @@ built the same way reaches its first screen at 280 ms, so the app's own part of 
 | `library()` and `updates()` asked again with nothing written (a 400-series library; the app asks 3 times in a launch and on every tab) | 6.9 ms and 6.2 ms each time | 0.03 ms (answer kept until a write) |
 | Everything else timed (opening the engine 1 ms, a series' chapters 0.04 ms, a tab's first frame, scrolling a 300-series library at 60 frames a second with no frame over 16.7 ms, 53 ms of queries in a launch) | already fast | unchanged |
 
-`desktop/manga-ffi/tests/perf_bench.rs` times the engine's reads (`cargo test -p akidev-manga-ffi --profile ios --test perf_bench -- --nocapture --ignored`).
+`crates/manga-ffi/tests/perf_bench.rs` times the engine's reads (`cargo test -p akidev-manga-ffi --profile ios --test perf_bench -- --nocapture --ignored`).
 The rest of a launch is the system: the 5 ms engine start, the first SwiftUI layout, and the first request for the Discover lists.
 
 ## What the app ships with

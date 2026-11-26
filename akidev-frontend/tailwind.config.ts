@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 
 // The colours are the desktop app's, as RGB channels so Tailwind's /alpha modifiers work.
-// See desktop/app/src/design/tokens.rs: a near-black canvas with grey steps for surfaces, so
+// See apps/desktop/src/design/tokens.rs: a near-black canvas with grey steps for surfaces, so
 // the artwork is the colour on screen. Amber is the one accent.
 const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
 

@@ -30,9 +30,6 @@ env:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +44,7 @@ jobs:
           # The schema 2 document, if it is live: it may hold what the other cannot, so it is kept and only
           # its trackers and version are taken from the refreshed one.
           curl -fsS --retry 3 "$FEED/v2/sources.json" -o "$work/sources-v2.json" || rm -f "$work/sources-v2.json"
-          result="$(FILE="$work/sources.json" ../content/sources/refresh-trackers.sh | tail -n 1)"
+          result="$(FILE="$work/sources.json" content/sources/refresh-trackers.sh | tail -n 1)"
           echo "$result"
           echo "work=$work" >> "$GITHUB_OUTPUT"
           if [ "$result" = changed ]; then echo "publish=true" >> "$GITHUB_OUTPUT"; fi
@@ -56,8 +53,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - if: steps.refresh.outputs.publish == 'true'
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop
 
       - name: Check, sign and publish
         if: steps.refresh.outputs.publish == 'true'

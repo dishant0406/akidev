@@ -9,10 +9,10 @@ engine="$root/manga-android/engine/src/main"
 : "${ANDROID_HOME:=/opt/homebrew/share/android-commandlinetools}"
 : "${ANDROID_NDK_HOME:=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)}"
 export ANDROID_HOME ANDROID_NDK_HOME
-# `ios` is the size-optimised profile in desktop/Cargo.toml (it names the phone builds, both platforms).
+# `ios` is the size-optimised profile in Cargo.toml (it names the phone builds, both platforms).
 profile="${PROFILE:-ios}"
 
-cd "$root/desktop"
+cd "$root"
 # Link flags that only shrink the library (about 0.8 MB): the relocations are stored packed (the Android linker reads them from API 23), and functions with identical code are merged
 # unless their address is taken. Only for the phone build: the bindings below are built for this Mac.
 RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,--pack-dyn-relocs=android -C link-arg=-Wl,--icf=safe" \

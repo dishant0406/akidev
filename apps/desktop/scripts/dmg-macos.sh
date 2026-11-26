@@ -7,13 +7,13 @@
 # stapled to it, so macOS opens the app with no warning. Without them the app is signed ad hoc
 # and macOS asks the first time it is opened.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../.."
 
 APP=target/release/bundle/Akidev.app
 VERSION=$(cargo pkgid -p akidev | sed 's/.*[#@]//')
 DMG="target/release/bundle/Akidev-$VERSION-$(uname -m).dmg"
 
-[ -d "$APP" ] || ./scripts/bundle-macos.sh
+[ -d "$APP" ] || ./apps/desktop/scripts/bundle-macos.sh
 
 # The window's look (a background picture and where the icons sit) is written by dmgbuild, which
 # needs no Finder and so also works on CI. It is installed into a private virtualenv.
@@ -26,12 +26,12 @@ fi
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 # One background with a sharp @2x picture inside, which Finder picks on a Retina screen.
-tiffutil -cathidpicheck assets/dmg/background.png assets/dmg/background@2x.png -out "$WORK/background.tiff" > /dev/null
+tiffutil -cathidpicheck apps/desktop/packaging/dmg/background.png apps/desktop/packaging/dmg/background@2x.png -out "$WORK/background.tiff" > /dev/null
 cp "$APP/Contents/Resources/AppIcon.icns" "$WORK/volume.icns"
 
 rm -f "$DMG"
 DMG_APP="$APP" DMG_BACKGROUND="$WORK/background.tiff" DMG_VOLUME_ICON="$WORK/volume.icns" \
-  "$VENV/bin/dmgbuild" -s scripts/dmg-settings.py Akidev "$DMG" > /dev/null
+  "$VENV/bin/dmgbuild" -s apps/desktop/scripts/dmg-settings.py Akidev "$DMG" > /dev/null
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"

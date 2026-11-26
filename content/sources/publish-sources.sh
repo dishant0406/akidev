@@ -18,7 +18,7 @@
 
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-cd "$here/../../desktop"
+cd "$here/../.."
 
 # A checkout of the akidev-sources repo. It is not guessed: the copy built into this repo is only a download.
 SOURCES_DIR="${SOURCES_DIR:?Set SOURCES_DIR to a checkout of the akidev-sources repo}"

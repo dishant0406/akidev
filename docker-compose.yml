@@ -66,7 +66,7 @@ services:
     build:
       # Only the Dockerfile and the binary the deploy workflow built into dist/. See the Dockerfile
       # for why it is not compiled here.
-      context: desktop/server
+      context: apps/server
     restart: unless-stopped
     ports:
       # The torrent port, the same number inside and out because it is what the trackers and the

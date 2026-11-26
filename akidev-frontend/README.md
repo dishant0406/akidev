@@ -1,7 +1,7 @@
 # Akidev frontend
 
 Next.js app (App Router, TypeScript) for Akidev. It talks to the Akidev API
-(`../desktop/server`, contract in `../desktop/server/API.md`) over REST and plays the video URL the API returns.
+(`../apps/server`, contract in `../apps/server/API.md`) over REST and plays the video URL the API returns.
 
 The UI began as a derivative of [Kitsune](https://github.com/Dovakiin0/Kitsune) (MIT) and has
 since been redesigned to match the desktop app. See [../ATTRIBUTION.md](../ATTRIBUTION.md).
@@ -45,7 +45,7 @@ and `tv.akidev.live` redirect to `/anime` and `/films` (see `src/middleware.ts`)
 
 ## Design
 
-The look is the desktop app's (`../desktop/app/src/design/tokens.rs`): a near-black canvas,
+The look is the desktop app's (`../apps/desktop/src/design/tokens.rs`): a near-black canvas,
 grey steps for surfaces, white for the one action on a screen and amber for progress and the
 active tab, in Inter. The colours are CSS variables in `src/app/globals.css` and Tailwind
 names in `tailwind.config.ts` (`canvas`, `surface`, `raised`, `line`, `ink`, `dim`, `faint`,
@@ -56,7 +56,7 @@ names in `tailwind.config.ts` (`canvas`, `surface`, `raised`, `line`, `ink`, `di
 `src/lib/api.ts` is a small fetch client (`get` and `post`), and `src/query/*.ts` wraps the
 endpoints in react-query hooks: one request for the home page (`/v1/home`), one for each
 catalogue page, search and title. The API is the contract; `src/types/media.ts` mirrors
-`desktop/server/API.md`.
+`apps/server/API.md`.
 
 Two deliberate choices:
 

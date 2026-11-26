@@ -3,7 +3,7 @@ name: Desktop release
 # Builds the macOS app and packs it into a disk image, kept as a workflow artifact.
 #
 # Run it by hand from the Actions tab, or push a tag named desktop-mac-v<version> (the version in
-# desktop/app/Cargo.toml). The app is signed ad hoc: there is no Apple Developer ID yet, so
+# Cargo.toml at the root). The app is signed ad hoc: there is no Apple Developer ID yet, so
 # macOS asks the first time it is opened, and the image carries a note that says how to
 # answer. The image is for Apple silicon, because that is what the runner and its libmpv are.
 
@@ -29,9 +29,6 @@ env:
 jobs:
   dmg:
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,8 +51,6 @@ jobs:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: desktop
 
       # With the signing secrets set, the app is signed with the Developer ID certificate and the
       # disk image is notarised by Apple. Without them the app is signed ad hoc, as before.
@@ -91,7 +86,7 @@ jobs:
         env:
           # The PostHog project token, compiled in. Public by design (it only lets events in).
           POSTHOG_TOKEN: ${{ secrets.POSTHOG_TOKEN }}
-        run: ./scripts/dmg-macos.sh
+        run: ./apps/desktop/scripts/dmg-macos.sh
 
       - name: Check what was built
         run: |
@@ -122,8 +117,8 @@ jobs:
         with:
           name: akidev-macos-dmg
           path: |
-            desktop/target/release/bundle/*.dmg
-            desktop/target/release/bundle/*.dmg.sha256
+            target/release/bundle/*.dmg
+            target/release/bundle/*.dmg.sha256
           if-no-files-found: error
           retention-days: 30
 

@@ -5,7 +5,7 @@
 # downloaded into target\mpv (kept between runs). Its import library is made from the DLL's
 # exports, so the MSVC linker does not depend on how the build's own library was written.
 $ErrorActionPreference = 'Stop'
-Set-Location (Join-Path $PSScriptRoot '..')
+Set-Location (Join-Path $PSScriptRoot '..\..\..')
 
 $mpv = Join-Path (Get-Location) 'target\mpv'
 if (-not (Test-Path "$mpv\libmpv-2.dll")) {
@@ -68,7 +68,7 @@ Write-Host "Built $zip"
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
     Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($iscc) {
-    & $iscc "/DAppVersion=$version" scripts\akidev.iss
+    & $iscc "/DAppVersion=$version" apps\desktop\scripts\akidev.iss
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
 } else {
     Write-Host 'Inno Setup is not installed: no installer was made.'

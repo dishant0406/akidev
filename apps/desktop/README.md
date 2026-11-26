@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../design/branding/akidev-icon.svg" alt="Akidev" width="128">
+  <img src="../../design/branding/akidev-icon.svg" alt="Akidev" width="128">
 </p>
 
 <h1 align="center">Akidev Desktop</h1>
@@ -13,8 +13,8 @@ The UI is [GPUI](https://www.gpui.rs/) through [gpui-kit](https://gpui-kit.com):
 canvas, grey surfaces and one amber accent, so the artwork is the colour on screen. Video is
 decoded by [libmpv](https://mpv.io).
 
-The same library also runs the website's backend: `server/` is a REST server built on `core`, and
-`../akidev-frontend` is the site that talks to it. See [server/API.md](server/API.md).
+The same library also runs the website's backend: `apps/server/` is a REST server built on `core`, and
+`../../akidev-frontend` is the site that talks to it. See [apps/server/API.md](../server/API.md).
 
 ## What is in it
 
@@ -46,10 +46,10 @@ with WebRTC, and only what to play and where travels: every device finds its own
 at `api.akidev.live` is just the meeting point where the first message each way is passed, and a
 relay (Cloudflare's, see the root README) carries the connection for the networks that block direct
 ones. The messages, and the rules that keep a guest in step, are in
-[`party/PROTOCOL.md`](party/PROTOCOL.md); the meeting point's routes are in
-[`server/API.md`](server/API.md).
+[`crates/party/PROTOCOL.md`](../../crates/party/PROTOCOL.md); the meeting point's routes are in
+[`apps/server/API.md`](../server/API.md).
 
-`party/` is `akidev-party`: the messages, the sync rules and the WebRTC connection, for the app. The
+`crates/party/` is `akidev-party`: the messages, the sync rules and the WebRTC connection, for the app. The
 website has the same in `akidev-frontend/src/lib/party`. `AKIDEV_API` points a development build at
 another server (`AKIDEV_API=http://localhost:9000 cargo run -p akidev`).
 
@@ -72,10 +72,10 @@ A saved file is encrypted in 64 KiB chunks with a key of its own, wrapped by a m
 system keychain (a file in the library folder where there is no keychain, or it does not answer in 20
 seconds). It does not open outside Akidev, and a copy of the folder is useless on another machine or
 account. It is private to the app, not DRM: whoever has the app and the key can read it. mpv plays it
-through an `akc://` address that decrypts as it reads (`app/src/saved.rs`), so no plain video is
+through an `akc://` address that decrypts as it reads (`src/saved.rs`), so no plain video is
 written to disk. Nothing is uploaded after a download completes: the torrent is dropped at once.
 
-`library/` is `akidev-library`: the container (`container.rs`), the key (`keys.rs`), the list
+`crates/library/` is `akidev-library`: the container (`container.rs`), the key (`keys.rs`), the list
 (`store.rs`) and the downloader (`download.rs`), tested with a seeder on this machine. The website has
 no downloads of its own; its "Download in the app" button opens `akidev://download?id=<media id>`,
 which opens that title in the app (nothing starts without a press), or the page that offers the app.
@@ -83,14 +83,14 @@ which opens that title in the app (nothing starts without a press), or the page 
 ## Layout
 
 ```
-core/      akidev-core: providers, indexers, release ranking, torrent engine, stream resolver
-sources/   the definitions of the indexers and providers, published separately from the app
-party/  akidev-party: watch parties, the connection and the rules that keep guests in step
-library/ akidev-library: saved films and music, the encrypted container and the downloader
-app/    akidev: the GPUI app and the libmpv player
+crates/core/      akidev-core: providers, indexers, release ranking, torrent engine, stream resolver
+content/sources/   the definitions of the indexers and providers, published separately from the app
+crates/party/  akidev-party: watch parties, the connection and the rules that keep guests in step
+crates/library/ akidev-library: saved films and music, the encrypted container and the downloader
+apps/desktop/    akidev: the GPUI app and the libmpv player
 ```
 
-In `app/src`, `updates.rs` is the pill and card and `updater.rs` the install step. `design/` holds the tokens (palette, type scale, spacing) and the few shared
+In `src`, `updates.rs` is the pill and card and `updater.rs` the install step. `design/` holds the tokens (palette, type scale, spacing) and the few shared
 components (buttons, chips, tabs, empty and error states); every screen is built from them.
 `app.rs` is the window shell, `route.rs` is navigation, and each screen has its own file
 (`home`, `browse`, `title`, `watch`, `settings`, plus `palette` for ⌘K). `player.rs` wraps
@@ -98,7 +98,7 @@ libmpv, `progress.rs` remembers where you are, and `images.rs` loads posters.
 
 `core` has no GPU dependency, so everything in it is tested headless.
 
-`core` is shared by two programs: this app, and `server/`, the website's backend. A fix to how a
+`core` is shared by two programs: this app, and `apps/server/`, the website's backend. A fix to how a
 release is found, ranked or opened lands in both. `core` began as a port of the Node API that
 used to serve the site, and the server has since replaced that API.
 
@@ -114,13 +114,13 @@ used to serve the site, and the server has since replaced that API.
 
 Its tests are the Node tests carried over with the same inputs and expected outputs. What a browser
 needs and mpv does not (HLS conversion, ffprobe, the debrid source, the Internet Archive) is in
-`server/`, not here. mpv plays any container directly.
+`apps/server/`, not here. mpv plays any container directly.
 
 ## The server
 
-`server/` is `akidev-server`, a REST API over `core` with the video delivery a browser needs. It
+`apps/server/` is `akidev-server`, a REST API over `core` with the video delivery a browser needs. It
 is deployed with the site; see the root README. Run it with `cargo run -p akidev-server` from this
-directory. [`server/API.md`](server/API.md) lists the routes and `server/src/config.rs` the settings,
+directory. [`apps/server/API.md`](../server/API.md) lists the routes and `apps/server/src/config.rs` the settings,
 and `cargo test -p akidev-server` runs its tests (they use `ffmpeg` and `ffprobe`, and say so and
 pass when those are missing).
 
@@ -169,7 +169,7 @@ buttons, shortcuts use Ctrl where macOS uses Cmd, and the exe carries the icon. 
 `mpv-dev` build, kept beside `Akidev.exe`.
 
 ```powershell
-./scripts/bundle-windows.ps1    # target\release\bundle\Akidev-<version>-x86_64.zip
+./apps/desktop/scripts/bundle-windows.ps1    # target\release\bundle\Akidev-<version>-x86_64.zip
 ```
 
 The script (run from a Visual Studio developer prompt) downloads libmpv, makes its import
@@ -186,7 +186,7 @@ DirectX shaders are compiled by tools that only exist on Windows.
 
 The app looks for a newer version of itself about 20 seconds after it starts and then every six
 hours (Settings, "Check for updates", on by default). It asks the GitHub releases of
-`dishant0406/akidev` (one constant, `REPO` in `core/src/update.rs`, so a rename is a one-line
+`dishant0406/akidev` (one constant, `REPO` in `crates/core/src/update.rs`, so a rename is a one-line
 change) for the newest non-draft, non-prerelease tag with this platform's prefix,
 `desktop-mac-v<version>` or `desktop-windows-v<version>`, and compares it by number with the
 running version (0.1.10 is newer than 0.1.9). When there is one, a small download icon with a
@@ -232,7 +232,7 @@ release workflow updates it. The app updates itself, so `brew upgrade` is not ne
 
 Run **Release desktop** from the repository's Actions tab: type a version such as `0.1.4` (empty
 raises the patch number by one) and choose Windows, macOS or both. It writes the version into
-`desktop/Cargo.toml`, commits it, tags `desktop-mac-v<version>` and `desktop-windows-v<version>`,
+`Cargo.toml`, commits it, tags `desktop-mac-v<version>` and `desktop-windows-v<version>`,
 builds each platform (signing and notarising the Mac app, and signing the Windows installer once
 SignPath is set up) and publishes a GitHub release for each, and points the Homebrew cask at the new Mac build. Pushing one of those tags by hand
 does the same for that platform, if the version in `Cargo.toml` already matches.
@@ -266,16 +266,16 @@ the engine ever fetches the whole file again, or if a read waits on an idle peer
 ## Packaging
 
 ```bash
-./scripts/bundle-macos.sh   # target/release/bundle/Akidev.app
-./scripts/dmg-macos.sh      # target/release/bundle/Akidev-<version>-<arch>.dmg
+./apps/desktop/scripts/bundle-macos.sh   # target/release/bundle/Akidev.app
+./apps/desktop/scripts/dmg-macos.sh      # target/release/bundle/Akidev-<version>-<arch>.dmg
 ```
 
 `bundle-macos.sh` builds the app with libmpv and every library it loads copied inside, so it runs
-on a Mac without Homebrew, and with the Dock icon made from `assets/icon.png`. `dmg-macos.sh` packs
+on a Mac without Homebrew, and with the Dock icon made from `packaging/icon.png`. `dmg-macos.sh` packs
 it into a disk image with an Applications shortcut and a short note.
 
 The **Desktop release** workflow does this on GitHub: run it from the Actions tab, or push a tag
-named `desktop-mac-v<version>` (the version in `app/Cargo.toml`), and the disk image is kept as the
+named `desktop-mac-v<version>` (the version in the root `Cargo.toml`), and the disk image is kept as the
 `akidev-macos-dmg` artifact for 30 days. It is for Apple silicon.
 
 The app is signed ad hoc, which is enough to run it locally. Without an Apple Developer ID

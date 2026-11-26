@@ -1,6 +1,6 @@
 // The single REST client used by the whole app.
 //
-// The API is JSON over HTTP (desktop/server/API.md), so this is a small fetch wrapper: it
+// The API is JSON over HTTP (apps/server/API.md), so this is a small fetch wrapper: it
 // also keeps the request count and the bundle honest.
 
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:9000").replace(/\/+$/, "");

@@ -8,9 +8,9 @@ license.workspace = true
 embed-resource = "3"
 
 [dependencies]
-akidev-core = { path = "../core", features = ["music", "code-plugins"] }
-akidev-library = { path = "../library" }
-akidev-party = { path = "../party" }
+akidev-core = { path = "../../crates/core", features = ["music", "code-plugins"] }
+akidev-library = { path = "../../crates/library" }
+akidev-party = { path = "../../crates/party" }
 gpui-kit = "=0.7.3"
 anyhow.workspace = true
 directories = "6"

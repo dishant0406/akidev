@@ -13,7 +13,7 @@
 #   FILE=/path/to/sources.json ./content/sources/refresh-trackers.sh
 
 set -euo pipefail
-cd "$(dirname "$0")/../../desktop"
+cd "$(dirname "$0")/../.."
 
 LIMIT="${LIMIT:-32}"
 LIST="${LIST:-https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt}"

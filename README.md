@@ -16,10 +16,10 @@ Anime, series and films from one API, served as one site and one desktop app.
 
 | Directory | What it is | Port |
 | --- | --- | --- |
-| `desktop/server/` | The API: a Rust binary, `akidev-server`. Catalogue from AniList, Cinemeta and TVMaze, releases from torrent indexers, video from a debrid CDN, a torrent swarm or the Internet Archive, converted for the browser only as far as it has to be. See [desktop/server/API.md](desktop/server/API.md). | 9000 |
-| `desktop/core/` | The library the server and the desktop app share: providers, indexers, ranking, the torrent engine. | |
+| `apps/server/` | The API: a Rust binary, `akidev-server`. Catalogue from AniList, Cinemeta and TVMaze, releases from torrent indexers, video from a debrid CDN, a torrent swarm or the Internet Archive, converted for the browser only as far as it has to be. See [apps/server/API.md](apps/server/API.md). | 9000 |
+| `crates/core/` | The library the server and the desktop app share: providers, indexers, ranking, the torrent engine. | |
 | `akidev-frontend/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. | 3000 |
-| `desktop/app/` | The native macOS app, with the same backend built in. See [desktop/README.md](desktop/README.md). | |
+| `apps/desktop/` | The native macOS app, with the same backend built in. See [apps/desktop/README.md](apps/desktop/README.md). | |
 
 The server and the desktop app are built on **one library**, so there is one copy of every indexer,
 provider and ranking rule. A fix to how a release is found or ranked lands in both. This replaced
@@ -58,12 +58,12 @@ means the watch page knows what it is looking at from the URL alone.
 
 The provider's own id is alphanumeric rather than digits-only because providers do not
 agree on a form: AniList and TVMaze use numbers, Cinemeta uses IMDb ids
-(`tt27548557`). `desktop/core/src/media_id.rs` and `akidev-frontend/src/lib/media-id.ts`
+(`tt27548557`). `crates/core/src/media_id.rs` and `akidev-frontend/src/lib/media-id.ts`
 must agree.
 
 ## Adding a provider or an indexer
 
-Both are *data*, not code: signed JSON definitions that the engine in `desktop/core` follows, so a
+Both are *data*, not code: signed JSON definitions that the engine in `crates/core` follows, so a
 change to what is asked of an upstream does not need a release. They are in the [akidev-sources](https://github.com/dishant0406/akidev-sources) repo;
 see [the akidev-sources repo](https://github.com/dishant0406/akidev-sources) for the format and for how they are
 signed and published. The server and the app both load the signed copy from
@@ -88,8 +88,8 @@ is not accepted either: it may hold a debrid credential. Only its validated torr
 shared pipeline.
 
 A stream source is different: it is code, because where the bytes come from is a different
-mechanism each time (`desktop/server/src/sources/` for debrid and the Internet Archive, and the
-torrent engine in `desktop/core`). `STREAM_SOURCES` lists them in order of preference: `debrid`
+mechanism each time (`apps/server/src/sources/` for debrid and the Internet Archive, and the
+torrent engine in `crates/core`). `STREAM_SOURCES` lists them in order of preference: `debrid`
 serves from a CDN cache, `torrent` joins a swarm and relays, `archive-org` returns a direct HTTPS
 URL. A source that is not usable - `debrid` without an API key - is skipped rather than failing
 the request, and `GET /health` reports what is configured.
@@ -121,7 +121,7 @@ because TVMaze's own search returned "D.N.Angel" above "Dangal".
 `POST /v1/play` finds a source and answers with a URL. Between the file and the URL, the server
 reads the file's header (`ffprobe`, through the same reader the player will use, since a torrent's
 file on disk is sparse until its pieces arrive) and takes the **lightest** delivery that works, in
-this order (`desktop/server/src/media.rs`):
+this order (`apps/server/src/media.rs`):
 
 1. **Direct.** An MP4 with H.264 and AAC or MP3 is sent as it is, with range support. No work at
    all.
@@ -155,10 +155,10 @@ guests can be the desktop app or the website, in any mix.
 The host is a device, not this server. A guest connects straight to it with WebRTC, and only what
 to play and where travels (a media id and a position); every device finds its own stream, so the
 host's connection carries a few hundred bytes a second. `api.akidev.live` is only the meeting point
-(`/v1/party`, in `desktop/server/API.md`): it passes the first message each way so two devices on
+(`/v1/party`, in `apps/server/API.md`): it passes the first message each way so two devices on
 different networks can find each other, keeps a party in memory until its host stops asking for
 guests, and never sees what is played. The messages and the rules that keep a guest in step are in
-`desktop/party/PROTOCOL.md`; the app has them in `desktop/party`, the site in
+`crates/party/PROTOCOL.md`; the app has them in `crates/party`, the site in
 `akidev-frontend/src/lib/party`.
 
 Most connections go direct. Some networks (strict NATs, some mobile and corporate ones) cannot, and
@@ -331,7 +331,7 @@ cp akidev-frontend/.env.example akidev-frontend/.env
 ```
 
 The server reads its settings from the environment and every one has a default that suits a small
-server: see `desktop/server/src/config.rs` for the list (`PORT`, `PUBLIC_URL`, `CORS_ORIGINS`,
+server: see `apps/server/src/config.rs` for the list (`PORT`, `PUBLIC_URL`, `CORS_ORIGINS`,
 `CACHE_DIR`, `STREAM_SOURCES`, `TORBOX_API_KEY`, `MAX_TORRENTS`, `MAX_CACHE_BYTES`,
 `MAX_HLS_SESSIONS`, `MAX_VIDEO_TRANSCODES`, ...).
 
@@ -487,7 +487,7 @@ work but requires the Workers Paid plan, and its request-scoped model fits a
 2. **build-server** compiles `akidev-server` inside `rust:1-bookworm`, the Debian release the
    runtime image is based on, so it links the libc and OpenSSL it will run against. It then starts
    the binary once, so one that cannot run is found there.
-3. **deploy** copies the commit to `/opt/konflix`, puts the binary in `desktop/server/dist/`,
+3. **deploy** copies the commit to `/opt/konflix`, puts the binary in `apps/server/dist/`,
    renders `.env.deploy` from the repository secrets and runs `scripts/deploy.sh` over SSH.
 4. The same job then verifies through Cloudflare.
 
@@ -518,7 +518,7 @@ Keep existing credentials/settings; this scope requires no new secrets, dependen
 The desktop embeds the core, so a website deploy does not update installed apps. Use the existing
 **Release desktop** workflow (`.github/workflows/release-desktop.yml`) to publish a new workspace
 version for the intended macOS/Windows platforms through their existing build/sign/publish jobs.
-Consumers of `desktop/library` likewise need a rebuilt/released artifact containing the new core;
+Consumers of `crates/library` likewise need a rebuilt/released artifact containing the new core;
 signed source definitions cannot deliver library/code fixes. The workflow creates version commits
 and platform tags, so release execution is a separate authorized step, not part of a docs edit.
 
@@ -564,4 +564,4 @@ rebuild needed. This is the only setting that has needed changing in production.
 
 No secret is committed. `.env.deploy` is rendered on the server from GitHub secrets by
 the workflow, is gitignored, and is written with mode `600`. Locally, the server reads its
-settings from the environment (see `desktop/server/src/config.rs`).
+settings from the environment (see `apps/server/src/config.rs`).

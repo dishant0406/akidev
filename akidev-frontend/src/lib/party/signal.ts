@@ -1,4 +1,4 @@
-// Talking to the meeting point on the API (/v1/party, see desktop/server/API.md).
+// Talking to the meeting point on the API (/v1/party, see apps/server/API.md).
 
 import { API_BASE } from "../api.ts";
 

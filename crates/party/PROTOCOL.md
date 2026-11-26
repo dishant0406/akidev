@@ -8,7 +8,7 @@ a guest, in any mix.
 
 - A guest and the host connect with **WebRTC**, over one data channel labelled `party`. Every
   guest has its own connection to the host; guests do not talk to each other.
-- `api.akidev.live` is only the **meeting point** (`desktop/server/API.md`, "Watch party"). The
+- `api.akidev.live` is only the **meeting point** (`apps/server/API.md`, "Watch party"). The
   host opens a party and gets a six-letter code; a guest posts an offer for that code; the host
   takes it and posts an answer. After that the server is not involved, and it never sees what is
   played. Offers and answers are complete: the device waits until it has found its addresses (at
@@ -34,7 +34,7 @@ One JSON object per data-channel message, as text. `t` says which. The Rust list
 | `bye` | either | | Leaving. From the host it ends the party. |
 
 `item` is `null` (nothing), `{ "kind": "video", "id": "series-tt0903747-s1e5", "release": "<selection id>", "candidates": ["<selection id>", ...] }` (a media id, as
-in `desktop/server/API.md`, the bare-hash or file-scoped release the host plays, and, until it has one, the releases it is trying, best first; `release` and `candidates` are optional,
+in `apps/server/API.md`, the bare-hash or file-scoped release the host plays, and, until it has one, the releases it is trying, best first; `release` and `candidates` are optional,
 and the website ignores `candidates`), or `{ "kind": "music", "id": "<YouTube video id>", "title", "artist",
 "cover" }` (the last three are only what a guest shows before its own copy has loaded).
 
