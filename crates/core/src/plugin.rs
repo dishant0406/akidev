@@ -832,8 +832,7 @@ mod tests {
         let _guard = sources::definitions_change_lock().blocking_lock();
         let base = sources::current();
         // A copy of the built-in Kitsu mapper under another name, and an indexer asked by its ids.
-        let document: Value =
-            serde_json::from_str(include_str!("../sources.json")).unwrap();
+        let document: Value = serde_json::from_str(include_str!("../sources.json")).unwrap();
         let mut mapper = document["mappers"][0].clone();
         assert_eq!(mapper["id"], "kitsu");
         mapper["id"] = json!("mymap");
@@ -1426,8 +1425,7 @@ mod tests {
 
     #[test]
     fn a_signed_document_cannot_bring_code() {
-        let mut document: Value =
-            serde_json::from_str(include_str!("../sources.json")).unwrap();
+        let mut document: Value = serde_json::from_str(include_str!("../sources.json")).unwrap();
         assert!(sources::parse(&bytes(&document)).is_ok());
         document["indexers"][0]["code"] = json!("search");
         assert!(
@@ -1506,8 +1504,7 @@ mod tests {
     fn a_catalogue_and_a_mapper_can_use_the_plugins_code_too() {
         let _guard = sources::definitions_change_lock().blocking_lock();
         let (_, module) = code_plugin("coded");
-        let document: Value =
-            serde_json::from_str(include_str!("../sources.json")).unwrap();
+        let document: Value = serde_json::from_str(include_str!("../sources.json")).unwrap();
         let mut mapper = document["mappers"][0].clone();
         mapper["id"] = json!("mymap");
         mapper["provider"]["code"] = json!("fetch_signed");
@@ -1570,8 +1567,7 @@ mod tests {
         elsewhere["services"][0]["base"] = json!("https://elsewhere.example.com/api");
         assert!(parse(&bytes(&elsewhere)).is_err());
         // Nothing in a signed document.
-        let mut signed: Value =
-            serde_json::from_str(include_str!("../sources.json")).unwrap();
+        let mut signed: Value = serde_json::from_str(include_str!("../sources.json")).unwrap();
         signed["services"] = json!([service]);
         assert!(sources::parse(&bytes(&signed)).is_err());
     }
