@@ -58,28 +58,28 @@ fun LibraryScreen() {
         AkiRefreshable({ app.refreshLibrary(force = true); library.loadHistory(); library.loadCategories() }, Modifier.fillMaxSize()) {
             AkiPage(narrow = false, state = library.scroll) {
                 item {
-                    AkiHeader("Library", subtitle = if (library.selecting) "${library.pickedShown.size} selected" else plural(app.library.size, "series", "series")) {
-                        AkiMenu("filter", "Sort and filter", library.menu(inMangaTab = part != null) { sheet = LibrarySheet.Managing })
+                    AkiHeader(Copy.Home.library, subtitle = if (library.selecting) Copy.Library.selectedCount(library.pickedShown.size) else Copy.Library.seriesCountAndroid(app.library.size)) {
+                        AkiMenu("filter", Copy.Library.sortAndFilter, library.menu(inMangaTab = part != null) { sheet = LibrarySheet.Managing })
                     }
                 }
                 item { MangaPartPills() }
-                if (part == null) item { AkiTabs(listOf(AkiChoice(LibraryTab.Saved, "Library"), AkiChoice(LibraryTab.History, "History")), library.tab, { library.tab = it }) }
+                if (part == null) item { AkiTabs(listOf(AkiChoice(LibraryTab.Saved, Copy.Home.library), AkiChoice(LibraryTab.History, Copy.Home.history)), library.tab, { library.tab = it }) }
                 if (library.tab == LibraryTab.Saved) saved(library, columns, inMangaTab = part != null) else history(library)
             }
         }
         if (library.tab == LibraryTab.Saved && library.selecting && library.pickedShown.isNotEmpty()) {
             // What can be done to the series picked: icons alone, round, so three of them fit and sit clear of the tab bar.
             Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 112.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiIconButton("folder", "Change categories") { sheet = LibrarySheet.Assigning(library.pickedShown.map { it.source to it.id }) }
-                AkiIconButton("check", "Mark as read") { library.markPickedRead() }
-                AkiIconButton("bookmark-off", "Remove from library", tint = Aki.colors.destructive) { sheet = LibrarySheet.Removing }
+                AkiIconButton("folder", Copy.Library.changeCategories) { sheet = LibrarySheet.Assigning(library.pickedShown.map { it.source to it.id }) }
+                AkiIconButton("check", Copy.Library.markAsRead) { library.markPickedRead() }
+                AkiIconButton("bookmark-off", Copy.Library.removeFromLibrary, tint = Aki.colors.destructive) { sheet = LibrarySheet.Removing }
             }
         }
     }
     when (val current = sheet) {
         LibrarySheet.Managing -> CategoriesSheet { sheet = null; library.loadCategories(); app.refresh() }
         is LibrarySheet.Assigning -> CategoryPicker(current.series, onDismiss = { sheet = null; library.loadCategories(); library.picked = emptySet(); library.selecting = false })
-        LibrarySheet.Removing -> AkiConfirm("Remove ${library.pickedShown.size} series from your library?", "Your reading progress is kept. You can add the series to your library again.", "Remove series", { sheet = null }) { scope.launch { library.removePicked() } }
+        LibrarySheet.Removing -> AkiConfirm(Copy.Library.removeSeriesQuestion(library.pickedShown.size), Copy.Library.removeSeriesHint, Copy.Library.removeSeries, { sheet = null }) { scope.launch { library.removePicked() } }
         null -> {}
     }
 }
@@ -93,14 +93,14 @@ private sealed interface LibrarySheet {
 
 private fun LazyListScope.saved(library: LibraryModel, columns: Int, inMangaTab: Boolean) {
     if (library.isEmpty) {
-        item { AkiEmptyState("Your library is empty", "Add a series with the bookmark button on its page. It stays here with your reading progress.", Modifier.heightIn(min = 340.dp)) }
+        item { AkiEmptyState(Copy.Library.libraryEmpty, Copy.Library.libraryEmptyHint, Modifier.heightIn(min = 340.dp)) }
         return
     }
     if (library.categories.isNotEmpty() && !inMangaTab) item { Shelves(library) }
     val shown = library.shown
     if (shown.isEmpty()) {
         item {
-            AkiEmptyState(if (library.onlyUnread) "All caught up" else "Nothing here", if (library.onlyUnread) "You have read everything in this category." else "No series in this category yet. Touch and hold a series to add it to a category.", Modifier.heightIn(min = 260.dp))
+            AkiEmptyState(if (library.onlyUnread) Copy.Home.allCaughtUp else Copy.Library.nothingHere, if (library.onlyUnread) Copy.Library.readEverythingInCategory else Copy.Library.noSeriesInCategory, Modifier.heightIn(min = 260.dp))
         }
     }
     akiGrid(shown, columns, key = { it.source + "/" + it.id }) { entry -> Cover(library, entry) }
@@ -108,7 +108,7 @@ private fun LazyListScope.saved(library: LibraryModel, columns: Int, inMangaTab:
 
 @Composable
 private fun Shelves(library: LibraryModel) {
-    val shelves = listOf(AkiChoice(-1L, "All")) + library.categories.filter { it.count > 0u || it.books == 0u }.map { AkiChoice(it.id, "${it.name} ${it.count}") } + listOf(AkiChoice(-2L, "No category"))
+    val shelves = listOf(AkiChoice(-1L, Copy.Home.all)) + library.categories.filter { it.count > 0u || it.books == 0u }.map { AkiChoice(it.id, "${it.name} ${it.count}") } + listOf(AkiChoice(-2L, Copy.Library.noCategory))
     AkiChips(shelves, library.category, { library.category = it })
 }
 
@@ -116,7 +116,7 @@ private fun Shelves(library: LibraryModel) {
 private fun Cover(library: LibraryModel, entry: LibraryEntry) {
     val router = LocalRouter.current
     val scope = rememberCoroutineScope()
-    val subtitle = if (entry.unread > 0u) "${entry.unread} unread" else "Up to date"
+    val subtitle = if (entry.unread > 0u) Copy.Library.unreadCount(entry.unread.toInt()) else Copy.Home.upToDate
     val card = @Composable { AkiCoverCard(entry.title, entry.cover, subtitle = subtitle, badge = entry.unread.toInt()) }
     if (library.selecting) {
         AkiTap({ library.toggle(entry) }, Modifier.semantics { selected = entry.source + "/" + entry.id in library.picked }) {
@@ -139,14 +139,14 @@ private fun Tick(on: Boolean, modifier: Modifier) {
 
 private fun LazyListScope.history(library: LibraryModel) {
     if (library.history.isEmpty()) {
-        item { AkiEmptyState("Nothing read yet", "Chapters you open appear here, newest first.", Modifier.heightIn(min = 340.dp)) }
+        item { AkiEmptyState(Copy.Library.nothingReadYet, Copy.Library.chaptersOpenedHint, Modifier.heightIn(min = 340.dp)) }
         return
     }
     items(library.history.size) { index ->
         val entry = library.history[index]
         val router = LocalRouter.current
         AkiTapMenu(library.historyMenu(entry), onClick = { router.push(SeriesRoute(SeriesRef(entry.source, entry.series, entry.title, entry.cover))) }) {
-            AkiListCard(entry.cover, if (entry.finished) "Finished" else "Reading", entry.title, badges = listOfNotNull(chapterName(entry.chapterNumber, entry.chapterTitle), shortDate(entry.atMs)))
+            AkiListCard(entry.cover, if (entry.finished) Copy.Library.finished else Copy.Library.reading, entry.title, badges = listOfNotNull(chapterName(entry.chapterNumber, entry.chapterTitle), shortDate(entry.atMs)))
         }
     }
 }

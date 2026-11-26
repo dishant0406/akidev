@@ -72,6 +72,68 @@ enum Copy {
         static let booksChoice = "Read EPUB books from your files or a catalogue. Akidev keeps your place."
         static let changeLaterHint = "You can change this at any time in Settings."
     }
+    enum Library {
+        static let categories = "Categories"
+        static let noCategoriesYet = "No categories yet"
+        static let categoriesExplainer = "A category groups series and books in your library. Add one, then put series or books on it."
+        static let noCategoriesYetFromMenu = "Add one from the menu on the Library or Books screen, under Edit categories."
+        static func optionsFor(_ name: String) -> String { "Options for \(name)" }
+        static let addCategory = "Add category"
+        static let newCategory = "New category"
+        static let renameCategory = "Rename category"
+        static let chooseCategoryName = "Choose a name for the category."
+        static let categoryNamePlaceholder = "Reading"
+        static func deleteCategoryQuestion(_ name: String) -> String { "Delete the category “\(name)”?" }
+        static let deleteCategory = "Delete category"
+        static let categoryContentsStay = "The series and books in it stay in your library."
+        static let couldNotSaveCategory = "Could not save the category"
+        static let rename = "Rename"
+        static let moveUp = "Move up"
+        static let moveDown = "Move down"
+        static let delete = "Delete"
+        static func seriesCount(_ count: Int) -> String { "\(count) series" }
+        static func seriesCountAndroid(_ count: Int) -> String { "\(count) series" }
+        static func bookCount(_ count: Int) -> String { count == 1 ? "\(count) book" : "\(count) books" }
+        static let empty = "Empty"
+        static let moveToAnotherSource = "Move to another source"
+        static func findOnAnotherSource(_ title: String) -> String { "Find “\(title)” on another source. Its categories and your reading progress move with it." }
+        static let noOtherSource = "No other source to move to"
+        static let installAnotherSource = "Install another source that can search, then come back."
+        static func moveSeriesQuestion(_ title: String, _ toName: String) -> String { "Move “\(title)” to \(toName)?" }
+        static let moveSeries = "Move series"
+        static func seriesLeavesSource(_ fromName: String, _ toName: String) -> String { "The series leaves \(fromName) and moves to \(toName). Your categories and reading progress move with it." }
+        static let couldNotMoveSeries = "Could not move the series"
+        static let couldNotSearchSource = "Could not search this source"
+        static let nothingFound = "Nothing found"
+        static func hasNothingCalled(_ name: String, _ term: String) -> String { "\(name) has nothing called “\(term)”. Try a shorter title, or another source." }
+        static let chooseMatchingSeries = "Choose the matching series"
+        static let sortAndFilter = "Sort and filter"
+        static let reverseOrder = "Reverse order"
+        static let showOnlyUnread = "Show only unread"
+        static let doneSelecting = "Done selecting"
+        static let selectSeries = "Select series"
+        static let editCategories = "Edit categories"
+        static let receiveFromFriend = "Receive from a friend"
+        static func selectedCount(_ count: Int) -> String { "\(count) selected" }
+        static let allCategories = "All categories"
+        static let noCategory = "No category"
+        static func removeSeriesQuestion(_ count: Int) -> String { "Remove \(count) series from your library?" }
+        static let removeSeriesHint = "Your reading progress is kept. You can add the series to your library again."
+        static let removeSeries = "Remove series"
+        static let libraryEmpty = "Your library is empty"
+        static let libraryEmptyHint = "Add a series with the bookmark button on its page. It stays here with your reading progress."
+        static let nothingHere = "Nothing here"
+        static let readEverythingInCategory = "You have read everything in this category."
+        static let noSeriesInCategory = "No series in this category yet. Touch and hold a series to add it to a category."
+        static func unreadCount(_ count: Int) -> String { "\(count) unread" }
+        static let changeCategories = "Change categories"
+        static let markAsRead = "Mark as read"
+        static let removeFromLibrary = "Remove from library"
+        static let nothingReadYet = "Nothing read yet"
+        static let chaptersOpenedHint = "Chapters you open appear here, newest first."
+        static let finished = "Finished"
+        static let reading = "Reading"
+    }
     enum Welcome {
         static let title = "Welcome to Akidev"
         static let body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

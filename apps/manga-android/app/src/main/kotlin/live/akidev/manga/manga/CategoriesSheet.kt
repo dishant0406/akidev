@@ -41,27 +41,27 @@ fun CategoriesSheet(onDismiss: () -> Unit) {
 
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Categories", AkiTextStyle.Title, isHeading = true)
+            AkiText(Copy.Library.categories, AkiTextStyle.Title, isHeading = true)
             if (categories.isEmpty()) {
-                AkiEmptyState("No categories yet", "A category groups series and books in your library. Add one, then put series or books on it.", Modifier.heightIn(min = 220.dp))
+                AkiEmptyState(Copy.Library.noCategoriesYet, Copy.Library.categoriesExplainer, Modifier.heightIn(min = 220.dp))
             }
             categories.forEachIndexed { index, category ->
                 val items = buildList {
-                    add(AkiMenuItem("Rename", "sliders") { asking = CategoryAsk.Rename(category) })
-                    if (index > 0) add(AkiMenuItem("Move up", "order") { move(index, -1) })
-                    if (index < categories.size - 1) add(AkiMenuItem("Move down", "down") { move(index, 1) })
-                    add(AkiMenuItem("Delete", "trash", destructive = true) { asking = CategoryAsk.Delete(category) })
+                    add(AkiMenuItem(Copy.Library.rename, "sliders") { asking = CategoryAsk.Rename(category) })
+                    if (index > 0) add(AkiMenuItem(Copy.Library.moveUp, "order") { move(index, -1) })
+                    if (index < categories.size - 1) add(AkiMenuItem(Copy.Library.moveDown, "down") { move(index, 1) })
+                    add(AkiMenuItem(Copy.Library.delete, "trash", destructive = true) { asking = CategoryAsk.Delete(category) })
                 }
-                AkiRow(category.name, subtitle = contents(category)) { AkiMenu("more", "Options for ${category.name}", items) }
+                AkiRow(category.name, subtitle = contents(category)) { AkiMenu("more", Copy.Library.optionsFor(category.name), items) }
             }
-            AkiButton("Add category", icon = "folder-add", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { asking = CategoryAsk.Add }
+            AkiButton(Copy.Library.addCategory, icon = "folder-add", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) { asking = CategoryAsk.Add }
         }
     }
     when (val current = asking) {
         CategoryAsk.Add, is CategoryAsk.Rename -> {
             val renaming = (current as? CategoryAsk.Rename)?.category
             AkiPrompt(
-                if (renaming == null) "New category" else "Rename category", "Choose a name for the category.", "Reading", if (renaming == null) "Add category" else "Rename category",
+                if (renaming == null) Copy.Library.newCategory else Copy.Library.renameCategory, Copy.Library.chooseCategoryName, Copy.Library.categoryNamePlaceholder, if (renaming == null) Copy.Library.addCategory else Copy.Library.renameCategory,
                 onDismiss = { asking = null }, initial = renaming?.name ?: "",
                 onConfirm = { text ->
                     asking = null
@@ -77,14 +77,14 @@ fun CategoriesSheet(onDismiss: () -> Unit) {
                 },
             )
         }
-        is CategoryAsk.Delete -> AkiConfirm("Delete the category “${current.category.name}”?", "The series and books in it stay in your library.", "Delete category", { asking = null }) {
+        is CategoryAsk.Delete -> AkiConfirm(Copy.Library.deleteCategoryQuestion(current.category.name), Copy.Library.categoryContentsStay, Copy.Library.deleteCategory, { asking = null }) {
             runCatching { app.engine.deleteCategory(current.category.id) }
             if (app.prefs.saveCategory == current.category.id) app.prefs.saveCategory = 0
             reload()
         }
         null -> {}
     }
-    problem?.let { AkiAlert("Could not save the category", it) { problem = null } }
+    problem?.let { AkiAlert(Copy.Library.couldNotSaveCategory, it) { problem = null } }
 }
 
 /** The question over the categories sheet: a new name, a new name for one, or whether to delete one. Only one is asked at a time. */
@@ -96,10 +96,10 @@ private sealed interface CategoryAsk {
 
 private fun contents(category: CategoryInfo): String {
     val parts = listOfNotNull(
-        if (category.count > 0u) "${category.count} series" else null,
-        if (category.books > 0u) (if (category.books == 1u) "1 book" else "${category.books} books") else null,
+        if (category.count > 0u) Copy.Library.seriesCount(category.count.toInt()) else null,
+        if (category.books > 0u) Copy.Library.bookCount(category.books.toInt()) else null,
     )
-    return if (parts.isEmpty()) "Empty" else parts.joinToString(" · ")
+    return if (parts.isEmpty()) Copy.Library.empty else parts.joinToString(" · ")
 }
 
 /** A series (or several) and the categories it is on, to change: each category is a switch, on when every one of them is on it. */
@@ -125,9 +125,9 @@ fun CategoryPicker(series: List<Pair<String, String>>, onDismiss: () -> Unit, bo
 
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Categories", AkiTextStyle.Title, isHeading = true)
+            AkiText(Copy.Library.categories, AkiTextStyle.Title, isHeading = true)
             if (categories.isEmpty()) {
-                AkiEmptyState("No categories yet", "Add one from the menu on the Library or Books screen, under Edit categories.", Modifier.heightIn(min = 220.dp))
+                AkiEmptyState(Copy.Library.noCategoriesYet, Copy.Library.noCategoriesYetFromMenu, Modifier.heightIn(min = 220.dp))
             } else {
                 AkiCard(padding = 16.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {

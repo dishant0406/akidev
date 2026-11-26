@@ -15,44 +15,44 @@ struct CategoriesSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Categories", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Library.categories, .title).accessibilityAddTraits(.isHeader)
                 if categories.isEmpty {
-                    AkiEmptyState(title: "No categories yet", message: "A category groups series and books in your library. Add one, then put series or books on it.")
+                    AkiEmptyState(title: Copy.Library.noCategoriesYet, message: Copy.Library.categoriesExplainer)
                         .frame(minHeight: 220)
                 }
                 ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
                     AkiRow(title: category.name, subtitle: contents(of: category)) {
-                        AkiMenu(symbol: "more", label: "Options for \(category.name)", items: menu(for: category, at: index))
+                        AkiMenu(symbol: "more", label: Copy.Library.optionsFor(category.name), items: menu(for: category, at: index))
                     }
                 }
-                AkiButton("Add category", icon: "folder-add", variant: .primary, size: .large, fullWidth: true) { renaming = nil; name = ""; naming = true }
+                AkiButton(Copy.Library.addCategory, icon: "folder-add", variant: .primary, size: .large, fullWidth: true) { renaming = nil; name = ""; naming = true }
             }
             .padding(24)
         }
         .onAppear(perform: load)
-        .akiPrompt(renaming == nil ? "New category" : "Rename category", message: "Choose a name for the category.", placeholder: "Reading", confirm: renaming == nil ? "Add category" : "Rename category", text: $name, isPresented: $naming, onConfirm: save)
-        .akiConfirm("Delete the category “\(deleting?.name ?? "")”?", message: "The series and books in it stay in your library.", confirm: "Delete category", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+        .akiPrompt(renaming == nil ? Copy.Library.newCategory : Copy.Library.renameCategory, message: Copy.Library.chooseCategoryName, placeholder: Copy.Library.categoryNamePlaceholder, confirm: renaming == nil ? Copy.Library.addCategory : Copy.Library.renameCategory, text: $name, isPresented: $naming, onConfirm: save)
+        .akiConfirm(Copy.Library.deleteCategoryQuestion(deleting?.name ?? ""), message: Copy.Library.categoryContentsStay, confirm: Copy.Library.deleteCategory, isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             if let deleting {
                 try? model.engine.deleteCategory(id: deleting.id)
                 if model.prefs.saveCategory == deleting.id { model.prefs.saveCategory = 0 }
             }
             reload()
         }
-        .akiAlert("Could not save the category", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiAlert(Copy.Library.couldNotSaveCategory, message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
     }
 
     private func menu(for category: CategoryInfo, at index: Int) -> [AkiMenuItem] {
-        var items = [AkiMenuItem(title: "Rename", icon: "sliders") { renaming = category; name = category.name; naming = true }]
-        if index > 0 { items.append(AkiMenuItem(title: "Move up", icon: "order") { move(index, by: -1) }) }
-        if index < categories.count - 1 { items.append(AkiMenuItem(title: "Move down", icon: "down") { move(index, by: 1) }) }
-        items.append(AkiMenuItem(title: "Delete", icon: "trash", destructive: true) { deleting = category })
+        var items = [AkiMenuItem(title: Copy.Library.rename, icon: "sliders") { renaming = category; name = category.name; naming = true }]
+        if index > 0 { items.append(AkiMenuItem(title: Copy.Library.moveUp, icon: "order") { move(index, by: -1) }) }
+        if index < categories.count - 1 { items.append(AkiMenuItem(title: Copy.Library.moveDown, icon: "down") { move(index, by: 1) }) }
+        items.append(AkiMenuItem(title: Copy.Library.delete, icon: "trash", destructive: true) { deleting = category })
         return items
     }
 
     private func contents(of category: CategoryInfo) -> String {
-        let parts = [category.count > 0 ? (category.count == 1 ? "1 series" : "\(category.count) series") : nil,
-                     category.books > 0 ? (category.books == 1 ? "1 book" : "\(category.books) books") : nil].compactMap { $0 }
-        return parts.isEmpty ? "Empty" : parts.joined(separator: " · ")
+        let parts = [category.count > 0 ? Copy.Library.seriesCount(Int(category.count)) : nil,
+                     category.books > 0 ? Copy.Library.bookCount(Int(category.books)) : nil].compactMap { $0 }
+        return parts.isEmpty ? Copy.Library.empty : parts.joined(separator: " · ")
     }
 
     private func load() { categories = (try? model.engine.categories()) ?? [] }
@@ -95,9 +95,9 @@ struct CategoryPicker: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Categories", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Library.categories, .title).accessibilityAddTraits(.isHeader)
                 if categories.isEmpty {
-                    AkiEmptyState(title: "No categories yet", message: "Add one from the menu on the Library or Books screen, under Edit categories.").frame(minHeight: 220)
+                    AkiEmptyState(title: Copy.Library.noCategoriesYet, message: Copy.Library.noCategoriesYetFromMenu).frame(minHeight: 220)
                 } else {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {

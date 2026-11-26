@@ -8,6 +8,7 @@ import live.akidev.manga.app.AppModel
 import kotlinx.coroutines.launch
 import live.akidev.manga.app.LibrarySort
 import live.akidev.manga.design.AkiMenuItem
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.CategoryInfo
 import uniffi.akimanga.HistoryEntry
 import uniffi.akimanga.LibraryEntry
@@ -92,14 +93,14 @@ class LibraryModel(private val app: AppModel) {
     /** The menu behind the filter button: the order, the filters, selecting, and the shelves. */
     fun menu(inMangaTab: Boolean, manage: () -> Unit): List<AkiMenuItem> = buildList {
         for (option in LibrarySort.entries) add(AkiMenuItem(option.title, "order", isSelected = option == app.prefs.librarySort) { choose(option) })
-        add(AkiMenuItem("Reverse order", "swap", isSelected = app.prefs.libraryReversed) { app.prefs.libraryReversed = !app.prefs.libraryReversed })
-        add(AkiMenuItem("Show only unread", "check", isSelected = onlyUnread) { onlyUnread = !onlyUnread })
-        add(AkiMenuItem(if (selecting) "Done selecting" else "Select series", "check") { select() })
-        add(AkiMenuItem("Edit categories", "folder", onClick = manage))
-        add(AkiMenuItem("Receive from a friend", "share") { app.sharing = live.akidev.manga.app.Sharing(null, null) })
+        add(AkiMenuItem(Copy.Library.reverseOrder, "swap", isSelected = app.prefs.libraryReversed) { app.prefs.libraryReversed = !app.prefs.libraryReversed })
+        add(AkiMenuItem(Copy.Library.showOnlyUnread, "check", isSelected = onlyUnread) { onlyUnread = !onlyUnread })
+        add(AkiMenuItem(if (selecting) Copy.Library.doneSelecting else Copy.Library.selectSeries, "check") { select() })
+        add(AkiMenuItem(Copy.Library.editCategories, "folder", onClick = manage))
+        add(AkiMenuItem(Copy.Library.receiveFromFriend, "share") { app.sharing = live.akidev.manga.app.Sharing(null, null) })
         // Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
         if (inMangaTab && categories.isNotEmpty()) {
-            val shelves = listOf(-1L to "All categories") + categories.map { it.id to it.name } + listOf(-2L to "No category")
+            val shelves = listOf(-1L to Copy.Library.allCategories) + categories.map { it.id to it.name } + listOf(-2L to Copy.Library.noCategory)
             for ((id, name) in shelves) add(AkiMenuItem(name, "folder", isSelected = id == category) { category = id })
         }
     }
@@ -107,8 +108,8 @@ class LibraryModel(private val app: AppModel) {
     /** What a long press on a series offers: the shelves to put it on or take it off, reading it all, removing it. */
     fun menuOf(item: LibraryEntry, scope: kotlinx.coroutines.CoroutineScope): List<AkiMenuItem> =
         categories.map { shelf -> AkiMenuItem(shelf.name, "folder", isSelected = shelf.id in item.categories) { putOnShelf(item, shelf) } } + listOf(
-            AkiMenuItem("Mark all as read", "check") { markRead(item) },
-            AkiMenuItem("Remove from library", "bookmark-off", destructive = true) { scope.launch { remove(item) } },
+            AkiMenuItem(Copy.Home.markAllAsRead, "check") { markRead(item) },
+            AkiMenuItem(Copy.Library.removeFromLibrary, "bookmark-off", destructive = true) { scope.launch { remove(item) } },
         )
 
     /** Reads the categories, and leaves a shelf that has gone (deleted in the manage sheet) for All. */
@@ -123,7 +124,7 @@ class LibraryModel(private val app: AppModel) {
 
     /** What a long press on a history row offers. */
     fun historyMenu(entry: uniffi.akimanga.HistoryEntry): List<AkiMenuItem> = listOf(
-        AkiMenuItem("Remove from history", "trash", destructive = true) {
+        AkiMenuItem(Copy.Home.removeFromHistory, "trash", destructive = true) {
             runCatching { app.engine.forgetHistory(entry.source, entry.series) }
             app.refresh()
             loadHistory()

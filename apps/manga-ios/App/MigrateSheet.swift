@@ -25,14 +25,14 @@ struct MigrateSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    AkiText("Move to another source", .title).accessibilityAddTraits(.isHeader)
-                    AkiText("Find “\(ref.title)” on another source. Its categories and your reading progress move with it.", .caption, tone: .muted)
+                    AkiText(Copy.Library.moveToAnotherSource, .title).accessibilityAddTraits(.isHeader)
+                    AkiText(Copy.Library.findOnAnotherSource(ref.title), .caption, tone: .muted)
                 }
                 if others.isEmpty {
-                    AkiEmptyState(title: "No other source to move to", message: "Install another source that can search, then come back.").frame(minHeight: 260)
+                    AkiEmptyState(title: Copy.Library.noOtherSource, message: Copy.Library.installAnotherSource).frame(minHeight: 260)
                 } else {
                     AkiMenuPill(icon: "sources", selection: $target, options: others.map { ($0.id, $0.name) })
-                    AkiInput(placeholder: "Search \(model.name(of: target))", text: $term, icon: "search", onSubmit: { Task { await search() } })
+                    AkiInput(placeholder: Copy.Home.searchSource(model.name(of: target)), text: $term, icon: "search", onSubmit: { Task { await search() } })
                     results(for: target)
                 }
             }
@@ -42,21 +42,21 @@ struct MigrateSheet: View {
         .onAppear { term = ref.title; if target.isEmpty { target = others.first?.id ?? "" } }
         // Opening the sheet, and choosing another source, each look for the title straight away.
         .task(id: target) { if !target.isEmpty { await search() } }
-        .akiConfirm("Move “\(ref.title)” to \(model.name(of: target))?", message: "The series leaves \(model.name(of: ref.source)) and moves to \(model.name(of: target)). Your categories and reading progress move with it.", confirm: "Move series", isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } })) {
+        .akiConfirm(Copy.Library.moveSeriesQuestion(ref.title, model.name(of: target)), message: Copy.Library.seriesLeavesSource(model.name(of: ref.source), model.name(of: target)), confirm: Copy.Library.moveSeries, isPresented: Binding(get: { chosen != nil }, set: { if !$0 { chosen = nil } })) {
             if let chosen { Task { await move(to: chosen) } }
         }
-        .akiAlert("Could not move the series", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiAlert(Copy.Library.couldNotMoveSeries, message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
     }
 
     @ViewBuilder private func results(for source: String) -> some View {
         if searching {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 140)
         } else if let failure {
-            AkiEmptyState(title: failure.title, message: failure.message, action: ("Try again", { Task { await search() } })).frame(minHeight: 240)
+            AkiEmptyState(title: failure.title, message: failure.message, action: (Copy.Home.tryAgain, { Task { await search() } })).frame(minHeight: 240)
         } else if results.isEmpty {
-            AkiEmptyState(title: "Nothing found", message: "\(model.name(of: source)) has nothing called “\(term)”. Try a shorter title, or another source.").frame(minHeight: 240)
+            AkiEmptyState(title: Copy.Library.nothingFound, message: Copy.Library.hasNothingCalled(model.name(of: source), term)).frame(minHeight: 240)
         } else {
-            AkiText("Choose the matching series", .captionStrong, tone: .muted)
+            AkiText(Copy.Library.chooseMatchingSeries, .captionStrong, tone: .muted)
             LazyVStack(spacing: 12) {
                 ForEach(results, id: \.id) { card in
                     AkiTap(action: { chosen = card }) {
@@ -82,7 +82,7 @@ struct MigrateSheet: View {
             results = found
         } catch {
             guard asked == target else { return }
-            failure = describe(error, "Could not search this source")
+            failure = describe(error, Copy.Library.couldNotSearchSource)
         }
         searching = false
     }

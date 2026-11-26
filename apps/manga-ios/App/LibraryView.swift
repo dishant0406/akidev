@@ -33,18 +33,18 @@ struct LibraryView: View {
         MangaStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Library", subtitle: selecting ? "\(pickedShown.count) selected" : "\(model.library.count) series") {
-                        AkiMenu(symbol: "filter", label: "Sort and filter", items:
+                    AkiHeader(title: Copy.Home.library, subtitle: selecting ? Copy.Library.selectedCount(pickedShown.count) : Copy.Library.seriesCount(model.library.count)) {
+                        AkiMenu(symbol: "filter", label: Copy.Library.sortAndFilter, items:
                             LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.librarySort) { choose(option) } }
-                            + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
-                               AkiMenuItem(title: "Show only unread", icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
-                               AkiMenuItem(title: selecting ? "Done selecting" : "Select series", icon: "check") { selecting.toggle(); picked = [] },
-                               AkiMenuItem(title: "Edit categories", icon: "folder") { managing = true },
-                               AkiMenuItem(title: "Receive from a friend", icon: "share") { model.sharing = SharePresented(item: nil) }]
+                            + [AkiMenuItem(title: Copy.Library.reverseOrder, icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
+                               AkiMenuItem(title: Copy.Library.showOnlyUnread, icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
+                               AkiMenuItem(title: selecting ? Copy.Library.doneSelecting : Copy.Library.selectSeries, icon: "check") { selecting.toggle(); picked = [] },
+                               AkiMenuItem(title: Copy.Library.editCategories, icon: "folder") { managing = true },
+                               AkiMenuItem(title: Copy.Library.receiveFromFriend, icon: "share") { model.sharing = SharePresented(item: nil) }]
                             + shelfItems)
                     }
                     MangaPartPills()
-                    if part == nil { AkiTabs(items: [(LibraryTab.saved, "Library"), (LibraryTab.history, "History")], selection: $tab) }
+                    if part == nil { AkiTabs(items: [(LibraryTab.saved, Copy.Home.library), (LibraryTab.history, Copy.Home.history)], selection: $tab) }
                     switch tab {
                     case .saved: saved
                     case .history: historyList
@@ -70,13 +70,13 @@ struct LibraryView: View {
         .onChange(of: model.library) { loadCategories() }
         .akiSheet(isPresented: $managing, content: { CategoriesSheet().onDisappear { loadCategories(); model.refresh() } })
         .akiSheet(isPresented: $assigning, content: { CategoryPicker(series: assignees).onDisappear { loadCategories(); picked = []; selecting = false } })
-        .akiConfirm(removeTitle, message: "Your reading progress is kept. You can add the series to your library again.", confirm: "Remove series", isPresented: $removing) { removePicked() }
+        .akiConfirm(removeTitle, message: Copy.Library.removeSeriesHint, confirm: Copy.Library.removeSeries, isPresented: $removing) { removePicked() }
     }
 
     /// Inside the Manga tab there is already one row of choices, so the category is chosen from the menu instead of a second row.
     private var shelfItems: [AkiMenuItem] {
         guard part != nil, !categories.isEmpty else { return [] }
-        return ([(Int64(-1), "All categories")] + categories.map { ($0.id, $0.name) } + [(Int64(-2), "No category")]).map { id, name in
+        return ([(Int64(-1), Copy.Library.allCategories)] + categories.map { ($0.id, $0.name) } + [(Int64(-2), Copy.Library.noCategory)]).map { id, name in
             AkiMenuItem(title: name, icon: "folder", isSelected: id == category) { category = id }
         }
     }
@@ -98,7 +98,7 @@ struct LibraryView: View {
 
     private var removeTitle: String {
         let count = selecting ? pickedShown.count : 0
-        return count == 1 ? "Remove 1 series from your library?" : "Remove \(count) series from your library?"
+        return Copy.Library.removeSeriesQuestion(count)
     }
 
     /// The series picked that are on screen: filtering after picking does not leave hidden ones to be changed unseen.
@@ -132,27 +132,27 @@ struct LibraryView: View {
 
     @ViewBuilder private var saved: some View {
         if model.library.isEmpty {
-            AkiEmptyState(title: "Your library is empty", message: "Add a series with the bookmark button on its page. It stays here with your reading progress.").frame(minHeight: 340)
+            AkiEmptyState(title: Copy.Library.libraryEmpty, message: Copy.Library.libraryEmptyHint).frame(minHeight: 340)
         } else {
             // Sorted once for this screen: `shown` filters and sorts the whole library each time it is read.
             let list = shown
             if !categories.isEmpty && part == nil {
-                AkiChips(items: [(Int64(-1), "All")] + categories.filter { $0.count > 0 || $0.books == 0 }.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), "No category")], selection: $category)
+                AkiChips(items: [(Int64(-1), Copy.Home.all)] + categories.filter { $0.count > 0 || $0.books == 0 }.map { ($0.id, "\($0.name) \($0.count)") } + [(Int64(-2), Copy.Library.noCategory)], selection: $category)
             }
             if list.isEmpty {
-                AkiEmptyState(title: onlyUnread ? "All caught up" : "Nothing here", message: onlyUnread ? "You have read everything in this category." : "No series in this category yet. Touch and hold a series to add it to a category.").frame(minHeight: 260)
+                AkiEmptyState(title: onlyUnread ? Copy.Home.allCaughtUp : Copy.Library.nothingHere, message: onlyUnread ? Copy.Library.readEverythingInCategory : Copy.Library.noSeriesInCategory).frame(minHeight: 260)
             }
             LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(list, id: \.key) { item in
                     if selecting {
                         AkiTap(action: { if !picked.insert(item.key).inserted { picked.remove(item.key) } }) {
-                            AkiCoverCard(title: item.title, cover: item.cover, subtitle: item.unread > 0 ? "\(item.unread) unread" : "Up to date", badge: Int(item.unread))
+                            AkiCoverCard(title: item.title, cover: item.cover, subtitle: item.unread > 0 ? Copy.Library.unreadCount(Int(item.unread)) : Copy.Home.upToDate, badge: Int(item.unread))
                                 .overlay(alignment: .topLeading) { tick(picked.contains(item.key)) }
                         }
                         .accessibilityAddTraits(picked.contains(item.key) ? .isSelected : [])
                     } else {
                         AkiLink(value: SeriesRef(source: item.source, id: item.id, title: item.title, cover: item.cover)) {
-                            AkiCoverCard(title: item.title, cover: item.cover, subtitle: item.unread > 0 ? "\(item.unread) unread" : "Up to date", badge: Int(item.unread))
+                            AkiCoverCard(title: item.title, cover: item.cover, subtitle: item.unread > 0 ? Copy.Library.unreadCount(Int(item.unread)) : Copy.Home.upToDate, badge: Int(item.unread))
                         }
                         .akiContextMenu(menu(for: item))
                     }
@@ -173,9 +173,9 @@ struct LibraryView: View {
     private var selectionBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "folder", label: "Change categories") { assignees = pickedShown.map { CategoryPicker.Series(source: $0.source, id: $0.id) }; assigning = true }
-                AkiIconButton(symbol: "check", label: "Mark as read") { markPickedRead() }
-                AkiIconButton(symbol: "bookmark-off", label: "Remove from library", tint: Aki.destructive) { removing = true }
+                AkiIconButton(symbol: "folder", label: Copy.Library.changeCategories) { assignees = pickedShown.map { CategoryPicker.Series(source: $0.source, id: $0.id) }; assigning = true }
+                AkiIconButton(symbol: "check", label: Copy.Library.markAsRead) { markPickedRead() }
+                AkiIconButton(symbol: "bookmark-off", label: Copy.Library.removeFromLibrary, tint: Aki.destructive) { removing = true }
             }
         }
         .padding(.bottom, 112)
@@ -209,11 +209,11 @@ struct LibraryView: View {
                 model.refresh(); loadCategories()
             }
         } + [
-            AkiMenuItem(title: "Mark all as read", icon: "check") {
+            AkiMenuItem(title: Copy.Home.markAllAsRead, icon: "check") {
                 let ids = ((try? model.engine.cachedChapters(source: item.source, series: item.id)) ?? []).map(\.id)
                 try? model.engine.mark(source: item.source, series: item.id, chapters: ids, read: true); model.refresh()
             },
-            AkiMenuItem(title: "Remove from library", icon: "bookmark-off", destructive: true) {
+            AkiMenuItem(title: Copy.Library.removeFromLibrary, icon: "bookmark-off", destructive: true) {
                 Task { try? await model.engine.setInLibrary(source: item.source, id: item.id, saved: false); model.refresh(); loadCategories() }
             },
         ]
@@ -227,15 +227,15 @@ struct LibraryView: View {
 
     @ViewBuilder private var historyList: some View {
         if history.isEmpty {
-            AkiEmptyState(title: "Nothing read yet", message: "Chapters you open appear here, newest first.").frame(minHeight: 340)
+            AkiEmptyState(title: Copy.Library.nothingReadYet, message: Copy.Library.chaptersOpenedHint).frame(minHeight: 340)
         } else {
             LazyVStack(spacing: 12) {
                 ForEach(Array(history.enumerated()), id: \.offset) { _, item in
                     AkiLink(value: SeriesRef(source: item.source, id: item.series, title: item.title, cover: item.cover)) {
-                        AkiListCard(thumbnail: item.cover, label: item.finished ? "Finished" : "Reading", title: item.title,
+                        AkiListCard(thumbnail: item.cover, label: item.finished ? Copy.Library.finished : Copy.Library.reading, title: item.title,
                                     badges: [chapterName(number: item.chapterNumber, title: item.chapterTitle), shortDate(item.atMs)].compactMap { $0 })
                     }
-                    .akiContextMenu([AkiMenuItem(title: "Remove from history", icon: "trash", destructive: true) {
+                    .akiContextMenu([AkiMenuItem(title: Copy.Home.removeFromHistory, icon: "trash", destructive: true) {
                         try? model.engine.forgetHistory(source: item.source, series: item.series)
                         model.refresh()
                         history = (try? model.engine.history(limit: 60)) ?? []
