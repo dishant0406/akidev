@@ -66,8 +66,6 @@ pids
 marketing/
 design/shots/
 apps/manga-ios/build-rel/
-content/manga/film/inputs/
-content/manga/film/out/
 
 # Release keys for fastlane (App Store and Google Play)
 fastlane/.env
@@ -75,11 +73,10 @@ fastlane/report.xml
 fastlane/README.md
 
 # The sources document. build.rs downloads it; it is not committed.
-content/sources/sources.json
-content/sources/sources.json.part
+crates/core/sources.json
+crates/core/sources.json.part
 
 # Build output of the plugins (each is its own Cargo project).
-content/plugins/*/target/
 
 # Build output of the Rust workspace, and the sources signing key.
 /target/

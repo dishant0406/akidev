@@ -17,7 +17,6 @@ on:
     # library (crates/core) and lives in apps/server, so those do deploy.
     paths-ignore:
       - apps/desktop/**
-      - content/sources/**
       - design/branding/**
       - .github/workflows/desktop*.yml
   # Allows a deploy of any branch or commit without pushing a new commit.

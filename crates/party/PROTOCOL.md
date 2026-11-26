@@ -136,7 +136,7 @@ says `ready`. The host's list of members shows who is.
 - A browser may refuse to play without a tap: the guest is asked for one.
 - A device from before any of this keeps working: new fields are only added, and a word it does not
   know in `choosing` is ignored. Which versions may run at all is the published sources' to say (see
-  `content/sources/README.md`, "Forcing an update").
+  the akidev-sources repo, "Forcing an update").
 - Devices on networks that block direct connections need the TURN relay (Cloudflare's, set up
   with `CF_TURN_KEY_ID` and `CF_TURN_TOKEN` on the server). Without it they cannot join; the server
   says so in its log when it starts. A desktop host behind such a network is told to host from the

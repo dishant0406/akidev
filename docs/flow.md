@@ -4,7 +4,7 @@ How data moves, which file does each step, and what the user sees when it goes w
 
 ## The sources document
 
-1. `sources.json` (in the akidev-sources repo) is built into every app and server (`core/src/sources.rs`, `EMBEDDED`). `core/build.rs` downloads it to `content/sources/sources.json` when that file is missing.
+1. `sources.json` (in the akidev-sources repo) is built into every app and server (`core/src/sources.rs`, `EMBEDDED`). `core/build.rs` downloads it to `crates/core/sources.json` (git-ignored) when that file is missing.
 2. At start, `load_saved` reads the copy saved by an earlier run. `keep_fresh` fetches a newer signed copy
    every 6 hours. A copy is used only if it is signed, has a higher `version`, and passes `validate`.
 3. The desktop app then calls `plugin::load` (`app/src/main.rs`), which puts the switched-on plugins on top.
@@ -83,8 +83,9 @@ Edge cases and what the person sees:
 1. Edit `sources.json` (start from the live document, not the repo copy: the daily tracker job publishes from
    the live one) and raise `version`.
 2. `cargo test -p akidev-core` and `akidev-sources check` validate it.
-3. `publish-sources.sh` runs `check-old-apps.sh` (old app, new document), signs, and uploads.
-4. The script derives the schema 2 document (the same one with `"schema": 2`, or `sources-v2.json` in the akidev-sources repo), signs
+3. Publishing (the old-app check, signing, upload, and the daily tracker job) is no longer in this repo: the scripts and the
+   workflow were removed on 2026-11-26 and stay in git history before that date. The steps below describe what they did.
+4. The script derived the schema 2 document (the same one with `"schema": 2`, or `sources-v2.json` in the akidev-sources repo), signs
    both, and uploads `/v2` first and the root second. The daily tracker job refreshes the trackers and the version of
    both, and keeps what the live schema 2 document holds that the other does not.
 5. An app asks `/v2` first (`sources::refresh_from`). If that has nothing, is not signed by our key, or has a format
@@ -205,7 +206,7 @@ Edge cases:
 - A screen reader: every step is in the page as text, in order, so all six are read.
 - Store address wrong or app removed: the store shows its own page. Nothing on our side can check it.
 
-Remaking the pictures: serve the repo, then run `python content/manga/film/tools/web-assets.py URL OUT` and copy `screens/*.webp`, `app-loop.mp4` and `app-poster.webp` into `apps/web/public/phone/`.
+The pictures in `apps/web/public/phone/` were made once from the launch film. The film's source was removed on 2026-11-26 and stays in git history.
 
 ## Searching, Done, and the Home icon (2026-11-24)
 

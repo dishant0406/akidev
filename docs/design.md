@@ -656,3 +656,16 @@ Turned down. A second language table only for ranking: two lists would drift. Pu
 
 Costs. A document without these parts uses the copy built into the app, so a server or app can ship before the publish, but the new words only reach users with the publish. Old apps ignore the new fields and keep their built-in words. The country words and the Prowlarr sites in the live document must be published before the deploy script can sync them. Words in a `languages` entry must be lower case letters and digits, so a pattern can never be broken by the document.
 
+## Sources and the launch film leave this repo (2026-11-26)
+
+**Chosen.** The plugin sources (`content/plugins`), the publish and tracker scripts (`content/sources`), the daily
+`refresh-trackers.yml` workflow and the launch film (`content/manga/film`) were removed. `sources.json` is still
+downloaded by `crates/core/build.rs`, now to `crates/core/sources.json` (git-ignored). The phone landing page keeps the
+pictures that the film made.
+
+**Why.** The sources and plugins belong to the `akidev-sources` repo, and the film was a one-time job. `content/` is for
+what both phone apps share.
+
+**Trade-off.** Nothing here refreshes the trackers each day or signs a publish any more. The built plugin files are in the
+sources repo, but the plugins' Rust source is only in this repo's git history, before this commit.
+

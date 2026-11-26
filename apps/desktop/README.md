@@ -84,7 +84,6 @@ which opens that title in the app (nothing starts without a press), or the page 
 
 ```
 crates/core/      akidev-core: providers, indexers, release ranking, torrent engine, stream resolver
-content/sources/   the definitions of the indexers and providers, published separately from the app
 crates/party/  akidev-party: watch parties, the connection and the rules that keep guests in step
 crates/library/ akidev-library: saved films and music, the encrypted container and the downloader
 apps/desktop/    akidev: the GPUI app and the libmpv player
@@ -132,7 +131,7 @@ not code. The app has one copy built in, uses the last good copy it saved, and f
 published one in the background (at start and every six hours). A downloaded copy is used only
 if its ed25519 signature is valid, its version is higher than the one in use and it passes the
 same validation as the built-in one; otherwise nothing changes, so a bad publish cannot break
-an installed app. `content/sources/publish-sources.sh` signs and uploads a new copy to Cloudflare R2.
+an installed app. The akidev-sources repo holds the document and the plugins.
 Viewers see none of this: there is no list of indexers, no switches and no addresses to change in the
 app. Settings holds only the torrent limits and the update switch.
 
