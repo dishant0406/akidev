@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Router
 import live.akidev.manga.design.AkiMenuItem
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.Choice
 import uniffi.akimanga.FilterInfo
 import uniffi.akimanga.HistoryEntry
@@ -81,7 +82,7 @@ class DiscoverModel(private val app: AppModel) {
 
     /** What a long press on a "Continue reading" card offers: finish the series, or forget it was started. */
     fun continueMenu(entry: HistoryEntry, scope: CoroutineScope): List<AkiMenuItem> = listOf(
-        AkiMenuItem("Mark all as read", "check") {
+        AkiMenuItem(Copy.Home.markAllAsRead, "check") {
             scope.launch {
                 app.io {
                     val ids = runCatching { app.engine.cachedChapters(entry.source, entry.series) }.getOrDefault(emptyList()).map { it.id }
@@ -90,7 +91,7 @@ class DiscoverModel(private val app: AppModel) {
                 afterHistoryChange()
             }
         },
-        AkiMenuItem("Remove from history", "trash", destructive = true) {
+        AkiMenuItem(Copy.Home.removeFromHistory, "trash", destructive = true) {
             scope.launch {
                 app.io { runCatching { app.engine.forgetHistory(entry.source, entry.series) } }
                 afterHistoryChange()

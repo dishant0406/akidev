@@ -54,12 +54,12 @@ fun UpdatesScreen() {
     AkiRefreshable(refresh, Modifier.fillMaxSize()) {
         AkiPage(narrow = true, state = updates.scroll) {
             item {
-                AkiHeader("Updates", subtitle = if (app.unreadTotal == 1) "1 unread chapter" else if (app.unreadTotal > 0) "${app.unreadTotal} unread chapters" else "All caught up") {
-                    if (app.refreshing) AkiSpinner(Modifier.size(44.dp), label = "Checking for new chapters") else AkiIconButton("refresh", "Check for new chapters") { scope.launch { refresh() } }
+                AkiHeader(Copy.Home.updates, subtitle = if (app.unreadTotal > 0) Copy.Home.unreadChapters(app.unreadTotal) else Copy.Home.allCaughtUp) {
+                    if (app.refreshing) AkiSpinner(Modifier.size(44.dp), label = Copy.Home.checkingForNewChapters) else AkiIconButton("refresh", Copy.Home.checkForNewChapters) { scope.launch { refresh() } }
                 }
             }
             item { MangaPartPills() }
-            if (part == null) item { AkiTabs(listOf(AkiChoice(UpdatesTab.Unread, "Unread"), AkiChoice(UpdatesTab.Recent, "Recent")), updates.tab, { updates.tab = it }) }
+            if (part == null) item { AkiTabs(listOf(AkiChoice(UpdatesTab.Unread, Copy.Home.unread), AkiChoice(UpdatesTab.Recent, Copy.Home.recent)), updates.tab, { updates.tab = it }) }
             if (app.updateFailures.isNotEmpty()) item { Failures(app) }
             rows(app, updates.tab) { scope.launch { refresh() } }
         }
@@ -71,9 +71,9 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
     if (list.isEmpty()) {
         item {
             AkiEmptyState(
-                if (tab == UpdatesTab.Unread) "All caught up" else "No series in your library",
-                if (tab == UpdatesTab.Unread) "New chapters of series in your library appear here." else "Add a series to your library and its chapters appear here.",
-                Modifier.heightIn(min = 340.dp), action = if (tab == UpdatesTab.Unread) AkiAction("Check for new chapters", check) else null,
+                if (tab == UpdatesTab.Unread) Copy.Home.allCaughtUp else Copy.Home.noSeriesInLibrary,
+                if (tab == UpdatesTab.Unread) Copy.Home.newChaptersAppearHere else Copy.Home.addSeriesToLibrary,
+                Modifier.heightIn(min = 340.dp), action = if (tab == UpdatesTab.Unread) AkiAction(Copy.Home.checkForNewChapters, check) else null,
             )
         }
         return
@@ -84,7 +84,7 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
         val latest = if (row.latestNumber == null && row.latestTitle == null) null else chapterName(row.latestNumber, row.latestTitle)
         AkiTap({ router.push(SeriesRoute(SeriesRef(row.source, row.id, row.title, row.cover))) }) {
             AkiListCard(
-                row.cover, when { row.unread == 0u -> "Up to date"; row.unread == 1u -> "1 new chapter"; else -> "${row.unread} new chapters" }, row.title,
+                row.cover, when { row.unread == 0u -> Copy.Home.upToDate; else -> Copy.Home.newChapterCount(row.unread.toInt()) }, row.title,
                 badges = listOfNotNull(latest, shortDate(row.latestDateMs)), dimmed = row.unread == 0u,
             )
         }
@@ -95,9 +95,9 @@ private fun LazyListScope.rows(app: AppModel, tab: UpdatesTab, check: () -> Unit
 private fun Failures(app: AppModel) {
     AkiCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, padding = 16.dp) {
         Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-            AkiText("Could not check ${app.updateFailures.size} series", AkiTextStyle.BodyStrong, isHeading = true, tabular = true)
-            for (failure in app.updateFailures) AkiText("${failure.title} (${app.name(failure.source)}): ${failure.message}", AkiTextStyle.Caption, tone = AkiTone.Muted)
-            AkiText("Pull down to try again.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(Copy.Home.couldNotCheck(app.updateFailures.size), AkiTextStyle.BodyStrong, isHeading = true, tabular = true)
+            for (failure in app.updateFailures) AkiText(Copy.Home.updateFailure(failure.title, app.name(failure.source), failure.message), AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(Copy.Home.pullDownToTryAgain, AkiTextStyle.Caption, tone = AkiTone.Muted)
         }
     }
 }

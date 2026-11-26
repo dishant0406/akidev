@@ -35,7 +35,7 @@ enum UpdateAlerts {
     static func post(_ found: [NewChapters]) async {
         guard !found.isEmpty, await status() == .authorized else { return }
         let content = UNMutableNotificationContent()
-        content.title = "New chapters"
+        content.title = Copy.Home.newChapters
         content.body = body(found)
         content.sound = .default
         content.threadIdentifier = "new-chapters"
@@ -46,13 +46,14 @@ enum UpdateAlerts {
     /// "Solo Leveling · Chapter 179", "Solo Leveling · 3 new chapters", "Solo Leveling, Tower of God and 2 more".
     static func body(_ found: [NewChapters]) -> String {
         let count = found.reduce(0) { $0 + $1.chapters.count }
-        if found.contains(where: \.adult) { return count == 1 ? "1 new chapter in your library." : "\(count) new chapters in your library." }
+        if found.contains(where: \.adult) { return Copy.Home.newChaptersInLibrary(count) }
         if found.count == 1, let only = found.first {
-            let what = only.chapters.count == 1 ? chapterName(number: only.chapters[0].number, title: only.chapters[0].title) : "\(only.chapters.count) new chapters"
-            return "\(only.title) · \(what)"
+            let what = only.chapters.count == 1 ? chapterName(number: only.chapters[0].number, title: only.chapters[0].title) : Copy.Home.newChapterCount(only.chapters.count)
+            return Copy.Home.titleAndDetail(only.title, what)
         }
         let names = found.prefix(2).map(\.title)
         let rest = found.count - names.count
-        return rest > 0 ? "\(names.joined(separator: ", ")) and \(rest) more" : names.joined(separator: " and ")
+        if rest > 0 { return Copy.Home.namesAndMore(names.joined(separator: ", "), rest) }
+        return Copy.Home.twoNames(names.first ?? "", names.last ?? "")
     }
 }

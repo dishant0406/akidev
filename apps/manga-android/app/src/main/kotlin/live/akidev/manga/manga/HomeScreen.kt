@@ -46,7 +46,7 @@ fun HomeScreen() {
 
     AkiRefreshable({ discover.reload(force = true) }, Modifier.fillMaxSize()) {
         AkiPage(narrow = false, state = discover.scroll) {
-            item { AkiHeader("Discover") }
+            item { AkiHeader(Copy.Home.discover) }
             item { MangaPartPills() }
             if (model.sources.isEmpty() && model.repos.isEmpty()) {
                 item { WelcomeScreen() }
@@ -67,9 +67,9 @@ fun HomeScreen() {
 @Composable
 private fun NothingVisible(model: AppModel) {
     AkiEmptyState(
-        if (model.sources.isEmpty()) "No sources installed" else "Nothing to show",
-        if (model.sources.isEmpty()) "Install a source from a repository in Sources to start reading." else "Your content settings hide every installed source.",
-        Modifier.heightIn(min = 420.dp), action = AkiAction("Open Sources") { model.tab = AppTab.Sources },
+        if (model.sources.isEmpty()) Copy.Home.noSourcesInstalled else Copy.Home.nothingToShow,
+        if (model.sources.isEmpty()) Copy.Home.installSourceHint else Copy.Home.settingsHideSources,
+        Modifier.heightIn(min = 420.dp), action = AkiAction(Copy.Home.openSources) { model.tab = AppTab.Sources },
     )
 }
 
@@ -79,12 +79,12 @@ private fun SearchRow(onFilters: () -> Unit) {
     val scope = rememberCoroutineScope()
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AkiInput(
-            "Search ${if (discover.isGlobal) "all sources" else discover.info?.name ?: ""}", discover.term, { discover.term = it }, Modifier.weight(1f), icon = "search",
+            if (discover.isGlobal) Copy.Home.searchAllSources else Copy.Home.searchSource(discover.info?.name ?: ""), discover.term, { discover.term = it }, Modifier.weight(1f), icon = "search",
             onSubmit = { discover.submitted = discover.term; scope.launch { discover.reload() } },
             onClear = { discover.submitted = ""; scope.launch { discover.reload() } },
         )
         if (discover.otherFilters.isNotEmpty() && !discover.isGlobal) {
-            AkiIconButton("sliders", if (discover.choices.isEmpty()) "Filter results" else "Filter results, on", tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
+            AkiIconButton("sliders", if (discover.choices.isEmpty()) Copy.Home.filterResults else Copy.Home.filterResultsOnAndroid, tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
         }
     }
 }
@@ -98,12 +98,12 @@ private fun SourcePills() {
         if (model.visibleSources.size > 1) {
             AkiMenuPill(
                 discover.source, { discover.choose(it); scope.launch { discover.reload() } },
-                listOf(AkiOption(DiscoverModel.EVERY_SOURCE, "All sources")) + model.visibleSources.map { AkiOption(it.id, it.name) }, icon = "sources",
+                listOf(AkiOption(DiscoverModel.EVERY_SOURCE, Copy.Home.allSources)) + model.visibleSources.map { AkiOption(it.id, it.name) }, icon = "sources",
             )
         }
         val category = discover.category
         if (category != null && !discover.isGlobal) {
-            val all = if (category.options.any { it.value.isEmpty() }) emptyList() else listOf(AkiOption("", "All"))
+            val all = if (category.options.any { it.value.isEmpty() }) emptyList() else listOf(AkiOption("", Copy.Home.all))
             AkiMenuPill(
                 discover.choices[category.id] ?: "",
                 { value -> discover.choices = if (value.isEmpty()) discover.choices - category.id else discover.choices + (category.id to value); scope.launch { discover.reload() } },
@@ -123,7 +123,7 @@ private fun LazyListScope.everySource(model: AppModel, open: (String, Card) -> U
     } else if (feed.shelves.isEmpty() && feed.loading) {
         item { Box(Modifier.fillMaxWidth().heightIn(min = 280.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
     } else if (feed.shelves.isEmpty()) {
-        item { AkiEmptyState("Nothing to show", "No source returned any series. Pull down to try again.", Modifier.heightIn(min = 320.dp)) }
+        item { AkiEmptyState(Copy.Home.nothingToShow, Copy.Home.noSourceReturnedSeries, Modifier.heightIn(min = 320.dp)) }
     } else {
         val popular = feed.shelves.firstOrNull { it.id.endsWith("popular") }
         val lead = popular?.items?.firstOrNull()
@@ -149,10 +149,10 @@ private fun LazyListScope.searchResults(search: GlobalSearchModel, open: (String
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             AkiText(group.source.name, AkiTextStyle.Heading, isHeading = true)
             when (val state = group.state) {
-                SearchState.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Searching ${group.source.name}") }
+                SearchState.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = Copy.Home.searchingSource(group.source.name)) }
                 is SearchState.Failed -> AkiCard(padding = 14.dp) { AkiText(state.message, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 3) }
                 is SearchState.Done -> if (state.cards.isEmpty()) {
-                    AkiText("No results in this source.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText(Copy.Home.noResultsInSource, AkiTextStyle.Caption, tone = AkiTone.Muted)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         items(state.cards.size, key = { state.cards[it].id }) { cardIndex ->
@@ -177,8 +177,8 @@ private fun LazyListScope.oneSource(model: AppModel, columns: Int, open: (String
     } else if (browse.items.isEmpty() && !browse.loading) {
         item {
             AkiEmptyState(
-                if (discover.submitted.isEmpty()) "Nothing to show" else "No results",
-                if (discover.submitted.isEmpty()) "This source returned no series. Pull down to try again." else "Nothing matched “${discover.submitted}” in ${discover.info?.name ?: discover.source}.",
+                if (discover.submitted.isEmpty()) Copy.Home.nothingToShow else Copy.Home.noResults,
+                if (discover.submitted.isEmpty()) Copy.Home.sourceReturnedNoSeries else Copy.Home.nothingMatched(discover.submitted, discover.info?.name ?: discover.source),
                 Modifier.heightIn(min = 320.dp),
             )
         }
@@ -197,10 +197,10 @@ private fun LazyListScope.sourceFeed(model: AppModel, columns: Int, open: (Strin
     val discover = model.discover
     val items = discover.browse.items
     val source = discover.source
-    item { Lead(items.first(), "Popular on ${discover.info?.name ?: "this source"}") { open(source, items.first()) } }
+    item { Lead(items.first(), Copy.Home.popularOn(discover.info?.name ?: Copy.Home.thisSource)) { open(source, items.first()) } }
     continueReading(model, open)
     item {
-        AkiShelf("Top 10", subtitle = discover.info?.name) {
+        AkiShelf(Copy.Home.top10, subtitle = discover.info?.name) {
             items(minOf(items.size, 10), key = { items[it].id }) { index ->
                 val card = items[index]
                 AkiTap({ open(source, card) }) { AkiPoster(card.title, card.cover, caption = chaptersLabel(card.chapters), rank = index + 1, width = 116.dp) }
@@ -210,7 +210,7 @@ private fun LazyListScope.sourceFeed(model: AppModel, columns: Int, open: (Strin
     val latest = discover.feed.latest
     if (latest.isNotEmpty()) {
         item {
-            AkiShelf("New releases") {
+            AkiShelf(Copy.Home.newReleases) {
                 items(latest.size, key = { latest[it].id }) { index ->
                     val card = latest[index]
                     AkiTap({ open(source, card) }) { AkiPoster(card.title, card.cover, caption = chaptersLabel(card.chapters)) }
@@ -219,7 +219,7 @@ private fun LazyListScope.sourceFeed(model: AppModel, columns: Int, open: (Strin
         }
     }
     if (items.size > 10) {
-        item { AkiText("Browse all", AkiTextStyle.Heading, isHeading = true) }
+        item { AkiText(Copy.Home.browseAll, AkiTextStyle.Heading, isHeading = true) }
         coverGrid(model, items.drop(10), columns, open)
     }
     showMore(model)
@@ -239,7 +239,7 @@ private fun LazyListScope.showMore(model: AppModel) {
     item {
         val scope = rememberCoroutineScope()
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            AkiButton(if (discover.browse.loading) "Loading…" else "Show more") { scope.launch { discover.load(reset = false) } }
+            AkiButton(if (discover.browse.loading) Copy.Home.loading else Copy.Home.showMore) { scope.launch { discover.load(reset = false) } }
         }
     }
 }
@@ -249,7 +249,7 @@ private fun LazyListScope.continueReading(model: AppModel, open: (String, Card) 
     if (entries.isEmpty()) return
     item {
         val scope = rememberCoroutineScope()
-        AkiShelf("Continue reading") {
+        AkiShelf(Copy.Home.continueReading) {
             items(entries.size, key = { entries[it].source + "/" + entries[it].series }) { index ->
                 val entry = entries[index]
                 AkiTapMenu(model.discover.continueMenu(entry, scope), onClick = { open(entry.source, Card(entry.series, entry.title, entry.cover, null)) }) {
@@ -269,18 +269,18 @@ private fun Lead(card: Card, tag: String, onClick: () -> Unit) {
 private fun Retry(title: String, message: String) {
     val scope = rememberCoroutineScope()
     val discover = LocalApp.current.discover
-    AkiEmptyState(title, message, Modifier.heightIn(min = 320.dp), action = AkiAction("Try again") { scope.launch { discover.reload(force = true) } })
+    AkiEmptyState(title, message, Modifier.heightIn(min = 320.dp), action = AkiAction(Copy.Home.tryAgain) { scope.launch { discover.reload(force = true) } })
 }
 
 fun chaptersLabel(count: UInt?) = when {
     count == null || count == 0u -> null
-    count == 1u -> "1\u00A0chapter"
-    else -> "${NumberFormat.getInstance().format(count.toLong())}\u00A0chapters"
+    count == 1u -> Copy.Home.oneChapterLabel
+    else -> Copy.Home.chapterCountLabel(NumberFormat.getInstance().format(count.toLong()))
 }
 
 /** A chapter's name: its title, else "Chapter 12". */
 fun chapterName(number: Double?, title: String?): String = when {
     !title.isNullOrEmpty() -> title
-    number != null -> "Chapter " + if (number == number.toLong().toDouble()) number.toLong().toString() else "%.2f".format(number).trimEnd('0').trimEnd('.')
-    else -> "Chapter"
+    number != null -> Copy.Home.chapterNumber(if (number == number.toLong().toDouble()) number.toLong().toString() else "%.2f".format(number).trimEnd('0').trimEnd('.'))
+    else -> Copy.Home.chapter
 }

@@ -69,7 +69,7 @@ struct GlobalSearchResults: View {
                     case .failed(let message):
                         AkiCard(padding: 14) { AkiText(message, .caption, tone: .muted, lines: 3) }
                     case .done(let cards) where cards.isEmpty:
-                        AkiText("No results in this source.", .caption, tone: .muted)
+                        AkiText(Copy.Home.noResultsInSource, .caption, tone: .muted)
                     case .done(let cards):
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 14) {

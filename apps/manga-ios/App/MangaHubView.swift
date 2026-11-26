@@ -46,7 +46,7 @@ struct MangaPartPills: View {
 
     var body: some View {
         if let part {
-            AkiChips(items: [(MangaPart.saved, "Library"), (MangaPart.history, "History"), (MangaPart.unread, "Unread"), (MangaPart.recent, "Recent"), (MangaPart.discover, "Discover")], selection: part)
+            AkiChips(items: [(MangaPart.saved, Copy.Home.library), (MangaPart.history, Copy.Home.history), (MangaPart.unread, Copy.Home.unread), (MangaPart.recent, Copy.Home.recent), (MangaPart.discover, Copy.Home.discover)], selection: part)
         }
     }
 }

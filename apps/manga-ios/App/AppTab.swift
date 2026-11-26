@@ -14,13 +14,13 @@ enum AppTab: Hashable, CaseIterable {
     /// What the tab is called: for someone who reads books, the first tab is their home and the manga tabs say what they are.
     func title(for kind: ReaderKind?) -> String {
         switch self {
-        case .home: kind == .books ? "Home" : "Discover"
-        case .library: "Library"
-        case .books: kind == .books ? "Library" : "Books"
-        case .updates: "Updates"
-        case .browse: "Browse"
-        case .manga: "Manga"
-        case .sources: "Sources"
+        case .home: kind == .books ? Copy.Home.home : Copy.Home.discover
+        case .library: Copy.Home.library
+        case .books: kind == .books ? Copy.Home.library : Copy.Home.books
+        case .updates: Copy.Home.updates
+        case .browse: Copy.Home.browse
+        case .manga: Copy.Home.manga
+        case .sources: Copy.Home.sources
         }
     }
 

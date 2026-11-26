@@ -1,6 +1,7 @@
 package live.akidev.manga.app
 
 import live.akidev.manga.design.AkiTabItem
+import live.akidev.manga.design.Copy
 
 enum class AppTab(val icon: String, val iconSolid: String) {
     Home("home", "home-solid"),
@@ -15,13 +16,13 @@ enum class AppTab(val icon: String, val iconSolid: String) {
 
     /** What the tab is called: for someone who reads books, the first tab is their home and the manga tabs say what they are. */
     fun title(kind: ReaderKind?) = when (this) {
-        Home -> if (kind == ReaderKind.Books) "Home" else "Discover"
-        Library -> "Library"
-        Books -> if (kind == ReaderKind.Books) "Library" else "Books"
-        Updates -> "Updates"
-        Browse -> "Browse"
-        Manga -> "Manga"
-        Sources -> "Sources"
+        Home -> if (kind == ReaderKind.Books) Copy.Home.home else Copy.Home.discover
+        Library -> Copy.Home.library
+        Books -> if (kind == ReaderKind.Books) Copy.Home.library else Copy.Home.books
+        Updates -> Copy.Home.updates
+        Browse -> Copy.Home.browse
+        Manga -> Copy.Home.manga
+        Sources -> Copy.Home.sources
     }
 
     fun item(kind: ReaderKind?, badge: Int = 0) = AkiTabItem(this, icon, iconSolid, title(kind), badge)

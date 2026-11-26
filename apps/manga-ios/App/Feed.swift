@@ -56,7 +56,7 @@ final class FeedModel {
                     let fresh = force ? nil : engine.freshListing(source: source.id, latest: isLatest)
                     if fresh == nil { stale.insert(id) }
                     if let page = fresh ?? engine.rememberedListing(source: source.id, latest: isLatest) {
-                        found.append(Shelf(id: id, title: source.name, subtitle: isLatest ? "New releases" : "Popular", source: source.id, items: Array(page.items.prefix(14))))
+                        found.append(Shelf(id: id, title: source.name, subtitle: isLatest ? Copy.Home.newReleases : Copy.Home.popular, source: source.id, items: Array(page.items.prefix(14))))
                     }
                 }
             }
@@ -87,7 +87,7 @@ final class FeedModel {
                 switch result {
                 case .success(let cards):
                     report(source.id, nil)
-                    let shelf = Shelf(id: id, title: source.name, subtitle: isLatest ? "New releases" : "Popular", source: source.id, items: Array(cards.prefix(14)))
+                    let shelf = Shelf(id: id, title: source.name, subtitle: isLatest ? Copy.Home.newReleases : Copy.Home.popular, source: source.id, items: Array(cards.prefix(14)))
                     if let at = shelves.firstIndex(where: { $0.id == id }) { shelves[at] = shelf } else { shelves.append(shelf) }
                 case .failure(let error):
                     report(source.id, error)

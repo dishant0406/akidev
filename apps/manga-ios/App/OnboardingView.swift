@@ -18,20 +18,20 @@ struct OnboardingView: View {
                         .akiGlass(.rounded(34), interactive: false)
                         .shadow(color: Aki.shadow, radius: 18, y: 8)
                     VStack(spacing: 10) {
-                        AkiText("What do you read?", .display, align: .center)
-                        AkiText("Akidev has manga and books. Choose which one comes first.", .body, tone: .muted, align: .center)
+                        AkiText(Copy.Home.whatDoYouRead, .display, align: .center)
+                        AkiText(Copy.Home.onboardingIntro, .body, tone: .muted, align: .center)
                     }
                 }
                 .reveal(shown, delay: 0, reduceMotion: reduceMotion)
                 AkiGlassGroup(spacing: 14) {
                     HStack(alignment: .top, spacing: 14) {
-                        card(.manga, detail: "Follow series from your sources and get alerts for new chapters.") { AkiMangaArt() }
+                        card(.manga, detail: Copy.Home.mangaChoice) { AkiMangaArt() }
                             .reveal(shown, delay: 0.12, reduceMotion: reduceMotion)
-                        card(.books, detail: "Read EPUB books from your files or a catalogue. Akidev keeps your place.") { AkiBooksArt() }
+                        card(.books, detail: Copy.Home.booksChoice) { AkiBooksArt() }
                             .reveal(shown, delay: 0.22, reduceMotion: reduceMotion)
                     }
                 }
-                AkiText("You can change this at any time in Settings.", .caption, tone: .muted, align: .center)
+                AkiText(Copy.Home.changeLaterHint, .caption, tone: .muted, align: .center)
                     .reveal(shown, delay: 0.32, reduceMotion: reduceMotion)
                 Spacer(minLength: 20)
             }

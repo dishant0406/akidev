@@ -63,16 +63,16 @@ fun OnboardingScreen() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         Box(Modifier.shadow(18.dp, AkiShapes.rounded(34.dp), ambientColor = Aki.colors.shadow, spotColor = Aki.colors.shadow).akiGlass(AkiShapes.rounded(34.dp)).padding(10.dp)) { AkiLogo(size = 76.dp) }
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AkiText("What do you read?", AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
-                            AkiText("Akidev has manga and books. Choose which one comes first.", AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
+                            AkiText(Copy.Home.whatDoYouRead, AkiTextStyle.Display, align = TextAlign.Center, isHeading = true)
+                            AkiText(Copy.Home.onboardingIntro, AkiTextStyle.Body, tone = AkiTone.Muted, align = TextAlign.Center)
                         }
                     }
                 }
                 Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, "Follow series from your sources and get alerts for new chapters.", chosen) { chosen = it } }
-                    Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, "Read EPUB books from your files or a catalogue. Akidev keeps your place.", chosen) { chosen = it } }
+                    Reveal(shown, 120, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Manga, Copy.Home.mangaChoice, chosen) { chosen = it } }
+                    Reveal(shown, 220, Modifier.weight(1f).fillMaxHeight()) { Choice(ReaderKind.Books, Copy.Home.booksChoice, chosen) { chosen = it } }
                 }
-                Reveal(shown, 320) { AkiText("You can change this at any time in Settings.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
+                Reveal(shown, 320) { AkiText(Copy.Home.changeLaterHint, AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center) }
             }
         }
     }

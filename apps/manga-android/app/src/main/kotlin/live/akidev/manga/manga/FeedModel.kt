@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.Card
 import uniffi.akimanga.Engine
 import uniffi.akimanga.SourceInfo
@@ -97,7 +98,7 @@ class FeedModel {
         val fresh = if (force) null else engine.freshListing(source.id, isLatest)
         if (fresh == null) stale.add(id)
         val page = fresh ?: engine.rememberedListing(source.id, isLatest) ?: return null
-        return Shelf(id, source.name, if (isLatest) "New releases" else "Popular", source.id, page.items.take(14))
+        return Shelf(id, source.name, if (isLatest) Copy.Home.newReleases else Copy.Home.popular, source.id, page.items.take(14))
     }
 
     private fun arrived(source: SourceInfo, isLatest: Boolean, result: Result<List<Card>>, mine: String, report: (String, Throwable?) -> Unit) {
@@ -105,7 +106,7 @@ class FeedModel {
         val id = "${source.id}|${if (isLatest) "latest" else "popular"}"
         result.onSuccess { cards ->
             report(source.id, null)
-            val shelf = Shelf(id, source.name, if (isLatest) "New releases" else "Popular", source.id, cards.take(14))
+            val shelf = Shelf(id, source.name, if (isLatest) Copy.Home.newReleases else Copy.Home.popular, source.id, cards.take(14))
             shelves = if (shelves.any { it.id == id }) shelves.map { if (it.id == id) shelf else it } else shelves + shelf
         }
         result.onFailure { report(source.id, it) }

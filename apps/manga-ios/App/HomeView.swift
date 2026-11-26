@@ -93,24 +93,24 @@ struct HomeView: View {
         MangaStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: "Discover")
+                    AkiHeader(title: Copy.Home.discover)
                     MangaPartPills()
                     if model.sources.isEmpty && model.repos.isEmpty {
                         WelcomeView()
                     } else if model.visibleSources.isEmpty {
-                        AkiEmptyState(title: model.sources.isEmpty ? "No sources installed" : "Nothing to show", message: model.sources.isEmpty ? "Install a source from a repository in Sources to start reading." : "Your content settings hide every installed source.", action: ("Open Sources", { model.tab = .sources }))
+                        AkiEmptyState(title: model.sources.isEmpty ? Copy.Home.noSourcesInstalled : Copy.Home.nothingToShow, message: model.sources.isEmpty ? Copy.Home.installSourceHint : Copy.Home.settingsHideSources, action: (Copy.Home.openSources, { model.tab = .sources }))
                             .frame(minHeight: 420)
                     } else {
                         HStack(spacing: 10) {
-                            AkiInput(placeholder: isGlobal ? "Search all sources" : "Search \(info?.name ?? "")", text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
+                            AkiInput(placeholder: isGlobal ? Copy.Home.searchAllSources : Copy.Home.searchSource(info?.name ?? ""), text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
                             if !otherFilters.isEmpty && !isGlobal {
-                                AkiIconButton(symbol: "sliders", label: "Filter results", tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
-                                    .accessibilityValue(choices.isEmpty ? "" : "On")
+                                AkiIconButton(symbol: "sliders", label: Copy.Home.filterResults, tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
+                                    .accessibilityValue(choices.isEmpty ? "" : Copy.Home.filterOnIos)
                             }
                         }
                         HStack(spacing: 10) {
                             if model.visibleSources.count > 1 {
-                                AkiMenuPill(icon: "sources", selection: $source, options: [(Self.everySource, "All sources")] + model.visibleSources.map { ($0.id, $0.name) })
+                                AkiMenuPill(icon: "sources", selection: $source, options: [(Self.everySource, Copy.Home.allSources)] + model.visibleSources.map { ($0.id, $0.name) })
                             }
                             if let category = category, !isGlobal { categories(category) }
                         }
@@ -168,7 +168,7 @@ struct HomeView: View {
                 choices[filter.id] = value.isEmpty ? nil : value
                 Task { await reload() }
             }
-        ), options: filter.options.contains { $0.value.isEmpty } ? filter.options.map { ($0.value, $0.name) } : [("", "All")] + filter.options.map { ($0.value, $0.name) })
+        ), options: filter.options.contains { $0.value.isEmpty } ? filter.options.map { ($0.value, $0.name) } : [("", Copy.Home.all)] + filter.options.map { ($0.value, $0.name) })
     }
 
     /// One card per series: the history has a row for every chapter read, newest first, so the same series appears many
@@ -180,7 +180,7 @@ struct HomeView: View {
 
     @ViewBuilder private var continueShelf: some View {
         if !continueReading.isEmpty {
-            AkiShelf(title: "Continue reading") {
+            AkiShelf(title: Copy.Home.continueReading) {
                 ForEach(continueReading, id: \.key) { entry in
                     AkiLink(value: SeriesRef(source: entry.source, id: entry.series, title: entry.title, cover: entry.cover)) {
                         AkiPoster(title: entry.title, cover: entry.cover, caption: chapterName(number: entry.chapterNumber, title: entry.chapterTitle))
@@ -194,13 +194,13 @@ struct HomeView: View {
     /// What a long press on a "Continue reading" card offers: finish the series, or forget it was started.
     private func continueMenu(for entry: HistoryEntry) -> [AkiMenuItem] {
         [
-            AkiMenuItem(title: "Mark all as read", icon: "check") {
+            AkiMenuItem(title: Copy.Home.markAllAsRead, icon: "check") {
                 let ids = ((try? model.engine.cachedChapters(source: entry.source, series: entry.series)) ?? []).map(\.id)
                 try? model.engine.mark(source: entry.source, series: entry.series, chapters: ids, read: true)
                 model.refresh()
                 reading = (try? model.engine.history(limit: 24)) ?? []
             },
-            AkiMenuItem(title: "Remove from history", icon: "trash", destructive: true) {
+            AkiMenuItem(title: Copy.Home.removeFromHistory, icon: "trash", destructive: true) {
                 try? model.engine.forgetHistory(source: entry.source, series: entry.series)
                 model.refresh()
                 reading = (try? model.engine.history(limit: 24)) ?? []
@@ -213,7 +213,7 @@ struct HomeView: View {
         if feed.shelves.isEmpty && feed.loading {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 280)
         } else if feed.shelves.isEmpty {
-            AkiEmptyState(title: "Nothing to show", message: "No source returned any series. Pull down to try again.").frame(minHeight: 320)
+            AkiEmptyState(title: Copy.Home.nothingToShow, message: Copy.Home.noSourceReturnedSeries).frame(minHeight: 320)
         } else {
             if let lead = feed.shelves.first(where: { $0.id.hasSuffix("popular") })?.items.first, let from = feed.shelves.first(where: { $0.id.hasSuffix("popular") }) {
                 AkiLink(value: SeriesRef(source: from.source, id: lead.id, title: lead.title, cover: lead.cover)) {
@@ -235,9 +235,9 @@ struct HomeView: View {
 
     @ViewBuilder private var results: some View {
         if let error = browse.error, browse.items.isEmpty {
-            AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await reload(force: true) } })).frame(minHeight: 320)
+            AkiEmptyState(title: error.title, message: error.message, action: (Copy.Home.tryAgain, { Task { await reload(force: true) } })).frame(minHeight: 320)
         } else if browse.items.isEmpty && !browse.loading {
-            AkiEmptyState(title: submitted.isEmpty ? "Nothing to show" : "No results", message: submitted.isEmpty ? "This source returned no series. Pull down to try again." : "Nothing matched “\(submitted)” in \(info?.name ?? source).").frame(minHeight: 320)
+            AkiEmptyState(title: submitted.isEmpty ? Copy.Home.nothingToShow : Copy.Home.noResults, message: submitted.isEmpty ? Copy.Home.sourceReturnedNoSeries : Copy.Home.nothingMatched(submitted, info?.name ?? source)).frame(minHeight: 320)
         } else if browse.items.isEmpty {
             AkiSpinner().frame(maxWidth: .infinity, minHeight: 240)
         } else if submitted.isEmpty && choices.isEmpty {
@@ -245,7 +245,7 @@ struct HomeView: View {
         } else {
             grid(browse.items)
             if browse.hasNext {
-                AkiButton(browse.loading ? "Loading…" : "Show more") { Task { await load(reset: false) } }.frame(maxWidth: .infinity)
+                AkiButton(browse.loading ? Copy.Home.loading : Copy.Home.showMore) { Task { await load(reset: false) } }.frame(maxWidth: .infinity)
             }
         }
     }
@@ -254,11 +254,11 @@ struct HomeView: View {
     @ViewBuilder private var sourceFeed: some View {
         if let first = browse.items.first {
             AkiLink(value: SeriesRef(source: source, id: first.id, title: first.title, cover: first.cover)) {
-                AkiBillboard(title: first.title, cover: first.cover, tag: "Popular on \(info?.name ?? "this source")")
+                AkiBillboard(title: first.title, cover: first.cover, tag: Copy.Home.popularOn(info?.name ?? Copy.Home.thisSource))
             }
         }
         continueShelf
-        AkiShelf(title: "Top 10", subtitle: info?.name) {
+        AkiShelf(title: Copy.Home.top10, subtitle: info?.name) {
             ForEach(Array(browse.items.prefix(10).enumerated()), id: \.element.id) { index, card in
                 AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
                     AkiPoster(title: card.title, cover: card.cover, caption: chaptersLabel(card.chapters), rank: index + 1, width: 116)
@@ -266,7 +266,7 @@ struct HomeView: View {
             }
         }
         if !feed.latest.isEmpty {
-            AkiShelf(title: "New releases") {
+            AkiShelf(title: Copy.Home.newReleases) {
                 ForEach(feed.latest, id: \.id) { card in
                     AkiLink(value: SeriesRef(source: source, id: card.id, title: card.title, cover: card.cover)) {
                         AkiPoster(title: card.title, cover: card.cover, caption: chaptersLabel(card.chapters))
@@ -275,11 +275,11 @@ struct HomeView: View {
             }
         }
         if browse.items.count > 10 {
-            AkiText("Browse all", .heading).accessibilityAddTraits(.isHeader)
+            AkiText(Copy.Home.browseAll, .heading).accessibilityAddTraits(.isHeader)
             grid(Array(browse.items.dropFirst(10)))
         }
         if browse.hasNext {
-            AkiButton(browse.loading ? "Loading…" : "Show more") { Task { await load(reset: false) } }.frame(maxWidth: .infinity)
+            AkiButton(browse.loading ? Copy.Home.loading : Copy.Home.showMore) { Task { await load(reset: false) } }.frame(maxWidth: .infinity)
         }
     }
 
@@ -326,7 +326,7 @@ struct FiltersSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Filters", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Home.filters, .title).accessibilityAddTraits(.isHeader)
                 ForEach(filters, id: \.id) { filter in
                     AkiCard(padding: 16) {
                         switch filter.kind {
@@ -340,8 +340,8 @@ struct FiltersSheet: View {
                         }
                     }
                 }
-                AkiButton("Show results", variant: .primary, size: .large, fullWidth: true) { dismiss(); apply() }
-                AkiButton("Reset filters", variant: .ghost, fullWidth: true) { choices = [:]; dismiss(); apply() }
+                AkiButton(Copy.Home.showResults, variant: .primary, size: .large, fullWidth: true) { dismiss(); apply() }
+                AkiButton(Copy.Home.resetFilters, variant: .ghost, fullWidth: true) { choices = [:]; dismiss(); apply() }
             }
             .padding(24)
         }

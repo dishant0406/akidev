@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import live.akidev.manga.MainActivity
+import live.akidev.manga.design.Copy
 import live.akidev.manga.manga.chapterName
 import uniffi.akimanga.ChapterEntry
 
@@ -40,12 +41,12 @@ object UpdateAlerts {
     fun post(context: Context, found: List<NewChapters>) {
         if (found.isEmpty() || !allowed(context)) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "New chapters", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, Copy.Home.newChapters, NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(
             context, REQUEST_OPEN, Intent(context, MainActivity::class.java).putExtra(OPEN_UPDATES, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle("New chapters").setContentText(body(found))
+            .setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle(Copy.Home.newChapters).setContentText(body(found))
             .setContentIntent(open).setAutoCancel(true).build()
         manager.notify(1, notification)
     }
@@ -55,14 +56,15 @@ object UpdateAlerts {
     /** "Solo Leveling · Chapter 179", "Solo Leveling · 3 new chapters", "Solo Leveling, Tower of God and 2 more". */
     fun body(found: List<NewChapters>): String {
         val count = found.sumOf { it.chapters.size }
-        if (found.any { it.adult }) return if (count == 1) "1 new chapter in your library." else "$count new chapters in your library."
+        if (found.any { it.adult }) return Copy.Home.newChaptersInLibrary(count)
         if (found.size == 1) {
             val only = found[0]
-            val what = if (only.chapters.size == 1) chapterName(only.chapters[0].number, only.chapters[0].title) else "${only.chapters.size} new chapters"
-            return "${only.title} · $what"
+            val what = if (only.chapters.size == 1) chapterName(only.chapters[0].number, only.chapters[0].title) else Copy.Home.newChapterCount(only.chapters.size)
+            return Copy.Home.titleAndDetail(only.title, what)
         }
         val names = found.take(2).map { it.title }
         val rest = found.size - names.size
-        return if (rest > 0) names.joinToString(", ") + " and $rest more" else names.joinToString(" and ")
+        if (rest > 0) return Copy.Home.namesAndMore(names.joinToString(", "), rest)
+        return Copy.Home.twoNames(names.firstOrNull() ?: "", names.lastOrNull() ?: "")
     }
 }
