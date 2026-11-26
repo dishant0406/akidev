@@ -75,7 +75,7 @@ fun SettingsScreen() {
     val askForAlerts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         app.prefs.notifyUpdates = granted
         app.scheduleBackgroundWork()
-        if (!granted) message = Problem(Copy.Settings.notificationsOffTitle, Copy.Settings.notificationsOffMessageAndroid)
+        if (!granted) message = Problem(Copy.Settings.notificationsOffTitle, Copy.Settings.notificationsOffMessage)
     }
     // Whether the voices repository answers is asked now, when Settings opens, and never at launch.
     LaunchedEffect(Unit) { app.readAloud.check() }
@@ -164,7 +164,7 @@ private fun LazyListScope.booksSection() {
     item {
         val prefs = LocalApp.current.prefs
         val style = prefs.bookStyle
-        AkiSection(Copy.Home.books, footer = Copy.Settings.booksFooterAndroid) {
+        AkiSection(Copy.Home.books, footer = Copy.Settings.booksFooter) {
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     AkiSelect(Copy.Settings.bookReadingStyle, style.scroll, { prefs.bookStyle = style.copy(scroll = it) }, listOf(AkiOption(false, Copy.Books.pages), AkiOption(true, Copy.Books.scroll)))
@@ -195,7 +195,7 @@ private fun ContentSection() {
     val app = LocalApp.current
     val prefs = app.prefs
     val languages = app.sources.flatMap { it.languages }.toSortedSet().toList()
-    AkiSection(Copy.Settings.content, footer = Copy.Settings.contentFooterAndroid) {
+    AkiSection(Copy.Settings.content, footer = Copy.Settings.contentFooterWithSwitch) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 AkiSwitch(Copy.Settings.showAdultSources, prefs.showAdult, { prefs.showAdult = it })
@@ -238,7 +238,7 @@ private fun UpdatesSection(enableAlerts: () -> Unit) {
     val prefs = app.prefs
     AkiSection(
         Copy.Home.updates,
-        footer = Copy.Settings.updatesFooterAndroid,
+        footer = Copy.Settings.updatesFooter,
     ) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -292,7 +292,7 @@ private fun LazyListScope.aboutSection() {
                         AkiLogo(size = 44.dp)
                         AkiText(Copy.Settings.akidevVersion(app.engine.version()), AkiTextStyle.BodyStrong, tabular = true)
                     }
-                    AkiText(Copy.Settings.aboutCreditsAndroid, AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText(Copy.Settings.aboutCredits + " " + Copy.Settings.aboutFontCredit, AkiTextStyle.Caption, tone = AkiTone.Muted)
                     AkiText(
                         Copy.Settings.aboutDescription,
                         AkiTextStyle.Caption, tone = AkiTone.Muted,

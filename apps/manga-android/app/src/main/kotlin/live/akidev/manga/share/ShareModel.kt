@@ -374,7 +374,7 @@ class ShareModel(private val app: AppModel, private val sharing: Sharing) : Shar
                     val problem = describe(failure)
                     if (failure is MangaException.Offline || problem.message.contains("could not reach", ignoreCase = true)) {
                         // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
-                        message = Problem(Copy.Share.couldNotAddTheSource, Copy.Share.sourceNeedsInternet)
+                        message = Problem(Copy.Share.couldNotShare, Copy.Share.couldNotAddSourceOffline)
                         retry = pending
                         return@launch
                     }

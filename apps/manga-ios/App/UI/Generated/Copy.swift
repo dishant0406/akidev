@@ -54,8 +54,7 @@ enum Copy {
         static func highlightsCount(_ count: Int) -> String { "Highlights · \(count)" }
         static func highlightCount(_ count: Int) -> String { count == 1 ? "\(count) highlight" : "\(count) highlights" }
         static let noHighlightsTitle = "No highlights yet"
-        static let noHighlightsMessageIos = "Press and hold a word in a book, drag to the end of what you want, and choose Highlight or Note."
-        static let noHighlightsMessageAndroid = "Press and hold a word in a book, drag the handles to choose text, then pick a colour or choose Note."
+        static let noHighlightsMessage = "Press and hold a word in a book, drag to choose text, then highlight it or add a note."
         static let noHighlightsInBookMessage = "Press and hold a word in the book, then drag the handles to choose what to highlight."
         static let catalogueFooter = "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any."
         static let catalogues = "Catalogues"
@@ -109,7 +108,7 @@ enum Copy {
         static func coverOf(_ title: String) -> String { "Cover of \(title)" }
         static let nextPage = "Next page"
         static let previousPage = "Previous page"
-        static func chapterFallbackTitleAndroid(_ number: Int) -> String { "Part \(number)" }
+        static func chapterFallbackTitle(_ number: Int) -> String { "Part \(number)" }
         static let pages = "Pages"
         static let scroll = "Scroll"
         static let font = "Font"
@@ -229,8 +228,7 @@ enum Copy {
         static let allSources = "All sources"
         static let all = "All"
         static let filterResults = "Filter results"
-        static let filterOnIos = "On"
-        static let filterResultsOnAndroid = "Filter results, on"
+        static let filterResultsOn = "Filter results, on"
         static let loading = "Loading…"
         static let showMore = "Show more"
         static func searchingSource(_ name: String) -> String { "Searching \(name)" }
@@ -282,7 +280,6 @@ enum Copy {
         static let moveDown = "Move down"
         static let delete = "Delete"
         static func seriesCount(_ count: Int) -> String { "\(count) series" }
-        static func seriesCountAndroid(_ count: Int) -> String { "\(count) series" }
         static func bookCount(_ count: Int) -> String { count == 1 ? "\(count) book" : "\(count) books" }
         static let empty = "Empty"
         static let moveToAnotherSource = "Move to another source"
@@ -427,17 +424,15 @@ enum Copy {
         static let nothingToReadHere = "Nothing to read here"
         static func noChaptersInLanguage(_ name: String) -> String { "\(name) lists this series but has no chapters to show in your language. Licensed series are often only linked to the publisher’s site. Try another source, or change the language in the source’s settings." }
         static let locked = "Locked"
-        static let lockedSignInAndroid = "Locked, sign in to read"
-        static let markAsUnreadIos = "Mark as unread"
-        static func markAsReadAndroid(_ name: String) -> String { "Mark \(name) as read" }
-        static func markAsUnreadAndroid(_ name: String) -> String { "Mark \(name) as unread" }
+        static let lockedSignIn = "Locked, sign in to read"
+        static func markAsRead(_ name: String) -> String { "Mark \(name) as read" }
+        static func markAsUnread(_ name: String) -> String { "Mark \(name) as unread" }
         static let deleteDownload = "Delete download"
         static let download = "Download"
         static let noBookmarksYet = "No bookmarks yet"
         static let bookmarkHint = "Bookmark a page while you read and it appears here."
         static func pageNumber(_ number: Int) -> String { "Page \(number)" }
-        static let removeBookmarkIos = "Remove bookmark"
-        static func removeBookmarkAndroid(_ number: Int) -> String { "Remove bookmark on page \(number)" }
+        static func removeBookmark(_ number: Int) -> String { "Remove bookmark on page \(number)" }
         static let readDownloaded = "Read · Downloaded"
         static let read = "Read"
         static let downloaded = "Downloaded"
@@ -445,7 +440,6 @@ enum Copy {
         static let status = "Status"
         static let unknown = "Unknown"
         static let author = "Author"
-        static let noAuthorIos = "—"
         static let source = "Source"
         static let ongoing = "Ongoing"
         static let completed = "Completed"
@@ -481,8 +475,8 @@ enum Copy {
         static let readerKindLabel = "I mostly read"
         static let mangaAndComics = "Manga and comics"
         static let content = "Content"
-        static let contentFooterIos = "Sources marked 18+ are not available in this app."
-        static let contentFooterAndroid = "Sources marked 18+ stay out of Discover and Sources until you turn this on."
+        static let contentFooterNoSwitch = "Sources marked 18+ are not available in this app."
+        static let contentFooterWithSwitch = "Sources marked 18+ stay out of Discover and Sources until you turn this on."
         static let language = "Language"
         static let showAdultSources = "Show 18+ sources"
         static let libraryFooter = "Choose what happens to a series when you add it to your library. Create categories from the Library menu."
@@ -495,14 +489,12 @@ enum Copy {
         static let leftEdgeForward = "Left edge goes forward"
         static let leftEdgeForwardHint = "In paged reading, tap the left edge for the next page."
         static let bookReadingStyle = "Reading"
-        static let booksFooterIos = "How a book opens. Once you are in a book, its Type and theme sheet changes these for you as you read."
-        static let booksFooterAndroid = "How a book opens. Once you are in a book, its Text and theme sheet changes these for you as you read."
+        static let booksFooter = "How a book opens. Once you are in a book, its Text and theme sheet changes these for you as you read."
         static let readAloud = "Reading aloud"
         static let readAloudFooter = "Books are read in a voice that runs on this phone. Download a voice model once. Reading aloud then needs no network."
         static let voiceModel = "Voice model"
         static let noVoiceModelYet = "None yet. Choose one to download."
-        static let updatesFooterIos = "Akidev checks the series in your library in the background when iOS allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device."
-        static let updatesFooterAndroid = "Akidev checks the series in your library in the background when Android allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device."
+        static let updatesFooter = "Akidev checks the series in your library in the background when your phone allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device."
         static let newChapterAlerts = "New chapter alerts"
         static let newChapterAlertsHint = "A notification when a series in your library gets a chapter."
         static let downloadNewChapters = "Download new chapters"
@@ -519,15 +511,14 @@ enum Copy {
         static let restoreFromBackup = "Restore from backup"
         static let openCbzComic = "Open a CBZ comic file"
         static func akidevVersion(_ version: String) -> String { "Akidev \(version)" }
-        static let aboutCreditsIos = "Icons: Solar by 480 Design, CC BY 4.0."
-        static let aboutCreditsAndroid = "Icons: Solar by 480 Design, CC BY 4.0. Type: Nunito, SIL Open Font License."
+        static let aboutCredits = "Icons: Solar by 480 Design, CC BY 4.0."
+        static let aboutFontCredit = "Type: Nunito, SIL Open Font License."
         static let aboutDescription = "A reader with no content of its own. Sources come from repositories you add. The people who make them, and the sites they read, are not affiliated with Akidev."
         static let glass = "Glass"
         static let glassFooter = "Controls show what is behind them, bent like glass. Turn on Reduce glass if this phone feels slow: controls become plain shapes."
         static let reduceGlass = "Reduce glass"
         static let notificationsOffTitle = "Notifications are off"
-        static let notificationsOffMessageIos = "Turn them on for Akidev in the iOS Settings app, then try again."
-        static let notificationsOffMessageAndroid = "Turn them on for Akidev in the Android Settings app, then try again."
+        static let notificationsOffMessage = "Turn them on for Akidev in the Settings app, then try again."
         static let couldNotMakeBackup = "Could not make the backup"
         static let couldNotRestoreBackup = "Could not restore the backup"
         static let couldNotAddFile = "Could not add this file"
@@ -574,8 +565,7 @@ enum Copy {
         static let onlyAcceptFromKnown = "Only accept from someone you know."
         static let accept = "Accept"
         static let decline = "Decline"
-        static func addSourceQuestionIos(_ name: String) -> String { "Add the source \(name)?" }
-        static func addSourceQuestionAndroid(_ name: String) -> String { "Add the source “\(name)”?" }
+        static func addSourceQuestion(_ name: String) -> String { "Add the source “\(name)”?" }
         static let addSourceButton = "Add source"
         static let addSourceAndSeries = "Add source and series"
         static let couldNotShare = "Could not share"
@@ -612,16 +602,13 @@ enum Copy {
         static func fromRepository(_ repo: String) -> String { "It comes from the repository \(repo)." }
         static let addedByHand = "Your friend added it by hand."
         static let notAkidevCode = "That is not an Akidev code. Ask them to show the code again."
-        static let couldNotJoinWifiIos = "Could not join their Wi-Fi. Try again."
-        static let couldNotJoinWifiAndroid = "Could not join their Wi-Fi. Move the phones closer and try again."
+        static let couldNotJoinWifi = "Could not join their Wi-Fi. Move the phones closer and try again."
         static let couldNotReachPhoneWifi = "Could not reach that phone. Check that both phones are on the same Wi-Fi."
         static let couldNotReachTryAgain = "Could not reach that phone. Try again."
         static let turnWifiOnForBoth = "Could not reach that phone. Turn Wi-Fi on for both phones. It does not need to be connected to a network."
         static let noSharedWifi = "That phone has no shared Wi-Fi with you. Choose “Use a temporary Wi-Fi” on this phone and ask them to scan your code."
         static func sendingStopped(_ reason: String) -> String { "Sending stopped: \(reason)." }
-        static let couldNotAddTheSource = "Could not add the source"
-        static let sourceNeedsInternet = "This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
-        static let couldNotAddSourceOfflineIos = "Could not add the source. This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
+        static let couldNotAddSourceOffline = "Could not add the source. This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
         static let couldNotStartWifi = "Could not start temporary Wi-Fi"
         static let couldNotMakeCode = "This phone could not make a code for it. Try again."
         static func allowPermission(_ permission: String) -> String { "Allow \(permission) for Akidev in the Android Settings app, then try again." }
@@ -656,8 +643,7 @@ enum Copy {
         static func repositoryLanguagesAdult(_ languages: String) -> String { "\(languages) · 18+" }
         static func notWorking(_ problem: String) -> String { "Not working: \(problem)" }
         static let removeSource = "Remove source"
-        static func removeSourceQuestionIos(_ name: String) -> String { "Remove \(name)?" }
-        static func removeSourceQuestionAndroid(_ name: String) -> String { "Remove “\(name)”?" }
+        static func removeSourceQuestion(_ name: String) -> String { "Remove “\(name)”?" }
         static let removeSourceMessage = "Its series stay in your library but cannot be read until you install it again."
         static let addSource = "Add a source"
         static let pasteSourceHint = "Paste the text of a source. It is checked before anything is kept."

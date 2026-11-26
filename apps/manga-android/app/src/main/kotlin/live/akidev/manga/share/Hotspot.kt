@@ -121,7 +121,7 @@ class WifiJoin(context: Context) {
             }
 
             override fun onUnavailable() {
-                if (go.isActive) go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifiAndroid))
+                if (go.isActive) go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifi))
             }
         }
         callback = joining
@@ -129,7 +129,7 @@ class WifiJoin(context: Context) {
             // The time counts the person's tap on the system's "Connect" question too, so it is not short.
             connectivity.requestNetwork(request, joining, 60_000)
         } catch (failure: RuntimeException) {
-            go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifiAndroid))
+            go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifi))
         }
         go.invokeOnCancellation { leave() }
     }

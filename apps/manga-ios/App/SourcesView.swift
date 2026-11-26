@@ -218,7 +218,7 @@ struct SourceSettingsView: View {
         .background(AkiBackdrop())
         .akiNoNavigationBar()
         .hidesTabBar()
-        .akiConfirm(Copy.Sources.removeSourceQuestionIos(model.name(of: source)), message: Copy.Sources.removeSourceMessage, confirm: Copy.Sources.removeSource, isPresented: $removing) {
+        .akiConfirm(Copy.Sources.removeSourceQuestion(model.name(of: source)), message: Copy.Sources.removeSourceMessage, confirm: Copy.Sources.removeSource, isPresented: $removing) {
             try? model.engine.removeSource(id: source)
             model.refresh()
             dismiss()

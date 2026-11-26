@@ -178,7 +178,7 @@ final class ShareModel {
                 back = .choosing
                 step = .joining
                 do { try await WifiJoin.join(ssid: ssid, password: password) } catch {
-                    problem = Copy.Share.couldNotJoinWifiIos
+                    problem = Copy.Share.couldNotJoinWifi
                     step = back
                     return
                 }
@@ -398,7 +398,7 @@ final class ShareModel {
                     let reason = describe(error).message
                     if case MangaError.Offline = error {
                         // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
-                        problem = Copy.Share.couldNotAddSourceOfflineIos
+                        problem = Copy.Share.couldNotAddSourceOffline
                         retry = pending
                     } else {
                         problem = reason

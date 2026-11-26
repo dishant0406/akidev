@@ -15,7 +15,7 @@ struct HighlightsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 AkiBackHeader(title: Copy.Books.highlights, subtitle: Copy.Books.highlightCount(found.count), back: { dismiss() })
                 if found.isEmpty {
-                    AkiEmptyState(title: Copy.Books.noHighlightsTitle, message: Copy.Books.noHighlightsMessageIos).frame(minHeight: 300)
+                    AkiEmptyState(title: Copy.Books.noHighlightsTitle, message: Copy.Books.noHighlightsMessage).frame(minHeight: 300)
                 }
                 ForEach(found, id: \.highlight.id) { item in
                     AkiTap(action: { dismiss(); open(item) }) {

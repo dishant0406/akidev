@@ -104,8 +104,7 @@ struct HomeView: View {
                         HStack(spacing: 10) {
                             AkiInput(placeholder: isGlobal ? Copy.Home.searchAllSources : Copy.Home.searchSource(info?.name ?? ""), text: $term, icon: "search", onSubmit: { submitted = term; Task { await reload() } }, onClear: { submitted = ""; Task { await reload() } })
                             if !otherFilters.isEmpty && !isGlobal {
-                                AkiIconButton(symbol: "sliders", label: Copy.Home.filterResults, tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
-                                    .accessibilityValue(choices.isEmpty ? "" : Copy.Home.filterOnIos)
+                                AkiIconButton(symbol: "sliders", label: choices.isEmpty ? Copy.Home.filterResults : Copy.Home.filterResultsOn, tint: choices.isEmpty ? nil : Aki.primary) { filtering = true }
                             }
                         }
                         HStack(spacing: 10) {

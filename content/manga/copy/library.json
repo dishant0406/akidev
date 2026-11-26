@@ -18,7 +18,6 @@
   "moveDown": "Move down",
   "delete": "Delete",
   "seriesCount": "{count:int} series",
-  "seriesCountAndroid": "{count:int} series",
   "bookCount": {
     "one": "{count:int} book",
     "other": "{count:int} books"

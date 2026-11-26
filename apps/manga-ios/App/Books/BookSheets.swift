@@ -369,7 +369,7 @@ struct BookAboutView: View {
         return VStack(alignment: .leading, spacing: 10) {
             AkiTap(action: { toggle(chapter) }) {
                 HStack {
-                    AkiText(text.map { model.pageTitle(chapter, text: $0) } ?? model.contents.first { Int($0.chapter) == chapter }?.title ?? Copy.Series.pageNumber(chapter + 1), .bodyStrong, lines: 2)
+                    AkiText(text.map { model.pageTitle(chapter, text: $0) } ?? model.contents.first { Int($0.chapter) == chapter }?.title ?? Copy.Books.chapterFallbackTitle(chapter + 1), .bodyStrong, lines: 2)
                     Spacer(minLength: 8)
                     AkiIcon(open ? "down" : "forward", size: 12, tone: .muted)
                 }

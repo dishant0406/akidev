@@ -24,7 +24,7 @@ struct SettingsView: View {
                 Task {
                     let granted = await UpdateAlerts.requestPermission()
                     model.prefs.notifyUpdates = granted
-                    if !granted { message = (Copy.Settings.notificationsOffTitle, Copy.Settings.notificationsOffMessageIos) }
+                    if !granted { message = (Copy.Settings.notificationsOffTitle, Copy.Settings.notificationsOffMessage) }
                 }
             }
         )
@@ -94,7 +94,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var contentSection: some View {
         @Bindable var prefs = model.prefs
-                AkiSection(title: Copy.Settings.content, footer: Copy.Settings.contentFooterIos) {
+                AkiSection(title: Copy.Settings.content, footer: Copy.Settings.contentFooterNoSwitch) {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
                             if !languages.isEmpty {
@@ -141,7 +141,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var updatesSection: some View {
         @Bindable var prefs = model.prefs
-                AkiSection(title: Copy.Home.updates, footer: Copy.Settings.updatesFooterIos) {
+                AkiSection(title: Copy.Home.updates, footer: Copy.Settings.updatesFooter) {
                     AkiCard(padding: 16) {
                         VStack(spacing: 16) {
                             AkiSwitch(title: Copy.Settings.newChapterAlerts, subtitle: Copy.Settings.newChapterAlertsHint, isOn: alerts)
@@ -194,7 +194,7 @@ struct SettingsView: View {
                                 AkiLogo(size: 44)
                                 AkiText(Copy.Settings.akidevVersion(model.engine.version()), .bodyStrong, digits: true)
                             }
-                            AkiText(Copy.Settings.aboutCreditsIos, .caption, tone: .muted)
+                            AkiText(Copy.Settings.aboutCredits, .caption, tone: .muted)
                             AkiText(Copy.Settings.aboutDescription, .caption, tone: .muted)
                         }
                     }
@@ -204,7 +204,7 @@ struct SettingsView: View {
     /// How books look and read before one is opened; the reader's own sheet changes the same things for the book in hand.
     @ViewBuilder private var booksSection: some View {
         @Bindable var prefs = model.prefs
-        AkiSection(title: Copy.Home.books, footer: Copy.Settings.booksFooterIos) {
+        AkiSection(title: Copy.Home.books, footer: Copy.Settings.booksFooter) {
             AkiCard(padding: 16) {
                 VStack(spacing: 16) {
                     AkiSelect(title: Copy.Settings.bookReadingStyle, selection: $prefs.bookStyle.scroll, options: [(false, Copy.Books.pages), (true, Copy.Books.scroll)])

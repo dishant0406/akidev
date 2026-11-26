@@ -89,7 +89,7 @@ struct ReaderView: View {
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia, digits: true)
                     .accessibilityLabel(Copy.Reader.pageOfCount(min(model.page + 1, max(count, 1)), count))
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
-                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? Copy.Series.removeBookmarkIos : Copy.Reader.addBookmark, tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) {
+                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? Copy.Series.removeBookmark(model.page + 1) : Copy.Reader.addBookmark, tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) {
                     model.toggleBookmark()
                     akiAnnounce(model.isBookmarked ? Copy.Reader.bookmarkAdded : Copy.Reader.bookmarkRemoved)
                 }

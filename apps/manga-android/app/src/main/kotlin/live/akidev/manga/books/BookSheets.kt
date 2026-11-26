@@ -275,7 +275,7 @@ private fun About(model: BookModel, onClose: () -> Unit) {
             Column(Modifier.fillMaxWidth().background(Aki.colors.surface, RoundedCornerShape(22.dp)).padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AkiTap({ opened = if (open) opened - chapter else opened + chapter }, Modifier.semantics { stateDescription = if (open) Copy.Books.expanded else Copy.Books.collapsed }) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        AkiText(text?.let { model.pageTitle(chapter, it) } ?: model.contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: Copy.Books.chapterFallbackTitleAndroid(chapter + 1), AkiTextStyle.BodyStrong, Modifier.weight(1f), lines = 2)
+                        AkiText(text?.let { model.pageTitle(chapter, it) } ?: model.contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: Copy.Books.chapterFallbackTitle(chapter + 1), AkiTextStyle.BodyStrong, Modifier.weight(1f), lines = 2)
                         AkiIcon(if (open) "down" else "forward", size = 12.dp, tone = AkiTone.Muted)
                     }
                 }

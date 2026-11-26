@@ -151,7 +151,7 @@ private fun BottomBar(reader: ReaderModel, onChapters: () -> Unit) {
         val shownPage = minOf(reader.page + 1, maxOf(count, 1))
         AkiText("$shownPage / $count", AkiTextStyle.Caption, Modifier.semantics { contentDescription = Copy.Reader.pageOfCount(shownPage, count) }.akiGlass(AkiShapes.pill(44.dp), tint = scrim).padding(horizontal = 18.dp, vertical = 12.dp), tone = AkiTone.OnMedia, tabular = true)
         AkiIconButton(
-            if (reader.isBookmarked) "bookmark-solid" else "bookmark", if (reader.isBookmarked) Copy.Series.removeBookmarkIos else Copy.Reader.addBookmark,
+            if (reader.isBookmarked) "bookmark-solid" else "bookmark", if (reader.isBookmarked) Copy.Series.removeBookmark(reader.page + 1) else Copy.Reader.addBookmark,
             tint = if (reader.isBookmarked) Aki.colors.primary else null, onMedia = true, scrim = scrim,
         ) { reader.toggleBookmark() }
         reader.newer(reader.current)?.let { newer -> AkiIconButton("next", Copy.Reader.nextChapter, onMedia = true, scrim = scrim) { scope.launch { reader.open(newer.id, 0, 0.0) } } }

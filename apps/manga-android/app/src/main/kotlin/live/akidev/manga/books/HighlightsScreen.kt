@@ -30,7 +30,7 @@ fun HighlightsScreen(open: (BookHighlightIn) -> Unit) {
 
     AkiPage(underTabBar = false, spacing = 14.dp) {
         item { AkiBackHeader(Copy.Books.highlights, back = router::back, subtitle = Copy.Books.highlightCount(found.size)) }
-        if (found.isEmpty()) item { AkiEmptyState(Copy.Books.noHighlightsTitle, Copy.Books.noHighlightsMessageAndroid, Modifier.heightIn(min = 300.dp)) }
+        if (found.isEmpty()) item { AkiEmptyState(Copy.Books.noHighlightsTitle, Copy.Books.noHighlightsMessage, Modifier.heightIn(min = 300.dp)) }
         items(found.size, key = { found[it].highlight.id }) { index ->
             val item = found[index]
             AkiTap({ router.back(); open(item) }) {

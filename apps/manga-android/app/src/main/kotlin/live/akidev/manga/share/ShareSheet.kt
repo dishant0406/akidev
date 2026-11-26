@@ -107,7 +107,7 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
             AkiQuestion(Copy.Share.wantsToSendYou(asked.from, what), Copy.Share.onlyAcceptFromKnown, Copy.Share.accept, Copy.Share.decline, { model.answer(true) }, { model.answer(false) })
         }
         model.newSource?.let { pending ->
-            AkiQuestion(Copy.Share.addSourceQuestionAndroid(pending.card.sourceName), sourceMessage(pending.card), Copy.Share.addSourceButton, Copy.Sources.cancel, { model.answerSource(true) }, { model.answerSource(false) })
+            AkiQuestion(Copy.Share.addSourceQuestion(pending.card.sourceName), sourceMessage(pending.card), Copy.Share.addSourceButton, Copy.Sources.cancel, { model.answerSource(true) }, { model.answerSource(false) })
         }
         model.message?.let { AkiAlert(it.title, it.message, model::closeMessage) }
     }

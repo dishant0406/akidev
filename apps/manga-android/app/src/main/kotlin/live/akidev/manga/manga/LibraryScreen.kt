@@ -57,7 +57,7 @@ fun LibraryScreen() {
         AkiRefreshable({ app.refreshLibrary(force = true); library.loadHistory(); library.loadCategories() }, Modifier.fillMaxSize()) {
             AkiPage(narrow = false, state = library.scroll) {
                 item {
-                    AkiHeader(Copy.Home.library, subtitle = if (library.selecting) Copy.Library.selectedCount(library.pickedShown.size) else Copy.Library.seriesCountAndroid(app.library.size)) {
+                    AkiHeader(Copy.Home.library, subtitle = if (library.selecting) Copy.Library.selectedCount(library.pickedShown.size) else Copy.Library.seriesCount(app.library.size)) {
                         AkiMenu("filter", Copy.Library.sortAndFilter, library.menu(inMangaTab = part != null) { sheet = LibrarySheet.Managing })
                     }
                 }

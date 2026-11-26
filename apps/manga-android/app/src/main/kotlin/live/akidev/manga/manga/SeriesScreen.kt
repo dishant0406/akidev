@@ -270,7 +270,7 @@ private fun LazyListScope.chapterRows(series: SeriesModel, openChapter: (Chapter
                 AkiListCard(
                     series.cover, series.label(chapter), chapterName(chapter.number, chapter.title),
                     badges = listOfNotNull(shortDate(chapter.dateMs), chapter.scanlator), dimmed = chapter.finished,
-                ) { if (series.isLocked(chapter)) LockMark(if (series.asksToSignIn(chapter)) Copy.Series.lockedSignInAndroid else Copy.Series.locked) else ReadMark(chapter, series) }
+                ) { if (series.isLocked(chapter)) LockMark(if (series.asksToSignIn(chapter)) Copy.Series.lockedSignIn else Copy.Series.locked) else ReadMark(chapter, series) }
             }
         }
     }
@@ -286,7 +286,7 @@ private fun LockMark(label: String) {
 
 @Composable
 private fun ReadMark(chapter: ChapterEntry, series: SeriesModel) {
-    Box(Modifier.size(48.dp).akiPress(label = if (chapter.finished) Copy.Series.markAsUnreadAndroid(chapterName(chapter.number, chapter.title)) else Copy.Series.markAsReadAndroid(chapterName(chapter.number, chapter.title))) { series.toggleRead(chapter) }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(48.dp).akiPress(label = if (chapter.finished) Copy.Series.markAsUnread(chapterName(chapter.number, chapter.title)) else Copy.Series.markAsRead(chapterName(chapter.number, chapter.title))) { series.toggleRead(chapter) }, contentAlignment = Alignment.Center) {
         AkiIcon(if (chapter.finished) "check-solid" else "check", size = 22.dp, tone = if (chapter.finished) AkiTone.Text else AkiTone.Muted)
     }
 }
@@ -298,7 +298,7 @@ private fun LazyListScope.bookmarkRows(series: SeriesModel, open: (ReaderTarget)
         SheetRow {
             AkiTap({ open(ReaderTarget(mark.chapter, mark.page.toInt(), mark.offset)) }) {
                 AkiListCard(series.cover, Copy.Series.pageNumber((mark.page + 1u).toInt()), chapterName(mark.chapterNumber, mark.chapterTitle), badges = listOfNotNull(shortDate(mark.createdMs))) {
-                    Box(Modifier.size(48.dp).akiPress(label = Copy.Series.removeBookmarkAndroid((mark.page + 1u).toInt())) { series.removeBookmark(mark) }, contentAlignment = Alignment.Center) { AkiIcon("trash", size = 22.dp, tone = AkiTone.Muted) }
+                    Box(Modifier.size(48.dp).akiPress(label = Copy.Series.removeBookmark((mark.page + 1u).toInt())) { series.removeBookmark(mark) }, contentAlignment = Alignment.Center) { AkiIcon("trash", size = 22.dp, tone = AkiTone.Muted) }
                 }
             }
         }

@@ -93,7 +93,7 @@ suspend fun BookModel.plainText(chapter: Int): String = withContext(Dispatchers.
 
 /** The title of a page: its entry in the contents, or the first line of its text. */
 fun BookModel.pageTitle(chapter: Int, text: String): String =
-    contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: text.lineSequence().firstOrNull()?.take(60) ?: Copy.Books.chapterFallbackTitleAndroid(chapter + 1)
+    contents.firstOrNull { it.chapter.toInt() == chapter }?.title ?: text.lineSequence().firstOrNull()?.take(60) ?: Copy.Books.chapterFallbackTitle(chapter + 1)
 
 /** The title of the part of the book a chapter falls in. */
 fun BookModel.title(chapter: Int): String = contents.lastOrNull { it.chapter.toInt() <= chapter }?.title ?: info.title

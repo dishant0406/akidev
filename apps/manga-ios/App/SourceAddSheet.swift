@@ -60,7 +60,7 @@ struct SourceAddSheet: View {
         do {
             let checked = try await model.engine.previewSource(json: json)
             if checked.nsfw {
-                self.error = (Copy.Sources.couldNotAddSource, Copy.Settings.contentFooterIos)
+                self.error = (Copy.Sources.couldNotAddSource, Copy.Settings.contentFooterNoSwitch)
             } else {
                 preview = checked
             }

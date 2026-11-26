@@ -84,7 +84,7 @@ private fun SearchRow(onFilters: () -> Unit) {
             onClear = { discover.submitted = ""; scope.launch { discover.reload() } },
         )
         if (discover.otherFilters.isNotEmpty() && !discover.isGlobal) {
-            AkiIconButton("sliders", if (discover.choices.isEmpty()) Copy.Home.filterResults else Copy.Home.filterResultsOnAndroid, tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
+            AkiIconButton("sliders", if (discover.choices.isEmpty()) Copy.Home.filterResults else Copy.Home.filterResultsOn, tint = if (discover.choices.isEmpty()) null else Aki.colors.primary, onClick = onFilters)
         }
     }
 }

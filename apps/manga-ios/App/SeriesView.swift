@@ -197,13 +197,13 @@ struct SeriesView: View {
                             // The mark is the state, so it sits where the read mark would; the whole row opens the sign-in.
                             AkiIcon("lock-solid", size: 20, tone: .muted)
                                 .frame(width: 44, height: 44)
-                                .accessibilityLabel(Copy.Series.locked)
+                                .accessibilityLabel(source?.lockedPromptsSignIn == true ? Copy.Series.lockedSignIn : Copy.Series.locked)
                         } else {
                             AkiTap(action: { toggleRead(chapter) }) {
                                 AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .text : .muted)
                                     .frame(width: 44, height: 44)
                             }
-                            .accessibilityLabel(chapter.finished ? Copy.Series.markAsUnreadIos : Copy.Library.markAsRead)
+                            .accessibilityLabel(chapter.finished ? Copy.Series.markAsUnread(chapterName(number: chapter.number, title: chapter.title)) : Copy.Series.markAsRead(chapterName(number: chapter.number, title: chapter.title)))
                         }
                     }
                 }
@@ -229,7 +229,7 @@ struct SeriesView: View {
                         AkiTap(action: { removeBookmark(mark) }) {
                             AkiIcon("trash", size: 22, tone: .muted).frame(width: 44, height: 44)
                         }
-                        .accessibilityLabel(Copy.Series.removeBookmarkIos)
+                        .accessibilityLabel(Copy.Series.removeBookmark(Int(mark.page) + 1))
                     }
                 }
             }
@@ -276,7 +276,7 @@ struct SeriesView: View {
             AkiCard(padding: 4) {
                 VStack(spacing: 0) {
                     info(Copy.Series.status, statusText ?? Copy.Series.unknown)
-                    info(Copy.Series.author, detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : Copy.Series.noAuthorIos)
+                    info(Copy.Series.author, detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : Copy.Series.unknown)
                     info(Copy.Series.source, model.name(of: ref.source))
                     info(Copy.Series.chapters, chapters.count.formatted())
                 }

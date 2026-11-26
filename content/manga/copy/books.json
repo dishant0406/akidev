@@ -61,8 +61,7 @@
     "other": "{count:int} highlights"
   },
   "noHighlightsTitle": "No highlights yet",
-  "noHighlightsMessageIos": "Press and hold a word in a book, drag to the end of what you want, and choose Highlight or Note.",
-  "noHighlightsMessageAndroid": "Press and hold a word in a book, drag the handles to choose text, then pick a colour or choose Note.",
+  "noHighlightsMessage": "Press and hold a word in a book, drag to choose text, then highlight it or add a note.",
   "noHighlightsInBookMessage": "Press and hold a word in the book, then drag the handles to choose what to highlight.",
   "catalogueFooter": "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.",
   "catalogues": "Catalogues",
@@ -119,7 +118,7 @@
   "coverOf": "Cover of {title}",
   "nextPage": "Next page",
   "previousPage": "Previous page",
-  "chapterFallbackTitleAndroid": "Part {number:int}",
+  "chapterFallbackTitle": "Part {number:int}",
   "pages": "Pages",
   "scroll": "Scroll",
   "font": "Font",

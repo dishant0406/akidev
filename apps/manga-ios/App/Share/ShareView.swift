@@ -26,7 +26,7 @@ struct ShareView: View {
         .onDisappear { model.end() }
         .onChange(of: model.codeNote) { if let note = model.codeNote { akiAnnounce(note) } }
         .akiQuestion(askTitle, message: Copy.Share.onlyAcceptFromKnown, yes: Copy.Share.accept, no: Copy.Share.decline, isPresented: Binding(get: { model.asked != nil }, set: { _ in }), onYes: { model.answer(true) }, onNo: { model.answer(false) })
-        .akiQuestion(Copy.Share.addSourceQuestionIos(model.newSource?.card.sourceName ?? ""), message: sourceMessage, yes: Copy.Share.addSourceButton, no: Copy.Sources.cancel, isPresented: Binding(get: { model.newSource != nil }, set: { _ in }), onYes: { model.answerSource(true) }, onNo: { model.answerSource(false) })
+        .akiQuestion(Copy.Share.addSourceQuestion(model.newSource?.card.sourceName ?? ""), message: sourceMessage, yes: Copy.Share.addSourceButton, no: Copy.Sources.cancel, isPresented: Binding(get: { model.newSource != nil }, set: { _ in }), onYes: { model.answerSource(true) }, onNo: { model.answerSource(false) })
         .akiAlert(Copy.Share.couldNotShare, message: model.problem, isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } }))
     }
 

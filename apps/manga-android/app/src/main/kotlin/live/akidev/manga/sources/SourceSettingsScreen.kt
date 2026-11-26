@@ -58,7 +58,7 @@ fun SourceSettingsScreen(source: String) {
     }
     if (signingIn) SignInSheet(source) { signingIn = false }
     if (removing) {
-        AkiConfirm(Copy.Sources.removeSourceQuestionAndroid(model.name(source)), Copy.Sources.removeSourceMessage, Copy.Sources.removeSource, { removing = false }) {
+        AkiConfirm(Copy.Sources.removeSourceQuestion(model.name(source)), Copy.Sources.removeSourceMessage, Copy.Sources.removeSource, { removing = false }) {
             model.engine.removeSource(source)
             model.refresh()
             router.back()
