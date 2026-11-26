@@ -183,7 +183,7 @@ struct BookThemePicker: View {
                     VStack(spacing: 6) {
                         ZStack {
                             Circle().fill(shown.paperColor)
-                            Text("Aa").font(.system(size: 15, weight: .semibold, design: .serif)).foregroundStyle(shown.inkColor)
+                            Text("Aa").font(.system(size: 15, weight: .semibold, design: .serif)).foregroundStyle(shown.inkColor) // copy: ok
                         }
                         .frame(width: 46, height: 46)
                         .overlay(Circle().strokeBorder(chosen ? Aki.primary : Aki.secondary, lineWidth: chosen ? 3 : 1))
