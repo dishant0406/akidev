@@ -34,7 +34,6 @@ import live.akidev.manga.books.BookFont
 import live.akidev.manga.books.BookTheme
 import live.akidev.manga.app.ReadingMode
 import live.akidev.manga.app.describe
-import live.akidev.manga.app.plural
 import live.akidev.manga.app.rememberFilePicker
 import live.akidev.manga.app.shareFile
 import live.akidev.manga.design.*
@@ -57,8 +56,8 @@ fun SettingsScreen() {
             val report = app.engine.restore(file.readText())
             app.refresh()
             val sources = report.sourcesInstalled.size
-            val missing = if (report.sourcesMissing.isEmpty()) "" else " Could not bring back: ${report.sourcesMissing.joinToString(", ")}."
-            message = Problem("Backup restored", "${report.series} series and ${plural(sources, "source", "sources")} restored.$missing")
+            val missing = if (report.sourcesMissing.isEmpty()) "" else " " + Copy.Settings.couldNotBringBack(report.sourcesMissing.joinToString(", "))
+            message = Problem(Copy.Settings.backupRestored, Copy.Settings.restoreSummary("${report.series}", Copy.Settings.restoredSourceCount(sources)) + missing)
         } catch (failure: Exception) {
             message = describe(failure)
         }
@@ -67,7 +66,7 @@ fun SettingsScreen() {
         message = try {
             app.engine.importFile(file.path)
             app.refresh()
-            Problem("Added to your library", "Find it in your library.")
+            Problem(Copy.Settings.addedToLibrary, Copy.Settings.findInLibrary)
         } catch (failure: Exception) {
             describe(failure)
         }
@@ -76,7 +75,7 @@ fun SettingsScreen() {
     val askForAlerts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         app.prefs.notifyUpdates = granted
         app.scheduleBackgroundWork()
-        if (!granted) message = Problem("Notifications are off", "Turn them on for Akidev in the Android Settings app, then try again.")
+        if (!granted) message = Problem(Copy.Settings.notificationsOffTitle, Copy.Settings.notificationsOffMessageAndroid)
     }
     // Whether the voices repository answers is asked now, when Settings opens, and never at launch.
     LaunchedEffect(Unit) { app.readAloud.check() }
@@ -86,7 +85,7 @@ fun SettingsScreen() {
     }
 
     AkiPage(underTabBar = false, spacing = 22.dp) {
-        item { AkiBackHeader("Settings", back = router::back) }
+        item { AkiBackHeader(Copy.Settings.title, back = router::back) }
         if (app.prefs.readerKind == ReaderKind.Books) {
             readerSection()
             booksSection()
@@ -98,7 +97,7 @@ fun SettingsScreen() {
                     { message = describe(it) },
                 )
             }, onRestore = importer, onComic = comicImporter)
-            item { AkiText("Manga", AkiTextStyle.Title, Modifier.padding(top = 8.dp), isHeading = true) }
+            item { AkiText(Copy.Home.manga, AkiTextStyle.Title, Modifier.padding(top = 8.dp), isHeading = true) }
             item { ContentSection() }
             item { LibrarySection(categories) }
             item { ReadingSection() }
@@ -139,12 +138,12 @@ private fun enableAlerts(app: live.akidev.manga.app.AppModel, context: android.c
 private fun LazyListScope.appearanceSection() {
     item {
         val prefs = LocalApp.current.prefs
-        AkiSection("Appearance") { AkiCard(padding = 16.dp) { AkiSelect("Theme", prefs.appearance, { prefs.appearance = it }, Appearance.entries.map { AkiOption(it, it.title) }) } }
+        AkiSection(Copy.Settings.appearance) { AkiCard(padding = 16.dp) { AkiSelect(Copy.Settings.theme, prefs.appearance, { prefs.appearance = it }, Appearance.entries.map { AkiOption(it, it.title) }) } }
     }
     item {
         val prefs = LocalApp.current.prefs
-        AkiSection("Glass", footer = "Controls show what is behind them, bent like glass. Turn on Reduce glass if this phone feels slow: controls become plain shapes.") {
-            AkiCard(padding = 16.dp) { AkiSwitch("Reduce glass", prefs.reduceGlass, { prefs.reduceGlass = it }) }
+        AkiSection(Copy.Settings.glass, footer = Copy.Settings.glassFooter) {
+            AkiCard(padding = 16.dp) { AkiSwitch(Copy.Settings.reduceGlass, prefs.reduceGlass, { prefs.reduceGlass = it }) }
         }
     }
 }
@@ -152,9 +151,9 @@ private fun LazyListScope.appearanceSection() {
 private fun LazyListScope.readerSection() {
     item {
         val prefs = LocalApp.current.prefs
-        AkiSection("Reader", footer = "Manga and books are both always here. This decides which comes first: the order of the tabs, and the one the app opens on.") {
+        AkiSection(Copy.Settings.reader, footer = Copy.Settings.readerFooter) {
             AkiCard(padding = 16.dp) {
-                AkiSelect("I mostly read", prefs.readerKind ?: ReaderKind.Manga, { prefs.readerKind = it }, ReaderKind.entries.map { AkiOption(it, it.title) })
+                AkiSelect(Copy.Settings.readerKindLabel, prefs.readerKind ?: ReaderKind.Manga, { prefs.readerKind = it }, ReaderKind.entries.map { AkiOption(it, it.title) })
             }
         }
     }
@@ -165,13 +164,13 @@ private fun LazyListScope.booksSection() {
     item {
         val prefs = LocalApp.current.prefs
         val style = prefs.bookStyle
-        AkiSection("Books", footer = "How a book opens. Once you are in a book, its Text and theme sheet changes these for you as you read.") {
+        AkiSection(Copy.Home.books, footer = Copy.Settings.booksFooterAndroid) {
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    AkiSelect("Reading", style.scroll, { prefs.bookStyle = style.copy(scroll = it) }, listOf(AkiOption(false, "Pages"), AkiOption(true, "Scroll")))
-                    AkiSelect("Theme", style.theme, { prefs.bookStyle = style.copy(theme = it) }, BookTheme.entries.map { AkiOption(it, it.title) })
-                    AkiSelect("Font", style.font, { prefs.bookStyle = style.copy(font = it) }, BookFont.entries.map { AkiOption(it, it.title) })
-                    AkiSwitch("Keep the screen on", prefs.keepAwake, { prefs.keepAwake = it })
+                    AkiSelect(Copy.Settings.bookReadingStyle, style.scroll, { prefs.bookStyle = style.copy(scroll = it) }, listOf(AkiOption(false, Copy.Books.pages), AkiOption(true, Copy.Books.scroll)))
+                    AkiSelect(Copy.Settings.theme, style.theme, { prefs.bookStyle = style.copy(theme = it) }, BookTheme.entries.map { AkiOption(it, it.title) })
+                    AkiSelect(Copy.Books.font, style.font, { prefs.bookStyle = style.copy(font = it) }, BookFont.entries.map { AkiOption(it, it.title) })
+                    AkiSwitch(Copy.Reader.keepScreenOn, prefs.keepAwake, { prefs.keepAwake = it })
                 }
             }
         }
@@ -184,8 +183,8 @@ private fun LazyListScope.readAloudSection() {
         val app = LocalApp.current
         val router = LocalRouter.current
         if (app.readAloud.reachable) {
-            AkiSection("Reading aloud", footer = "Books are read in a voice that runs on this phone. Download a voice model once. Reading aloud then needs no network.") {
-                AkiTap({ router.push(VoicesRoute) }) { AkiRow("Voice model", subtitle = app.readAloud.current?.name ?: "None yet. Choose one to download.", icon = "headphones", showsChevron = true) }
+            AkiSection(Copy.Settings.readAloud, footer = Copy.Settings.readAloudFooter) {
+                AkiTap({ router.push(VoicesRoute) }) { AkiRow(Copy.Settings.voiceModel, subtitle = app.readAloud.current?.name ?: Copy.Settings.noVoiceModelYet, icon = "headphones", showsChevron = true) }
             }
         }
     }
@@ -196,12 +195,12 @@ private fun ContentSection() {
     val app = LocalApp.current
     val prefs = app.prefs
     val languages = app.sources.flatMap { it.languages }.toSortedSet().toList()
-    AkiSection("Content", footer = "Sources marked 18+ stay out of Discover and Sources until you turn this on.") {
+    AkiSection(Copy.Settings.content, footer = Copy.Settings.contentFooterAndroid) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                AkiSwitch("Show 18+ sources", prefs.showAdult, { prefs.showAdult = it })
+                AkiSwitch(Copy.Settings.showAdultSources, prefs.showAdult, { prefs.showAdult = it })
                 if (languages.isNotEmpty()) {
-                    AkiSelect("Language", prefs.languages.firstOrNull() ?: "", { prefs.languages = if (it.isEmpty()) emptyList() else listOf(it) }, listOf(AkiOption("", "All")) + languages.map { AkiOption(it, it.uppercase()) })
+                    AkiSelect(Copy.Settings.language, prefs.languages.firstOrNull() ?: "", { prefs.languages = if (it.isEmpty()) emptyList() else listOf(it) }, listOf(AkiOption("", Copy.Home.all)) + languages.map { AkiOption(it, it.uppercase()) })
                 }
             }
         }
@@ -212,9 +211,9 @@ private fun ContentSection() {
 private fun LibrarySection(categories: List<CategoryInfo>) {
     val prefs = LocalApp.current.prefs
     val current = if (categories.any { it.id == prefs.saveCategory } || prefs.saveCategory == -1L) prefs.saveCategory else 0L
-    AkiSection("Library", footer = "Choose what happens to a series when you add it to your library. Create categories from the Library menu.") {
+    AkiSection(Copy.Home.library, footer = Copy.Settings.libraryFooter) {
         AkiCard(padding = 16.dp) {
-            AkiSelect("When adding to library", current, { prefs.saveCategory = it }, listOf(AkiOption(0L, "No category"), AkiOption(-1L, "Ask each time")) + categories.map { AkiOption(it.id, "Put in ${it.name}") })
+            AkiSelect(Copy.Settings.whenAddingToLibrary, current, { prefs.saveCategory = it }, listOf(AkiOption(0L, Copy.Library.noCategory), AkiOption(-1L, Copy.Settings.askEachTime)) + categories.map { AkiOption(it.id, Copy.Settings.putInCategory(it.name)) })
         }
     }
 }
@@ -222,12 +221,12 @@ private fun LibrarySection(categories: List<CategoryInfo>) {
 @Composable
 private fun ReadingSection() {
     val prefs = LocalApp.current.prefs
-    AkiSection("Reading", footer = "A series keeps its own mode once you change it in the reader.") {
+    AkiSection(Copy.Settings.reading, footer = Copy.Settings.readingFooter) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                AkiSelect("Default mode", prefs.defaultMode, { prefs.defaultMode = it }, ReadingMode.entries.map { AkiOption(it, it.title) })
-                AkiSwitch("Left edge goes forward", prefs.invertTaps, { prefs.invertTaps = it }, subtitle = "In paged reading, tap the left edge for the next page.")
-                AkiSwitch("Keep the screen on", prefs.keepAwake, { prefs.keepAwake = it })
+                AkiSelect(Copy.Settings.defaultMode, prefs.defaultMode, { prefs.defaultMode = it }, ReadingMode.entries.map { AkiOption(it, it.title) })
+                AkiSwitch(Copy.Settings.leftEdgeForward, prefs.invertTaps, { prefs.invertTaps = it }, subtitle = Copy.Settings.leftEdgeForwardHint)
+                AkiSwitch(Copy.Reader.keepScreenOn, prefs.keepAwake, { prefs.keepAwake = it })
             }
         }
     }
@@ -238,17 +237,17 @@ private fun UpdatesSection(enableAlerts: () -> Unit) {
     val app = LocalApp.current
     val prefs = app.prefs
     AkiSection(
-        "Updates",
-        footer = "Akidev checks the series in your library in the background when Android allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device.",
+        Copy.Home.updates,
+        footer = Copy.Settings.updatesFooterAndroid,
     ) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 AkiSwitch(
-                    "New chapter alerts", prefs.notifyUpdates, { if (it) enableAlerts() else { prefs.notifyUpdates = false; app.scheduleBackgroundWork() } },
-                    subtitle = "A notification when a series in your library gets a chapter.",
+                    Copy.Settings.newChapterAlerts, prefs.notifyUpdates, { if (it) enableAlerts() else { prefs.notifyUpdates = false; app.scheduleBackgroundWork() } },
+                    subtitle = Copy.Settings.newChapterAlertsHint,
                 )
-                AkiSwitch("Download new chapters", prefs.autoDownload, { prefs.autoDownload = it; app.scheduleBackgroundWork() }, subtitle = "Keeps them on this device to read offline.")
-                if (prefs.autoDownload) AkiSwitch("Download only on Wi-Fi", prefs.downloadOnWifiOnly, { prefs.downloadOnWifiOnly = it })
+                AkiSwitch(Copy.Settings.downloadNewChapters, prefs.autoDownload, { prefs.autoDownload = it; app.scheduleBackgroundWork() }, subtitle = Copy.Settings.downloadNewChaptersHint)
+                if (prefs.autoDownload) AkiSwitch(Copy.Settings.downloadOnWifiOnly, prefs.downloadOnWifiOnly, { prefs.downloadOnWifiOnly = it })
             }
         }
     }
@@ -258,14 +257,14 @@ private fun UpdatesSection(enableAlerts: () -> Unit) {
 private fun DownloadsSection(downloaded: Long, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
     val view = androidx.compose.ui.platform.LocalView.current
-    AkiSection("Downloads") {
+    AkiSection(Copy.Settings.downloads) {
         AkiCard(padding = 16.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    AkiText("Kept on this device", AkiTextStyle.BodyStrong, Modifier.weight(1f))
+                    AkiText(Copy.Settings.keptOnThisDevice, AkiTextStyle.BodyStrong, Modifier.weight(1f))
                     AkiText(Formatter.formatFileSize(context, downloaded), tone = AkiTone.Muted, tabular = true)
                 }
-                AkiButton("Clear image cache", icon = "trash", fullWidth = true) { scope.launch(Dispatchers.IO) { AkiImageLoader.clear() }; view.announceForAccessibility("Image cache cleared") }
+                AkiButton(Copy.Settings.clearImageCache, icon = "trash", fullWidth = true) { scope.launch(Dispatchers.IO) { AkiImageLoader.clear() }; view.announceForAccessibility(Copy.Settings.imageCacheCleared) }
             }
         }
     }
@@ -273,11 +272,11 @@ private fun DownloadsSection(downloaded: Long, scope: kotlinx.coroutines.Corouti
 
 private fun LazyListScope.dataSection(onBackup: () -> Unit, onRestore: () -> Unit, onComic: () -> Unit) {
     item {
-        AkiSection("Your data", footer = "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories.") {
+        AkiSection(Copy.Settings.yourData, footer = Copy.Settings.yourDataFooter) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AkiButton("Create backup", icon = "server", fullWidth = true, onClick = onBackup)
-                AkiButton("Restore from backup", icon = "restore", fullWidth = true, onClick = onRestore)
-                AkiButton("Open a CBZ comic file", icon = "zip", fullWidth = true, onClick = onComic)
+                AkiButton(Copy.Settings.createBackup, icon = "server", fullWidth = true, onClick = onBackup)
+                AkiButton(Copy.Settings.restoreFromBackup, icon = "restore", fullWidth = true, onClick = onRestore)
+                AkiButton(Copy.Settings.openCbzComic, icon = "zip", fullWidth = true, onClick = onComic)
             }
         }
     }
@@ -286,16 +285,16 @@ private fun LazyListScope.dataSection(onBackup: () -> Unit, onRestore: () -> Uni
 private fun LazyListScope.aboutSection() {
     item {
         val app = LocalApp.current
-        AkiSection("About") {
+        AkiSection(Copy.Books.about) {
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         AkiLogo(size = 44.dp)
-                        AkiText("Akidev ${app.engine.version()}", AkiTextStyle.BodyStrong, tabular = true)
+                        AkiText(Copy.Settings.akidevVersion(app.engine.version()), AkiTextStyle.BodyStrong, tabular = true)
                     }
-                    AkiText("Icons: Solar by 480 Design, CC BY 4.0. Type: Nunito, SIL Open Font License.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    AkiText(Copy.Settings.aboutCreditsAndroid, AkiTextStyle.Caption, tone = AkiTone.Muted)
                     AkiText(
-                        "A reader with no content of its own. Sources come from repositories you add. The people who make them, and the sites they read, are not affiliated with Akidev.",
+                        Copy.Settings.aboutDescription,
                         AkiTextStyle.Caption, tone = AkiTone.Muted,
                     )
                 }

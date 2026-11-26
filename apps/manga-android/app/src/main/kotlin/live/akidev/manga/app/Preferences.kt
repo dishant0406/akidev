@@ -6,32 +6,41 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import live.akidev.manga.books.BookSort
+import live.akidev.manga.design.Copy
 import live.akidev.manga.books.BookStyle
 import androidx.core.content.edit
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
-enum class Appearance(val title: String) { System("System"), Light("Light"), Dark("Dark") }
-
-/** What the person mostly reads. Everything is always there; this only decides what comes first. */
-enum class ReaderKind(val title: String) { Manga("Manga and comics"), Books("Books") }
-
-enum class ReadingMode(val title: String, val shortTitle: String) {
-    Strip("Long strip", "Strip"), Paged("Pages, left to right", "Paged"), RightToLeft("Pages, right to left", "Right to left")
+enum class Appearance(val title: String) {
+    System(Copy.Settings.AppearanceName.system), Light(Copy.Settings.AppearanceName.light), Dark(Copy.Settings.AppearanceName.dark)
 }
 
-enum class ReaderBackground(val title: String) { Black("Black"), Grey("Dark grey") }
+/** What the person mostly reads. Everything is always there; this only decides what comes first. */
+enum class ReaderKind(val title: String) { Manga(Copy.Settings.mangaAndComics), Books(Copy.Home.books) }
 
-enum class OrientationLock(val title: String) { Auto("Auto"), Portrait("Portrait"), Landscape("Landscape") }
+enum class ReadingMode(val title: String, val shortTitle: String) {
+    Strip(Copy.Reader.modeLongStrip, Copy.Reader.modeStrip), Paged(Copy.Reader.modePagedLeftToRight, Copy.Reader.modePaged),
+    RightToLeft(Copy.Reader.modePagedRightToLeft, Copy.Reader.modeRightToLeft)
+}
+
+enum class ReaderBackground(val title: String) {
+    Black(Copy.Settings.ReaderBackgroundName.black), Grey(Copy.Settings.ReaderBackgroundName.darkGrey)
+}
+
+enum class OrientationLock(val title: String) {
+    Auto(Copy.Settings.OrientationName.auto), Portrait(Copy.Settings.OrientationName.portrait), Landscape(Copy.Settings.OrientationName.landscape)
+}
 
 /** How fast the strip scrolls by itself, in dp a second. */
 enum class AutoScrollSpeed(val title: String, val dpPerSecond: Float) {
-    Slow("Slow", 45f), Normal("Normal", 90f), Fast("Fast", 170f), Rapid("Rapid", 300f)
+    Slow(Copy.Settings.ScrollSpeedName.slow, 45f), Normal(Copy.Settings.ScrollSpeedName.normal, 90f),
+    Fast(Copy.Settings.ScrollSpeedName.fast, 170f), Rapid(Copy.Settings.ScrollSpeedName.rapid, 300f)
 }
 
 enum class LibrarySort(val title: String) {
-    Recent("Last read"), Added("Date added"), Title("Title"), Unread("Unread"),
-    Chapters("Total chapters"), Latest("Latest chapter"), Random("Random")
+    Recent(Copy.Books.SortName.recent), Added(Copy.Books.SortName.added), Title(Copy.Books.SortName.title), Unread(Copy.Home.unread),
+    Chapters(Copy.Settings.sortTotalChapters), Latest(Copy.Settings.sortLatestChapter), Random(Copy.Settings.sortRandom)
 }
 
 /**

@@ -35,7 +35,7 @@ struct LibraryView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     AkiHeader(title: Copy.Home.library, subtitle: selecting ? Copy.Library.selectedCount(pickedShown.count) : Copy.Library.seriesCount(model.library.count)) {
                         AkiMenu(symbol: "filter", label: Copy.Library.sortAndFilter, items:
-                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.librarySort) { choose(option) } }
+                            LibrarySort.allCases.map { option in AkiMenuItem(title: option.label, icon: "order", isSelected: option == model.prefs.librarySort) { choose(option) } }
                             + [AkiMenuItem(title: Copy.Library.reverseOrder, icon: "swap", isSelected: model.prefs.libraryReversed) { model.prefs.libraryReversed.toggle() },
                                AkiMenuItem(title: Copy.Library.showOnlyUnread, icon: "check", isSelected: onlyUnread) { onlyUnread.toggle() },
                                AkiMenuItem(title: selecting ? Copy.Library.doneSelecting : Copy.Library.selectSeries, icon: "check") { selecting.toggle(); picked = [] },

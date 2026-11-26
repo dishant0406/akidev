@@ -4,31 +4,55 @@ import SwiftUI
 
 enum Appearance: String, CaseIterable {
     case system, light, dark
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .system: Copy.Settings.AppearanceName.system
+        case .light: Copy.Settings.AppearanceName.light
+        case .dark: Copy.Settings.AppearanceName.dark
+        }
+    }
     var scheme: ColorScheme? { self == .light ? .light : self == .dark ? .dark : nil }
 }
 
 /// What the person mostly reads. Everything is always there; this only decides what comes first.
 enum ReaderKind: String, CaseIterable {
     case manga, books
-    var title: String { self == .manga ? "Manga and comics" : "Books" }
+    var title: String { self == .manga ? Copy.Settings.mangaAndComics : Copy.Home.books }
 }
 
 enum ReaderBackground: String, CaseIterable {
     case pitch = "black", slate = "grey"
-    var title: String { self == .pitch ? "Black" : "Dark grey" }
+    var title: String { self == .pitch ? Copy.Settings.ReaderBackgroundName.black : Copy.Settings.ReaderBackgroundName.darkGrey }
     var color: Color { self == .pitch ? Aki.stage : Aki.stageAlt }
 }
 
 enum OrientationLock: String, CaseIterable {
     case auto, portrait, landscape
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .auto: Copy.Settings.OrientationName.auto
+        case .portrait: Copy.Settings.OrientationName.portrait
+        case .landscape: Copy.Settings.OrientationName.landscape
+        }
+    }
     var mask: UIInterfaceOrientationMask { self == .portrait ? .portrait : self == .landscape ? .landscape : .allButUpsideDown }
 }
 
 enum LibrarySort: String, CaseIterable {
     case recent = "Last read", added = "Date added", title = "Title", unread = "Unread"
     case chapters = "Total chapters", latest = "Latest chapter", random = "Random"
+
+    var label: String {
+        switch self {
+        case .recent: Copy.Books.SortName.recent
+        case .added: Copy.Books.SortName.added
+        case .title: Copy.Books.SortName.title
+        case .unread: Copy.Home.unread
+        case .chapters: Copy.Settings.sortTotalChapters
+        case .latest: Copy.Settings.sortLatestChapter
+        case .random: Copy.Settings.sortRandom
+        }
+    }
 }
 
 /// What the person chose in Settings, kept in UserDefaults so it survives launches.

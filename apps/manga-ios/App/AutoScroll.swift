@@ -49,7 +49,14 @@ final class FrameClock {
 /// How fast the strip scrolls by itself, in points a second.
 enum AutoScrollSpeed: String, CaseIterable {
     case slow, normal, fast, rapid
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .slow: Copy.Settings.ScrollSpeedName.slow
+        case .normal: Copy.Settings.ScrollSpeedName.normal
+        case .fast: Copy.Settings.ScrollSpeedName.fast
+        case .rapid: Copy.Settings.ScrollSpeedName.rapid
+        }
+    }
     var points: CGFloat {
         switch self {
         case .slow: 45

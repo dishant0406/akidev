@@ -467,6 +467,107 @@ enum Copy {
         static let deleteDataHint = "The series leaves your library. Your reading progress and downloaded chapters are deleted from this device. You can add the series again later."
         static let deleteData = "Delete data"
     }
+    enum Settings {
+        static let title = "Settings"
+        static let appearance = "Appearance"
+        enum AppearanceName {
+            static let system = "System"
+            static let light = "Light"
+            static let dark = "Dark"
+        }
+        static let theme = "Theme"
+        static let reader = "Reader"
+        static let readerFooter = "Manga and books are both always here. This decides which comes first: the order of the tabs, and the one the app opens on."
+        static let readerKindLabel = "I mostly read"
+        static let mangaAndComics = "Manga and comics"
+        static let content = "Content"
+        static let contentFooterIos = "Sources marked 18+ are not available in this app."
+        static let contentFooterAndroid = "Sources marked 18+ stay out of Discover and Sources until you turn this on."
+        static let language = "Language"
+        static let showAdultSources = "Show 18+ sources"
+        static let libraryFooter = "Choose what happens to a series when you add it to your library. Create categories from the Library menu."
+        static let whenAddingToLibrary = "When adding to library"
+        static let askEachTime = "Ask each time"
+        static func putInCategory(_ name: String) -> String { "Put in \(name)" }
+        static let reading = "Reading"
+        static let readingFooter = "A series keeps its own mode once you change it in the reader."
+        static let defaultMode = "Default mode"
+        static let leftEdgeForward = "Left edge goes forward"
+        static let leftEdgeForwardHint = "In paged reading, tap the left edge for the next page."
+        static let bookReadingStyle = "Reading"
+        static let booksFooterIos = "How a book opens. Once you are in a book, its Type and theme sheet changes these for you as you read."
+        static let booksFooterAndroid = "How a book opens. Once you are in a book, its Text and theme sheet changes these for you as you read."
+        static let readAloud = "Reading aloud"
+        static let readAloudFooter = "Books are read in a voice that runs on this phone. Download a voice model once. Reading aloud then needs no network."
+        static let voiceModel = "Voice model"
+        static let noVoiceModelYet = "None yet. Choose one to download."
+        static let updatesFooterIos = "Akidev checks the series in your library in the background when iOS allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device."
+        static let updatesFooterAndroid = "Akidev checks the series in your library in the background when Android allows it, usually a few times a day and less if you rarely open the app. The check asks your sources for new chapters and sends nothing else. The alert is made on this device."
+        static let newChapterAlerts = "New chapter alerts"
+        static let newChapterAlertsHint = "A notification when a series in your library gets a chapter."
+        static let downloadNewChapters = "Download new chapters"
+        static let downloadNewChaptersHint = "Keeps them on this device to read offline."
+        static let downloadOnWifiOnly = "Download only on Wi-Fi"
+        static let downloads = "Downloads"
+        static let keptOnThisDevice = "Kept on this device"
+        static let clearImageCache = "Clear image cache"
+        static let imageCacheCleared = "Image cache cleared"
+        static let yourData = "Your data"
+        static let yourDataFooter = "A backup holds your library, what you have read, categories, repositories and source settings. Sources come back from their repositories."
+        static let shareBackup = "Share backup"
+        static let createBackup = "Create backup"
+        static let restoreFromBackup = "Restore from backup"
+        static let openCbzComic = "Open a CBZ comic file"
+        static func akidevVersion(_ version: String) -> String { "Akidev \(version)" }
+        static let aboutCreditsIos = "Icons: Solar by 480 Design, CC BY 4.0."
+        static let aboutCreditsAndroid = "Icons: Solar by 480 Design, CC BY 4.0. Type: Nunito, SIL Open Font License."
+        static let aboutDescription = "A reader with no content of its own. Sources come from repositories you add. The people who make them, and the sites they read, are not affiliated with Akidev."
+        static let glass = "Glass"
+        static let glassFooter = "Controls show what is behind them, bent like glass. Turn on Reduce glass if this phone feels slow: controls become plain shapes."
+        static let reduceGlass = "Reduce glass"
+        static let notificationsOffTitle = "Notifications are off"
+        static let notificationsOffMessageIos = "Turn them on for Akidev in the iOS Settings app, then try again."
+        static let notificationsOffMessageAndroid = "Turn them on for Akidev in the Android Settings app, then try again."
+        static let couldNotMakeBackup = "Could not make the backup"
+        static let couldNotRestoreBackup = "Could not restore the backup"
+        static let couldNotAddFile = "Could not add this file"
+        static let backupRestored = "Backup restored"
+        static func restoreSummary(_ series: String, _ sources: String) -> String { "\(series) series and \(sources) restored." }
+        static func restoredSourceCount(_ count: Int) -> String { count == 1 ? "\(count) source" : "\(count) sources" }
+        static func couldNotBringBack(_ names: String) -> String { "Could not bring back: \(names)." }
+        static let addedToLibrary = "Added to your library"
+        static let findInLibrary = "Find it in your library."
+        static func fileAddedToLibrary(_ title: String) -> String { "“\(title)” is in your library." }
+        static func notBookOrComic(_ name: String) -> String { "“\(name)” is not a book or a comic. Akidev opens EPUB books, CBZ comics and shared series." }
+        static func couldNotOpenNamed(_ name: String, _ message: String) -> String { "Could not open “\(name)”. \(message)" }
+        static let couldNotReadFile = "Could not read this file"
+        static let androidCouldNotReadFile = "Android did not let Akidev read that file. Try opening it again."
+        static let couldNotOpenThisFile = "Could not open this file"
+        static let browserCheckTitle = "This site needs a browser check"
+        static func browserCheckMessage(_ host: String) -> String { "\(host) asks for a browser check before it answers, and Akidev cannot pass it. Try another source, or read this one through a Suwayomi or Komga server you run." }
+        static let couldNotReachTitle = "Could not reach the site"
+        static func couldNotReachMessage(_ host: String) -> String { "\(host) did not answer. Check your connection and try again." }
+        static let couldNotLoadScreen = "Could not load this screen"
+        enum OrientationName {
+            static let auto = "Auto"
+            static let portrait = "Portrait"
+            static let landscape = "Landscape"
+        }
+        enum ReaderBackgroundName {
+            static let black = "Black"
+            static let darkGrey = "Dark grey"
+        }
+        enum ScrollSpeedName {
+            static let slow = "Slow"
+            static let normal = "Normal"
+            static let fast = "Fast"
+            static let rapid = "Rapid"
+        }
+        static let sortTotalChapters = "Total chapters"
+        static let sortLatestChapter = "Latest chapter"
+        static let sortRandom = "Random"
+        static func chapterCount(_ count: Int) -> String { count == 1 ? "\(count) chapter" : "\(count) chapters" }
+    }
     enum Welcome {
         static let title = "Welcome to Akidev"
         static let body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

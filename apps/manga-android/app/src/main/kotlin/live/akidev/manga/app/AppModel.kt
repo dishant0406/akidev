@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import live.akidev.manga.books.BooksModel
+import live.akidev.manga.design.Copy
 import live.akidev.manga.listen.ReadAloudModel
 import live.akidev.manga.manga.DiscoverModel
 import live.akidev.manga.manga.LibraryModel
@@ -186,12 +187,12 @@ class AppModel(private val context: Context) {
             lower.endsWith(".epub") -> {
                 val book = io { engine.importBook(path) }
                 booksScreen.load()
-                "“${book.title}” is in your library."
+                Copy.Settings.fileAddedToLibrary(book.title)
             }
             lower.endsWith(".cbz") -> {
                 io { engine.importFile(path) }
                 refresh()
-                "“${name.removeSuffix(".cbz")}” is in your library."
+                Copy.Settings.fileAddedToLibrary(name.removeSuffix(".cbz"))
             }
             lower.endsWith(".akidev.json") -> {
                 // The file is in a folder that is emptied soon, and the question may wait.
@@ -201,16 +202,16 @@ class AppModel(private val context: Context) {
                 if (card.installed) {
                     engine.shareAddCard(kept.path)
                     refresh()
-                    "“${card.title}” is in your library."
+                    Copy.Settings.fileAddedToLibrary(card.title)
                 } else {
                     ask(PendingCard(kept.path, card))
                     ""
                 }
             }
-            else -> "“$name” is not a book or a comic. Akidev opens EPUB books, CBZ comics and shared series."
+            else -> Copy.Settings.notBookOrComic(name)
         }
     } catch (failure: Exception) {
-        "Could not open “$name”. ${describe(failure).message}"
+        Copy.Settings.couldNotOpenNamed(name, describe(failure).message)
     }
 
     /** A book, a comic or a shared series sent to the app from another one ("Open with", "Share"). */
@@ -218,7 +219,7 @@ class AppModel(private val context: Context) {
         scope.launch {
             val file = withContext(Dispatchers.IO) { copyToCache(context, uri) }
             if (file == null) {
-                notice = Problem("Could not read this file", "Android did not let Akidev read that file. Try opening it again.")
+                notice = Problem(Copy.Settings.couldNotReadFile, Copy.Settings.androidCouldNotReadFile)
                 return@launch
             }
             // The file's name may not say what it is; what the sender said it is may.
@@ -231,7 +232,7 @@ class AppModel(private val context: Context) {
             val name = if (file.name.lowercase().endsWith(extension)) file.name else file.name + extension
             val said = takeIn(file.path, name)
             withContext(Dispatchers.IO) { file.parentFile?.deleteRecursively() }
-            if (said.isNotBlank()) notice = Problem(if (said.endsWith("is in your library.")) "Added to your library" else "Could not open this file", said)
+            if (said.isNotBlank()) notice = Problem(if (said.endsWith("is in your library.")) Copy.Settings.addedToLibrary else Copy.Settings.couldNotOpenThisFile, said)
         }
     }
 
