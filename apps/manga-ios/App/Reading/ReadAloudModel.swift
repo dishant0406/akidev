@@ -78,7 +78,7 @@ final class ReadAloudModel {
             })
             installed = engine.voicesInstalled()
             if installed.count == 1 { prefs.voiceModel = model.id }
-        } catch { failure = describe(error, "Could not download the voice") }
+        } catch { failure = describe(error, Copy.Listen.couldNotDownloadVoice) }
     }
 
     func use(_ model: VoiceModel) {
@@ -100,10 +100,10 @@ final class ReadAloudModel {
         hearing = voice?.id ?? ""
         let heard = try? await Task.detached(priority: .userInitiated) { () throws -> (samples: [Float], rate: Int) in
             let speaker = try engine.openSpeaker(id: id)
-            return (try speaker.speak(text: "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice: name), Int(speaker.sampleRate()))
+            return (try speaker.speak(text: Copy.Listen.voiceSample, voice: name), Int(speaker.sampleRate()))
         }.value
         hearing = nil
-        guard let heard else { return failure = ("Could not play the voice", "Try again, or choose another voice.") }
+        guard let heard else { return failure = (Copy.Listen.couldNotPlayVoice, Copy.Listen.tryAnotherVoice) }
         playing = voice?.id ?? ""
         preview.onFinish = { [weak self] in self?.playing = nil }
         preview.play(heard.samples, rate: heard.rate)
@@ -125,7 +125,7 @@ final class ReadAloudModel {
             installed = engine.voicesInstalled()
             return true
         } catch {
-            failure = describe(error, "Could not download the voice")
+            failure = describe(error, Copy.Listen.couldNotDownloadVoice)
             return false
         }
     }
@@ -134,7 +134,7 @@ final class ReadAloudModel {
         do {
             try engine.removeVoice(id: model.id)
             installed = engine.voicesInstalled()
-        } catch { failure = describe(error, "Could not remove the voice") }
+        } catch { failure = describe(error, Copy.Listen.couldNotRemoveVoice) }
     }
 }
 

@@ -134,6 +134,52 @@ enum Copy {
         static let finished = "Finished"
         static let reading = "Reading"
     }
+    enum Listen {
+        static let voiceModels = "Voice models"
+        static let readingAloudOnPhone = "Reading aloud happens on this phone"
+        static let noVoiceModels = "No voice models yet"
+        static let noVoiceModelsHint = "The voices repository has none to offer. Check your connection and try again later."
+        static let voice = "Voice"
+        static func voiceOf(_ name: String) -> String { "Voice of \(name)" }
+        static func voicesOf(_ name: String) -> String { "Voices of \(name)" }
+        static func voiceName(_ name: String) -> String { "\(name) voice" }
+        static let modelFallback = "Model"
+        static let standard = "Standard"
+        static let modelsOwnVoice = "The model’s own voice."
+        static let voicesDifferHint = "These voices differ in pace and in how much they lift and drop. Hear a few before choosing: the model reads the words, the voice sets the character."
+        static let americanEnglish = "American English"
+        static let britishEnglish = "British English"
+        static let characters = "Characters"
+        static let underdogCredit = "Voice by Underdog Woof, underdog.ai. Free for non-commercial use."
+        static let modelDownloadedOnce = "A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone."
+        static let notForCommercialUse = "not for commercial use"
+        static func downloadingVoice(_ name: String) -> String { "Downloading \(name)" }
+        static func gettingVoice(_ name: String) -> String { "Getting \(name)" }
+        static let update = "Update"
+        static func updateVoice(_ name: String) -> String { "Update \(name)" }
+        static let updateAkidevToUseVoice = "Update Akidev to use this voice"
+        static let inUse = "In use"
+        static let use = "Use"
+        static func useVoice(_ name: String) -> String { "Use \(name)" }
+        static func deleteVoice(_ name: String) -> String { "Delete \(name)" }
+        static func downloadVoice(_ name: String) -> String { "Download \(name)" }
+        static func stopSampleOf(_ name: String) -> String { "Stop sample of \(name)" }
+        static func playSampleOf(_ name: String) -> String { "Play sample of \(name)" }
+        static let voiceSample = "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
+        static let couldNotDownloadVoice = "Could not download the voice"
+        static let couldNotPlayVoice = "Could not play the voice"
+        static let couldNotRemoveVoice = "Could not remove the voice"
+        static let tryAnotherVoice = "Try again, or choose another voice."
+        static let couldNotReadAloud = "Could not read aloud"
+        static let gettingReadyToReadAloud = "Getting ready to read aloud"
+        static let previousSentence = "Previous sentence"
+        static let nextSentence = "Next sentence"
+        static let play = "Play"
+        static let pause = "Pause"
+        static let readingSpeed = "Reading speed"
+        static let stopReadingAloud = "Stop reading aloud"
+        static let notificationChannel = "Reading aloud"
+    }
     enum Reader {
         static let readerSettings = "Reader settings"
         static let readingModeForSeries = "Reading mode for this series"

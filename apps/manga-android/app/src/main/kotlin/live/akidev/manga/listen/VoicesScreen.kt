@@ -21,6 +21,7 @@ import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.VoiceChoiceRoute
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.VoiceModel
 import uniffi.akimanga.VoiceOption
 import live.akidev.manga.books.percent
@@ -35,26 +36,26 @@ fun VoicesScreen() {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     AkiPage(underTabBar = false, spacing = 16.dp) {
-        item { AkiBackHeader("Voice models", back = router::back, subtitle = "Reading aloud happens on this phone") }
-        if (model.models.isEmpty()) item { AkiEmptyState("No voice models yet", "The voices repository has none to offer. Check your connection and try again later.", Modifier.heightIn(min = 260.dp)) }
+        item { AkiBackHeader(Copy.Listen.voiceModels, back = router::back, subtitle = Copy.Listen.readingAloudOnPhone) }
+        if (model.models.isEmpty()) item { AkiEmptyState(Copy.Listen.noVoiceModels, Copy.Listen.noVoiceModelsHint, Modifier.heightIn(min = 260.dp)) }
         items(model.models.size, key = { model.models[it].id }) { index ->
             val voice = model.models[index]
-            val parts = listOf(voice.languages.joinToString(", ").uppercase(), Formatter.formatFileSize(context, voice.bytes.toLong()), voice.licence) + if (voice.commercial) emptyList() else listOf("not for commercial use")
+            val parts = listOf(voice.languages.joinToString(", ").uppercase(), Formatter.formatFileSize(context, voice.bytes.toLong()), voice.licence) + if (voice.commercial) emptyList() else listOf(Copy.Listen.notForCommercialUse)
             AkiRow(voice.name, subtitle = parts.joinToString(" · ")) { Control(voice) { scope.launch { model.install(voice) } } }
         }
         val current = model.current
         if (current != null && current.voices.isNotEmpty()) {
             item {
-                AkiSection("Voice") {
-                    AkiTap({ router.push(VoiceChoiceRoute) }) { AkiRow("Voice of ${current.name}", subtitle = model.chosenVoice?.name ?: "Standard", icon = "headphones", showsChevron = true) }
+                AkiSection(Copy.Listen.voice) {
+                    AkiTap({ router.push(VoiceChoiceRoute) }) { AkiRow(Copy.Listen.voiceOf(current.name), subtitle = model.chosenVoice?.name ?: Copy.Listen.standard, icon = "headphones", showsChevron = true) }
                 }
             }
         }
         // Underdog Woof's licence asks every app that offers it to credit it, with a link.
         if (model.models.any { it.id == "woof-en" }) {
-            item { AkiTap({ uriHandler.openUri("https://underdog.ai/woof") }) { AkiText("Voice by Underdog Woof, underdog.ai. Free for non-commercial use.", AkiTextStyle.Caption, tone = AkiTone.Muted) } }
+            item { AkiTap({ uriHandler.openUri("https://underdog.ai/woof") }) { AkiText(Copy.Listen.underdogCredit, AkiTextStyle.Caption, tone = AkiTone.Muted) } }
         }
-        item { AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", AkiTextStyle.Caption, tone = AkiTone.Muted) }
+        item { AkiText(Copy.Listen.modelDownloadedOnce, AkiTextStyle.Caption, tone = AkiTone.Muted) }
     }
     model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
 }
@@ -64,15 +65,15 @@ private fun Control(voice: VoiceModel, install: () -> Unit) {
     val model = LocalApp.current.readAloud
     val fraction = model.progress[voice.id]
     when {
-        fraction != null -> AkiProgressBar(fraction, Modifier.width(64.dp), label = "Downloading ${voice.name}")
+        fraction != null -> AkiProgressBar(fraction, Modifier.width(64.dp), label = Copy.Listen.downloadingVoice(voice.name))
         model.has(voice) -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (model.hasUpdate(voice)) AkiButton("Update", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Update ${voice.name}", onClick = install)
-            else if (model.current?.id == voice.id) AkiText("In use", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
-            else AkiButton("Use", size = AkiButtonSize.Small, description = "Use ${voice.name}") { model.use(voice) }
-            AkiIconButton("trash", "Delete ${voice.name}") { model.remove(voice) }
+            if (model.hasUpdate(voice)) AkiButton(Copy.Listen.update, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = Copy.Listen.updateVoice(voice.name), onClick = install)
+            else if (model.current?.id == voice.id) AkiText(Copy.Listen.inUse, AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
+            else AkiButton(Copy.Listen.use, size = AkiButtonSize.Small, description = Copy.Listen.useVoice(voice.name)) { model.use(voice) }
+            AkiIconButton("trash", Copy.Listen.deleteVoice(voice.name)) { model.remove(voice) }
         }
-        voice.usable -> AkiButton("Download", icon = "download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Download ${voice.name}", onClick = install)
-        else -> AkiText("Update Akidev to use this voice", AkiTextStyle.Caption, tone = AkiTone.Muted)
+        voice.usable -> AkiButton(Copy.Series.download, icon = "download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = Copy.Listen.downloadVoice(voice.name), onClick = install)
+        else -> AkiText(Copy.Listen.updateAkidevToUseVoice, AkiTextStyle.Caption, tone = AkiTone.Muted)
     }
 }
 
@@ -87,17 +88,17 @@ fun VoiceChoiceScreen() {
 
     /** The voices grouped by where they come from, in the order the model lists them. */
     val voices = model.current?.voices ?: emptyList()
-    val groups = listOf("en-us" to "American English", "en-gb" to "British English", "" to "Characters").map { (key, title) -> title to voices.filter { (it.accent ?: "") == key } }.filter { it.second.isNotEmpty() }
+    val groups = listOf("en-us" to Copy.Listen.americanEnglish, "en-gb" to Copy.Listen.britishEnglish, "" to Copy.Listen.characters).map { (key, title) -> title to voices.filter { (it.accent ?: "") == key } }.filter { it.second.isNotEmpty() }
 
     AkiPage(underTabBar = false, spacing = 22.dp) {
-        item { AkiBackHeader("Voice", back = router::back, subtitle = model.current?.let { "Voices of ${it.name}" }) }
-        item { AkiSection("Standard") { VoiceCard("", "${model.current?.name ?: "Model"} voice", null, "The model’s own voice.", null) } }
+        item { AkiBackHeader(Copy.Listen.voice, back = router::back, subtitle = model.current?.let { Copy.Listen.voicesOf(it.name) }) }
+        item { AkiSection(Copy.Listen.standard) { VoiceCard("", Copy.Listen.voiceName(model.current?.name ?: Copy.Listen.modelFallback), null, Copy.Listen.modelsOwnVoice, null) } }
         for ((title, group) in groups) {
             item(key = title) {
                 AkiSection(title) { for (voice in group) VoiceCard(voice.id, voice.name, detail(voice), voice.description, voice) }
             }
         }
-        item { AkiText("These voices differ in pace and in how much they lift and drop. Hear a few before choosing: the model reads the words, the voice sets the character.", AkiTextStyle.Caption, tone = AkiTone.Muted) }
+        item { AkiText(Copy.Listen.voicesDifferHint, AkiTextStyle.Caption, tone = AkiTone.Muted) }
     }
     model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
 }
@@ -121,12 +122,12 @@ private fun VoiceCard(id: String, name: String, detail: String?, description: St
             AkiText(description, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 4)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 when {
-                    busy -> Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = "Getting $name") }
-                    model.playing == id -> AkiIconButton("pause", "Stop sample of $name") { model.stopHearing() }
-                    else -> AkiIconButton("play", "Play sample of $name") { scope.launch { model.hear(voice) } }
+                    busy -> Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { AkiSpinner(label = Copy.Listen.gettingVoice(name)) }
+                    model.playing == id -> AkiIconButton("pause", Copy.Listen.stopSampleOf(name)) { model.stopHearing() }
+                    else -> AkiIconButton("play", Copy.Listen.playSampleOf(name)) { scope.launch { model.hear(voice) } }
                 }
-                if (model.voiceInUse == id) AkiText("In use", AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
-                else AkiButton("Use", size = AkiButtonSize.Small, description = "Use $name") { scope.launch { model.choose(voice) } }
+                if (model.voiceInUse == id) AkiText(Copy.Listen.inUse, AkiTextStyle.CaptionStrong, tone = AkiTone.Muted)
+                else AkiButton(Copy.Listen.use, size = AkiButtonSize.Small, description = Copy.Listen.useVoice(name)) { scope.launch { model.choose(voice) } }
             }
         }
     }

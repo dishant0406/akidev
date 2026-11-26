@@ -14,29 +14,29 @@ struct VoicesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiBackHeader(title: "Voice models", subtitle: "Reading aloud happens on this phone", back: { dismiss() })
+                AkiBackHeader(title: Copy.Listen.voiceModels, subtitle: Copy.Listen.readingAloudOnPhone, back: { dismiss() })
                 if model.models.isEmpty {
-                    AkiEmptyState(title: "No voice models yet", message: "The voices repository has none to offer. Check your connection and try again later.").frame(minHeight: 260)
+                    AkiEmptyState(title: Copy.Listen.noVoiceModels, message: Copy.Listen.noVoiceModelsHint).frame(minHeight: 260)
                 }
                 ForEach(model.models, id: \.id) { voice in
                     AkiRow(title: voice.name, subtitle: details(of: voice)) { control(for: voice) }
                 }
                 if let current = model.current, !current.voices.isEmpty {
-                    AkiSection(title: "Voice") {
+                    AkiSection(title: Copy.Listen.voice) {
                         AkiLink(value: VoiceChoiceRoute()) {
-                            AkiRow(title: "Voice of \(current.name)", subtitle: model.chosenVoice?.name ?? "Standard", icon: "headphones", showsChevron: true)
+                            AkiRow(title: Copy.Listen.voiceOf(current.name), subtitle: model.chosenVoice?.name ?? Copy.Listen.standard, icon: "headphones", showsChevron: true)
                         }
                     }
                 }
                 // Underdog Woof's licence asks every app that offers it to credit it, with a link.
                 if model.models.contains(where: { $0.id == "woof-en" }) {
                     Button { openURL(URL(string: "https://underdog.ai/woof")!) } label: {
-                        AkiText("Voice by Underdog Woof, underdog.ai. Free for non-commercial use.", .caption, tone: .muted)
+                        AkiText(Copy.Listen.underdogCredit, .caption, tone: .muted)
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(.isLink)
                 }
-                AkiText("A model is downloaded once, checked, and then reads books with no network. Nothing you read leaves your phone.", .caption, tone: .muted)
+                AkiText(Copy.Listen.modelDownloadedOnce, .caption, tone: .muted)
             }
             .akiPage(narrow: true)
         }
@@ -48,28 +48,28 @@ struct VoicesView: View {
 
     private func details(of voice: VoiceModel) -> String {
         var parts = [voice.languages.joined(separator: ", ").uppercased(), bookSize(voice.bytes), voice.licence]
-        if !voice.commercial { parts.append("not for commercial use") }
+        if !voice.commercial { parts.append(Copy.Listen.notForCommercialUse) }
         return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private func control(for voice: VoiceModel) -> some View {
         if let fraction = model.progress[voice.id] {
-            AkiProgressBar(fraction: fraction).frame(width: 64).accessibilityElement(children: .ignore).accessibilityLabel("Downloading \(voice.name)").accessibilityValue(bookPercent(fraction))
+            AkiProgressBar(fraction: fraction).frame(width: 64).accessibilityElement(children: .ignore).accessibilityLabel(Copy.Listen.downloadingVoice(voice.name)).accessibilityValue(bookPercent(fraction))
         } else if model.has(voice) {
             HStack(spacing: 8) {
                 if model.hasUpdate(voice) {
-                    AkiButton("Update", variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel("Update \(voice.name)")
+                    AkiButton(Copy.Listen.update, variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel(Copy.Listen.updateVoice(voice.name))
                 } else if model.current?.id == voice.id {
-                    AkiText("In use", .captionStrong, tone: .muted)
+                    AkiText(Copy.Listen.inUse, .captionStrong, tone: .muted)
                 } else {
-                    AkiButton("Use", size: .small) { model.use(voice) }.accessibilityLabel("Use \(voice.name)")
+                    AkiButton(Copy.Listen.use, size: .small) { model.use(voice) }.accessibilityLabel(Copy.Listen.useVoice(voice.name))
                 }
-                AkiIconButton(symbol: "trash", label: "Delete \(voice.name)", size: 44) { model.remove(voice) }
+                AkiIconButton(symbol: "trash", label: Copy.Listen.deleteVoice(voice.name), size: 44) { model.remove(voice) }
             }
         } else if voice.usable {
-            AkiButton("Download", icon: "download", variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel("Download \(voice.name)")
+            AkiButton(Copy.Series.download, icon: "download", variant: .primary, size: .small) { Task { await model.install(voice) } }.accessibilityLabel(Copy.Listen.downloadVoice(voice.name))
         } else {
-            AkiText("Update Akidev to use this voice", .caption, tone: .muted)
+            AkiText(Copy.Listen.updateAkidevToUseVoice, .caption, tone: .muted)
         }
     }
 }

@@ -13,8 +13,8 @@ struct VoiceChoiceView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                AkiBackHeader(title: "Voice", subtitle: model.current.map { "Voices of \($0.name)" }, back: { dismiss() })
-                AkiSection(title: "Standard") { card(id: "", name: "\(model.current?.name ?? "Model") voice", detail: nil, description: "The model’s own voice.", voice: nil) }
+                AkiBackHeader(title: Copy.Listen.voice, subtitle: model.current.map { Copy.Listen.voicesOf($0.name) }, back: { dismiss() })
+                AkiSection(title: Copy.Listen.standard) { card(id: "", name: Copy.Listen.voiceName(model.current?.name ?? Copy.Listen.modelFallback), detail: nil, description: Copy.Listen.modelsOwnVoice, voice: nil) }
                 ForEach(groups, id: \.title) { group in
                     AkiSection(title: group.title) {
                         ForEach(group.voices, id: \.id) { voice in
@@ -22,7 +22,7 @@ struct VoiceChoiceView: View {
                         }
                     }
                 }
-                AkiText("These voices differ in pace and in how much they lift and drop. Hear a few before choosing: the model reads the words, the voice sets the character.", .caption, tone: .muted)
+                AkiText(Copy.Listen.voicesDifferHint, .caption, tone: .muted)
             }
             .akiPage(narrow: true)
         }
@@ -36,7 +36,7 @@ struct VoiceChoiceView: View {
     /// The voices grouped by where they come from, in the order the model lists them.
     private var groups: [(title: String, voices: [VoiceOption])] {
         let voices = model.current?.voices ?? []
-        let titles = [("en-us", "American English"), ("en-gb", "British English"), ("", "Characters")]
+        let titles = [("en-us", Copy.Listen.americanEnglish), ("en-gb", Copy.Listen.britishEnglish), ("", Copy.Listen.characters)]
         return titles.map { key, title in (title, voices.filter { ($0.accent ?? "") == key }) }.filter { !$0.voices.isEmpty }
     }
 
@@ -57,16 +57,16 @@ struct VoiceChoiceView: View {
                 AkiText(description, .caption, tone: .muted, lines: 4)
                 HStack(spacing: 10) {
                     if busy {
-                        AkiSpinner().frame(width: 44, height: 44).accessibilityLabel("Getting \(name)")
+                        AkiSpinner().frame(width: 44, height: 44).accessibilityLabel(Copy.Listen.gettingVoice(name))
                     } else if model.playing == id {
-                        AkiIconButton(symbol: "pause", label: "Stop sample of \(name)", size: 44) { model.stopHearing() }
+                        AkiIconButton(symbol: "pause", label: Copy.Listen.stopSampleOf(name), size: 44) { model.stopHearing() }
                     } else {
-                        AkiIconButton(symbol: "play", label: "Play sample of \(name)", size: 44) { Task { await model.hear(voice) } }
+                        AkiIconButton(symbol: "play", label: Copy.Listen.playSampleOf(name), size: 44) { Task { await model.hear(voice) } }
                     }
                     if model.voiceInUse == id {
-                        AkiText("In use", .captionStrong, tone: .muted)
+                        AkiText(Copy.Listen.inUse, .captionStrong, tone: .muted)
                     } else {
-                        AkiButton("Use", size: .small) { Task { await model.choose(voice) } }.accessibilityLabel("Use \(name)")
+                        AkiButton(Copy.Listen.use, size: .small) { Task { await model.choose(voice) } }.accessibilityLabel(Copy.Listen.useVoice(name))
                     }
                     Spacer(minLength: 0)
                 }

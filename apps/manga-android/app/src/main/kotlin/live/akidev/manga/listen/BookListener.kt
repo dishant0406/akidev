@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import live.akidev.manga.books.BookSpan
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.BookReader
 import uniffi.akimanga.BookSection
 import uniffi.akimanga.BookSpeech
@@ -111,7 +112,7 @@ class BookListener(
             sampleRate = opened.sampleRate().toInt()
             begin()
         } catch (error: Exception) {
-            return stop(describe(error, "Could not read aloud"))
+            return stop(describe(error, Copy.Listen.couldNotReadAloud))
         }
         run(chapter, offset)
     }
@@ -317,7 +318,7 @@ class BookListener(
                     withContext(Dispatchers.Default) { voiceOfModel.speak(sentence.text, voice).toFloatArray() }
                 } catch (error: Exception) {
                     failures += 1
-                    if (failures >= 3 && mine == generation) stop(describe(error, "Could not read aloud"))
+                    if (failures >= 3 && mine == generation) stop(describe(error, Copy.Listen.couldNotReadAloud))
                     continue
                 }
                 failures = 0
@@ -361,7 +362,7 @@ class BookListener(
             sentences[chapter] = found
             found
         } catch (error: Exception) {
-            stop(describe(error, "Could not read aloud"))
+            stop(describe(error, Copy.Listen.couldNotReadAloud))
             null
         }
     }

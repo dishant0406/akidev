@@ -13,6 +13,7 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.IBinder
 import live.akidev.manga.MainActivity
+import live.akidev.manga.design.Copy
 
 /** What the lock screen, the notification and the headphones' buttons ask of the voice that is reading. */
 interface ListenControls {
@@ -81,15 +82,15 @@ object ListenSession {
 
     internal fun notification(context: Context): Notification {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Reading aloud", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, Copy.Listen.notificationChannel, NotificationManager.IMPORTANCE_LOW))
         fun action(name: String, label: String, icon: Int): Notification.Action =
             Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(context, icon), label, PendingIntent.getService(context, name.hashCode(), Intent(context, ListenService::class.java).setAction(name), PendingIntent.FLAG_IMMUTABLE)).build()
         val open = PendingIntent.getActivity(context, REQUEST_OPEN, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_media_play).setContentTitle(title).setContentText(author).setContentIntent(open).setOngoing(playing)
-            .addAction(action(ACTION_PREVIOUS, "Previous sentence", android.R.drawable.ic_media_previous))
-            .addAction(action(ACTION_TOGGLE, if (playing) "Pause" else "Play", if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play))
-            .addAction(action(ACTION_NEXT, "Next sentence", android.R.drawable.ic_media_next))
+            .addAction(action(ACTION_PREVIOUS, Copy.Listen.previousSentence, android.R.drawable.ic_media_previous))
+            .addAction(action(ACTION_TOGGLE, if (playing) Copy.Listen.pause else Copy.Listen.play, if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play))
+            .addAction(action(ACTION_NEXT, Copy.Listen.nextSentence, android.R.drawable.ic_media_next))
             .setStyle(Notification.MediaStyle().setMediaSession(session?.sessionToken).setShowActionsInCompactView(0, 1, 2))
             .build()
     }

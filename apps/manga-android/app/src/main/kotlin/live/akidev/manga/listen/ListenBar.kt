@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import live.akidev.manga.design.*
 import java.text.NumberFormat
+import live.akidev.manga.design.Copy
 
 private val rates = listOf(0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
 
@@ -19,15 +20,15 @@ private val rates = listOf(0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
 @Composable
 fun ListenBar(listener: BookListener) {
     Row(Modifier.fillMaxWidth().widthIn(max = 640.dp).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-        AkiIconButton("previous", "Previous sentence") { listener.previous() }
+        AkiIconButton("previous", Copy.Listen.previousSentence) { listener.previous() }
         if (listener.state == BookListener.State.Loading) {
-            androidx.compose.foundation.layout.Box(Modifier.size(44.dp).akiGlass(AkiShapes.pill(44.dp)), contentAlignment = Alignment.Center) { AkiSpinner(label = "Getting ready to read aloud") }
+            androidx.compose.foundation.layout.Box(Modifier.size(44.dp).akiGlass(AkiShapes.pill(44.dp)), contentAlignment = Alignment.Center) { AkiSpinner(label = Copy.Listen.gettingReadyToReadAloud) }
         } else {
             val playing = listener.state == BookListener.State.Playing
-            AkiIconButton(if (playing) "pause" else "play", if (playing) "Pause" else "Play", tint = Aki.colors.primary) { listener.toggle() }
+            AkiIconButton(if (playing) "pause" else "play", if (playing) Copy.Listen.pause else Copy.Listen.play, tint = Aki.colors.primary) { listener.toggle() }
         }
-        AkiIconButton("next", "Next sentence") { listener.next() }
+        AkiIconButton("next", Copy.Listen.nextSentence) { listener.next() }
         AkiMenuPill(listener.rate, { listener.changeRate(it) }, rates.map { AkiOption(it, "${NumberFormat.getInstance().format(it)}×") })
-        AkiIconButton("close", "Stop reading aloud") { listener.stop() }
+        AkiIconButton("close", Copy.Listen.stopReadingAloud) { listener.stop() }
     }
 }

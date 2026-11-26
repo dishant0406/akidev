@@ -9,16 +9,16 @@ struct ListenBar: View {
     var body: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "previous", label: "Previous sentence") { listener.skip(forward: false) }
+                AkiIconButton(symbol: "previous", label: Copy.Listen.previousSentence) { listener.skip(forward: false) }
                 if listener.state == .loading {
-                    AkiSpinner().frame(width: 44, height: 44).akiGlass(.circle, interactive: false).accessibilityLabel("Getting ready to read aloud")
+                    AkiSpinner().frame(width: 44, height: 44).akiGlass(.circle, interactive: false).accessibilityLabel(Copy.Listen.gettingReadyToReadAloud)
                 } else {
-                    AkiIconButton(symbol: listener.state == .playing ? "pause" : "play", label: listener.state == .playing ? "Pause" : "Play", tint: Aki.primary) { listener.toggle() }
+                    AkiIconButton(symbol: listener.state == .playing ? "pause" : "play", label: listener.state == .playing ? Copy.Listen.pause : Copy.Listen.play, tint: Aki.primary) { listener.toggle() }
                 }
-                AkiIconButton(symbol: "next", label: "Next sentence") { listener.skip(forward: true) }
+                AkiIconButton(symbol: "next", label: Copy.Listen.nextSentence) { listener.skip(forward: true) }
                 AkiMenuPill(selection: Bindable(listener).rate, options: Self.rates)
-                    .accessibilityHint("Reading speed")
-                AkiIconButton(symbol: "close", label: "Stop reading aloud") { listener.stop() }
+                    .accessibilityHint(Copy.Listen.readingSpeed)
+                AkiIconButton(symbol: "close", label: Copy.Listen.stopReadingAloud) { listener.stop() }
             }
         }
         .padding(.horizontal, 16)

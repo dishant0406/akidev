@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import live.akidev.manga.app.Preferences
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.Engine
 import uniffi.akimanga.VoiceModel
 import uniffi.akimanga.VoiceOption
@@ -88,7 +89,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             installed = engine.voicesInstalled()
             if (installed.size == 1) prefs.voiceModel = model.id
         } catch (error: Exception) {
-            failure = describe(error, "Could not download the voice")
+            failure = describe(error, Copy.Listen.couldNotDownloadVoice)
         }
         progress.remove(model.id)
     }
@@ -112,12 +113,12 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
         val heard = withContext(Dispatchers.Default) {
             runCatching {
                 engine.openSpeaker(model.id).use { speaker ->
-                    speaker.speak("It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.", voice?.id).toFloatArray() to speaker.sampleRate().toInt()
+                    speaker.speak(Copy.Listen.voiceSample, voice?.id).toFloatArray() to speaker.sampleRate().toInt()
                 }
             }.getOrNull()
         }
         hearing = null
-        if (heard == null) failure = Problem("Could not play the voice", "Try again, or choose another voice.") else play(heard.first, heard.second, voice?.id ?: "")
+        if (heard == null) failure = Problem(Copy.Listen.couldNotPlayVoice, Copy.Listen.tryAnotherVoice) else play(heard.first, heard.second, voice?.id ?: "")
     }
 
     /** Stops a sample that is playing. Called by the button, and when the screen is left. */
@@ -158,7 +159,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             installed = engine.voicesInstalled()
             return true
         } catch (error: Exception) {
-            failure = describe(error, "Could not download the voice")
+            failure = describe(error, Copy.Listen.couldNotDownloadVoice)
             return false
         } finally {
             fetching = fetching - voice.id
@@ -170,7 +171,7 @@ class ReadAloudModel(private val engine: Engine, private val prefs: Preferences,
             engine.removeVoice(model.id)
             installed = engine.voicesInstalled()
         } catch (error: Exception) {
-            failure = describe(error, "Could not remove the voice")
+            failure = describe(error, Copy.Listen.couldNotRemoveVoice)
         }
     }
 
