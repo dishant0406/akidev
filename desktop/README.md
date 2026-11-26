@@ -132,7 +132,7 @@ not code. The app has one copy built in, uses the last good copy it saved, and f
 published one in the background (at start and every six hours). A downloaded copy is used only
 if its ed25519 signature is valid, its version is higher than the one in use and it passes the
 same validation as the built-in one; otherwise nothing changes, so a bad publish cannot break
-an installed app. `./scripts/publish-sources.sh` signs and uploads a new copy to Cloudflare R2.
+an installed app. `content/sources/publish-sources.sh` signs and uploads a new copy to Cloudflare R2.
 Viewers see none of this: there is no list of indexers, no switches and no addresses to change in the
 app. Settings holds only the torrent limits and the update switch.
 

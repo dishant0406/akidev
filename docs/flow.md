@@ -4,7 +4,7 @@ How data moves, which file does each step, and what the user sees when it goes w
 
 ## The sources document
 
-1. `sources.json` (in the akidev-sources repo) is built into every app and server (`core/src/sources.rs`, `EMBEDDED`). `core/build.rs` downloads it to `desktop/sources/sources.json` when that file is missing.
+1. `sources.json` (in the akidev-sources repo) is built into every app and server (`core/src/sources.rs`, `EMBEDDED`). `core/build.rs` downloads it to `content/sources/sources.json` when that file is missing.
 2. At start, `load_saved` reads the copy saved by an earlier run. `keep_fresh` fetches a newer signed copy
    every 6 hours. A copy is used only if it is signed, has a higher `version`, and passes `validate`.
 3. The desktop app then calls `plugin::load` (`app/src/main.rs`), which puts the switched-on plugins on top.

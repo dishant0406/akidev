@@ -1596,7 +1596,7 @@ pub(crate) mod tests {
         assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
-    /// A plugin that brings code, built from `plugins/code-indexer` (see its README): it signs its request
+    /// A plugin that brings code, built from `content/plugins/code-indexer` (see its README): it signs its request
     /// and reads an HTML page into rows. Here it runs against a page served from this machine.
     #[cfg(feature = "code-plugins")]
     #[tokio::test]

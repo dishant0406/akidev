@@ -73,3 +73,10 @@ manga-android/store/film/out/
 fastlane/.env
 fastlane/report.xml
 fastlane/README.md
+
+# The sources document. build.rs downloads it; it is not committed.
+content/sources/sources.json
+content/sources/sources.json.part
+
+# Build output of the plugins (each is its own Cargo project).
+content/plugins/*/target/

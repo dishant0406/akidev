@@ -9,11 +9,11 @@
 # client), and the list is cut at LIMIT, which must not exceed the cap `validate` enforces.
 #
 # Usage:
-#   ./scripts/refresh-trackers.sh
-#   FILE=/path/to/sources.json ./scripts/refresh-trackers.sh
+#   ./content/sources/refresh-trackers.sh
+#   FILE=/path/to/sources.json ./content/sources/refresh-trackers.sh
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../desktop"
 
 LIMIT="${LIMIT:-32}"
 LIST="${LIST:-https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_all.txt}"

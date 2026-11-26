@@ -13,11 +13,12 @@
 # Requires: the cf CLI logged in to the Cloudflare account, and the signing key.
 #
 # Usage:
-#   SOURCES_DIR=/path/to/akidev-sources ./scripts/publish-sources.sh
-#   BUCKET=my-bucket KEY=/path/to/sources.key ./scripts/publish-sources.sh
+#   SOURCES_DIR=/path/to/akidev-sources ./content/sources/publish-sources.sh
+#   BUCKET=my-bucket KEY=/path/to/sources.key ./content/sources/publish-sources.sh
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here/../../desktop"
 
 # A checkout of the akidev-sources repo. It is not guessed: the copy built into this repo is only a download.
 SOURCES_DIR="${SOURCES_DIR:?Set SOURCES_DIR to a checkout of the akidev-sources repo}"
@@ -39,7 +40,7 @@ if [ "$new" -le "${live:-0}" ]; then
 fi
 
 # An old app refuses a whole document for a value it does not know. Set OLD_REF to the oldest release still supported.
-./scripts/check-old-apps.sh "$SOURCES_DIR/sources.json"
+"$here/check-old-apps.sh" "$SOURCES_DIR/sources.json"
 
 # The schema 2 document: its own file when there is one, otherwise the same document with the number changed.
 if [ -f "$SOURCES_DIR/sources-v2.json" ]; then

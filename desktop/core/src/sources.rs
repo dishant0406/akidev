@@ -36,7 +36,7 @@ const FEED_URL: &str = "https://sources.akidev.live";
 /// whoever publishes, never in this repository.
 const PUBLIC_KEY: &str = "e0776a868d11f70f94e6aaee3a28205cdc15002c246e97811b3100c4d4a04bbe";
 
-const EMBEDDED: &str = include_str!("../../sources/sources.json");
+const EMBEDDED: &str = include_str!("../../../content/sources/sources.json");
 
 /// A document is a few tens of kilobytes; anything much larger is not one.
 const MAX_BYTES: usize = 1 << 20;

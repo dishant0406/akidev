@@ -19,7 +19,7 @@ on:
       - desktop/app/**
       - desktop/assets/**
       - desktop/scripts/**
-      - desktop/sources/**
+      - content/sources/**
       - desktop/README.md
       - design/branding/**
       - .github/workflows/desktop*.yml

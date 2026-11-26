@@ -33,7 +33,7 @@ indexers carry on), and the Prowlarr fallback answers 400 (it only runs when oth
 
 ## An old-app gate before publishing (2026-11-21)
 
-**Chosen.** `desktop/scripts/check-old-apps.sh` builds the checker from an old release tag and runs it on a
+**Chosen.** `content/sources/check-old-apps.sh` builds the checker from an old release tag and runs it on a
 document. `publish-sources.sh` runs it before signing.
 
 **Why.** An installed app ignores unknown fields but refuses the whole document for a value it does not know
@@ -183,7 +183,7 @@ dash, because a key is split at the first one after the provider.
 ## The data lives in its own repo (2026-11-21)
 
 **Chosen.** `sources.json` and its README moved to a public repo, `dishant0406/akidev-sources`. This repo keeps only code.
-`desktop/core/build.rs` downloads the file to `desktop/sources/sources.json` (git-ignored) when it is missing, so every
+`desktop/core/build.rs` downloads the file to `content/sources/sources.json` (git-ignored) when it is missing, so every
 build, local or CI, gets a built-in copy without any workflow step. `publish-sources.sh` needs `SOURCES_DIR`, a checkout of
 the new repo, so what gets published is always what is committed there.
 
@@ -194,7 +194,7 @@ workflow (six places to forget; `build.rs` covers all of them, plus the iOS and 
 
 **Trade-off.** A build needs the network once, and it is not reproducible: it reads the newest `main` of the sources repo.
 A bad commit there can break this repo's tests (`read_tests.rs`, `screens.test.ts` read the document). To pin an older copy,
-put your own file at `desktop/sources/sources.json`. The old copies stay in this repo's git history.
+put your own file at `content/sources/sources.json`. The old copies stay in this repo's git history.
 
 ## Credits and kind labels are data; the old flag is gone (2026-11-21)
 

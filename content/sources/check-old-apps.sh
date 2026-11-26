@@ -9,15 +9,15 @@
 # (a later validator can be stricter than the oldest).
 #
 # Usage:
-#   ./scripts/check-old-apps.sh                       checks sources/sources.json
-#   ./scripts/check-old-apps.sh /path/to/doc.json
-#   OLD_REF=desktop-mac-v0.1.20 ./scripts/check-old-apps.sh      the oldest to check (default v0.1.17)
-#   OLD_REFS="desktop-mac-v0.1.17 desktop-mac-v0.1.25" ./scripts/check-old-apps.sh   exactly these
+#   ./content/sources/check-old-apps.sh                 checks content/sources/sources.json
+#   ./content/sources/check-old-apps.sh /path/to/doc.json
+#   OLD_REF=desktop-mac-v0.1.20 ./content/sources/check-old-apps.sh      the oldest to check (default v0.1.17)
+#   OLD_REFS="desktop-mac-v0.1.17 desktop-mac-v0.1.25" ./content/sources/check-old-apps.sh   exactly these
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../../desktop"
 
-document="$(realpath "${1:-sources/sources.json}")"
+document="$(realpath "${1:-../content/sources/sources.json}")"
 target="${OLD_TARGET:-${TMPDIR:-/tmp}/akidev-old-apps-target}"
 newest="$(git tag --list 'desktop-mac-v*' | sort -V | tail -1)"
 refs="${OLD_REFS:-${OLD_REF:-desktop-mac-v0.1.17} $newest}"
