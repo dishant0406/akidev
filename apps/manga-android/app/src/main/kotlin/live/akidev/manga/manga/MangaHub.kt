@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.compositionLocalOf
 import live.akidev.manga.design.AkiChips
 import live.akidev.manga.design.AkiChoice
+import live.akidev.manga.design.Copy
 
 /** The manga screens in the Manga tab, one row of choices: the library's two lists, the updates' two lists, and Discover. */
 enum class MangaPart { Saved, History, Unread, Recent, Discover }
@@ -23,7 +24,7 @@ val LocalMangaPart = compositionLocalOf<MangaPartControl?> { null }
 fun MangaPartPills() {
     val control = LocalMangaPart.current ?: return
     AkiChips(
-        listOf(AkiChoice(MangaPart.Saved, "Library"), AkiChoice(MangaPart.History, "History"), AkiChoice(MangaPart.Unread, "Unread"), AkiChoice(MangaPart.Recent, "Recent"), AkiChoice(MangaPart.Discover, "Discover")),
+        listOf(AkiChoice(MangaPart.Saved, Copy.Home.library), AkiChoice(MangaPart.History, Copy.Home.history), AkiChoice(MangaPart.Unread, Copy.Home.unread), AkiChoice(MangaPart.Recent, Copy.Home.recent), AkiChoice(MangaPart.Discover, Copy.Home.discover)),
         control.part, control.choose,
     )
 }
