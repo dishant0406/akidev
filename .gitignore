@@ -80,3 +80,7 @@ content/sources/sources.json.part
 
 # Build output of the plugins (each is its own Cargo project).
 content/plugins/*/target/
+
+# Build output of the Rust workspace (moved from desktop/target), and the sources signing key (moved from desktop/.secrets).
+/target/
+.secrets/
