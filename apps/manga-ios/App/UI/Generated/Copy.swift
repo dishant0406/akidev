@@ -134,6 +134,63 @@ enum Copy {
         static let finished = "Finished"
         static let reading = "Reading"
     }
+    enum Series {
+        static let back = "Back"
+        static let addToLibrary = "Add to library"
+        static let moreOptions = "More options"
+        static let markAllAsUnread = "Mark all as unread"
+        static let downloadUnreadChapters = "Download unread chapters"
+        static let refresh = "Refresh"
+        static let share = "Share"
+        static let chooseCover = "Choose a cover"
+        static let resetCover = "Reset cover"
+        static let deleteSeriesData = "Delete series data"
+        static let chapters = "Chapters"
+        static let bookmarks = "Bookmarks"
+        static let details = "Details"
+        static let nothingToReadHere = "Nothing to read here"
+        static func noChaptersInLanguage(_ name: String) -> String { "\(name) lists this series but has no chapters to show in your language. Licensed series are often only linked to the publisher’s site. Try another source, or change the language in the source’s settings." }
+        static let locked = "Locked"
+        static let lockedSignInAndroid = "Locked, sign in to read"
+        static let markAsUnreadIos = "Mark as unread"
+        static func markAsReadAndroid(_ name: String) -> String { "Mark \(name) as read" }
+        static func markAsUnreadAndroid(_ name: String) -> String { "Mark \(name) as unread" }
+        static let deleteDownload = "Delete download"
+        static let download = "Download"
+        static let noBookmarksYet = "No bookmarks yet"
+        static let bookmarkHint = "Bookmark a page while you read and it appears here."
+        static func pageNumber(_ number: Int) -> String { "Page \(number)" }
+        static let removeBookmarkIos = "Remove bookmark"
+        static func removeBookmarkAndroid(_ number: Int) -> String { "Remove bookmark on page \(number)" }
+        static let readDownloaded = "Read · Downloaded"
+        static let read = "Read"
+        static let downloaded = "Downloaded"
+        static let showLess = "Show less"
+        static let status = "Status"
+        static let unknown = "Unknown"
+        static let author = "Author"
+        static let noAuthorIos = "—"
+        static let source = "Source"
+        static let ongoing = "Ongoing"
+        static let completed = "Completed"
+        static let hiatus = "Hiatus"
+        static let cancelled = "Cancelled"
+        static func continueSeries(_ name: String) -> String { "Continue · \(name)" }
+        static func startSeries(_ name: String) -> String { "Start · \(name)" }
+        static let couldNotDownloadChapters = "Could not download chapters"
+        static let couldNotLoadSeries = "Could not load this series"
+        static let couldNotLoadChapters = "Could not load the chapters"
+        static let couldNotUpdateLibrary = "Could not update your library"
+        static func chaptersNotDownloaded(_ count: Int) -> String { count == 1 ? "\(count) chapter could not be downloaded. Check your connection and try again." : "\(count) chapters could not be downloaded. Check your connection and try again." }
+        static let downloading = "Downloading"
+        static let addedToLibrary = "Added to library"
+        static let removedFromLibrary = "Removed from library"
+        static let readingNow = "Reading now"
+        static let started = "Started"
+        static func deleteDataQuestion(_ title: String) -> String { "Delete the data for “\(title)”?" }
+        static let deleteDataHint = "The series leaves your library. Your reading progress and downloaded chapters are deleted from this device. You can add the series again later."
+        static let deleteData = "Delete data"
+    }
     enum Welcome {
         static let title = "Welcome to Akidev"
         static let body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

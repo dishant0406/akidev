@@ -83,7 +83,7 @@ struct SeriesView: View {
         .akiHaptic(.impact(weight: .medium), trigger: savedTaps)
         .akiHaptic(.success, trigger: downloadsDone)
         .akiHaptic(.error, trigger: problem)
-        .akiAlert("Could not download chapters", message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
+        .akiAlert(Copy.Series.couldNotDownloadChapters, message: problem, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
         .akiSheet(isPresented: $presented.equals(.move)) { MigrateSheet(ref: ref) { dismiss() } }
         .akiSheet(isPresented: $signingIn) { SignInSheet(source: ref.source) { afterSignIn = waiting } }
         .onChange(of: signingIn) { if !signingIn, let next = afterSignIn { afterSignIn = nil; target = next } }
@@ -93,7 +93,7 @@ struct SeriesView: View {
             model.refresh()
         }
         .akiSheet(isPresented: $presented.equals(.categories)) { CategoryPicker(series: [CategoryPicker.Series(source: ref.source, id: ref.id)]) }
-        .akiConfirm("Delete the data for “\(ref.title)”?", message: "The series leaves your library. Your reading progress and downloaded chapters are deleted from this device. You can add the series again later.", confirm: "Delete data", isPresented: $presented.equals(.forget)) {
+        .akiConfirm(Copy.Series.deleteDataQuestion(ref.title), message: Copy.Series.deleteDataHint, confirm: Copy.Series.deleteData, isPresented: $presented.equals(.forget)) {
             try? model.engine.forgetSeries(source: ref.source, series: ref.id)
             model.refresh()
             dismiss()
@@ -140,20 +140,20 @@ struct SeriesView: View {
     private var controls: some View {
         AkiGlassGroup(spacing: 12) {
             HStack {
-                AkiIconButton(symbol: "back", label: "Back", onMedia: true) { dismiss() }
+                AkiIconButton(symbol: "back", label: Copy.Series.back, onMedia: true) { dismiss() }
                 Spacer()
-                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? "Remove from library" : "Add to library", tint: saved ? Aki.primary : nil, onMedia: true) { Task { await toggleSaved() } }
-                AkiMenu(symbol: "more", label: "More options", onMedia: true, items: [
-                    AkiMenuItem(title: "Mark all as read", icon: "check") { markAll(read: true) },
-                    AkiMenuItem(title: "Mark all as unread", icon: "check") { markAll(read: false) },
-                    AkiMenuItem(title: "Download unread chapters", icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
-                    AkiMenuItem(title: "Refresh", icon: "refresh") { Task { await load(force: true) } },
-                    AkiMenuItem(title: "Share", icon: "share") { model.sharing = SharePresented(item: .series(ref)) },
-                    AkiMenuItem(title: "Change categories", icon: "folder") { presented = .categories },
-                    AkiMenuItem(title: "Choose a cover", icon: "image") { presented = .cover },
-                    AkiMenuItem(title: "Reset cover", icon: "refresh") { clearCover() },
-                    AkiMenuItem(title: "Move to another source", icon: "swap") { presented = .move },
-                    AkiMenuItem(title: "Delete series data", icon: "trash", destructive: true) { presented = .forget },
+                AkiIconButton(symbol: saved ? "bookmark-solid" : "bookmark", label: saved ? Copy.Library.removeFromLibrary : Copy.Series.addToLibrary, tint: saved ? Aki.primary : nil, onMedia: true) { Task { await toggleSaved() } }
+                AkiMenu(symbol: "more", label: Copy.Series.moreOptions, onMedia: true, items: [
+                    AkiMenuItem(title: Copy.Home.markAllAsRead, icon: "check") { markAll(read: true) },
+                    AkiMenuItem(title: Copy.Series.markAllAsUnread, icon: "check") { markAll(read: false) },
+                    AkiMenuItem(title: Copy.Series.downloadUnreadChapters, icon: "download") { download(chapters.filter { !$0.finished && !kept.contains($0.id) }) },
+                    AkiMenuItem(title: Copy.Series.refresh, icon: "refresh") { Task { await load(force: true) } },
+                    AkiMenuItem(title: Copy.Series.share, icon: "share") { model.sharing = SharePresented(item: .series(ref)) },
+                    AkiMenuItem(title: Copy.Library.changeCategories, icon: "folder") { presented = .categories },
+                    AkiMenuItem(title: Copy.Series.chooseCover, icon: "image") { presented = .cover },
+                    AkiMenuItem(title: Copy.Series.resetCover, icon: "refresh") { clearCover() },
+                    AkiMenuItem(title: Copy.Library.moveToAnotherSource, icon: "swap") { presented = .move },
+                    AkiMenuItem(title: Copy.Series.deleteSeriesData, icon: "trash", destructive: true) { presented = .forget },
                 ])
             }
         }
@@ -164,13 +164,13 @@ struct SeriesView: View {
 
     private var sheet: some View {
         VStack(spacing: 18) {
-            AkiTabs(items: [(SeriesTab.chapters, "Chapters"), (SeriesTab.bookmarks, "Bookmarks"), (SeriesTab.details, "Details")], selection: $tab)
+            AkiTabs(items: [(SeriesTab.chapters, Copy.Series.chapters), (SeriesTab.bookmarks, Copy.Series.bookmarks), (SeriesTab.details, Copy.Series.details)], selection: $tab)
             if tab == .bookmarks {
                 bookmarkList
             } else if let error, chapters.isEmpty {
-                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await load(force: true) } })).frame(minHeight: 260)
+                AkiEmptyState(title: error.title, message: error.message, action: (Copy.Home.tryAgain, { Task { await load(force: true) } })).frame(minHeight: 260)
             } else if tab == .chapters && chapters.isEmpty && !loading {
-                AkiEmptyState(title: "Nothing to read here", message: "\(model.name(of: ref.source)) lists this series but has no chapters to show in your language. Licensed series are often only linked to the publisher’s site. Try another source, or change the language in the source’s settings.")
+                AkiEmptyState(title: Copy.Series.nothingToReadHere, message: Copy.Series.noChaptersInLanguage(model.name(of: ref.source)))
                     .frame(minHeight: 280)
             } else if tab == .chapters {
                 chapterList
@@ -197,20 +197,20 @@ struct SeriesView: View {
                             // The mark is the state, so it sits where the read mark would; the whole row opens the sign-in.
                             AkiIcon("lock-solid", size: 20, tone: .muted)
                                 .frame(width: 44, height: 44)
-                                .accessibilityLabel("Locked")
+                                .accessibilityLabel(Copy.Series.locked)
                         } else {
                             AkiTap(action: { toggleRead(chapter) }) {
                                 AkiIcon(chapter.finished ? "check-solid" : "check", size: 22, tone: chapter.finished ? .text : .muted)
                                     .frame(width: 44, height: 44)
                             }
-                            .accessibilityLabel(chapter.finished ? "Mark as unread" : "Mark as read")
+                            .accessibilityLabel(chapter.finished ? Copy.Series.markAsUnreadIos : Copy.Library.markAsRead)
                         }
                     }
                 }
                 .akiContextMenu([
                     kept.contains(chapter.id)
-                        ? AkiMenuItem(title: "Delete download", icon: "trash", destructive: true) { removeDownload(chapter) }
-                        : AkiMenuItem(title: "Download", icon: "download") { download([chapter]) },
+                        ? AkiMenuItem(title: Copy.Series.deleteDownload, icon: "trash", destructive: true) { removeDownload(chapter) }
+                        : AkiMenuItem(title: Copy.Series.download, icon: "download") { download([chapter]) },
                 ])
             }
         }
@@ -219,17 +219,17 @@ struct SeriesView: View {
     private var bookmarkList: some View {
         LazyVStack(spacing: 12) {
             if bookmarks.isEmpty {
-                AkiEmptyState(title: "No bookmarks yet", message: "Bookmark a page while you read and it appears here.").frame(minHeight: 260)
+                AkiEmptyState(title: Copy.Series.noBookmarksYet, message: Copy.Series.bookmarkHint).frame(minHeight: 260)
             }
             ForEach(bookmarks, id: \.self) { mark in
                 AkiTap(action: { target = ReaderTarget(chapterID: mark.chapter, page: Int(mark.page), offset: mark.offset) }) {
-                    AkiListCard(thumbnail: cover, label: "Page \(mark.page + 1)",
+                    AkiListCard(thumbnail: cover, label: Copy.Series.pageNumber(Int(mark.page) + 1),
                                 title: chapterName(number: mark.chapterNumber, title: mark.chapterTitle),
                                 badges: [shortDate(mark.createdMs)].compactMap { $0 }) {
                         AkiTap(action: { removeBookmark(mark) }) {
                             AkiIcon("trash", size: 22, tone: .muted).frame(width: 44, height: 44)
                         }
-                        .accessibilityLabel("Remove bookmark")
+                        .accessibilityLabel(Copy.Series.removeBookmarkIos)
                     }
                 }
             }
@@ -254,13 +254,13 @@ struct SeriesView: View {
 
     /// The small line over a chapter's title: where you are in it, or what it is.
     private func label(_ chapter: ChapterEntry) -> String {
-        if chapter.finished { return kept.contains(chapter.id) ? "Read · Downloaded" : "Read" }
-        if kept.contains(chapter.id) { return "Downloaded" }
-        if let page = chapter.page { return "Page \(page + 1)" }
+        if chapter.finished { return kept.contains(chapter.id) ? Copy.Series.readDownloaded : Copy.Series.read }
+        if kept.contains(chapter.id) { return Copy.Series.downloaded }
+        if let page = chapter.page { return Copy.Series.pageNumber(Int(page) + 1) }
         if isLocked(chapter), let word = source?.lockedLabel { return word }
-        let number = chapter.number.map { "Chapter \($0.formatted(.number.precision(.fractionLength(0...2))))" }
+        let number = chapter.number.map { Copy.Home.chapterNumber($0.formatted(.number.precision(.fractionLength(0...2)))) }
         if let number, chapter.title.map({ !$0.localizedCaseInsensitiveContains(number) }) == true { return number }
-        return "Unread"
+        return Copy.Home.unread
     }
 
     private var details: some View {
@@ -269,16 +269,16 @@ struct SeriesView: View {
                 AkiCard(padding: 16) {
                     VStack(alignment: .leading, spacing: 8) {
                         AkiText(description, .body, lines: expanded ? nil : 6)
-                        AkiButton(expanded ? "Show less" : "Show more", variant: .ghost, size: .small) { withAnimation(AkiMotion.settle(reduceMotion)) { expanded.toggle() } }
+                        AkiButton(expanded ? Copy.Series.showLess : Copy.Home.showMore, variant: .ghost, size: .small) { withAnimation(AkiMotion.settle(reduceMotion)) { expanded.toggle() } }
                     }
                 }
             }
             AkiCard(padding: 4) {
                 VStack(spacing: 0) {
-                    info("Status", statusText ?? "Unknown")
-                    info("Author", detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : "—")
-                    info("Source", model.name(of: ref.source))
-                    info("Chapters", chapters.count.formatted())
+                    info(Copy.Series.status, statusText ?? Copy.Series.unknown)
+                    info(Copy.Series.author, detail?.authors.isEmpty == false ? detail!.authors.joined(separator: ", ") : Copy.Series.noAuthorIos)
+                    info(Copy.Series.source, model.name(of: ref.source))
+                    info(Copy.Series.chapters, chapters.count.formatted())
                 }
             }
             if let tags = detail?.tags, !tags.isEmpty {
@@ -299,10 +299,10 @@ struct SeriesView: View {
 
     private var statusText: String? {
         switch detail?.status {
-        case .ongoing: "Ongoing"
-        case .completed: "Completed"
-        case .hiatus: "Hiatus"
-        case .cancelled: "Cancelled"
+        case .ongoing: Copy.Series.ongoing
+        case .completed: Copy.Series.completed
+        case .hiatus: Copy.Series.hiatus
+        case .cancelled: Copy.Series.cancelled
         default: nil
         }
     }
@@ -320,7 +320,7 @@ struct SeriesView: View {
               let chapter = list.first(where: { $0.id == resume.chapter }) else { return resumable = nil }
         let started = list.contains { $0.finished || $0.page != nil }
         let name = chapterName(number: chapter.number, title: chapter.title)
-        resumable = Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? "Continue · \(name)" : "Start · \(name)")
+        resumable = Resumable(target: ReaderTarget(chapterID: resume.chapter, page: Int(resume.page), offset: resume.offset), label: started ? Copy.Series.continueSeries(name) : Copy.Series.startSeries(name))
         // Only for a series the person keeps or has begun: browsing past one should not cost the site a request.
         if started || saved { fetchPagesAhead(of: resume.chapter) }
     }
@@ -341,13 +341,13 @@ struct SeriesView: View {
         if fresh {
             // Seen in the last ten minutes: the stored details are enough, unless there are none.
             if detail == nil {
-                do { detail = try await model.engine.details(source: ref.source, id: ref.id) } catch { self.error = describe(error, "Could not load this series") }
+                do { detail = try await model.engine.details(source: ref.source, id: ref.id) } catch { self.error = describe(error, Copy.Series.couldNotLoadSeries) }
             }
         } else {
             async let fetchedDetail = model.engine.details(source: ref.source, id: ref.id)
             async let fetchedChapters = model.engine.chapters(source: ref.source, id: ref.id)
-            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, "Could not load this series") } }
-            do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error, "Could not load the chapters") } }
+            do { detail = try await fetchedDetail } catch { if detail == nil { self.error = describe(error, Copy.Series.couldNotLoadSeries) } }
+            do { setChapters(try await fetchedChapters.entries) } catch { if chapters.isEmpty { self.error = describe(error, Copy.Series.couldNotLoadChapters) } }
         }
         loading = false
         loadBookmarks()
@@ -366,15 +366,15 @@ struct SeriesView: View {
     }
 
     private func download(_ list: [ChapterEntry]) {
-        akiAnnounce("Downloading")
+        akiAnnounce(Copy.Series.downloading)
         Task {
             var failed = 0
             for chapter in list.reversed() {
                 do { try await model.engine.downloadChapter(source: ref.source, series: ref.id, chapter: chapter.id) } catch { failed += 1 }
                 loadKept()
             }
-            if failed == 0 { downloadsDone += 1; akiAnnounce("Downloaded") }
-            if failed > 0 { problem = (failed == 1 ? "1 chapter could not be downloaded." : "\(failed) chapters could not be downloaded.") + " Check your connection and try again." }
+            if failed == 0 { downloadsDone += 1; akiAnnounce(Copy.Series.downloaded) }
+            if failed > 0 { problem = Copy.Series.chaptersNotDownloaded(failed) }
         }
     }
 
@@ -403,10 +403,10 @@ struct SeriesView: View {
             try await model.engine.setInLibrary(source: ref.source, id: ref.id, saved: !saved)
             saved.toggle()
             savedTaps += 1
-            akiAnnounce(saved ? "Added to library" : "Removed from library")
+            akiAnnounce(saved ? Copy.Series.addedToLibrary : Copy.Series.removedFromLibrary)
             if saved { putOnSaveCategory() }
             model.refresh()
-        } catch { self.error = describe(error, "Could not update your library") }
+        } catch { self.error = describe(error, Copy.Series.couldNotUpdateLibrary) }
     }
 
     private func clearCover() {

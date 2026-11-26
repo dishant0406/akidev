@@ -15,7 +15,7 @@ struct ReaderChaptersSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        AkiText("Chapters", .title).accessibilityAddTraits(.isHeader)
+                        AkiText(Copy.Series.chapters, .title).accessibilityAddTraits(.isHeader)
                         AkiText([model.ref.title, chaptersLabel(UInt32(chapters.count))].compactMap { $0 }.joined(separator: " · "), .caption, tone: .muted, lines: 1, digits: true)
                     }
                     LazyVStack(spacing: 10) {
@@ -57,16 +57,16 @@ struct ReaderChaptersSheet: View {
     /// What is special about a chapter, as icons on the right; a chapter not yet opened has none. Fixed sizes, so nothing moves.
     @ViewBuilder private func marks(_ chapter: ChapterEntry, reading: Bool) -> some View {
         HStack(spacing: 10) {
-            if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted).accessibilityLabel("Downloaded") }
+            if kept.contains(chapter.id) { AkiIcon("download", size: 18, tone: reading ? .onPrimary : .muted).accessibilityLabel(Copy.Series.downloaded) }
             if reading {
                 AkiIcon("play-solid", size: 14, tone: .onMedia)
                     .frame(width: 36, height: 36)
                     .background(Aki.onPrimary, in: Circle())
-                    .accessibilityLabel("Reading now")
+                    .accessibilityLabel(Copy.Series.readingNow)
             } else if chapter.finished {
-                AkiIcon("check-solid", size: 20, tone: .muted).accessibilityLabel("Read")
+                AkiIcon("check-solid", size: 20, tone: .muted).accessibilityLabel(Copy.Series.read)
             } else if chapter.page != nil {
-                AkiIcon("play", size: 18, tone: .text).accessibilityLabel("Started")
+                AkiIcon("play", size: 18, tone: .text).accessibilityLabel(Copy.Series.started)
             }
         }
     }

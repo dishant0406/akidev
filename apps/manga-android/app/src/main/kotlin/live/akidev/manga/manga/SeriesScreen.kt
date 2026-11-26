@@ -110,7 +110,7 @@ fun SeriesScreen(ref: SeriesRef) {
         Controls(series, onSaved = {
             scope.launch {
                 val saved = series.toggleSaved()
-                view.announceForAccessibility(if (saved) "Added to library" else "Removed from library")
+                view.announceForAccessibility(if (saved) Copy.Series.addedToLibrary else Copy.Series.removedFromLibrary)
                 if (saved) {
                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                     if (series.putOnSaveCategory()) popup = SeriesPopup.Categories
@@ -128,11 +128,11 @@ fun SeriesScreen(ref: SeriesRef) {
     }
 
     if (signingIn) SignInSheet(ref.source, onSignedIn = { waiting?.let(open) }) { signingIn = false }
-    series.problem?.let { AkiAlert("Could not download chapters", it) { series.problem = null } }
+    series.problem?.let { AkiAlert(Copy.Series.couldNotDownloadChapters, it) { series.problem = null } }
     when (popup) {
         SeriesPopup.Moving -> MigrateSheet(ref, onMoved = { router.back() }) { popup = null }
         SeriesPopup.Categories -> CategoryPicker(listOf(ref.source to ref.id), onDismiss = { popup = null })
-        SeriesPopup.Forgetting -> AkiConfirm("Delete the data for “${ref.title}”?", "The series leaves your library. Your reading progress and downloaded chapters are deleted from this device. You can add the series again later.", "Delete data", { popup = null }) {
+        SeriesPopup.Forgetting -> AkiConfirm(Copy.Series.deleteDataQuestion(ref.title), Copy.Series.deleteDataHint, Copy.Series.deleteData, { popup = null }) {
             series.forget()
             router.back()
         }
@@ -190,24 +190,24 @@ private fun Controls(
         }
     }
     Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        AkiIconButton("back", "Back", onMedia = true) { router.back() }
+        AkiIconButton("back", Copy.Series.back, onMedia = true) { router.back() }
         Box(Modifier.weight(1f))
         AkiIconButton(
-            if (series.saved) "bookmark-solid" else "bookmark", if (series.saved) "Remove from library" else "Add to library",
+            if (series.saved) "bookmark-solid" else "bookmark", if (series.saved) Copy.Library.removeFromLibrary else Copy.Series.addToLibrary,
             tint = if (series.saved) Aki.colors.primary else null, onMedia = true, onClick = onSaved,
         )
         AkiMenu(
-            "more", "More options", onMedia = true, items = listOf(
-                AkiMenuItem("Mark all as read", "check") { series.markAll(read = true) },
-                AkiMenuItem("Mark all as unread", "check") { series.markAll(read = false) },
-                AkiMenuItem("Download unread chapters", "download") { scope.launch { series.download(chapters.filter { !it.finished && it.id !in series.kept }) } },
-                AkiMenuItem("Refresh", "refresh") { scope.launch { series.load(force = true) } },
-                AkiMenuItem("Share", "share", onClick = share),
-                AkiMenuItem("Change categories", "folder", onClick = onCategories),
-                AkiMenuItem("Choose a cover", "image", onClick = onCover),
-                AkiMenuItem("Reset cover", "refresh") { series.clearCover() },
-                AkiMenuItem("Move to another source", "swap", onClick = onMove),
-                AkiMenuItem("Delete series data", "trash", destructive = true, onClick = onForget),
+            "more", Copy.Series.moreOptions, onMedia = true, items = listOf(
+                AkiMenuItem(Copy.Home.markAllAsRead, "check") { series.markAll(read = true) },
+                AkiMenuItem(Copy.Series.markAllAsUnread, "check") { series.markAll(read = false) },
+                AkiMenuItem(Copy.Series.downloadUnreadChapters, "download") { scope.launch { series.download(chapters.filter { !it.finished && it.id !in series.kept }) } },
+                AkiMenuItem(Copy.Series.refresh, "refresh") { scope.launch { series.load(force = true) } },
+                AkiMenuItem(Copy.Series.share, "share", onClick = share),
+                AkiMenuItem(Copy.Library.changeCategories, "folder", onClick = onCategories),
+                AkiMenuItem(Copy.Series.chooseCover, "image", onClick = onCover),
+                AkiMenuItem(Copy.Series.resetCover, "refresh") { series.clearCover() },
+                AkiMenuItem(Copy.Library.moveToAnotherSource, "swap", onClick = onMove),
+                AkiMenuItem(Copy.Series.deleteSeriesData, "trash", destructive = true, onClick = onForget),
             ),
         )
     }
@@ -222,7 +222,7 @@ private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (Ser
             // The page colour is a glass source between the picture and the page, so the tabs show it and not the picture behind the sheet.
             Box(Modifier.matchParentSize().akiGlassSource(layer = -0.25f).background(Aki.colors.background, RoundedCornerShape(topStart = Aki.sheetRadius, topEnd = Aki.sheetRadius)))
             AkiTabs(
-                listOf(AkiChoice(SeriesTab.Chapters, "Chapters"), AkiChoice(SeriesTab.Bookmarks, "Bookmarks"), AkiChoice(SeriesTab.Details, "Details")), tab, onTab,
+                listOf(AkiChoice(SeriesTab.Chapters, Copy.Series.chapters), AkiChoice(SeriesTab.Bookmarks, Copy.Series.bookmarks), AkiChoice(SeriesTab.Details, Copy.Series.details)), tab, onTab,
                 Modifier.widthIn(max = 720.dp).padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 18.dp),
             )
         }
@@ -231,13 +231,13 @@ private fun LazyListScope.sheet(series: SeriesModel, tab: SeriesTab, onTab: (Ser
     when {
         tab == SeriesTab.Bookmarks -> bookmarkRows(series, open)
         error != null && series.chapters.isEmpty() -> sheetItem {
-            AkiEmptyState(error.title, error.message, Modifier.heightIn(min = 260.dp), action = AkiAction("Try again") { scope.launch { series.load(force = true) } })
+            AkiEmptyState(error.title, error.message, Modifier.heightIn(min = 260.dp), action = AkiAction(Copy.Home.tryAgain) { scope.launch { series.load(force = true) } })
         }
         tab == SeriesTab.Chapters && series.chapters.isEmpty() && !series.loading -> sheetItem {
             val name = LocalApp.current.name(series.ref.source)
             AkiEmptyState(
-                "Nothing to read here",
-                "$name lists this series but has no chapters to show in your language. Licensed series are often only linked to the publisher’s site. Try another source, or change the language in the source’s settings.",
+                Copy.Series.nothingToReadHere,
+                Copy.Series.noChaptersInLanguage(name),
                 Modifier.heightIn(min = 280.dp),
             )
         }
@@ -263,14 +263,14 @@ private fun LazyListScope.chapterRows(series: SeriesModel, openChapter: (Chapter
     if (series.chapters.isEmpty() && series.loading) sheetItem { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
     items(series.chapters.size, key = { series.chapters[it].id }) { index ->
         val chapter = series.chapters[index]
-        val download = if (chapter.id in series.kept) AkiMenuItem("Delete download", "trash", destructive = true) { series.removeDownload(chapter) }
-        else AkiMenuItem("Download", "download") { scope.launch { series.download(listOf(chapter)) } }
+        val download = if (chapter.id in series.kept) AkiMenuItem(Copy.Series.deleteDownload, "trash", destructive = true) { series.removeDownload(chapter) }
+        else AkiMenuItem(Copy.Series.download, "download") { scope.launch { series.download(listOf(chapter)) } }
         SheetRow {
             AkiTapMenu(listOf(download), onClick = { openChapter(chapter) }) {
                 AkiListCard(
                     series.cover, series.label(chapter), chapterName(chapter.number, chapter.title),
                     badges = listOfNotNull(shortDate(chapter.dateMs), chapter.scanlator), dimmed = chapter.finished,
-                ) { if (series.isLocked(chapter)) LockMark(if (series.asksToSignIn(chapter)) "Locked, sign in to read" else "Locked") else ReadMark(chapter, series) }
+                ) { if (series.isLocked(chapter)) LockMark(if (series.asksToSignIn(chapter)) Copy.Series.lockedSignInAndroid else Copy.Series.locked) else ReadMark(chapter, series) }
             }
         }
     }
@@ -286,19 +286,19 @@ private fun LockMark(label: String) {
 
 @Composable
 private fun ReadMark(chapter: ChapterEntry, series: SeriesModel) {
-    Box(Modifier.size(48.dp).akiPress(label = "Mark ${chapterName(chapter.number, chapter.title)} as ${if (chapter.finished) "unread" else "read"}") { series.toggleRead(chapter) }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(48.dp).akiPress(label = if (chapter.finished) Copy.Series.markAsUnreadAndroid(chapterName(chapter.number, chapter.title)) else Copy.Series.markAsReadAndroid(chapterName(chapter.number, chapter.title))) { series.toggleRead(chapter) }, contentAlignment = Alignment.Center) {
         AkiIcon(if (chapter.finished) "check-solid" else "check", size = 22.dp, tone = if (chapter.finished) AkiTone.Text else AkiTone.Muted)
     }
 }
 
 private fun LazyListScope.bookmarkRows(series: SeriesModel, open: (ReaderTarget) -> Unit) {
-    if (series.bookmarks.isEmpty()) sheetItem { AkiEmptyState("No bookmarks yet", "Bookmark a page while you read and it appears here.", Modifier.heightIn(min = 260.dp)) }
+    if (series.bookmarks.isEmpty()) sheetItem { AkiEmptyState(Copy.Series.noBookmarksYet, Copy.Series.bookmarkHint, Modifier.heightIn(min = 260.dp)) }
     items(series.bookmarks.size) { index ->
         val mark = series.bookmarks[index]
         SheetRow {
             AkiTap({ open(ReaderTarget(mark.chapter, mark.page.toInt(), mark.offset)) }) {
-                AkiListCard(series.cover, "Page ${mark.page + 1u}", chapterName(mark.chapterNumber, mark.chapterTitle), badges = listOfNotNull(shortDate(mark.createdMs))) {
-                    Box(Modifier.size(48.dp).akiPress(label = "Remove bookmark on page ${mark.page + 1u}") { series.removeBookmark(mark) }, contentAlignment = Alignment.Center) { AkiIcon("trash", size = 22.dp, tone = AkiTone.Muted) }
+                AkiListCard(series.cover, Copy.Series.pageNumber((mark.page + 1u).toInt()), chapterName(mark.chapterNumber, mark.chapterTitle), badges = listOfNotNull(shortDate(mark.createdMs))) {
+                    Box(Modifier.size(48.dp).akiPress(label = Copy.Series.removeBookmarkAndroid((mark.page + 1u).toInt())) { series.removeBookmark(mark) }, contentAlignment = Alignment.Center) { AkiIcon("trash", size = 22.dp, tone = AkiTone.Muted) }
                 }
             }
         }
@@ -315,15 +315,15 @@ private fun Details(series: SeriesModel) {
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AkiText(description, AkiTextStyle.Body, lines = if (expanded) null else 6)
-                    AkiButton(if (expanded) "Show less" else "Show more", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small) { expanded = !expanded }
+                    AkiButton(if (expanded) Copy.Series.showLess else Copy.Home.showMore, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small) { expanded = !expanded }
                 }
             }
         }
         AkiCard(padding = 4.dp) {
-            Info("Status", series.statusText ?: "Unknown")
-            Info("Author", detail?.authors?.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "Unknown")
-            Info("Source", app.name(series.ref.source))
-            Info("Chapters", NumberFormat.getInstance().format(series.chapters.size))
+            Info(Copy.Series.status, series.statusText ?: Copy.Series.unknown)
+            Info(Copy.Series.author, detail?.authors?.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: Copy.Series.unknown)
+            Info(Copy.Series.source, app.name(series.ref.source))
+            Info(Copy.Series.chapters, NumberFormat.getInstance().format(series.chapters.size))
         }
         if (detail != null && detail.tags.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { for (tag in detail.tags) AkiBadge(tag) }
     }

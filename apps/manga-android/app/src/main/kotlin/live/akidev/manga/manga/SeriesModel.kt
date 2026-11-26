@@ -9,6 +9,7 @@ import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.SeriesRef
 import live.akidev.manga.app.describe
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.Bookmark
 import uniffi.akimanga.ChapterEntry
 import uniffi.akimanga.Detail
@@ -59,10 +60,10 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
 
     val statusText
         get() = when (detail?.status) {
-            uniffi.akimanga.Status.ONGOING -> "Ongoing"
-            uniffi.akimanga.Status.COMPLETED -> "Completed"
-            uniffi.akimanga.Status.HIATUS -> "Hiatus"
-            uniffi.akimanga.Status.CANCELLED -> "Cancelled"
+            uniffi.akimanga.Status.ONGOING -> Copy.Series.ongoing
+            uniffi.akimanga.Status.COMPLETED -> Copy.Series.completed
+            uniffi.akimanga.Status.HIATUS -> Copy.Series.hiatus
+            uniffi.akimanga.Status.CANCELLED -> Copy.Series.cancelled
             else -> null
         }
 
@@ -75,7 +76,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
         }
         val started = list.any { it.finished || it.page != null }
         val name = chapterName(chapter.number, chapter.title)
-        resumable = Resumable(ReaderTarget(resume.chapter, resume.page.toInt(), resume.offset), if (started) "Continue · $name" else "Start · $name")
+        resumable = Resumable(ReaderTarget(resume.chapter, resume.page.toInt(), resume.offset), if (started) Copy.Series.continueSeries(name) else Copy.Series.startSeries(name))
         // Only for a series the person keeps or has begun: browsing past one should not cost the site a request.
         if (started || saved) fetchPagesAhead(resume.chapter)
     }
@@ -122,8 +123,8 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             // Seen in the last ten minutes: the stored details are enough, unless there are none.
             val fetchedDetail = if (fresh && detail != null) null else async { runCatching { engine.details(ref.source, ref.id) } }
             val fetchedChapters = if (fresh) null else async { runCatching { engine.chapters(ref.source, ref.id) } }
-            fetchedDetail?.await()?.fold({ detail = it }, { if (detail == null) error = describe(it, "Could not load this series") })
-            fetchedChapters?.await()?.fold({ showChapters(it.entries) }, { if (chapters.isEmpty()) error = describe(it, "Could not load the chapters") })
+            fetchedDetail?.await()?.fold({ detail = it }, { if (detail == null) error = describe(it, Copy.Series.couldNotLoadSeries) })
+            fetchedChapters?.await()?.fold({ showChapters(it.entries) }, { if (chapters.isEmpty()) error = describe(it, Copy.Series.couldNotLoadChapters) })
         }
         loading = false
         loadBookmarks()
@@ -158,7 +159,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             try { engine.downloadChapter(ref.source, ref.id, chapter.id) } catch (failure: Exception) { failed += 1 }
             loadKept()
         }
-        if (failed > 0) problem = (if (failed == 1) "1 chapter could not be downloaded." else "$failed chapters could not be downloaded.") + " Check your connection and try again."
+        if (failed > 0) problem = Copy.Series.chaptersNotDownloaded(failed)
         return failed == 0
     }
 
@@ -181,7 +182,7 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
             saved = !saved
             app.refresh()
         } catch (failure: Exception) {
-            error = describe(failure, "Could not update your library")
+            error = describe(failure, Copy.Series.couldNotUpdateLibrary)
         }
         return saved
     }
@@ -236,12 +237,12 @@ class SeriesModel(private val app: AppModel, val ref: SeriesRef) {
     /** The small line over a chapter's title: where you are in it, or what it is. */
     fun label(chapter: ChapterEntry): String {
         val downloaded = chapter.id in kept
-        if (chapter.finished) return if (downloaded) "Read · Downloaded" else "Read"
-        if (downloaded) return "Downloaded"
-        chapter.page?.let { return "Page ${it + 1u}" }
-        if (isLocked(chapter)) return source?.lockedLabel ?: "Locked"
-        val number = chapter.number?.let { "Chapter " + chapterName(it, null).removePrefix("Chapter ") }
+        if (chapter.finished) return if (downloaded) Copy.Series.readDownloaded else Copy.Series.read
+        if (downloaded) return Copy.Series.downloaded
+        chapter.page?.let { return Copy.Series.pageNumber((it + 1u).toInt()) }
+        if (isLocked(chapter)) return source?.lockedLabel ?: Copy.Series.locked
+        val number = chapter.number?.let { chapterName(it, null) }
         if (number != null && chapter.title?.contains(number, ignoreCase = true) == false) return number
-        return "Unread"
+        return Copy.Home.unread
     }
 }
