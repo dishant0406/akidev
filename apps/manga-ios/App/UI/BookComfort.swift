@@ -5,7 +5,13 @@ import UIKit
 enum BookWarmth: String, Codable, CaseIterable {
     case off, always, night
 
-    var title: String { self == .night ? "At night" : rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .off: Copy.Books.WarmthName.off
+        case .always: Copy.Books.WarmthName.always
+        case .night: Copy.Books.WarmthName.night
+        }
+    }
 
     /// Night is a clock window, so no location is asked for.
     func isOn(at date: Date) -> Bool {

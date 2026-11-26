@@ -23,15 +23,15 @@ struct BooksHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    AkiHeader(title: "Home", subtitle: books.isEmpty ? "Your reading" : (books.count == 1 ? "1 book" : "\(books.count) books")) {
-                        AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { model.tab = .books; model.addingBook = true }
+                    AkiHeader(title: Copy.Home.home, subtitle: books.isEmpty ? Copy.Books.yourReading : Copy.Library.bookCount(books.count)) {
+                        AkiIconButton(symbol: "add", label: Copy.Books.addBooks, tint: Aki.primary) { model.tab = .books; model.addingBook = true }
                     }
                     if loaded && books.isEmpty {
-                        AkiEmptyState(title: "Your library is empty", message: "Add EPUB files from your device, or download books from a catalogue.", action: ("Add books", { model.tab = .books; model.addingBook = true }), secondary: ("Find a catalogue", { model.tab = .browse })).frame(minHeight: 340)
+                        AkiEmptyState(title: Copy.Library.libraryEmpty, message: Copy.Books.emptyLibraryMessage, action: (Copy.Books.addBooks, { model.tab = .books; model.addingBook = true }), secondary: (Copy.Books.findCatalogue, { model.tab = .browse })).frame(minHeight: 340)
                     }
                     if let current { continueCard(current) }
                     if !unread.isEmpty {
-                        AkiShelf(title: "Not started", subtitle: "Added, never opened") {
+                        AkiShelf(title: Copy.Books.notStarted, subtitle: Copy.Books.addedNeverOpened) {
                             ForEach(unread.prefix(12), id: \.id) { book in poster(book, caption: book.authors.first) }
                         }
                     }
@@ -41,11 +41,11 @@ struct BooksHomeView: View {
                         }
                     }
                     if !highlights.isEmpty {
-                        AkiSection(title: "Recent highlights") {
+                        AkiSection(title: Copy.Books.recentHighlights) {
                             ForEach(highlights.prefix(3), id: \.highlight.id) { found in
                                 AkiTap(action: { open(found) }) { highlightCard(found) }
                             }
-                            AkiLink(value: HighlightsRoute()) { AkiButton("Show all highlights", icon: "forward", fullWidth: true, action: {}).allowsHitTesting(false) }
+                            AkiLink(value: HighlightsRoute()) { AkiButton(Copy.Books.showAllHighlights, icon: "forward", fullWidth: true, action: {}).allowsHitTesting(false) }
                         }
                     }
                     catalogueSection
@@ -70,7 +70,7 @@ struct BooksHomeView: View {
                         .frame(width: 84)
                         .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
                     VStack(alignment: .leading, spacing: 8) {
-                        AkiText("Continue reading", .eyebrow, tone: .muted)
+                        AkiText(Copy.Home.continueReading, .eyebrow, tone: .muted)
                         AkiText(book.title, .heading, lines: 2)
                         if let author = book.authors.first { AkiText(author, .caption, tone: .muted, lines: 1) }
                         AkiProgressBar(fraction: book.progress)
@@ -105,18 +105,18 @@ struct BooksHomeView: View {
     }
 
     private func progressLine(_ book: BookInfo) -> String {
-        if book.finished { return "Finished" }
-        return book.openedMs == nil ? "New" : bookPercent(book.progress)
+        if book.finished { return Copy.Library.finished }
+        return book.openedMs == nil ? Copy.Books.new : bookPercent(book.progress)
     }
 
     @ViewBuilder private var catalogueSection: some View {
-        AkiSection(title: "Catalogues", footer: "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
+        AkiSection(title: Copy.Books.catalogues, footer: Copy.Books.catalogueFooter) {
             ForEach(catalogues, id: \.url) { catalogue in
                 AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
                     AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
                 }
             }
-            AkiButton(catalogues.isEmpty ? "Add a book catalogue" : "Manage catalogues", icon: "add", fullWidth: true) { model.tab = .browse }
+            AkiButton(catalogues.isEmpty ? Copy.Books.addBookCatalogue : Copy.Books.manageCatalogues, icon: "add", fullWidth: true) { model.tab = .browse }
         }
     }
 

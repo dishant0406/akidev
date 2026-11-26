@@ -9,29 +9,29 @@ struct BookSettingsSheet: View {
         @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                AkiText("Text and theme", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Books.textAndTheme, .title).accessibilityAddTraits(.isHeader)
                 BookThemePicker(selection: $model.style.theme)
                 VStack(alignment: .leading, spacing: 10) {
-                    AkiText("Reading", .captionStrong, tone: .muted).accessibilityAddTraits(.isHeader)
-                    AkiTabs(items: [(false, "Pages"), (true, "Scroll")], selection: $model.style.scroll)
+                    AkiText(Copy.Library.reading, .captionStrong, tone: .muted).accessibilityAddTraits(.isHeader)
+                    AkiTabs(items: [(false, Copy.Books.pages), (true, Copy.Books.scroll)], selection: $model.style.scroll)
                 }
                 AkiCard(padding: 16) {
                     VStack(spacing: 18) {
-                        AkiSelect(title: "Font", selection: $model.style.font, options: BookFont.allCases.map { ($0, $0.title) })
-                        stepper("Text size", value: $model.style.size, range: BookStyle.sizes, small: "A", large: "A", spoken: "\(Int(model.style.size.rounded())) points")
-                        stepper("Line spacing", value: $model.style.lineSpacing, range: BookStyle.spacings, small: "−", large: "+", spoken: model.style.lineSpacing.formatted(.number.precision(.fractionLength(2))))
+                        AkiSelect(title: Copy.Books.font, selection: $model.style.font, options: BookFont.allCases.map { ($0, $0.title) })
+                        stepper(Copy.Books.textSize, value: $model.style.size, range: BookStyle.sizes, small: "A", large: "A", spoken: Copy.Books.textSizeSpoken(Int(model.style.size.rounded())))
+                        stepper(Copy.Books.lineSpacing, value: $model.style.lineSpacing, range: BookStyle.spacings, small: "−", large: "+", spoken: model.style.lineSpacing.formatted(.number.precision(.fractionLength(2))))
                     }
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    AkiText("Margins", .captionStrong, tone: .muted).accessibilityAddTraits(.isHeader)
+                    AkiText(Copy.Books.margins, .captionStrong, tone: .muted).accessibilityAddTraits(.isHeader)
                     AkiTabs(items: BookMargin.allCases.map { ($0, $0.title) }, selection: $model.style.margin)
                 }
                 light($model)
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {
-                        AkiSwitch(title: "Justify text", isOn: $model.style.justify)
-                        AkiSwitch(title: "Hyphenate long words", subtitle: "Fewer gaps in justified lines.", isOn: $model.style.hyphenate)
-                        AkiSwitch(title: "Use the book’s fonts", subtitle: "For headings and special text, when the book carries its own.", isOn: $model.style.bookFonts)
+                        AkiSwitch(title: Copy.Books.justifyText, isOn: $model.style.justify)
+                        AkiSwitch(title: Copy.Books.hyphenateTitle, subtitle: Copy.Books.hyphenateSubtitle, isOn: $model.style.hyphenate)
+                        AkiSwitch(title: Copy.Books.bookFontsTitle, subtitle: Copy.Books.bookFontsSubtitle, isOn: $model.style.bookFonts)
                     }
                 }
             }
@@ -43,21 +43,21 @@ struct BookSettingsSheet: View {
     private func light(_ model: Bindable<BookModel>) -> some View {
         AkiCard(padding: 16) {
             VStack(alignment: .leading, spacing: 18) {
-                AkiSwitch(title: "Set the brightness here", subtitle: "Goes lower than the phone’s lowest, and is given back when you close the book.", isOn: Binding(
+                AkiSwitch(title: Copy.Books.brightnessHereTitle, subtitle: Copy.Books.brightnessHereSubtitle, isOn: Binding(
                     get: { model.wrappedValue.style.brightness != nil },
                     set: { model.wrappedValue.style.brightness = $0 ? 0.6 : nil }
                 ))
                 if let brightness = model.wrappedValue.style.brightness {
-                    stepper("Brightness", value: Binding(get: { brightness }, set: { model.wrappedValue.style.brightness = $0 }), range: 0...1, small: "−", large: "+")
+                    stepper(Copy.Books.brightness, value: Binding(get: { brightness }, set: { model.wrappedValue.style.brightness = $0 }), range: 0...1, small: "−", large: "+")
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    AkiText("Warm tint", .bodyStrong).accessibilityAddTraits(.isHeader)
+                    AkiText(Copy.Books.warmTint, .bodyStrong).accessibilityAddTraits(.isHeader)
                     AkiTabs(items: BookWarmth.allCases.map { ($0, $0.title) }, selection: model.style.warmth)
                 }
                 if model.wrappedValue.style.warmth != .off {
-                    stepper("Warmth", value: model.style.warmthAmount, range: 0.1...0.8, small: "−", large: "+")
+                    stepper(Copy.Books.warmth, value: model.style.warmthAmount, range: 0.1...0.8, small: "−", large: "+")
                 }
-                AkiSwitch(title: "Ink display", subtitle: "Grey, still and quiet like paper: no page-turn motion.", isOn: model.style.ink)
+                AkiSwitch(title: Copy.Books.inkTitle, subtitle: Copy.Books.inkSubtitle, isOn: model.style.ink)
             }
         }
     }
@@ -71,7 +71,7 @@ struct BookSettingsSheet: View {
             HStack(spacing: 12) {
                 AkiText(small, .caption, tone: .muted).accessibilityHidden(true)
                 AkiSlider(value: value, range: range, label: title)
-                    .accessibilityValue(spoken ?? "\(Int(((value.wrappedValue - range.lowerBound) / (range.upperBound - range.lowerBound) * 100).rounded())) percent")
+                    .accessibilityValue(spoken ?? Copy.Books.percentSpoken(Int(((value.wrappedValue - range.lowerBound) / (range.upperBound - range.lowerBound) * 100).rounded())))
                 AkiText(large, .heading, tone: .muted).accessibilityHidden(true)
             }
         }
@@ -95,22 +95,22 @@ struct BookContentsSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
-                        AkiText(tab == .contents ? "Contents" : tab == .marks ? "Highlights" : "About", .title).accessibilityAddTraits(.isHeader)
+                        AkiText(tab == .contents ? Copy.Books.contents : tab == .marks ? Copy.Books.highlights : Copy.Books.about, .title).accessibilityAddTraits(.isHeader)
                         AkiText(model.info.title, .caption, tone: .muted, lines: 1)
                     }
-                    AkiTabs(items: [(Tab.contents, "Contents"), (Tab.marks, "Highlights"), (Tab.about, "About")], selection: $tab)
+                    AkiTabs(items: [(Tab.contents, Copy.Books.contents), (Tab.marks, Copy.Books.highlights), (Tab.about, Copy.Books.about)], selection: $tab)
                     switch tab {
                     case .contents:
                         LazyVStack(spacing: 10) {
                             if hasFront {
-                                fold("Before the book", count: frontCount, open: $showFront)
+                                fold(Copy.Books.beforeTheBook, count: frontCount, open: $showFront)
                                 if showFront { ForEach(indices(of: .front), id: \.self) { index in row(model.contents[index], current: index == currentIndex).id(index) } }
                             }
                             ForEach(indices(of: .body), id: \.self) { index in
                                 row(model.contents[index], current: index == currentIndex).id(index)
                             }
                             if hasBack {
-                                fold("After the book", count: backCount, open: $showBack)
+                                fold(Copy.Books.afterTheBook, count: backCount, open: $showBack)
                                 if showBack { ForEach(indices(of: .back), id: \.self) { index in row(model.contents[index], current: index == currentIndex).id(index) } }
                             }
                         }
@@ -158,19 +158,19 @@ struct BookContentsSheet: View {
     private func fold(_ title: String, count: Int, open: Binding<Bool>) -> some View {
         AkiTap(action: { open.wrappedValue.toggle() }) {
             HStack {
-                AkiText("\(title) · \(count)", .captionStrong, tone: .muted, digits: true)
+                AkiText(Copy.Books.sectionTitleCount(title, count), .captionStrong, tone: .muted, digits: true)
                 Spacer(minLength: 8)
                 AkiIcon(open.wrappedValue ? "down" : "forward", size: 12, tone: .muted)
             }
             .padding(.horizontal, 18).padding(.vertical, 10)
             .contentShape(Rectangle())
         }
-        .accessibilityValue(open.wrappedValue ? "Expanded" : "Collapsed")
+        .accessibilityValue(open.wrappedValue ? Copy.Books.expanded : Copy.Books.collapsed)
     }
 
     @ViewBuilder private var marks: some View {
         if model.marks.isEmpty {
-            AkiEmptyState(title: "No highlights yet", message: "Press and hold a word in the book, then drag the handles to choose what to highlight.").frame(minHeight: 240)
+            AkiEmptyState(title: Copy.Books.noHighlightsTitle, message: Copy.Books.noHighlightsInBookMessage).frame(minHeight: 240)
         } else {
             LazyVStack(spacing: 10) {
                 ForEach(model.marks, id: \.id) { mark in
@@ -188,10 +188,10 @@ struct BookContentsSheet: View {
                         .background(Aki.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
-                    .akiContextMenu([AkiMenuItem(title: "Remove highlight", icon: "trash", destructive: true) { model.remove(mark) }])
+                    .akiContextMenu([AkiMenuItem(title: Copy.Books.removeHighlight, icon: "trash", destructive: true) { model.remove(mark) }])
                 }
             }
-            if let exported { AkiShare(title: "Share as Markdown", icon: "share", file: exported) }
+            if let exported { AkiShare(title: Copy.Books.shareAsMarkdown, icon: "share", file: exported) }
         }
     }
 
@@ -228,14 +228,14 @@ struct BookSearchSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Search", .title).accessibilityAddTraits(.isHeader)
-                AkiInput(placeholder: "Search this book", text: $query, icon: "search", onSubmit: run, onClear: { task?.cancel(); hits = []; asked = ""; searching = false })
+                AkiText(Copy.Books.search, .title).accessibilityAddTraits(.isHeader)
+                AkiInput(placeholder: Copy.Books.searchThisBook, text: $query, icon: "search", onSubmit: run, onClear: { task?.cancel(); hits = []; asked = ""; searching = false })
                 if searching && hits.isEmpty {
                     AkiSpinner().frame(maxWidth: .infinity, minHeight: 80)
                 } else if !asked.isEmpty && hits.isEmpty {
-                    AkiText("No results for “\(asked)”.", .body, tone: .muted)
+                    AkiText(Copy.Books.noResultsFor(asked), .body, tone: .muted)
                 } else if hits.first?.similar == true {
-                    AkiText("No exact match. These are the closest words.", .caption, tone: .muted)
+                    AkiText(Copy.Books.noExactMatch, .caption, tone: .muted)
                 }
                 LazyVStack(spacing: 10) {
                     ForEach(Array(hits.enumerated()), id: \.offset) { _, hit in
@@ -269,7 +269,7 @@ struct BookSearchSheet: View {
             guard !Task.isCancelled else { return }
             hits = found
             searching = false
-            akiAnnounce(found.isEmpty ? "No results" : found.count == 1 ? "1 result" : "\(found.count) results")
+            akiAnnounce(found.isEmpty ? Copy.Home.noResults : Copy.Books.resultCount(found.count))
         }
     }
 }
@@ -283,10 +283,10 @@ struct BookNoteSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Note", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Books.note, .title).accessibilityAddTraits(.isHeader)
                 AkiText(draft.quote, .caption, tone: .muted, lines: 4)
-                AkiTextArea(text: $draft.text, height: 140, prose: true, label: "Note")
-                AkiButton("Save note", variant: .primary, size: .large, fullWidth: true) { model.saveNote(draft); close() }
+                AkiTextArea(text: $draft.text, height: 140, prose: true, label: Copy.Books.note)
+                AkiButton(Copy.Books.saveNote, variant: .primary, size: .large, fullWidth: true) { model.saveNote(draft); close() }
             }
             .padding(24)
         }
@@ -302,9 +302,9 @@ struct BookFootnoteSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiText("Footnote", .title).accessibilityAddTraits(.isHeader)
+                AkiText(Copy.Books.footnote, .title).accessibilityAddTraits(.isHeader)
                 AkiText(note.text, .body)
-                AkiButton("Go to footnote", icon: "forward", fullWidth: true) {
+                AkiButton(Copy.Books.goToFootnote, icon: "forward", fullWidth: true) {
                     close()
                     Task { await model.follow(inBook: note.link) }
                 }
@@ -338,11 +338,11 @@ struct BookAboutView: View {
                 Spacer(minLength: 0)
             }
             HStack(spacing: 10) {
-                AkiButton("Use this page as the cover", icon: "image", size: .small) { Task { await model.useCurrentPageAsCover() } }
-                if model.info.customCover { AkiButton("Use original cover", size: .small) { model.useOwnCover() } }
+                AkiButton(Copy.Reader.useCoverPage, icon: "image", size: .small) { Task { await model.useCurrentPageAsCover() } }
+                if model.info.customCover { AkiButton(Copy.Books.useOriginalCover, size: .small) { model.useOwnCover() } }
             }
             if model.aboutPages.isEmpty {
-                AkiText("This book has no extra pages, such as a copyright page or notes.", .caption, tone: .muted)
+                AkiText(Copy.Books.noAboutPages, .caption, tone: .muted)
             }
             LazyVStack(spacing: 10) {
                 // A page that is only a picture (a title page) has nothing to read here.
@@ -359,7 +359,7 @@ struct BookAboutView: View {
         var parts: [String] = []
         if let language = model.info.language { parts.append(language.uppercased()) }
         parts.append(bookSize(model.info.bytes))
-        parts.append(model.chapterCount == 1 ? "1 part" : "\(model.chapterCount) parts")
+        parts.append(Copy.Books.partCount(model.chapterCount))
         return parts.joined(separator: " · ")
     }
 
@@ -369,18 +369,18 @@ struct BookAboutView: View {
         return VStack(alignment: .leading, spacing: 10) {
             AkiTap(action: { toggle(chapter) }) {
                 HStack {
-                    AkiText(text.map { model.pageTitle(chapter, text: $0) } ?? model.contents.first { Int($0.chapter) == chapter }?.title ?? "Page \(chapter + 1)", .bodyStrong, lines: 2)
+                    AkiText(text.map { model.pageTitle(chapter, text: $0) } ?? model.contents.first { Int($0.chapter) == chapter }?.title ?? Copy.Series.pageNumber(chapter + 1), .bodyStrong, lines: 2)
                     Spacer(minLength: 8)
                     AkiIcon(open ? "down" : "forward", size: 12, tone: .muted)
                 }
                 .contentShape(Rectangle())
             }
-            .accessibilityValue(open ? "Expanded" : "Collapsed")
+            .accessibilityValue(open ? Copy.Books.expanded : Copy.Books.collapsed)
             if open {
                 if let text {
                     // A long page (notes) shows its start: the rest is in the book.
                     AkiText(String(text.prefix(1800)) + (text.count > 1800 ? "…" : ""), .body, tone: .muted)
-                    AkiButton("Open in book", icon: "forward", size: .small) { model.open(BookEntry(title: "", depth: 0, chapter: UInt32(chapter), anchor: nil)); close() }
+                    AkiButton(Copy.Books.openInBook, icon: "forward", size: .small) { model.open(BookEntry(title: "", depth: 0, chapter: UInt32(chapter), anchor: nil)); close() }
                 } else {
                     AkiSpinner().frame(maxWidth: .infinity)
                 }

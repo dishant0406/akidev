@@ -27,22 +27,22 @@ struct CatalogueView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                AkiBackHeader(title: searched.map { "“\($0)”" } ?? ref.name, subtitle: feed == nil ? nil : "\(items.count) shown", back: { dismiss() })
+                AkiBackHeader(title: searched.map { "“\($0)”" } ?? ref.name, subtitle: feed == nil ? nil : Copy.Books.shownCount(items.count), back: { dismiss() })
                 if search != nil {
-                    AkiInput(placeholder: "Search this catalogue", text: $term, icon: "search", onSubmit: { Task { await run() } }, onClear: { searched = nil; Task { await load(ref.url) } })
+                    AkiInput(placeholder: Copy.Books.searchThisCatalogue, text: $term, icon: "search", onSubmit: { Task { await run() } }, onClear: { searched = nil; Task { await load(ref.url) } })
                 }
                 if let failure {
-                    AkiEmptyState(title: failure.title, message: failure.message, action: ("Try again", { Task { await load(searched == nil ? ref.url : nil) } })).frame(minHeight: 260)
+                    AkiEmptyState(title: failure.title, message: failure.message, action: (Copy.Home.tryAgain, { Task { await load(searched == nil ? ref.url : nil) } })).frame(minHeight: 260)
                 } else if feed == nil {
                     AkiSpinner().frame(maxWidth: .infinity, minHeight: 200)
                 } else if items.isEmpty {
-                    AkiEmptyState(title: "Nothing here", message: "This page of the catalogue has no books.").frame(minHeight: 240)
+                    AkiEmptyState(title: Copy.Library.nothingHere, message: Copy.Books.catalogueEmpty).frame(minHeight: 240)
                 }
                 LazyVStack(spacing: 12) {
                     ForEach(Array(items.enumerated()), id: \.offset) { _, item in CatalogueItemRow(item: item, search: search) }
                 }
                 if let next {
-                    if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton("Show more", fullWidth: true) { Task { await more(next) } } }
+                    if loadingMore { AkiSpinner().frame(maxWidth: .infinity) } else { AkiButton(Copy.Home.showMore, fullWidth: true) { Task { await more(next) } } }
                 }
             }
             .akiPage(narrow: true)
@@ -63,7 +63,7 @@ struct CatalogueView: View {
             feed = found
             items = found.items
             next = found.next
-        } catch { failure = describe(error, "Could not load this catalogue") }
+        } catch { failure = describe(error, Copy.Books.couldNotLoadCatalogue) }
     }
 
     private func run() async {
@@ -80,7 +80,7 @@ struct CatalogueView: View {
         } catch {
             feed = CatalogueFeed(title: "", items: [], next: nil, search: search)
             items = []
-            failure = describe(error, "Could not load this catalogue")
+            failure = describe(error, Copy.Books.couldNotLoadCatalogue)
         }
     }
 
@@ -91,7 +91,7 @@ struct CatalogueView: View {
             let found = try await model.engine.catalogueFeed(url: url)
             items += found.items
             next = found.next
-        } catch { problem = describe(error, "Could not load more books") }
+        } catch { problem = describe(error, Copy.Books.couldNotLoadMore) }
     }
 }
 
@@ -109,16 +109,16 @@ struct CatalogueItemRow: View {
             if let get = item.get {
                 AkiListCard(thumbnail: item.cover, label: item.author ?? "", title: item.title) {
                     if got {
-                        AkiBadge("In your library", icon: "tick")
+                        AkiBadge(Copy.Books.inYourLibrary, icon: "tick")
                     } else if getting {
-                        AkiSpinner().accessibilityLabel("Downloading")
+                        AkiSpinner().accessibilityLabel(Copy.Series.downloading)
                     } else {
-                        AkiButton("Download", variant: .primary, size: .small) { Task { await fetch(get) } }.accessibilityLabel("Download \(item.title)")
+                        AkiButton(Copy.Series.download, variant: .primary, size: .small) { Task { await fetch(get) } }.accessibilityLabel(Copy.Books.downloadTitle(item.title))
                     }
                 }
             } else if let open = item.open {
                 AkiLink(value: CatalogueRef(url: open, name: item.title, search: search)) {
-                    AkiListCard(thumbnail: item.cover, label: item.author ?? "Open", title: item.title) { AkiIcon("forward", size: 13, tone: .muted) }
+                    AkiListCard(thumbnail: item.cover, label: item.author ?? Copy.Books.openItem, title: item.title) { AkiIcon("forward", size: 13, tone: .muted) }
                 }
             }
         }
@@ -131,7 +131,7 @@ struct CatalogueItemRow: View {
         do {
             _ = try await model.engine.getBook(url: url)
             got = true
-            akiAnnounce("\(item.title) is in your library")
-        } catch { problem = describe(error, "Could not download this book") }
+            akiAnnounce(Copy.Books.isInLibrary(item.title))
+        } catch { problem = describe(error, Copy.Books.couldNotDownload) }
     }
 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.Problem
+import live.akidev.manga.design.Copy
 import live.akidev.manga.listen.BookListener
 import uniffi.akimanga.BookAlign
 import uniffi.akimanga.BookBlock
@@ -411,7 +412,7 @@ class BookModel private constructor(
     /** Takes the place of a chapter that cannot be read, so the book still opens and turns. */
     private val unreadable = BookChapter(
         blocks = listOf(
-            BookBlock(0u, BookKind.Text(listOf(BookRun("This part of the book could not be read.", false, true, false, false, false, false, 0, 1f, null, null))), 0u.toUByte(), BookAlign.CENTER, 0f, 0f, 0f, false),
+            BookBlock(0u, BookKind.Text(listOf(BookRun(Copy.Books.partUnreadable, false, true, false, false, false, false, 0, 1f, null, null))), 0u.toUByte(), BookAlign.CENTER, 0f, 0f, 0f, false),
         ),
         anchors = emptyList(), fonts = emptyList(), vertical = false,
     )

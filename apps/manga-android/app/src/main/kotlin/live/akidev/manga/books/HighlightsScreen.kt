@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.BookHighlightIn
 
 /** Everything the person highlighted or wrote a note on, in every book, newest first. Tapping one opens the book there. */
@@ -28,8 +29,8 @@ fun HighlightsScreen(open: (BookHighlightIn) -> Unit) {
     LaunchedEffect(Unit) { found = withContext(Dispatchers.Default) { runCatching { app.engine.recentHighlights(500u) }.getOrDefault(emptyList()) } }
 
     AkiPage(underTabBar = false, spacing = 14.dp) {
-        item { AkiBackHeader("Highlights", back = router::back, subtitle = if (found.size == 1) "1 highlight" else "${found.size} highlights") }
-        if (found.isEmpty()) item { AkiEmptyState("No highlights yet", "Press and hold a word in a book, drag the handles to choose text, then pick a colour or choose Note.", Modifier.heightIn(min = 300.dp)) }
+        item { AkiBackHeader(Copy.Books.highlights, back = router::back, subtitle = Copy.Books.highlightCount(found.size)) }
+        if (found.isEmpty()) item { AkiEmptyState(Copy.Books.noHighlightsTitle, Copy.Books.noHighlightsMessageAndroid, Modifier.heightIn(min = 300.dp)) }
         items(found.size, key = { found[it].highlight.id }) { index ->
             val item = found[index]
             AkiTap({ router.back(); open(item) }) {

@@ -26,6 +26,7 @@ import live.akidev.manga.app.HighlightsRoute
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.BookHighlightIn
 import uniffi.akimanga.BookInfo
 import uniffi.akimanga.CatalogueInfo
@@ -67,22 +68,22 @@ fun BooksHomeScreen() {
 
     AkiPage(narrow = false, spacing = 26.dp) {
         item {
-            AkiHeader("Home", subtitle = if (books.isEmpty()) "Your reading" else if (books.size == 1) "1 book" else "${books.size} books") {
-                AkiIconButton("add", "Add books", tint = Aki.colors.primary) { app.tab = AppTab.Books; app.addingBook = true }
+            AkiHeader(Copy.Home.home, subtitle = if (books.isEmpty()) Copy.Books.yourReading else Copy.Library.bookCount(books.size)) {
+                AkiIconButton("add", Copy.Books.addBooks, tint = Aki.colors.primary) { app.tab = AppTab.Books; app.addingBook = true }
             }
         }
         if (loaded && books.isEmpty()) {
             item {
                 AkiEmptyState(
-                    "Your library is empty", "Add EPUB files from your device, or download books from a catalogue.", Modifier.heightIn(min = 340.dp),
-                    action = AkiAction("Add books") { app.tab = AppTab.Books; app.addingBook = true }, secondary = AkiAction("Find a catalogue") { app.tab = AppTab.Browse },
+                    Copy.Library.libraryEmpty, Copy.Books.emptyLibraryMessage, Modifier.heightIn(min = 340.dp),
+                    action = AkiAction(Copy.Books.addBooks) { app.tab = AppTab.Books; app.addingBook = true }, secondary = AkiAction(Copy.Books.findCatalogue) { app.tab = AppTab.Browse },
                 )
             }
         }
         current?.let { book -> item { ContinueCard(book) { reading(book) } } }
         if (unread.isNotEmpty()) {
             item {
-                AkiShelf("Not started", subtitle = "Added, never opened") {
+                AkiShelf(Copy.Books.notStarted, subtitle = Copy.Books.addedNeverOpened) {
                     items(unread.take(12).size, key = { unread[it].id }) { index ->
                         val book = unread[index]
                         AkiTap({ reading(book) }) { AkiPoster(book.title, book.cover, caption = book.authors.firstOrNull()) }
@@ -103,18 +104,18 @@ fun BooksHomeScreen() {
         }
         if (highlights.isNotEmpty()) {
             item {
-                AkiSection("Recent highlights") {
+                AkiSection(Copy.Books.recentHighlights) {
                     for (found in highlights.take(3)) AkiTap({ open(found) }) { HighlightCard(found) }
-                    AkiButton("Show all highlights", icon = "forward", fullWidth = true) { router.push(HighlightsRoute { open(it) }) }
+                    AkiButton(Copy.Books.showAllHighlights, icon = "forward", fullWidth = true) { router.push(HighlightsRoute { open(it) }) }
                 }
             }
         }
         item {
-            AkiSection("Catalogues", footer = "Download books from a catalogue you add (an OPDS feed). Akidev does not include or endorse any.") {
+            AkiSection(Copy.Books.catalogues, footer = Copy.Books.catalogueFooter) {
                 for (catalogue in catalogues) {
                     AkiTap({ router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) { AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true) }
                 }
-                AkiButton(if (catalogues.isEmpty()) "Add a book catalogue" else "Manage catalogues", icon = "add", fullWidth = true) { app.tab = AppTab.Browse }
+                AkiButton(if (catalogues.isEmpty()) Copy.Books.addBookCatalogue else Copy.Books.manageCatalogues, icon = "add", fullWidth = true) { app.tab = AppTab.Browse }
             }
         }
     }
@@ -127,7 +128,7 @@ private fun ContinueCard(book: BookInfo, onClick: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 AkiImage(book.cover, Modifier.width(84.dp).clip(RoundedCornerShape(Aki.thumbRadius)), placeholder = 1.5f, fill = true)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AkiText("Continue reading", AkiTextStyle.Eyebrow, tone = AkiTone.Muted)
+                    AkiText(Copy.Home.continueReading, AkiTextStyle.Eyebrow, tone = AkiTone.Muted)
                     AkiText(book.title, AkiTextStyle.Heading, lines = 2)
                     book.authors.firstOrNull()?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1) }
                     AkiProgressBar(book.progress, label = null)

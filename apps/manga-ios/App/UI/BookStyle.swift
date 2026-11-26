@@ -58,14 +58,14 @@ enum BookFont: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .newYork: "New York"
-        case .system: "San Francisco"
-        case .iowan: "Iowan"
-        case .georgia: "Georgia"
-        case .palatino: "Palatino"
-        case .charter: "Charter"
-        case .athelas: "Athelas"
-        case .avenir: "Avenir Next"
+        case .newYork: Copy.Books.FontNameIos.newYork
+        case .system: Copy.Books.FontNameIos.system
+        case .iowan: Copy.Books.FontNameIos.iowan
+        case .georgia: Copy.Books.FontNameIos.georgia
+        case .palatino: Copy.Books.FontNameIos.palatino
+        case .charter: Copy.Books.FontNameIos.charter
+        case .athelas: Copy.Books.FontNameIos.athelas
+        case .avenir: Copy.Books.FontNameIos.avenir
         }
     }
 
@@ -104,7 +104,13 @@ enum BookFont: String, Codable, CaseIterable {
 enum BookMargin: String, Codable, CaseIterable {
     case narrow, normal, wide
 
-    var title: String { rawValue.capitalized }
+    var title: String {
+        switch self {
+        case .narrow: Copy.Books.MarginName.narrow
+        case .normal: Copy.Books.MarginName.normal
+        case .wide: Copy.Books.MarginName.wide
+        }
+    }
     var points: CGFloat {
         switch self {
         case .narrow: 20
@@ -121,12 +127,12 @@ enum BookTheme: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .auto: "Auto"
-        case .paper: "Paper"
-        case .sepia: "Sepia"
-        case .ink: "Ink"
-        case .night: "Night"
-        case .black: "Black"
+        case .auto: Copy.Books.ThemeName.auto
+        case .paper: Copy.Books.ThemeName.paper
+        case .sepia: Copy.Books.ThemeName.sepia
+        case .ink: Copy.Books.ThemeName.ink
+        case .night: Copy.Books.ThemeName.night
+        case .black: Copy.Books.ThemeName.black
         }
     }
 

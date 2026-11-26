@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import live.akidev.manga.design.Copy
 
 /** What a menu over the page is about: a selection, or a highlight that was tapped, and where the finger was. */
 private class MenuTarget(val span: BookSpan, val mark: Long?, val point: Offset)
@@ -68,7 +69,7 @@ fun BookPageView(model: BookModel, chapter: Int, page: Int, modifier: Modifier =
         val top = insets.top + if (model.style.scroll) layout.leading(shown) else 0f
         val overlays = model.overlays
         val footer = remember(layout, shown) { model.footer(BookPlace(chapter, shown), layout) }
-        val spoken = remember(layout, shown) { layout.pageText(shown).ifBlank { "No text on this page." } }
+        val spoken = remember(layout, shown) { layout.pageText(shown).ifBlank { Copy.Books.noTextOnPage } }
         val density = LocalDensity.current
         val foot = remember(density) { Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 12 * density.density; typeface = Typeface.create(Typeface.SANS_SERIF, 500, false); fontFeatureSettings = "tnum" } }
 
@@ -76,12 +77,12 @@ fun BookPageView(model: BookModel, chapter: Int, page: Int, modifier: Modifier =
             Modifier.fillMaxSize()
                 // The page is drawn, not a text view, so TalkBack is given its words, its place, and the actions a swipe or a tap would do.
                 .semantics {
-                    contentDescription = if (layout.coverPicture != null) "Cover of ${model.info.title}" else spoken
-                    stateDescription = "Page ${shown + 1} of ${layout.count}"
+                    contentDescription = if (layout.coverPicture != null) Copy.Books.coverOf(model.info.title) else spoken
+                    stateDescription = Copy.Reader.pageOfCount(shown + 1, layout.count)
                     customActions = listOf(
-                        CustomAccessibilityAction("Next page") { model.turnPage(forward = true); true },
-                        CustomAccessibilityAction("Previous page") { model.turnPage(forward = false); true },
-                        CustomAccessibilityAction("Show or hide controls") { model.chromeVisible = !model.chromeVisible; true },
+                        CustomAccessibilityAction(Copy.Books.nextPage) { model.turnPage(forward = true); true },
+                        CustomAccessibilityAction(Copy.Books.previousPage) { model.turnPage(forward = false); true },
+                        CustomAccessibilityAction(Copy.Reader.showOrHideControls) { model.chromeVisible = !model.chromeVisible; true },
                     )
                 }
                 .pointerInput(layout, shown) {
@@ -227,16 +228,16 @@ private fun ActionMenu(model: BookModel, layout: ChapterLayout, target: MenuTarg
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 // Each colour is a 48 dp target around the 30 dp dot.
                 for (index in HighlightColour.names.indices) {
-                    Box(Modifier.size(48.dp).akiPress(label = "Highlight in ${HighlightColour.names[index].lowercase()}") { act(BookAction.Highlight(index)) }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(48.dp).akiPress(label = Copy.Books.highlightInColour(HighlightColour.names[index].lowercase())) { act(BookAction.Highlight(index)) }, contentAlignment = Alignment.Center) {
                         Box(Modifier.size(30.dp).background(HighlightColour.colour(index), CircleShape))
                     }
                 }
             }
             val items = buildList {
-                if (model.canRead) add(AkiMenuItem("Read from here", "play") { act(BookAction.Read) })
-                add(AkiMenuItem("Note", "bookmark") { act(BookAction.Note) })
-                add(AkiMenuItem("Copy", "share") { act(BookAction.Copy) })
-                if (target.mark != null) add(AkiMenuItem("Remove highlight", "trash", destructive = true) { act(BookAction.Remove) })
+                if (model.canRead) add(AkiMenuItem(Copy.Books.readFromHere, "play") { act(BookAction.Read) })
+                add(AkiMenuItem(Copy.Books.note, "bookmark") { act(BookAction.Note) })
+                add(AkiMenuItem(Copy.Books.copy, "share") { act(BookAction.Copy) })
+                if (target.mark != null) add(AkiMenuItem(Copy.Books.removeHighlight, "trash", destructive = true) { act(BookAction.Remove) })
             }
             AkiMenuRows(items)
         }

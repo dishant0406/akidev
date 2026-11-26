@@ -109,7 +109,7 @@ extension BookModel {
 
     /// The title of a page: its entry in the contents, or the first line of its text.
     func pageTitle(_ chapter: Int, text: String) -> String {
-        contents.first { Int($0.chapter) == chapter }?.title ?? String(text.split(separator: "\n").first?.prefix(60) ?? "Page \(chapter + 1)")
+        contents.first { Int($0.chapter) == chapter }?.title ?? String(text.split(separator: "\n").first?.prefix(60) ?? Substring(Copy.Series.pageNumber(chapter + 1)))
     }
 
     /// The title of the part of the book a chapter falls in.

@@ -13,9 +13,9 @@ struct HighlightsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                AkiBackHeader(title: "Highlights", subtitle: found.count == 1 ? "1 highlight" : "\(found.count) highlights", back: { dismiss() })
+                AkiBackHeader(title: Copy.Books.highlights, subtitle: Copy.Books.highlightCount(found.count), back: { dismiss() })
                 if found.isEmpty {
-                    AkiEmptyState(title: "No highlights yet", message: "Press and hold a word in a book, drag to the end of what you want, and choose Highlight or Note.").frame(minHeight: 300)
+                    AkiEmptyState(title: Copy.Books.noHighlightsTitle, message: Copy.Books.noHighlightsMessageIos).frame(minHeight: 300)
                 }
                 ForEach(found, id: \.highlight.id) { item in
                     AkiTap(action: { dismiss(); open(item) }) {

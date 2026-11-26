@@ -52,26 +52,26 @@ struct BooksView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    AkiHeader(title: model.prefs.readerKind == .books ? "Library" : "Books", subtitle: subtitle) {
+                    AkiHeader(title: model.prefs.readerKind == .books ? Copy.Home.library : Copy.Home.books, subtitle: subtitle) {
                         AkiGlassGroup(spacing: 10) {
                             HStack(spacing: 10) {
-                                AkiMenu(symbol: "filter", label: "Sort and filter", items: sortItems)
-                                AkiMenu(symbol: "more", label: "More", items: moreItems)
-                                AkiIconButton(symbol: "add", label: "Add books", tint: Aki.primary) { importing = true }
+                                AkiMenu(symbol: "filter", label: Copy.Library.sortAndFilter, items: sortItems)
+                                AkiMenu(symbol: "more", label: Copy.Books.more, items: moreItems)
+                                AkiIconButton(symbol: "add", label: Copy.Books.addBooks, tint: Aki.primary) { importing = true }
                             }
                         }
                     }
                     if searching {
-                        AkiInput(placeholder: "Search your books", text: $words, icon: "search", onClear: { words = "" })
+                        AkiInput(placeholder: Copy.Books.searchYourBooks, text: $words, icon: "search", onClear: { words = "" })
                     }
                     if !categories.isEmpty && !books.isEmpty {
-                        AkiChips(items: [(Int64(-1), "All")] + categories.map { ($0.id, "\($0.name) \($0.books)") } + [(Int64(-2), "No category")], selection: $category)
+                        AkiChips(items: [(Int64(-1), Copy.Home.all)] + categories.map { ($0.id, "\($0.name) \($0.books)") } + [(Int64(-2), Copy.Library.noCategory)], selection: $category)
                     }
                     if books.isEmpty {
-                        AkiEmptyState(title: "No books yet", message: "Add EPUB files from your device. They stay on this phone until you delete them.", action: ("Add books", { importing = true }), secondary: ("Receive from a friend", { model.sharing = SharePresented(item: nil) })).frame(minHeight: 380)
+                        AkiEmptyState(title: Copy.Books.noBooksTitle, message: Copy.Books.noBooksMessage, action: (Copy.Books.addBooks, { importing = true }), secondary: (Copy.Library.receiveFromFriend, { model.sharing = SharePresented(item: nil) })).frame(minHeight: 380)
                     } else {
                         if shown.isEmpty {
-                            AkiEmptyState(title: "Nothing here", message: category == -2 ? "Every book is in a category." : "No books in this category yet. Press and hold a book to add it to one.").frame(minHeight: 260)
+                            AkiEmptyState(title: Copy.Library.nothingHere, message: category == -2 ? Copy.Books.everyBookInCategory : Copy.Books.noBooksInCategory).frame(minHeight: 260)
                         }
                         LazyVGrid(columns: columns, spacing: 22) {
                             ForEach(shown, id: \.id) { book in
@@ -123,20 +123,20 @@ struct BooksView: View {
         }
         .akiFullScreen(item: $reading, onDismiss: load) { book in BookReaderScreen(book: book) }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
-        .akiConfirm(removingPicked.count == 1 ? "Delete 1 book?" : "Delete \(removingPicked.count) books?", message: "Their files and your reading progress are deleted from this phone.", confirm: removingPicked.count == 1 ? "Delete book" : "Delete books", isPresented: Binding(get: { !removingPicked.isEmpty }, set: { if !$0 { removingPicked = [] } })) {
+        .akiConfirm(Copy.Books.deleteBooksQuestion(removingPicked.count), message: Copy.Books.deleteBooksMessage, confirm: removingPicked.count == 1 ? Copy.Books.deleteBook : Copy.Books.deleteBooks, isPresented: Binding(get: { !removingPicked.isEmpty }, set: { if !$0 { removingPicked = [] } })) {
             for book in removingPicked { try? model.engine.removeBook(id: book.id) }
             removingPicked = []; picked = []; selecting = false
             load()
         }
-        .akiConfirm("Delete “\(removing?.title ?? "")”?", message: "Its file and your reading progress are deleted from this phone.", confirm: "Delete book", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+        .akiConfirm(Copy.Books.deleteBookQuestion(removing?.title ?? ""), message: Copy.Books.deleteBookMessage, confirm: Copy.Books.deleteBook, isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             if let removing { try? model.engine.removeBook(id: removing.id) }
             load()
         }
     }
 
     private var subtitle: String {
-        if let adding { return "Adding \(adding.done + 1) of \(adding.total)…" }
-        return books.count == 1 ? "1 book" : "\(books.count) books"
+        if let adding { return Copy.Books.addingProgress(adding.done + 1, adding.total) }
+        return Copy.Library.bookCount(books.count)
     }
 
     private var shown: [BookInfo] {
@@ -144,16 +144,16 @@ struct BooksView: View {
     }
 
     private var sortItems: [AkiMenuItem] {
-        BookSort.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "order", isSelected: option == model.prefs.bookSort) { model.prefs.bookSort = option } }
-            + [AkiMenuItem(title: "Reverse order", icon: "swap", isSelected: model.prefs.bookReversed) { model.prefs.bookReversed.toggle() }]
-            + BookFilter.allCases.map { option in AkiMenuItem(title: option.rawValue, icon: "filter", isSelected: option == filter) { filter = option } }
+        BookSort.allCases.map { option in AkiMenuItem(title: option.label, icon: "order", isSelected: option == model.prefs.bookSort) { model.prefs.bookSort = option } }
+            + [AkiMenuItem(title: Copy.Library.reverseOrder, icon: "swap", isSelected: model.prefs.bookReversed) { model.prefs.bookReversed.toggle() }]
+            + BookFilter.allCases.map { option in AkiMenuItem(title: option.label, icon: "filter", isSelected: option == filter) { filter = option } }
     }
 
     private var moreItems: [AkiMenuItem] {
-        [AkiMenuItem(title: searching ? "Hide search" : "Search books", icon: "search") { searching.toggle(); if !searching { words = "" } },
-         AkiMenuItem(title: selecting ? "Done selecting" : "Select books", icon: "check") { selecting.toggle(); picked = [] },
-         AkiMenuItem(title: "Edit categories", icon: "folder") { sheet = .categories },
-         AkiMenuItem(title: "Receive from a friend", icon: "share") { model.sharing = SharePresented(item: nil) }]
+        [AkiMenuItem(title: searching ? Copy.Books.hideSearch : Copy.Books.searchBooks, icon: "search") { searching.toggle(); if !searching { words = "" } },
+         AkiMenuItem(title: selecting ? Copy.Library.doneSelecting : Copy.Books.selectBooks, icon: "check") { selecting.toggle(); picked = [] },
+         AkiMenuItem(title: Copy.Library.editCategories, icon: "folder") { sheet = .categories },
+         AkiMenuItem(title: Copy.Library.receiveFromFriend, icon: "share") { model.sharing = SharePresented(item: nil) }]
     }
 
     private func toggle(_ book: BookInfo) {
@@ -172,10 +172,10 @@ struct BooksView: View {
         let chosen = books.filter { picked.contains($0.id) }
         return AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "folder", label: "Change categories") { sheet = .assign(chosen) }
-                AkiIconButton(symbol: "check", label: "Mark as finished") { for book in chosen { try? model.engine.finishBook(id: book.id) }; picked = []; selecting = false; load() }
-                AkiIconButton(symbol: "restore", label: "Mark as not started") { for book in chosen { try? model.engine.resetBook(id: book.id) }; picked = []; selecting = false; load() }
-                AkiIconButton(symbol: "trash", label: "Delete books", tint: Aki.destructive) { removingPicked = chosen }
+                AkiIconButton(symbol: "folder", label: Copy.Library.changeCategories) { sheet = .assign(chosen) }
+                AkiIconButton(symbol: "check", label: Copy.Books.markFinished) { for book in chosen { try? model.engine.finishBook(id: book.id) }; picked = []; selecting = false; load() }
+                AkiIconButton(symbol: "restore", label: Copy.Books.markNotStarted) { for book in chosen { try? model.engine.resetBook(id: book.id) }; picked = []; selecting = false; load() }
+                AkiIconButton(symbol: "trash", label: Copy.Books.deleteBooks, tint: Aki.destructive) { removingPicked = chosen }
             }
         }
         .padding(.bottom, 112)
@@ -196,20 +196,20 @@ struct BooksView: View {
     }
 
     private func menu(for book: BookInfo) -> [AkiMenuItem] {
-        var items = [AkiMenuItem(title: "Show details", icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; sheet = .details(book) },
-                     AkiMenuItem(title: "Share book", icon: "share") { model.sharing = SharePresented(item: .book(book)) },
-                     AkiMenuItem(title: "Change categories", icon: "folder") { sheet = .sort(book) },
-                     AkiMenuItem(title: "Choose a cover picture", icon: "image") { coverFor = book; choosingCover = true }]
+        var items = [AkiMenuItem(title: Copy.Books.showDetails, icon: "list") { detailMarks = (try? model.engine.bookMarks(book: book.id)) ?? []; sheet = .details(book) },
+                     AkiMenuItem(title: Copy.Books.shareBook, icon: "share") { model.sharing = SharePresented(item: .book(book)) },
+                     AkiMenuItem(title: Copy.Library.changeCategories, icon: "folder") { sheet = .sort(book) },
+                     AkiMenuItem(title: Copy.Books.chooseCoverPicture, icon: "image") { coverFor = book; choosingCover = true }]
         if book.customCover {
-            items.append(AkiMenuItem(title: "Use the book’s own cover", icon: "restore") { try? model.engine.clearBookCustomCover(id: book.id); load() })
+            items.append(AkiMenuItem(title: Copy.Books.useOwnCover, icon: "restore") { try? model.engine.clearBookCustomCover(id: book.id); load() })
         }
-        items.append(AkiMenuItem(title: "Delete book", icon: "trash", destructive: true) { removing = book })
+        items.append(AkiMenuItem(title: Copy.Books.deleteBook, icon: "trash", destructive: true) { removing = book })
         return items
     }
 
     private func progressLine(_ book: BookInfo) -> String {
-        if book.finished { return "Finished" }
-        if book.openedMs == nil { return "New" }
+        if book.finished { return Copy.Library.finished }
+        if book.openedMs == nil { return Copy.Books.new }
         return bookPercent(book.progress)
     }
 
@@ -239,7 +239,7 @@ struct BooksView: View {
             adding = nil
             load()
             if !failures.isEmpty {
-                problem = (failures.count == 1 ? "Could not add 1 book" : "Could not add \(failures.count) books", failures.joined(separator: "\n"))
+                problem = (Copy.Books.couldNotAddBooks(failures.count), failures.joined(separator: "\n"))
             }
         }
     }
@@ -258,7 +258,7 @@ struct BookReaderScreen: View {
             if let model {
                 BookReaderView(model: model, close: { dismiss() })
             } else if let failure {
-                AkiEmptyState(title: "Could not open this book", message: failure, action: ("Close", { dismiss() }))
+                AkiEmptyState(title: Copy.Books.couldNotOpenBook, message: failure, action: (Copy.Books.close, { dismiss() }))
             } else {
                 AkiOpeningLoader(label: book.title)
             }

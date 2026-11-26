@@ -21,6 +21,7 @@ import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.CatalogueFeed
 import uniffi.akimanga.CatalogueItem
 
@@ -54,7 +55,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
         } catch (error: Exception) {
             feed = CatalogueFeed("", emptyList(), null, search)
             items = emptyList()
-            failure = describe(error, "Could not load this catalogue")
+            failure = describe(error, Copy.Books.couldNotLoadCatalogue)
         }
     }
 
@@ -67,7 +68,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
             items = found.items
             next = found.next
         } catch (error: Exception) {
-            failure = describe(error, "Could not load this catalogue")
+            failure = describe(error, Copy.Books.couldNotLoadCatalogue)
         }
     }
 
@@ -75,16 +76,16 @@ fun CatalogueScreen(ref: CatalogueRef) {
 
     AkiPage(underTabBar = false, spacing = 16.dp) {
         item { AkiBackHeader(searched?.let { "“$it”" } ?: ref.name, back = router::back, subtitle = if (feed == null) null else "${items.size} shown") }
-        if (search != null) item { AkiInput("Search this catalogue", term, { term = it }, icon = "search", onSubmit = { scope.launch { run() } }, onClear = { searched = null; scope.launch { load(ref.url) } }) }
+        if (search != null) item { AkiInput(Copy.Books.searchThisCatalogue, term, { term = it }, icon = "search", onSubmit = { scope.launch { run() } }, onClear = { searched = null; scope.launch { load(ref.url) } }) }
         val error = failure
-        if (error != null) item { AkiEmptyState(error.title, error.message, Modifier.heightIn(min = 260.dp), action = AkiAction("Try again") { scope.launch { load(if (searched == null) ref.url else null) } }) }
+        if (error != null) item { AkiEmptyState(error.title, error.message, Modifier.heightIn(min = 260.dp), action = AkiAction(Copy.Home.tryAgain) { scope.launch { load(if (searched == null) ref.url else null) } }) }
         else if (feed == null) item { Box(Modifier.fillMaxWidth().heightIn(min = 200.dp), contentAlignment = Alignment.Center) { AkiSpinner() } }
-        else if (items.isEmpty()) item { AkiEmptyState("Nothing here", "This page of the catalogue has no books.", Modifier.heightIn(min = 240.dp)) }
+        else if (items.isEmpty()) item { AkiEmptyState(Copy.Library.nothingHere, Copy.Books.catalogueEmpty, Modifier.heightIn(min = 240.dp)) }
         items(items.size) { index -> CatalogueItemRow(items[index], search) }
         next?.let { address ->
             item {
                 if (loadingMore) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { AkiSpinner() }
-                else AkiButton("Show more", fullWidth = true) {
+                else AkiButton(Copy.Home.showMore, fullWidth = true) {
                     scope.launch {
                         loadingMore = true
                         try {
@@ -92,7 +93,7 @@ fun CatalogueScreen(ref: CatalogueRef) {
                             items = items + found.items
                             next = found.next
                         } catch (failure: Exception) {
-                            problem = describe(failure, "Could not load more books")
+                            problem = describe(failure, Copy.Books.couldNotLoadMore)
                         }
                         loadingMore = false
                     }
@@ -120,17 +121,17 @@ fun CatalogueItemRow(item: CatalogueItem, search: String?) {
     if (get != null) {
         AkiListCard(item.cover, item.author ?: "", item.title) {
             when (getting) {
-                Getting.Done -> AkiBadge("In your library", icon = "tick")
-                Getting.Busy -> AkiSpinner(label = "Downloading")
-                Getting.Ready -> AkiButton("Download", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = "Download ${item.title}") {
+                Getting.Done -> AkiBadge(Copy.Books.inYourLibrary, icon = "tick")
+                Getting.Busy -> AkiSpinner(label = Copy.Series.downloading)
+                Getting.Ready -> AkiButton(Copy.Series.download, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small, description = Copy.Books.downloadTitle(item.title)) {
                     scope.launch {
                         getting = Getting.Busy
                         getting = try {
                             app.engine.getBook(get)
-                            view.announceForAccessibility("${item.title} is in your library")
+                            view.announceForAccessibility(Copy.Books.isInLibrary(item.title))
                             Getting.Done
                         } catch (failure: Exception) {
-                            problem = describe(failure, "Could not download this book")
+                            problem = describe(failure, Copy.Books.couldNotDownload)
                             Getting.Ready
                         }
                     }
@@ -139,7 +140,7 @@ fun CatalogueItemRow(item: CatalogueItem, search: String?) {
         }
     } else if (open != null) {
         AkiTap({ router.push(CatalogueRoute(CatalogueRef(open, item.title, search))) }) {
-            AkiListCard(item.cover, item.author ?: "Open", item.title) { AkiIcon("forward", size = 13.dp, tone = AkiTone.Muted) }
+            AkiListCard(item.cover, item.author ?: Copy.Books.openItem, item.title) { AkiIcon("forward", size = 13.dp, tone = AkiTone.Muted) }
         }
     }
     problem?.let { AkiAlert(it.title, it.message) { problem = null } }

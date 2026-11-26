@@ -44,6 +44,7 @@ import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import live.akidev.manga.listen.ListenBar
 import androidx.compose.ui.semantics.clearAndSetSemantics
 
@@ -66,7 +67,7 @@ fun BookReaderScreen(route: BookReaderRoute) {
     val opened = model
     when {
         opened != null -> BookReaderView(opened)
-        failure != null -> AkiEmptyState("Could not open this book", failure!!, action = AkiAction("Close") { router.back() })
+        failure != null -> AkiEmptyState(Copy.Books.couldNotOpenBook, failure!!, action = AkiAction(Copy.Books.close) { router.back() })
         else -> Box(Modifier.fillMaxSize().background(Aki.colors.background), contentAlignment = Alignment.Center) { AkiOpeningLoader(route.book.title) }
     }
 }
@@ -114,7 +115,7 @@ private fun BookReaderView(model: BookModel) {
             }
             AnimatedVisibility(model.chromeVisible, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) { TopBar(model, onContents = { sheet = BookSheet.Contents }, onSearch = { sheet = BookSheet.Search }, onSettings = { sheet = BookSheet.Settings }) }
             Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (model.trail.isNotEmpty()) AkiButton("Back to where you were", icon = "back", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) { model.goBack() }
+                if (model.trail.isNotEmpty()) AkiButton(Copy.Books.backToWhereYouWere, icon = "back", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Small) { model.goBack() }
                 model.listener?.let { ListenBar(it) }
                 AnimatedVisibility(model.chromeVisible, enter = fadeIn(), exit = fadeOut()) { BottomBar(model, onContents = { sheet = BookSheet.Contents }) }
             }
@@ -129,7 +130,7 @@ private fun BookReaderView(model: BookModel) {
         model.footnote?.let { note -> BookFootnoteSheet(model, note) { model.footnote = null } }
         model.failure?.let { AkiAlert(it.title, it.message) { model.failure = null } }
         model.externalLink?.let { link ->
-            AkiConfirm("Open this link?", link, "Open link", { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, link.toUri())) }
+            AkiConfirm(Copy.Books.openLinkQuestion, link, Copy.Books.openLink, { model.externalLink = null }) { view.context.startActivity(Intent(Intent.ACTION_VIEW, link.toUri())) }
         }
     }
 }
@@ -145,24 +146,24 @@ private fun TopBar(model: BookModel, onContents: () -> Unit, onSearch: () -> Uni
     val router = LocalRouter.current
     val app = LocalApp.current
     AkiReaderTopBar {
-        AkiIconButton("back", "Close book") { router.back() }
-        AkiBarTitle(model.info.title, model.info.authors.firstOrNull(), "${model.info.title}. Show contents", onContents)
-        if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", "Read aloud") { model.listen() }
-        AkiIconButton("search", "Search in this book", onClick = onSearch)
-        AkiIconButton("sliders", "Text and theme", onClick = onSettings)
+        AkiIconButton("back", Copy.Books.closeBook) { router.back() }
+        AkiBarTitle(model.info.title, model.info.authors.firstOrNull(), Copy.Books.titleShowContents(model.info.title), onContents)
+        if (model.listener == null && app.readAloud.current != null) AkiIconButton("headphones", Copy.Books.readAloud) { model.listen() }
+        AkiIconButton("search", Copy.Books.searchInThisBook, onClick = onSearch)
+        AkiIconButton("sliders", Copy.Books.textAndTheme, onClick = onSettings)
     }
 }
 
 @Composable
 private fun BottomBar(model: BookModel, onContents: () -> Unit) {
     Row(Modifier.fillMaxWidth().widthIn(max = 640.dp).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        AkiIconButton("list", "Contents", onClick = onContents)
+        AkiIconButton("list", Copy.Books.contents, onClick = onContents)
         Row(
             Modifier.weight(1f).height(44.dp).akiGlass(AkiShapes.pill(44.dp)).padding(horizontal = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             val onEnd = { model.goToProgress(model.progress) }
-            AkiSlider(model.progress, { value -> model.progress = value }, Modifier.weight(1f).spokenValue(percent(model.progress)), onEnd = onEnd, label = "Reading progress")
+            AkiSlider(model.progress, { value -> model.progress = value }, Modifier.weight(1f).spokenValue(percent(model.progress)), onEnd = onEnd, label = Copy.Books.readingProgress)
             // The slider already says the percentage aloud.
             AkiText(percent(model.progress), AkiTextStyle.Caption, Modifier.widthIn(min = 40.dp).clearAndSetSemantics {}, lines = 1, align = androidx.compose.ui.text.style.TextAlign.End, tabular = true)
         }

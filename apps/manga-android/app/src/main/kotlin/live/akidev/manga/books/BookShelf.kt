@@ -1,10 +1,11 @@
 package live.akidev.manga.books
 
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.BookInfo
 
-enum class BookSort(val title: String) { Recent("Last read"), Added("Date added"), Title("Title"), Author("Author"), Progress("Progress") }
+enum class BookSort(val title: String) { Recent(Copy.Books.SortName.recent), Added(Copy.Books.SortName.added), Title(Copy.Books.SortName.title), Author(Copy.Series.author), Progress(Copy.Books.SortName.progress) }
 
-enum class BookFilter(val title: String) { All("All books"), Reading("Reading"), NotStarted("Not started"), Finished("Finished") }
+enum class BookFilter(val title: String) { All(Copy.Books.allBooks), Reading(Copy.Library.reading), NotStarted(Copy.Books.notStarted), Finished(Copy.Library.finished) }
 
 /**
  * What is on the shelf: the books on the category chosen (-1 is every one, -2 the ones on none), those that fit the filter and the words

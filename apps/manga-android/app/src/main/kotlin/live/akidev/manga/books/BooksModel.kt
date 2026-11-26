@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import live.akidev.manga.app.AppModel
 import live.akidev.manga.app.describe
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.BookInfo
 import uniffi.akimanga.CategoryInfo
 import java.io.File
@@ -67,7 +68,7 @@ class BooksModel(private val app: AppModel) {
         }
         adding = null
         load()
-        if (failures.isNotEmpty()) problem = (if (failures.size == 1) "Could not add 1 book" else "Could not add ${failures.size} books") to failures.joinToString("\n")
+        if (failures.isNotEmpty()) problem = Copy.Books.couldNotAddBooks(failures.size) to failures.joinToString("\n")
     }
 
     fun finish(books: List<BookInfo>) {

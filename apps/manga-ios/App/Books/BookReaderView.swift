@@ -53,7 +53,7 @@ struct BookReaderView: View {
         .akiSheet(item: $model.noteDraft) { draft in BookNoteSheet(model: model, draft: draft) { model.noteDraft = nil } }
         .akiSheet(item: $model.footnote) { note in BookFootnoteSheet(model: model, note: note) { model.footnote = nil } }
         .akiAlert(model.failure?.title ?? "", message: model.failure?.message, isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } }))
-        .akiConfirm("Open this link?", message: model.externalLink?.absoluteString ?? "", confirm: "Open link", isPresented: Binding(get: { model.externalLink != nil }, set: { if !$0 { model.externalLink = nil } })) {
+        .akiConfirm(Copy.Books.openLinkQuestion, message: model.externalLink?.absoluteString ?? "", confirm: Copy.Books.openLink, isPresented: Binding(get: { model.externalLink != nil }, set: { if !$0 { model.externalLink = nil } })) {
             if let url = model.externalLink { UIApplication.shared.open(url) }
         }
         .onAppear { UIApplication.shared.isIdleTimerDisabled = app.prefs.keepAwake; BookComfort.apply(model.style.brightness) }
@@ -66,7 +66,7 @@ struct BookReaderView: View {
     private var topBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "back", label: "Close book", action: close)
+                AkiIconButton(symbol: "back", label: Copy.Books.closeBook, action: close)
                 AkiTap(action: { sheet = .contents }) {
                     VStack(alignment: .leading, spacing: 0) {
                         AkiText(model.info.title, .captionStrong, lines: 1)
@@ -76,13 +76,13 @@ struct BookReaderView: View {
                     .akiGlass(.capsule, interactive: false)
                 }
                 .accessibilityLabel(model.info.title)
-                .accessibilityHint("Shows the contents")
+                .accessibilityHint(Copy.Books.showsContentsHint)
                 Spacer(minLength: 0)
                 if model.listener == nil, app.readAloud.current != nil {
-                    AkiIconButton(symbol: "headphones", label: "Read aloud") { model.listen() }
+                    AkiIconButton(symbol: "headphones", label: Copy.Books.readAloud) { model.listen() }
                 }
-                AkiIconButton(symbol: "search", label: "Search in this book") { sheet = .searching }
-                AkiIconButton(symbol: "sliders", label: "Text and theme") { sheet = .settings }
+                AkiIconButton(symbol: "search", label: Copy.Books.searchInThisBook) { sheet = .searching }
+                AkiIconButton(symbol: "sliders", label: Copy.Books.textAndTheme) { sheet = .settings }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -92,9 +92,9 @@ struct BookReaderView: View {
     private var bottomBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "list", label: "Contents") { sheet = .contents }
+                AkiIconButton(symbol: "list", label: Copy.Books.contents) { sheet = .contents }
                 HStack(spacing: 12) {
-                    AkiSlider(value: $model.progress, onEnd: { model.go(toProgress: model.progress) }, label: "Reading progress")
+                    AkiSlider(value: $model.progress, onEnd: { model.go(toProgress: model.progress) }, label: Copy.Books.readingProgress)
                     // The slider already says the percentage aloud.
                     AkiText(bookPercent(model.progress), .caption, lines: 1, digits: true)
                         .fixedSize()
@@ -110,6 +110,6 @@ struct BookReaderView: View {
     }
 
     private var backToPage: some View {
-        AkiButton("Back to where you were", icon: "back", variant: .primary, size: .small) { model.goBack() }
+        AkiButton(Copy.Books.backToWhereYouWere, icon: "back", variant: .primary, size: .small) { model.goBack() }
     }
 }

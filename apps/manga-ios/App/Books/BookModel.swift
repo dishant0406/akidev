@@ -370,7 +370,7 @@ final class BookModel: BookPaging {
 
     /// Takes the place of a chapter that cannot be read, so the book still opens and turns.
     nonisolated private static let unreadable = BookChapter(
-        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: "This part of the book could not be read.", bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, family: nil, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
+        blocks: [BookBlock(start: 0, kind: .text(runs: [BookRun(text: Copy.Books.partUnreadable, bold: false, italic: true, underline: false, strike: false, smallCaps: false, mono: false, shift: 0, size: 1, family: nil, link: nil)]), heading: 0, align: .center, left: 0, firstLine: 0, spaceBefore: 0, pageBreakBefore: false)],
         anchors: [],
         fonts: [],
         vertical: false

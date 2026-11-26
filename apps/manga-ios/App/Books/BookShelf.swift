@@ -1,12 +1,32 @@
 import AkiManga
 import Foundation
 
+/// The raw values are saved in the settings, so they stay as they are. `label` gives the words on screen.
 enum BookSort: String, CaseIterable {
     case recent = "Last read", added = "Date added", title = "Title", author = "Author", progress = "Progress"
+
+    var label: String {
+        switch self {
+        case .recent: Copy.Books.SortName.recent
+        case .added: Copy.Books.SortName.added
+        case .title: Copy.Books.SortName.title
+        case .author: Copy.Series.author
+        case .progress: Copy.Books.SortName.progress
+        }
+    }
 }
 
-enum BookFilter: String, CaseIterable {
-    case all = "All books", reading = "Reading", notStarted = "Not started", finished = "Finished"
+enum BookFilter: CaseIterable {
+    case all, reading, notStarted, finished
+
+    var label: String {
+        switch self {
+        case .all: Copy.Books.allBooks
+        case .reading: Copy.Library.reading
+        case .notStarted: Copy.Books.notStarted
+        case .finished: Copy.Library.finished
+        }
+    }
 }
 
 /// What is on the shelf: the books on the category chosen (-1 is every one, -2 the ones on none), those that fit the filter and the

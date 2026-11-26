@@ -15,20 +15,20 @@ struct BooksBrowseView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    AkiHeader(title: "Browse", subtitle: catalogues.isEmpty ? "Find books to read" : (catalogues.count == 1 ? "1 catalogue" : "\(catalogues.count) catalogues")) {
-                        AkiIconButton(symbol: "add", label: "Add a catalogue", tint: Aki.primary) { adding = true }
+                    AkiHeader(title: Copy.Home.browse, subtitle: catalogues.isEmpty ? Copy.Books.findBooksToRead : Copy.Books.catalogueCount(catalogues.count)) {
+                        AkiIconButton(symbol: "add", label: Copy.Books.addCatalogue, tint: Aki.primary) { adding = true }
                     }
                     if catalogues.isEmpty {
-                        AkiEmptyState(title: "No catalogue yet", message: "A catalogue is a shop or library of books that shares an OPDS feed, such as a Calibre-Web server or Standard Ebooks. Add one by its address. Akidev does not include or endorse any.", action: ("Add a catalogue", { adding = true })).frame(minHeight: 340)
+                        AkiEmptyState(title: Copy.Books.noCatalogueTitle, message: Copy.Books.noCatalogueMessage, action: (Copy.Books.addCatalogue, { adding = true })).frame(minHeight: 340)
                     } else {
-                        AkiInput(placeholder: "Search every catalogue", text: $term, icon: "search", onSubmit: { Task { await search.run(model.engine, catalogues: catalogues, term: term) } }, onClear: { search.clear() })
+                        AkiInput(placeholder: Copy.Books.searchEveryCatalogue, text: $term, icon: "search", onSubmit: { Task { await search.run(model.engine, catalogues: catalogues, term: term) } }, onClear: { search.clear() })
                         if search.groups.isEmpty {
-                            AkiSection(title: "Catalogues") {
+                            AkiSection(title: Copy.Books.catalogues) {
                                 ForEach(catalogues, id: \.url) { catalogue in
                                     AkiLink(value: CatalogueRef(url: catalogue.url, name: catalogue.name, search: nil)) {
                                         AkiRow(title: catalogue.name, subtitle: catalogue.url, icon: "book-solid", showsChevron: true)
                                     }
-                                    .akiContextMenu([AkiMenuItem(title: "Remove catalogue", icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); load() }])
+                                    .akiContextMenu([AkiMenuItem(title: Copy.Books.removeCatalogue, icon: "trash", destructive: true) { try? model.engine.removeCatalogue(url: catalogue.url); load() }])
                                 }
                             }
                         } else {
@@ -44,14 +44,14 @@ struct BooksBrowseView: View {
             .akiDestination(for: CatalogueRef.self) { CatalogueView(ref: $0) }
         }
         .onAppear(perform: load)
-        .akiPrompt("Add a book catalogue", message: "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", placeholder: "example.org/opds", confirm: "Add catalogue", text: $address, isPresented: $adding) {
+        .akiPrompt(Copy.Books.addBookCatalogue, message: Copy.Books.addCatalogueMessage, placeholder: Copy.Books.catalogueAddressPlaceholder, confirm: Copy.Books.addCatalogueConfirm, text: $address, isPresented: $adding) {
             let link = address
             address = ""
             Task {
                 do {
                     _ = try await model.engine.addCatalogue(url: link)
                     load()
-                } catch { problem = describe(error, "Could not add the catalogue") }
+                } catch { problem = describe(error, Copy.Books.couldNotAddCatalogue) }
             }
         }
         .akiAlert(problem?.title ?? "", message: problem?.message, isPresented: Binding(get: { problem != nil }, set: { if !$0 { problem = nil } }))
@@ -67,7 +67,7 @@ struct BooksBrowseView: View {
                     case .loading: AkiSpinner().frame(maxWidth: .infinity, minHeight: 60)
                     case .failed(let message): AkiText(message, .caption, tone: .muted)
                     case .done(let items):
-                        if items.isEmpty { AkiText("No books found.", .caption, tone: .muted) }
+                        if items.isEmpty { AkiText(Copy.Books.noBooksFound, .caption, tone: .muted) }
                         LazyVStack(spacing: 12) { ForEach(Array(items.prefix(8).enumerated()), id: \.offset) { _, item in CatalogueItemRow(item: item, search: group.search) } }
                     }
                 }
@@ -107,7 +107,7 @@ final class BookSearchAcross {
                 group.addTask {
                     do {
                         // A catalogue says where it is searched on its first page.
-                        guard let address = try await engine.catalogueFeed(url: catalogue.url).search else { return (catalogue.url, nil, .failed("This catalogue does not offer search.")) }
+                        guard let address = try await engine.catalogueFeed(url: catalogue.url).search else { return (catalogue.url, nil, .failed(Copy.Books.catalogueNoSearch)) }
                         // Kept in a variable first: `try await` inside a returned value broke Release builds on a phone (see GlobalSearchView).
                         let found = try await engine.catalogueSearch(search: address, term: words).items
                         return (catalogue.url, address, .done(found))

@@ -350,15 +350,15 @@ final class BookPageController: UIViewController, @preconcurrency UIEditMenuInte
         guard let target, let layout = paging.layout(chapter: target.span.chapter) else { return nil }
         let words = layout.words(from: target.span.start, to: target.span.end)
         func act(_ action: BookAction) { paging.perform(action, on: target.span, mark: target.mark, words: words) }
-        let colours = UIMenu(title: "Colour", image: HighlightColour.swatch(0), children: HighlightColour.names.indices.map { index in
+        let colours = UIMenu(title: Copy.Books.colour, image: HighlightColour.swatch(0), children: HighlightColour.names.indices.map { index in
             UIAction(title: HighlightColour.names[index], image: HighlightColour.swatch(index)) { _ in act(.highlight(colour: index)) }
         })
         var actions: [UIMenuElement] = []
-        if paging.canRead { actions.append(UIAction(title: "Read from here", image: UIImage(systemName: "play.circle")) { _ in act(.read) }) }
-        if target.mark == nil { actions.append(UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { _ in act(.highlight(colour: 0)) }) }
-        actions += [colours, UIAction(title: "Note", image: UIImage(systemName: "square.and.pencil")) { _ in act(.note) },
-                    UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in act(.copy) }]
-        if target.mark != nil { actions.append(UIAction(title: "Remove highlight", image: UIImage(systemName: "trash"), attributes: .destructive) { _ in act(.remove) }) }
+        if paging.canRead { actions.append(UIAction(title: Copy.Books.readFromHere, image: UIImage(systemName: "play.circle")) { _ in act(.read) }) }
+        if target.mark == nil { actions.append(UIAction(title: Copy.Books.highlight, image: UIImage(systemName: "highlighter")) { _ in act(.highlight(colour: 0)) }) }
+        actions += [colours, UIAction(title: Copy.Books.note, image: UIImage(systemName: "square.and.pencil")) { _ in act(.note) },
+                    UIAction(title: Copy.Books.copy, image: UIImage(systemName: "doc.on.doc")) { _ in act(.copy) }]
+        if target.mark != nil { actions.append(UIAction(title: Copy.Books.removeHighlight, image: UIImage(systemName: "trash"), attributes: .destructive) { _ in act(.remove) }) }
         return UIMenu(children: actions)
     }
 }

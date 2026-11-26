@@ -27,6 +27,7 @@ import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.Problem
 import live.akidev.manga.app.describe
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import uniffi.akimanga.CatalogueInfo
 import uniffi.akimanga.CatalogueItem
 import uniffi.akimanga.Engine
@@ -63,7 +64,7 @@ class BookSearchAcross {
                     val answer = try {
                         // A catalogue says where it is searched on its first page.
                         address = engine.catalogueFeed(catalogue.url).search
-                        if (address == null) CatalogueAnswer.Failed("This catalogue does not offer search.") else CatalogueAnswer.Done(engine.catalogueSearch(address, typed).items)
+                        if (address == null) CatalogueAnswer.Failed(Copy.Books.catalogueNoSearch) else CatalogueAnswer.Done(engine.catalogueSearch(address, typed).items)
                     } catch (failure: Exception) {
                         CatalogueAnswer.Failed(describe(failure).message)
                     }
@@ -90,25 +91,25 @@ fun BooksBrowseScreen() {
 
     AkiPage(spacing = 20.dp) {
         item {
-            AkiHeader("Browse", subtitle = if (catalogues.isEmpty()) "Find books to read" else if (catalogues.size == 1) "1 catalogue" else "${catalogues.size} catalogues") {
-                AkiIconButton("add", "Add a catalogue", tint = Aki.colors.primary) { adding = true }
+            AkiHeader(Copy.Home.browse, subtitle = if (catalogues.isEmpty()) Copy.Books.findBooksToRead else Copy.Books.catalogueCount(catalogues.size)) {
+                AkiIconButton("add", Copy.Books.addCatalogue, tint = Aki.colors.primary) { adding = true }
             }
         }
         if (catalogues.isEmpty()) {
             item {
                 AkiEmptyState(
-                    "No catalogue yet",
-                    "A catalogue is a shop or library of books that shares an OPDS feed, such as a Calibre-Web server or Standard Ebooks. Add one by its address. Akidev does not include or endorse any.",
-                    Modifier.heightIn(min = 340.dp), action = AkiAction("Add a catalogue") { adding = true },
+                    Copy.Books.noCatalogueTitle,
+                    Copy.Books.noCatalogueMessage,
+                    Modifier.heightIn(min = 340.dp), action = AkiAction(Copy.Books.addCatalogue) { adding = true },
                 )
             }
         } else {
-            item { AkiInput("Search every catalogue", term, { term = it }, icon = "search", onSubmit = { scope.launch { across.run(app.engine, catalogues, term) } }, onClear = { across.clear() }) }
+            item { AkiInput(Copy.Books.searchEveryCatalogue, term, { term = it }, icon = "search", onSubmit = { scope.launch { across.run(app.engine, catalogues, term) } }, onClear = { across.clear() }) }
             if (across.groups.isEmpty()) {
                 item {
-                    AkiSection("Catalogues") {
+                    AkiSection(Copy.Books.catalogues) {
                         for (catalogue in catalogues) {
-                            val remove = AkiMenuItem("Remove catalogue", "trash", destructive = true) { runCatching { app.engine.removeCatalogue(catalogue.url) }; load() }
+                            val remove = AkiMenuItem(Copy.Books.removeCatalogue, "trash", destructive = true) { runCatching { app.engine.removeCatalogue(catalogue.url) }; load() }
                             AkiTapMenu(listOf(remove), onClick = { router.push(CatalogueRoute(CatalogueRef(catalogue.url, catalogue.name, null))) }) {
                                 AkiRow(catalogue.name, subtitle = catalogue.url, icon = "book-solid", showsChevron = true)
                             }
@@ -120,7 +121,7 @@ fun BooksBrowseScreen() {
     }
     if (adding) {
         AkiPrompt(
-            "Add a book catalogue", "The address of an OPDS catalogue, for example a Calibre-Web or Standard Ebooks feed.", "example.org/opds", "Add catalogue", { adding = false },
+            Copy.Books.addBookCatalogue, Copy.Books.addCatalogueMessage, Copy.Books.catalogueAddressPlaceholder, Copy.Books.addCatalogueConfirm, { adding = false },
             onConfirm = { link ->
                 adding = false
                 scope.launch {
@@ -128,7 +129,7 @@ fun BooksBrowseScreen() {
                         app.engine.addCatalogue(link)
                         load()
                     } catch (failure: Exception) {
-                        problem = describe(failure, "Could not add the catalogue")
+                        problem = describe(failure, Copy.Books.couldNotAddCatalogue)
                     }
                 }
             },
@@ -147,7 +148,7 @@ private fun LazyListScope.results(across: BookSearchAcross) {
                 CatalogueAnswer.Loading -> Box(Modifier.fillMaxWidth().heightIn(min = 60.dp), contentAlignment = Alignment.Center) { AkiSpinner() }
                 is CatalogueAnswer.Failed -> AkiText(answer.message, AkiTextStyle.Caption, tone = AkiTone.Muted)
                 is CatalogueAnswer.Done -> {
-                    if (answer.items.isEmpty()) AkiText("No books found.", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                    if (answer.items.isEmpty()) AkiText(Copy.Books.noBooksFound, AkiTextStyle.Caption, tone = AkiTone.Muted)
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { for (item in answer.items.take(8)) CatalogueItemRow(item, group.search) }
                 }
             }

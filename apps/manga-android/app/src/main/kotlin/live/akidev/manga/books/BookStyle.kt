@@ -5,12 +5,13 @@ import android.graphics.Typeface
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.res.ResourcesCompat
 import live.akidev.manga.R
+import live.akidev.manga.design.Copy
 import org.json.JSONObject
 import java.util.Calendar
 
 /** The reading surface's fonts. Lora and Atkinson Hyperlegible are carried in the app; the others are the phone's own. */
 enum class BookFont(val title: String) {
-    Lora("Lora"), Serif("Serif"), Sans("Sans"), Atkinson("Atkinson Hyperlegible"), Rounded("Rounded");
+    Lora(Copy.Books.FontNameAndroid.lora), Serif(Copy.Books.FontNameAndroid.serif), Sans(Copy.Books.FontNameAndroid.sans), Atkinson(Copy.Books.FontNameAndroid.atkinson), Rounded(Copy.Books.FontNameAndroid.rounded);
 
     /** The face for a style of it: the weight is 400 or 700, and the italic is the font's own where it has one. */
     fun typeface(context: Context, bold: Boolean, italic: Boolean, mono: Boolean): Typeface {
@@ -26,17 +27,17 @@ enum class BookFont(val title: String) {
     }
 }
 
-enum class BookMargin(val title: String, val dp: Int) { Narrow("Narrow", 20), Normal("Normal", 32), Wide("Wide", 44) }
+enum class BookMargin(val title: String, val dp: Int) { Narrow(Copy.Books.MarginName.narrow, 20), Normal(Copy.Books.MarginName.normal, 32), Wide(Copy.Books.MarginName.wide, 44) }
 
 /** The reading surface: paper and ink. Not the app's tokens, which are for the app's own screens. */
 enum class BookTheme(val title: String, val paper: Color, val ink: Color) {
     /** White by day, night by night: whichever the phone is in. */
-    Auto("Auto", Color(0xFFFAFAF8), Color(0xFF1A1A1A)),
-    Paper("Paper", Color(0xFFFAFAF8), Color(0xFF1A1A1A)),
-    Sepia("Sepia", Color(0xFFF3EAD7), Color(0xFF4B3B2A)),
-    Ink("Ink", Color(0xFFDADAD6), Color(0xFF262626)),
-    Night("Night", Color(0xFF1C1C1E), Color(0xFFD6D6DA)),
-    Black("Black", Color(0xFF000000), Color(0xFFBDBDC2));
+    Auto(Copy.Books.ThemeName.auto, Color(0xFFFAFAF8), Color(0xFF1A1A1A)),
+    Paper(Copy.Books.ThemeName.paper, Color(0xFFFAFAF8), Color(0xFF1A1A1A)),
+    Sepia(Copy.Books.ThemeName.sepia, Color(0xFFF3EAD7), Color(0xFF4B3B2A)),
+    Ink(Copy.Books.ThemeName.ink, Color(0xFFDADAD6), Color(0xFF262626)),
+    Night(Copy.Books.ThemeName.night, Color(0xFF1C1C1E), Color(0xFFD6D6DA)),
+    Black(Copy.Books.ThemeName.black, Color(0xFF000000), Color(0xFFBDBDC2));
 
     /** The theme itself, with `Auto` settled by the phone's appearance. */
     fun resolved(dark: Boolean) = if (this == Auto) (if (dark) Night else Paper) else this
@@ -48,7 +49,7 @@ enum class BookTheme(val title: String, val paper: Color, val ink: Color) {
 
 /** When the warm tint is on. */
 enum class BookWarmth(val title: String) {
-    Off("Off"), Always("Always"), Night("At night");
+    Off(Copy.Books.WarmthName.off), Always(Copy.Books.WarmthName.always), Night(Copy.Books.WarmthName.night);
 
     /** Night is a clock window, so no location is asked for. */
     fun isOn(hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) = when (this) {
@@ -113,7 +114,7 @@ data class BookStyle(
 
 /** The four highlight colours. */
 object HighlightColour {
-    val names = listOf("Yellow", "Green", "Blue", "Pink")
+    val names = listOf(Copy.Books.HighlightColour.yellow, Copy.Books.HighlightColour.green, Copy.Books.HighlightColour.blue, Copy.Books.HighlightColour.pink)
     val colours = listOf(Color(0xFFFFD21F), Color(0xFF6CCB5F), Color(0xFF5AA9FF), Color(0xFFFF7BAC))
 
     /** The colour of a selection and its handles. */

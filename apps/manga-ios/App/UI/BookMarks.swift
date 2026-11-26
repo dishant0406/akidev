@@ -36,7 +36,7 @@ enum BookAction {
 
 /// The four highlight colours.
 enum HighlightColour {
-    static let names = ["Yellow", "Green", "Blue", "Pink"]
+    static let names = [Copy.Books.HighlightColour.yellow, Copy.Books.HighlightColour.green, Copy.Books.HighlightColour.blue, Copy.Books.HighlightColour.pink]
     static let colours: [UIColor] = [UIColor(hex: 0xFFD21F), UIColor(hex: 0x6CCB5F), UIColor(hex: 0x5AA9FF), UIColor(hex: 0xFF7BAC)]
 
     /// The colour of a selection and its handles.
