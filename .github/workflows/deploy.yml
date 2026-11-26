@@ -21,7 +21,7 @@ on:
       - desktop/scripts/**
       - desktop/sources/**
       - desktop/README.md
-      - branding/**
+      - design/branding/**
       - .github/workflows/desktop*.yml
   # Allows a deploy of any branch or commit without pushing a new commit.
   workflow_dispatch:

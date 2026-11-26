@@ -1,5 +1,5 @@
 //! Sending a book or a comic to a phone on the same Wi-Fi, with no server in between. The wire format is LocalSend's
-//! (v2), so the other phone only needs this engine, or the LocalSend app. See pipeline/SHARE_PLAN.md.
+//! (v2), so the other phone only needs this engine, or the LocalSend app. See docs/plans/SHARE_PLAN.md.
 //!
 //! `receive` is the phone that gets the file (a small HTTPS server), `send` is the one that gives it, and `find` is how
 //! they learn of each other.

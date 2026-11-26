@@ -77,7 +77,7 @@ swipe-back is the model).
 ## 3. Decisions
 
 1. **Native Kotlin + Jetpack Compose, one Android module set, not Compose Multiplatform.** The iOS app stays SwiftUI. The only shared
-   code is the Rust engine and the written spec (`manga-app/USER_FLOW.md`, `DESIGN.md`). Sharing UI code would give the lowest common look, not the best of each.
+   code is the Rust engine and the written spec (`manga-app/USER_FLOW.md`, `design/manga.md`). Sharing UI code would give the lowest common look, not the best of each.
 2. **A thin `AkiGlass` layer of our own over the glass library.** Screens never import Backdrop or Haze; they call `Modifier.akiGlass(...)`
    or `AkiGlassButton`, as iOS screens only use Aki components and `scripts/check-ui.sh` enforces it. The library can be swapped
    (or replaced by our shader) after the spike without touching a screen.
@@ -108,7 +108,7 @@ interactive bottom bar is the template), `AkiTabs` (the pills), `AkiMenu`/`AkiMe
 `AkiInput`, `AkiTextArea`, `AkiHeader`, `AkiSection`, `AkiShelf`, `AkiBadge`, `AkiDialog`, `AkiEmptyState`, `AkiSpinner`,
 `AkiRefresh`, `AkiOnboarding`, `AkiBackdrop` (the soft yellow glow, which is what the glass refracts), `AkiCovers`, `AkiImage`,
 `AkiZoomPage`, and the book pieces (`BookPage`, `BookLayout`, `BookStyle`, `BookMarks`, `BookComfort`, `BookFonts`).
-Rules carried over from `DESIGN.md`: one yellow, glass only for the controls and navigation layer, glass never samples glass (use
+Rules carried over from `design/manga.md`: one yellow, glass only for the controls and navigation layer, glass never samples glass (use
 the library's exported backdrop for sheets over bars), tint means something.
 
 ## 5. Phases

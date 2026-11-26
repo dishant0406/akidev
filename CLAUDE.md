@@ -18,4 +18,4 @@ for motion, responsiveness and interaction details. The two apps should look lik
 screen changes in one, check the other.
 
 The manga app (`manga-app/`, with `desktop/manga*`) is a separate product with its own look, described in
-`manga-app/DESIGN.md`: it does not follow `design/DESIGN_PLAN.md`.
+`design/manga.md`: it does not follow `design/DESIGN_PLAN.md`.

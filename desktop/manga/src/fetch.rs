@@ -31,7 +31,7 @@ impl Req {
 }
 
 /// The site asked for a check (Cloudflare, a captcha) instead of answering. The app has no browser to pass it
-/// in, so it says the site is not supported from here and points to a server that can (see pipeline/MANGA_PLAN.md).
+/// in, so it says the site is not supported from here and points to a server that can (see docs/plans/MANGA_PLAN.md).
 #[derive(Debug)]
 pub struct Challenge {
     pub url: String,

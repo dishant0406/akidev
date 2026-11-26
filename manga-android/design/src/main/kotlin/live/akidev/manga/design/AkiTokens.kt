@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * The design tokens. Screens and components use these names only, never a raw colour (see manga-app/DESIGN.md: the Android
+ * The design tokens. Screens and components use these names only, never a raw colour (see design/manga.md: the Android
  * app has the same tokens as the iOS app's Tokens.swift, with the same values).
  *
  * Surfaces: `background` (the screen), `surface` (cards), `secondary` (chips, fields, quiet fills).

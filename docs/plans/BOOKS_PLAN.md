@@ -14,7 +14,7 @@ Principles, carried over from the manga side:
 2. **Native.** The engine (Rust, shared with the desktop app) reads the file; Swift lays out and draws it. No `WKWebView`, no epub.js, no Readium toolkit.
 3. **Light.** Budget: the app grows by **no more than 0.5 MB** (now 8.2 MB), launch time does not change, no bundled fonts.
 4. **Quiet.** The reader is mostly text. Everything else (bars, sheets) is glass and hides.
-5. **Same look.** `manga-app/DESIGN.md` (bright, one yellow, glass chrome). The reading surface has its own themes.
+5. **Same look.** `design/manga.md` (bright, one yellow, glass chrome). The reading surface has its own themes.
 
 ## 2. What readers want (research)
 

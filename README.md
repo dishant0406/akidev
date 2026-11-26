@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/akidev-icon.svg" alt="Akidev" width="128">
+  <img src="design/branding/akidev-icon.svg" alt="Akidev" width="128">
 </p>
 
 <h1 align="center">Akidev</h1>
@@ -312,9 +312,9 @@ sources still to try. Retries/media preparation share the source deadline. Pinne
 substitute another hash or fall back to Archive, and skip exclusions remain in force.
 
 These are local implementation facts, not a measured live success rate. The historical
-[Torrential research](pipeline/TORRENTIAL_RESEARCH.md) is a revision-pinned static review with
+[Torrential research](docs/plans/TORRENTIAL_RESEARCH.md) is a revision-pinned static review with
 future adoption hypotheses, not a report that every recommendation shipped. The separate
-[implementation status and verification limits](pipeline/SOURCE_RELIABILITY_PLAN.md) distinguish
+[implementation status and verification limits](docs/plans/SOURCE_RELIABILITY_PLAN.md) distinguish
 current controls from follow-up experiments. No new dependencies, secrets or configuration are
 required for this reliability scope.
 

@@ -1,5 +1,5 @@
 //! Sending a book or a series to a phone on the same Wi-Fi: the part the apps call. The work is in `akidev_manga::share`;
-//! see pipeline/SHARE_PLAN.md for what is sent and why.
+//! see docs/plans/SHARE_PLAN.md for what is sent and why.
 
 use crate::{DEVICE, Engine, Result, failed, now_ms, plain_name};
 use akidev_manga::model as m;

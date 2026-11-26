@@ -26,7 +26,7 @@ nothing about a book leaves it.
 1. **On the phone.** No server, no account, no network. Text is analysed in the Rust engine (`desktop/manga/src/book/`), never sent anywhere.
 2. **Quiet.** The reader is mostly text. New things hide in the bars and sheets that already exist (the reader bar, the book details sheet,
    the listen bar). Nothing new is on screen until the person turns it on, except the one line of time left.
-3. **Reuse.** Screens use only Aki components (`scripts/check-ui.sh`); look follows `manga-app/DESIGN.md`. The engine already cuts chapters
+3. **Reuse.** Screens use only Aki components (`scripts/check-ui.sh`); look follows `design/manga.md`. The engine already cuts chapters
    into sentences with UTF-16 positions (`book/speech.rs`), which highlights, search and reading aloud share: every feature below uses
    those same positions, so nothing needs mapping.
 4. **No launch cost.** No new work at launch and no new framework import at launch (no Swift Charts; bars are drawn with Aki shapes).

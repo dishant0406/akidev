@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../branding/akidev-icon.svg" alt="Akidev" width="128">
+  <img src="../design/branding/akidev-icon.svg" alt="Akidev" width="128">
 </p>
 
 <h1 align="center">Akidev Desktop</h1>

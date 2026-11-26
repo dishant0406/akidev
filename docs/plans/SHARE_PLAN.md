@@ -103,7 +103,7 @@ Not solved on purpose: phones on different networks, a guest Wi-Fi with "client 
 7. **Foreground only.** iOS stops an app in the background, and a phone that goes to sleep stops the Wi-Fi. During a transfer we keep the screen on (the apps already have a keep-awake path) and say "Keep Akidev open". Android may add a foreground service later for very large series.
 8. **The receive screen is a switch, not always on.** The listener runs only while the person is on the Share screen (or taps "Receive"). Nothing listens when the person is reading. Why: battery, privacy, and fewer ways to attack the phone.
 9. **Cap everything the receiver gets.** Max file size (2 GB, the same as CBZ import), max file count per session (200), file names are cleaned (no `..`, no slashes), one session at a time (409 for the rest), 429 if a device asks too often. The sha256 must match. A book is checked by the existing EPUB reader before it is added. A CBZ goes through `local::import`, which already has limits. A pointer file is parsed as JSON with a size cap (64 KB), and the repo link goes through the existing add-repo question, so the person still confirms a new source.
-10. **Look.** One Share sheet on both apps, following `design/DESIGN_PLAN.md` and `manga-app/DESIGN.md` (glass, yellow for state). States: "Looking for people nearby", empty (with the tips and the code fallback), sending with a progress ring, done, declined, failed with a retry. The screens are written natively in each app and named the same.
+10. **Look.** One Share sheet on both apps, following `design/DESIGN_PLAN.md` and `design/manga.md` (glass, yellow for state). States: "Looking for people nearby", empty (with the tips and the code fallback), sending with a progress ring, done, declined, failed with a retry. The screens are written natively in each app and named the same.
 
 ## 7. Phases
 
@@ -208,4 +208,4 @@ The owner found Android showing Share as a page and iOS as a sheet, an IP addres
 
 ## 13. No shared Wi-Fi (2026-11-03)
 
-A temporary Android hotspot for Android with iPhone, and Apple's peer-to-peer link for iPhone to iPhone, are built. The research, contract, flow and what is unverified are in `pipeline/SHARE_OFFLINE_PLAN.md`.
+A temporary Android hotspot for Android with iPhone, and Apple's peer-to-peer link for iPhone to iPhone, are built. The research, contract, flow and what is unverified are in `docs/plans/SHARE_OFFLINE_PLAN.md`.

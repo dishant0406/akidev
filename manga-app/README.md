@@ -2,7 +2,7 @@
 
 The iPhone app for reading manga and manhwa: SwiftUI with Liquid Glass chrome (iOS 26), over the Rust
 engine in `desktop/manga` through the uniffi facade in `desktop/manga-ffi`. The plan and the reasoning are in
-[pipeline/MANGA_PLAN.md](../pipeline/MANGA_PLAN.md); the look is described in [DESIGN.md](DESIGN.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
+[docs/plans/MANGA_PLAN.md](../docs/plans/MANGA_PLAN.md); the look is described in [design/manga.md](../design/manga.md) (bright, rounded, yellow, glass; not the dark look of the website). Every screen and flow, with what is built and what is next, is in [USER_FLOW.md](USER_FLOW.md).
 
 ```
 App/                    the SwiftUI app (Home, Library, Updates, Series, Reader, Sources)
@@ -60,7 +60,7 @@ A model is downloaded, checked (it must say a test sentence) and kept in `voices
 The engine side is `desktop/manga/src/voice.rs` (definitions, download, speaking with the `ptts` crate) and
 `src/book/speech.rs` (a chapter's sentences with their places); the app side is `App/Reading/` (`BookListener` makes the speech a
 few sentences ahead and queues it on an `AVAudioEngine`; the page follows the sentence). Adding a model needs no app release as long
-as it is a kind the app runs (`family`, only `ptts` now): see `pipeline/TTS_PLAN.md`, section 11. Debug builds take
+as it is a kind the app runs (`family`, only `ptts` now): see `docs/plans/TTS_PLAN.md`, section 11. Debug builds take
 `-voicesRepo http://127.0.0.1:8771/` to read another repository; `AKI_VOICE_MODEL=/folder cargo test -p akidev-manga --release --test voice -- --ignored`
 runs the test that needs a real model.
 

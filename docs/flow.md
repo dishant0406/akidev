@@ -90,7 +90,7 @@ Edge cases and what the person sees:
 5. An app asks `/v2` first (`sources::refresh_from`). If that has nothing, is not signed by our key, or has a format
    it does not read, it asks the root. A document is used only if it is signed, newer and valid.
 6. Publish before shipping a server or app that needs a new field (`empty_when`, `headers`). The exact steps,
-   and what degrades if the order is wrong, are in `pipeline/SKELETON_PLAN.md` ("How to publish this work").
+   and what degrades if the order is wrong, are in `docs/plans/SKELETON_PLAN.md` ("How to publish this work").
 
 ## Playing a title on the server
 

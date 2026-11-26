@@ -199,7 +199,7 @@ An iPhone never makes a temporary Wi-Fi. An iPhone receiver always shows one cod
 
 ## Docs
 
-The two workers must not edit `pipeline/SHARE_OFFLINE_PLAN.md`, `docs/` or the memory files. They report what they built, what they tested and what they could not.
+The two workers must not edit `docs/plans/SHARE_OFFLINE_PLAN.md`, `docs/` or the memory files. They report what they built, what they tested and what they could not.
 
 ---
 

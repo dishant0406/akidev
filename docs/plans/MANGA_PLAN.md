@@ -49,7 +49,7 @@ speak exactly these six operations, so that porting an existing Mihon or Aidoku 
 - `core/src/http.rs`: one client, timeouts, size cap (`read_capped`). `core/src/cache.rs`.
 - `library/` crate: SQLite store (`rusqlite`), encrypted container, key store with a file fallback on iOS.
 - `server/src/img.rs`: image pipeline (decode, webp) on the server.
-- `pipeline/MOBILE_PLAN.md` already concluded: Rust crates are portable behind uniffi; switch `reqwest` from
+- `docs/plans/MOBILE_PLAN.md` already concluded: Rust crates are portable behind uniffi; switch `reqwest` from
   native-tls to **rustls** for phones; native SwiftUI over uniffi is the best fit (option B).
 
 What is missing for manga: an HTML engine (the current engine reads JSON and RSS only), an image-page
@@ -640,7 +640,7 @@ broken page images; an Internet Archive page is a full-size scan (about 1 MB eac
 ## 18. The look: a reference chosen by the owner (2026-10-22)
 
 The owner shared a screenshot of a webtoon-style reader and asked for the app to look like it, "not like Paperback", with
-Liquid Glass used as much as possible. The shell was redone to match (`manga-app/DESIGN.md` has the analysis and the rules):
+Liquid Glass used as much as possible. The shell was redone to match (`design/manga.md` has the analysis and the rules):
 a bright rounded design with one yellow, soft grey chapter and update cards, and glass for all chrome.
 
 **Built:** a design system (adaptive light and dark colours, rounded type, glass buttons, yellow-tinted pills that slide,
@@ -682,4 +682,4 @@ stakes; global search, filters, categories and backup are the next tier.
 - [MangaDex API limitations](https://api.mangadex.org/docs/2-limitations)
 - [Apple: GlassEffectContainer](https://developer.apple.com/documentation/swiftui/glasseffectcontainer.md)
 - [Ferrostar: Rust to Swift with uniffi and XCFramework](https://stadiamaps.com/blog/ferrostar-building-a-cross-platform-navigation-sdk-in-rust-part-2/)
-- In-repo: `desktop/core/src/definition.rs`, `desktop/sources/README.md`, `pipeline/MOBILE_PLAN.md`, `design/DESIGN_PLAN.md`
+- In-repo: `desktop/core/src/definition.rs`, `desktop/sources/README.md`, `docs/plans/MOBILE_PLAN.md`, `design/DESIGN_PLAN.md`

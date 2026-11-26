@@ -2,7 +2,7 @@
 
 The same app as `manga-app/` (iOS), written in Kotlin and Jetpack Compose. Manga and comics, EPUB books, reading aloud and
 new-chapter alerts all run on the same Rust engine (`desktop/manga`, `desktop/manga-ffi`) through UniFFI bindings.
-How it should look is written in `manga-app/DESIGN.md`; what it does is in `manga-app/USER_FLOW.md`.
+How it should look is written in `design/manga.md`; what it does is in `manga-app/USER_FLOW.md`.
 
 ## Layout
 

@@ -2,7 +2,7 @@
 //!
 //! The module replaces only the step JSON cannot say (signing, a login, scraping a page). What it
 //! answers is read by the plugin's own declarative definition, so every check after it is unchanged.
-//! See `pipeline/WASM_PLUGINS.md` for the ABI and the rules.
+//! See `docs/plans/WASM_PLUGINS.md` for the ABI and the rules.
 //!
 //! The module is untrusted. It gets no files and no clock, and no network except through `http`, which
 //! is held to the rules of a JSON plugin and to the hosts the plugin declared. Its CPU is bounded by

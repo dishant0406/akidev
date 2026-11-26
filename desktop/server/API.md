@@ -111,7 +111,7 @@ bounded file-head range, not merely any downloaded bytes. The server probes thro
 before delivery and rejects a known runtime outside 65–150% of the catalogue runtime. These are
 identity/structure/startup gates, not proof of semantic content identity or uninterrupted playback.
 Archive separately rejects redirects and unknown duration, and runs local `ffprobe` on a capped
-media head before handing out its direct URL (see the [status and limitations](../../pipeline/SOURCE_RELIABILITY_PLAN.md)).
+media head before handing out its direct URL (see the [status and limitations](../../docs/plans/SOURCE_RELIABILITY_PLAN.md)).
 
 ```json
 { "available": true, "url": "https://api.akidev.live/s/<token>", "stream_type": "file",

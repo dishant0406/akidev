@@ -3,7 +3,7 @@
 //! The plugin's WebAssembly module only wraps the service's API (see `code.rs`). The app keeps the
 //! judgement: it picks which file of the release is the episode, it holds the deadline and does the
 //! waiting (a module has no clock), and it decides whether the link it gets back may be played.
-//! The protocol is in `pipeline/WASM_PLUGINS.md`.
+//! The protocol is in `docs/plans/WASM_PLUGINS.md`.
 
 use crate::definition::Module;
 use crate::model::Release;

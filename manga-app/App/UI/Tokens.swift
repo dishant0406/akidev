@@ -11,7 +11,7 @@ extension Color {
     init(hex: UInt32) { self.init(uiColor: UIColor(hex: hex)) }
 }
 
-/// The design tokens. Screens and components use these names only, never a raw colour. See `DESIGN.md`.
+/// The design tokens. Screens and components use these names only, never a raw colour. See `design/manga.md`.
 ///
 /// Surfaces: `background` (the screen), `surface` (cards), `secondary` (chips, fields, quiet fills).
 /// Text: `text`, `textMuted`. Action: `primary` is the one accent (the chosen item, the main action) and `onPrimary`

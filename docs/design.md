@@ -455,7 +455,7 @@ Chosen: the page at `app.akidev.live` is bright and quiet, like the phone app an
 Why: the first version (a dark page, glowing gradients, tilted phones, a sticky phone with a blurred glow) looked like every generated landing page. We looked at Things, Bear, Overcast, Readwise Reader, Lusion, Apple and the Dribbble results for "app landing page". The pages that look expensive are calm. They have one real object, one accent and a lot of space. The Dribbble results were mostly the gradient look we had.
 
 Details that matter:
-- The bright look is the same token names with light values (`html[data-landing]` in `globals.css`), so every colour class on the page works unchanged. This is an exception to `design/DESIGN_PLAN.md`, for this host only: the phone app has its own look (`manga-app/DESIGN.md`).
+- The bright look is the same token names with light values (`html[data-landing]` in `globals.css`), so every colour class on the page works unchanged. This is an exception to `design/DESIGN_PLAN.md`, for this host only: the phone app has its own look (`design/manga.md`).
 - Type is one family (the site's Hanken Grotesk), weight 600, tracking -0.02em on large text, line height 1.05 to 1.15 on headings and 1.6 on body text. No uppercase labels. No gradients except one hard-edged highlight.
 - Store links are plain black badges drawn by us. The official badge art needs a download from Apple and Google.
 - The 3D phone is a progressive enhancement. The page draws a flat phone first and swaps in the 3D one when the browser is idle and WebGL works. The 3D code is a separate chunk (about 178 KB gzipped, measured in a production build), so the first picture never waits for it.
