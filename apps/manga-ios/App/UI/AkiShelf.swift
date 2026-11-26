@@ -37,7 +37,7 @@ struct AkiPoster: View {
                 AkiText("\(rank)", .numeral, tone: .muted)
                     .frame(width: rank >= 10 ? 70 : 46, height: width * 1.5, alignment: .bottomTrailing)
                     .padding(.trailing, 4)
-                    .accessibilityLabel("Number \(rank)")
+                    .accessibilityLabel(Copy.Ui.numberRank(rank))
             }
             VStack(alignment: .leading, spacing: 8) {
                 AkiImage(url: cover, placeholder: 1.5, fill: true)
@@ -56,7 +56,7 @@ struct AkiBillboard: View {
     let title: String
     let cover: String?
     let tag: String
-    var action = "Read now"
+    var action = Copy.Ui.readNow
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {

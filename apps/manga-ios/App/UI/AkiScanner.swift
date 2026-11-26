@@ -14,11 +14,11 @@ struct AkiScanner: View {
             if allowed == true {
                 Camera(found: found)
                     .clipShape(RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
-                    .accessibilityLabel("Camera, looking for a code")
+                    .accessibilityLabel(Copy.Share.cameraLooking)
             } else if allowed == false {
                 VStack(spacing: 12) {
-                    AkiText("Camera access is off. Allow it in Settings to scan a code.", .body, tone: .muted, align: .center)
-                    AkiButton("Open Settings", variant: .ghost, size: .small) {
+                    AkiText(Copy.Share.cameraOff, .body, tone: .muted, align: .center)
+                    AkiButton(Copy.Share.openSettings, variant: .ghost, size: .small) {
                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                     }
                 }

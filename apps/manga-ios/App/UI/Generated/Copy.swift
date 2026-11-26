@@ -712,6 +712,24 @@ enum Copy {
         static let account = "Account"
         static let noSettingsForSource = "This source has no settings."
     }
+    enum Ui {
+        static let clearText = "Clear text"
+        static func tabUnread(_ label: String, _ count: Int) -> String { "\(label), \(count) unread" }
+        static let failedPage = "Try again. Could not load the page."
+        static func failedPageNumber(_ number: Int) -> String { "Try again. Could not load page \(number)." }
+        static let pageLoading = "Loading page"
+        static func pageLoadingNumber(_ number: Int) -> String { "Loading page \(number)" }
+        static let openingChapter = "Opening chapter"
+        static func openingChapterNamed(_ label: String) -> String { "Opening chapter, \(label)" }
+        static let loading = "Loading"
+        static func numberRank(_ rank: Int) -> String { "Number \(rank)" }
+        static let readNow = "Read now"
+        static func pillChoice(_ title: String, _ choice: String) -> String { "\(title), \(choice)" }
+        static let collapsed = "Collapsed"
+        static let refreshing = "Refreshing"
+        static let refreshed = "Refreshed"
+        static let pasteAddress = "Paste an address"
+    }
     enum Welcome {
         static let title = "Welcome to Akidev"
         static let body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

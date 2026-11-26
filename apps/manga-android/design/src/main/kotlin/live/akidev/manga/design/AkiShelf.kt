@@ -43,7 +43,7 @@ fun AkiPoster(title: String, cover: String?, modifier: Modifier = Modifier, capt
     Row(modifier) {
         if (rank != null) {
             // A screen reader says "Number 3" before the title, not just "3".
-            Box(Modifier.width(if (rank >= 10) 70.dp else 46.dp).height(width * 1.5f).padding(end = 4.dp).clearAndSetSemantics { text = AnnotatedString("Number $rank") }, contentAlignment = Alignment.BottomEnd) {
+            Box(Modifier.width(if (rank >= 10) 70.dp else 46.dp).height(width * 1.5f).padding(end = 4.dp).clearAndSetSemantics { text = AnnotatedString(Copy.Ui.numberRank(rank)) }, contentAlignment = Alignment.BottomEnd) {
                 AkiText("$rank", AkiTextStyle.Numeral, tone = AkiTone.Muted)
             }
         }
@@ -57,7 +57,7 @@ fun AkiPoster(title: String, cover: String?, modifier: Modifier = Modifier, capt
 
 /** The one title the feed leads with: a tall picture, a glass tag, the title and what tapping does. */
 @Composable
-fun AkiBillboard(title: String, cover: String?, tag: String, modifier: Modifier = Modifier, action: String = "Read now") {
+fun AkiBillboard(title: String, cover: String?, tag: String, modifier: Modifier = Modifier, action: String = Copy.Ui.readNow) {
     Box(modifier.fillMaxWidth().height(440.dp).clip(RoundedCornerShape(Aki.cardRadius))) {
         // The picture is a glass source of its own (between the backdrop and the page), so the badge on it shows the picture, not the page behind.
         Box(Modifier.fillMaxWidth().height(440.dp).akiGlassSource(layer = -0.5f)) {

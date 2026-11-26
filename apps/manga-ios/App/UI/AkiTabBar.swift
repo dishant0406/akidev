@@ -33,7 +33,7 @@ struct AkiTabBar: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(tab.title(for: kind))
-                    .accessibilityValue(unread(tab) > 0 ? "\(unread(tab)) unread" : "")
+                    .accessibilityValue(unread(tab) > 0 ? Copy.Library.unreadCount(unread(tab)) : "")
                     .accessibilityAddTraits(on ? .isSelected : [])
                     .akiGlassIf(on, .rounded(inner), tint: Aki.primary)
                     .glassEffectID(tab, in: space)

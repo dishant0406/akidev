@@ -29,7 +29,7 @@ import androidx.compose.ui.semantics.semantics
 
 /** A quarter-circle that turns: waiting for something. A screen reader says `label`; pass null when text beside it already says what is loading. */
 @Composable
-fun AkiSpinner(modifier: Modifier = Modifier, label: String? = "Loading") {
+fun AkiSpinner(modifier: Modifier = Modifier, label: String? = Copy.Ui.loading) {
     val color = Aki.colors.textMuted
     val turn by rememberInfiniteTransition(label = "spinner").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "turn")
     Canvas(modifier.size(24.dp).then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)) {
@@ -40,7 +40,7 @@ fun AkiSpinner(modifier: Modifier = Modifier, label: String? = "Loading") {
 
 /** A bar that fills: a download. A screen reader says `label` and the percentage. */
 @Composable
-fun AkiProgressBar(fraction: Double, modifier: Modifier = Modifier, label: String? = "Progress") {
+fun AkiProgressBar(fraction: Double, modifier: Modifier = Modifier, label: String? = Copy.Share.progress) {
     val colors = Aki.colors
     Box(
         modifier.fillMaxWidth().height(6.dp).background(colors.secondary, CircleShape).semantics {

@@ -46,7 +46,7 @@ fun <ID> AkiTabBar(
             for (tab in tabs) {
                 val on = tab.id == selection
                 Box(
-                    Modifier.size(CellWidth, CellHeight).akiPress(label = if (tab.badge > 0) "${tab.label}, ${tab.badge} unread" else tab.label, role = Role.Tab, selected = on) {
+                    Modifier.size(CellWidth, CellHeight).akiPress(label = if (tab.badge > 0) Copy.Ui.tabUnread(tab.label, tab.badge) else tab.label, role = Role.Tab, selected = on) {
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         if (on) onReselect(tab.id) else onSelect(tab.id)
                     },

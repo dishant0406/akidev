@@ -104,7 +104,7 @@ fun AkiRefreshable(onRefresh: suspend () -> Unit, modifier: Modifier = Modifier,
     }
 
     // Pulling down is a gesture a screen reader cannot make, so "Refresh" is also an action in its actions menu.
-    Box(modifier.nestedScroll(connection).semantics { customActions = listOf(CustomAccessibilityAction("Refresh") { if (phase == Phase.Idle) start(); true }) }) {
+    Box(modifier.nestedScroll(connection).semantics { customActions = listOf(CustomAccessibilityAction(Copy.Series.refresh) { if (phase == Phase.Idle) start(); true }) }) {
         content()
         Bead(pull.value, line, phase, turn.floatValue, Modifier.align(Alignment.TopCenter))
     }
@@ -123,7 +123,7 @@ private fun Bead(pull: Float, line: Float, phase: Phase, turn: Float, modifier: 
             .scale(if (phase == Phase.Idle) 0.55f + 0.45f * progress else 1f)
             .size(46.dp).akiGlass(AkiShapes.pill(46.dp))
             // While it runs, and when it is done, a screen reader says so.
-            .then(if (phase == Phase.Idle) Modifier else Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = if (phase == Phase.Loading) "Refreshing" else "Refreshed" }),
+            .then(if (phase == Phase.Idle) Modifier else Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = if (phase == Phase.Loading) Copy.Ui.refreshing else Copy.Ui.refreshed }),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(28.dp)) {

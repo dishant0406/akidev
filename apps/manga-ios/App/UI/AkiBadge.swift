@@ -44,7 +44,7 @@ struct AkiCount: View {
 
     var body: some View {
         AkiText("\(min(value, 99))", .captionStrong, tone: tinted ? .onPrimary : .onMedia, digits: true)
-            .accessibilityLabel("\(value) unread")
+            .accessibilityLabel(Copy.Library.unreadCount(value))
             .padding(.horizontal, 9)
             .frame(minWidth: 26, minHeight: 26)
             .akiGlass(.capsule, tint: tinted ? Aki.primary : Aki.destructive, interactive: false)

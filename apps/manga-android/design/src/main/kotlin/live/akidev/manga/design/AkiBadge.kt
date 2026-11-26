@@ -55,7 +55,7 @@ fun AkiCount(value: Int, modifier: Modifier = Modifier, tinted: Boolean = true) 
     val colors = Aki.colors
     Row(
         modifier.defaultMinSize(minWidth = 26.dp, minHeight = 26.dp).background(if (tinted) colors.primary else colors.destructive, CircleShape).padding(horizontal = 9.dp)
-            .clearAndSetSemantics { text = AnnotatedString("$value unread") },
+            .clearAndSetSemantics { text = AnnotatedString(Copy.Library.unreadCount(value)) },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

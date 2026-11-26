@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 fun AkiPasteButton(modifier: Modifier = Modifier, onPaste: (String) -> Unit) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
-    AkiButton("Paste an address", modifier.fillMaxWidth(), icon = "download", fullWidth = true) {
+    AkiButton(Copy.Ui.pasteAddress, modifier.fillMaxWidth(), icon = "download", fullWidth = true) {
         scope.launch {
             val text = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
             if (!text.isNullOrBlank()) onPaste(text)

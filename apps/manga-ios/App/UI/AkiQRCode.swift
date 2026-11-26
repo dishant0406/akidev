@@ -20,7 +20,7 @@ struct AkiQRCode: View {
         .padding(18)
         .frame(width: size, height: size)
         .background(Color.white, in: RoundedRectangle(cornerRadius: Aki.thumbRadius, style: .continuous))
-        .accessibilityLabel("QR code")
+        .accessibilityLabel(Copy.Share.qrCode)
     }
 
     /// One pixel per module, the modules opaque and the rest clear, for the view to scale up without blurring.

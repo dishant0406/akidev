@@ -37,7 +37,7 @@ struct AkiInput: View {
                     .buttonStyle(.plain)
                     // The hit area grows to 44 pt without moving anything.
                     .padding(14).contentShape(Rectangle()).padding(-14)
-                    .accessibilityLabel("Clear text")
+                    .accessibilityLabel(Copy.Ui.clearText)
             }
             // While typing, Done does what the keyboard's Return key does: it searches. A password or email field (a form) only
             // closes the keyboard, so Done cannot send a form early.
@@ -45,7 +45,7 @@ struct AkiInput: View {
                 Button {
                     focused = false
                     if !secure && !email { onSubmit() }
-                } label: { AkiText("Done", .bodyStrong, tone: .text) }
+                } label: { AkiText(Copy.Share.done, .bodyStrong, tone: .text) }
                     .buttonStyle(.plain)
                     .padding(10).contentShape(Rectangle()).padding(-10)
                     .transition(.opacity)

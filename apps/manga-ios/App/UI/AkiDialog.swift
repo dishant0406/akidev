@@ -15,7 +15,7 @@ func akiAnnounce(_ text: String) {
 extension View {
     /// A message with one button.
     func akiAlert(_ title: String, message: String?, isPresented: Binding<Bool>) -> some View {
-        alert(title, isPresented: isPresented) { Button("Done", role: .cancel) {} } message: { Text(message ?? "") }
+        alert(title, isPresented: isPresented) { Button(Copy.Share.done, role: .cancel) {} } message: { Text(message ?? "") }
     }
 
     /// A question with a text field: an address, a name.
@@ -23,7 +23,7 @@ extension View {
         alert(title, isPresented: isPresented) {
             TextField(placeholder, text: text).textInputAutocapitalization(.never).autocorrectionDisabled()
             Button(confirm, action: onConfirm)
-            Button("Cancel", role: .cancel) { text.wrappedValue = "" }
+            Button(Copy.Sources.cancel, role: .cancel) { text.wrappedValue = "" }
         } message: { Text(message) }
     }
 
@@ -39,7 +39,7 @@ extension View {
     func akiConfirm(_ title: String, message: String, confirm: String, isPresented: Binding<Bool>, onConfirm: @escaping () -> Void) -> some View {
         alert(title, isPresented: isPresented) {
             Button(confirm, role: .destructive, action: onConfirm)
-            Button("Cancel", role: .cancel) {}
+            Button(Copy.Sources.cancel, role: .cancel) {}
         } message: { Text(message) }
     }
 

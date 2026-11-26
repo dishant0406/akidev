@@ -1,0 +1,18 @@
+{
+  "clearText": "Clear text",
+  "tabUnread": "{label}, {count:int} unread",
+  "failedPage": "Try again. Could not load the page.",
+  "failedPageNumber": "Try again. Could not load page {number:int}.",
+  "pageLoading": "Loading page",
+  "pageLoadingNumber": "Loading page {number:int}",
+  "openingChapter": "Opening chapter",
+  "openingChapterNamed": "Opening chapter, {label}",
+  "loading": "Loading",
+  "numberRank": "Number {rank:int}",
+  "readNow": "Read now",
+  "pillChoice": "{title}, {choice}",
+  "collapsed": "Collapsed",
+  "refreshing": "Refreshing",
+  "refreshed": "Refreshed",
+  "pasteAddress": "Paste an address"
+}

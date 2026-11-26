@@ -714,6 +714,24 @@ object Copy {
         const val account = "Account"
         const val noSettingsForSource = "This source has no settings."
     }
+    object Ui {
+        const val clearText = "Clear text"
+        fun tabUnread(label: String, count: Int): String = "${label}, ${count} unread"
+        const val failedPage = "Try again. Could not load the page."
+        fun failedPageNumber(number: Int): String = "Try again. Could not load page ${number}."
+        const val pageLoading = "Loading page"
+        fun pageLoadingNumber(number: Int): String = "Loading page ${number}"
+        const val openingChapter = "Opening chapter"
+        fun openingChapterNamed(label: String): String = "Opening chapter, ${label}"
+        const val loading = "Loading"
+        fun numberRank(rank: Int): String = "Number ${rank}"
+        const val readNow = "Read now"
+        fun pillChoice(title: String, choice: String): String = "${title}, ${choice}"
+        const val collapsed = "Collapsed"
+        const val refreshing = "Refreshing"
+        const val refreshed = "Refreshed"
+        const val pasteAddress = "Paste an address"
+    }
     object Welcome {
         const val title = "Welcome to Akidev"
         const val body = "Akidev is a reader. It comes with no manga or books. Add a repository, which is a folder of sources, and read what those sources offer."

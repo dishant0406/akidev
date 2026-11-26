@@ -33,7 +33,7 @@ fun <V> AkiMenuPill(selection: V, onSelect: (V) -> Unit, options: List<AkiOption
     AkiMenuPopup(open, { open = false }, items) {
         Row(
             modifier.heightIn(min = 44.dp).akiGlass(AkiShapes.pill(44.dp)).akiPress(label = current, role = Role.DropdownList) { open = true }
-                .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }.padding(horizontal = 16.dp),
+                .semantics { stateDescription = if (open) Copy.Books.expanded else Copy.Ui.collapsed }.padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -55,8 +55,8 @@ fun <V> AkiSelect(title: String, selection: V, onSelect: (V) -> Unit, options: L
             // A chip, so it reads as something to tap.
             AkiText(
                 options.firstOrNull { it.value == selection }?.label ?: "", AkiTextStyle.BodyStrong, lines = 1,
-                modifier = Modifier.akiPress(label = "$title, ${options.firstOrNull { it.value == selection }?.label ?: ""}", role = Role.DropdownList) { open = true }
-                    .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                modifier = Modifier.akiPress(label = Copy.Ui.pillChoice(title, options.firstOrNull { it.value == selection }?.label ?: ""), role = Role.DropdownList) { open = true }
+                    .semantics { stateDescription = if (open) Copy.Books.expanded else Copy.Ui.collapsed }
                     .heightIn(min = 36.dp).akiTouchTarget().background(Aki.colors.secondary, AkiShapes.pill(36.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }

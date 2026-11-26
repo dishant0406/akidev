@@ -39,7 +39,7 @@ struct AkiImage: View {
                         }
                     }
                     .transition(.opacity)
-                    .accessibilityLabel(pageNumber.map { "Page \($0 + 1)" } ?? "")
+                    .accessibilityLabel(pageNumber.map { Copy.Series.pageNumber($0 + 1) } ?? "")
                 } else if failed, pageNumber == nil {
                     AkiIcon("image", tone: .muted)
                 }

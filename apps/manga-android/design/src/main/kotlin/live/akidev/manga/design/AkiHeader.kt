@@ -26,7 +26,7 @@ fun AkiHeader(title: String, modifier: Modifier = Modifier, subtitle: String? = 
 @Composable
 fun AkiBackHeader(title: String, back: () -> Unit, modifier: Modifier = Modifier, subtitle: String? = null, trailing: @Composable RowScope.() -> Unit = {}) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        AkiIconButton("back", "Back", onClick = back)
+        AkiIconButton("back", Copy.Series.back, onClick = back)
         AkiHeader(title, subtitle = subtitle, trailing = trailing)
     }
 }

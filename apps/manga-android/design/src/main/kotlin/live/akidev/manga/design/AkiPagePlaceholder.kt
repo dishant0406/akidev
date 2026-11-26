@@ -43,7 +43,7 @@ fun AkiPagePlaceholder(number: Int? = null, failed: Boolean = false, retry: () -
     Box(
         Modifier.fillMaxSize().background(colors.stageAlt)
             .semantics {
-                contentDescription = if (failed) (if (number != null) "Try again. Could not load page $number." else "Try again. Could not load the page.") else if (number != null) "Loading page $number" else "Loading page"
+                contentDescription = if (failed) (if (number != null) Copy.Ui.failedPageNumber(number) else Copy.Ui.failedPage) else if (number != null) Copy.Ui.pageLoadingNumber(number) else Copy.Ui.pageLoading
                 if (failed) role = Role.Button
             }
             .clickable(remember { MutableInteractionSource() }, null, enabled = failed) { retry() },
@@ -52,7 +52,7 @@ fun AkiPagePlaceholder(number: Int? = null, failed: Boolean = false, retry: () -
         if (failed) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AkiIcon("refresh", size = 22.dp, tone = AkiTone.OnMedia)
-                AkiText("Try again", AkiTextStyle.CaptionStrong, tone = AkiTone.OnMedia)
+                AkiText(Copy.Home.tryAgain, AkiTextStyle.CaptionStrong, tone = AkiTone.OnMedia)
             }
         } else {
             if (!akiReduceMotion()) Shimmer()
@@ -81,7 +81,7 @@ private fun Shimmer() {
 fun AkiOpeningLoader(label: String? = null) {
     val turn by rememberInfiniteTransition(label = "opening").animateFloat(0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart), label = "turn")
     val color = Aki.colors.primary
-    Column(Modifier.semantics { contentDescription = if (label != null) "Opening chapter, $label" else "Opening chapter" }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.semantics { contentDescription = if (label != null) Copy.Ui.openingChapterNamed(label) else Copy.Ui.openingChapter }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Canvas(Modifier.size(30.dp)) {
             val width = 3.dp.toPx()
             drawArc(color, turn, 100f, false, Offset(width / 2, width / 2), Size(size.width - width, size.height - width), style = Stroke(width, cap = StrokeCap.Round))

@@ -9,8 +9,8 @@ struct AkiPagePlaceholder: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var label: String {
-        guard let number else { return failed ? "Try again. Could not load the page." : "Loading page" }
-        return failed ? "Try again. Could not load page \(number)." : "Loading page \(number)"
+        guard let number else { return failed ? Copy.Ui.failedPage : Copy.Ui.pageLoading }
+        return failed ? Copy.Ui.failedPageNumber(number) : Copy.Ui.pageLoadingNumber(number)
     }
 
     var body: some View {
@@ -19,7 +19,7 @@ struct AkiPagePlaceholder: View {
             if failed {
                 VStack(spacing: 10) {
                     AkiIcon("refresh", size: 22, tone: .onMedia)
-                    AkiText("Try again", .captionStrong, tone: .onMedia)
+                    AkiText(Copy.Home.tryAgain, .captionStrong, tone: .onMedia)
                 }
             } else {
                 shimmer
@@ -66,6 +66,6 @@ struct AkiOpeningLoader: View {
             if let label { AkiText(label, .caption, tone: .onMedia).opacity(0.6) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Opening chapter")
+        .accessibilityLabel(Copy.Ui.openingChapter)
     }
 }

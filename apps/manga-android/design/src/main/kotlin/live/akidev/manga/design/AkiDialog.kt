@@ -71,7 +71,7 @@ fun AkiDialogLayer(dialogs: AkiDialogs) {
     BackHandler(enabled = visible) { dialogs.shown?.onDismiss?.invoke() }
     AnimatedVisibility(visible, enter = fadeIn(tween(150)), exit = fadeOut(tween(120))) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(remember { MutableInteractionSource() }, null, onClickLabel = "Cancel") { dialogs.shown?.onDismiss?.invoke() }
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(remember { MutableInteractionSource() }, null, onClickLabel = Copy.Sources.cancel) { dialogs.shown?.onDismiss?.invoke() }
                 .systemBarsPadding().imePadding(),
             contentAlignment = Alignment.Center,
         ) {
@@ -130,7 +130,7 @@ private fun AkiDialogCard(title: String, message: String?, onDismiss: () -> Unit
 /** A message with one button. */
 @Composable
 fun AkiAlert(title: String, message: String?, onDismiss: () -> Unit) {
-    AkiDialogCard(title, message, onDismiss) { AkiButton("Done", Modifier.weight(1f), onClick = onDismiss) }
+    AkiDialogCard(title, message, onDismiss) { AkiButton(Copy.Share.done, Modifier.weight(1f), onClick = onDismiss) }
 }
 
 /** A question with a text field: an address, a name. */
@@ -138,7 +138,7 @@ fun AkiAlert(title: String, message: String?, onDismiss: () -> Unit) {
 fun AkiPrompt(title: String, message: String, placeholder: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit, initial: String = "") {
     var text by remember { mutableStateOf(initial) }
     AkiDialogCard(title, message, onDismiss, content = { AkiInput(placeholder, text, { text = it }, isUrl = true, onSubmit = { onConfirm(text) }, autoFocus = true) }) {
-        AkiButton("Cancel", Modifier.weight(1f), onClick = onDismiss)
+        AkiButton(Copy.Sources.cancel, Modifier.weight(1f), onClick = onDismiss)
         AkiButton(confirm, Modifier.weight(1f)) { onConfirm(text) }
     }
 }
@@ -156,7 +156,7 @@ fun AkiQuestion(title: String, message: String, yes: String, no: String, onYes: 
 @Composable
 fun AkiConfirm(title: String, message: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AkiDialogCard(title, message, onDismiss) {
-        AkiButton("Cancel", Modifier.weight(1f), onClick = onDismiss)
+        AkiButton(Copy.Sources.cancel, Modifier.weight(1f), onClick = onDismiss)
         AkiButton(confirm, Modifier.weight(1f), variant = AkiButtonVariant.Destructive) { onConfirm(); onDismiss() }
     }
 }
