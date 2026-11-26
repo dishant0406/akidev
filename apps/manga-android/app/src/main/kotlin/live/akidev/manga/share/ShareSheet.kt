@@ -82,20 +82,20 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                AkiText(if (model.receiving) "Receive" else "Send", AkiTextStyle.Title, Modifier.semantics { heading() })
-                model.label?.let { AkiText(if (model.ready) it else "Getting “$it” ready…", AkiTextStyle.Body, tone = AkiTone.Muted, lines = 1) }
+                AkiText(if (model.receiving) Copy.Share.receive else Copy.Share.send, AkiTextStyle.Title, Modifier.semantics { heading() })
+                model.label?.let { AkiText(if (model.ready) it else Copy.Share.gettingReady(it), AkiTextStyle.Body, tone = AkiTone.Muted, lines = 1) }
             }
             val coming = model.incoming?.takeIf { it.step == IncomingStep.Receiving }
             val state = model.state
             when {
-                model.received != null -> Finished("check", model.received.orEmpty(), "Done", onDismiss)
-                coming != null -> Working("Receiving from ${coming.from}", coming.fraction, false, null, model::stopReceiving)
-                state is SendState.Joining -> Working("Joining their Wi-Fi…", null, false, null, model::stopSending)
-                state is SendState.Connected -> Working("Connected. Waiting for ${state.to.alias} to send…", null, false, null, model::stopSending)
-                state is SendState.Waiting -> Working("Waiting for ${state.to.alias}…", null, false, null, model::stopSending)
-                state is SendState.Sending -> Working("Sending to ${state.to.alias}", state.fraction, true, "Keep Akidev open", model::stopSending)
-                state is SendState.Done -> Finished("check", "Sent to ${state.to.alias}", "Done", onDismiss)
-                state is SendState.Failed -> Finished(null, state.message, "Try again", model::again, "Cancel", onDismiss)
+                model.received != null -> Finished("check", model.received.orEmpty(), Copy.Share.done, onDismiss)
+                coming != null -> Working(Copy.Share.receivingFrom(coming.from), coming.fraction, false, null, model::stopReceiving)
+                state is SendState.Joining -> Working(Copy.Share.joiningWifi, null, false, null, model::stopSending)
+                state is SendState.Connected -> Working(Copy.Share.connectedWaiting(state.to.alias), null, false, null, model::stopSending)
+                state is SendState.Waiting -> Working(Copy.Share.waitingFor(state.to.alias), null, false, null, model::stopSending)
+                state is SendState.Sending -> Working(Copy.Share.sendingTo(state.to.alias), state.fraction, true, Copy.Share.keepAkidevOpen, model::stopSending)
+                state is SendState.Done -> Finished("check", Copy.Share.sentTo(state.to.alias), Copy.Share.done, onDismiss)
+                state is SendState.Failed -> Finished(null, state.message, Copy.Home.tryAgain, model::again, Copy.Sources.cancel, onDismiss)
                 state is SendState.Scanning -> Scan(model, state.denied)
                 model.receiving -> Receive(model, scan, startNetwork)
                 else -> Choose(model, scan, startNetwork)
@@ -104,28 +104,29 @@ fun ShareSheet(sharing: Sharing, onDismiss: () -> Unit) {
         // Inside the sheet: a dialog drawn outside it would sit behind the sheet's own window.
         model.incoming?.takeIf { it.step == IncomingStep.Asked }?.let { asked ->
             val what = asked.files.joinToString(", ") { what(it, Formatter.formatFileSize(context, it.size.toLong())) }
-            AkiQuestion("${asked.from} wants to send you $what", "Only accept from someone you know.", "Accept", "Decline", { model.answer(true) }, { model.answer(false) })
+            AkiQuestion(Copy.Share.wantsToSendYou(asked.from, what), Copy.Share.onlyAcceptFromKnown, Copy.Share.accept, Copy.Share.decline, { model.answer(true) }, { model.answer(false) })
         }
         model.newSource?.let { pending ->
-            AkiQuestion("Add the source “${pending.card.sourceName}”?", sourceMessage(pending.card), "Add source", "Cancel", { model.answerSource(true) }, { model.answerSource(false) })
+            AkiQuestion(Copy.Share.addSourceQuestionAndroid(pending.card.sourceName), sourceMessage(pending.card), Copy.Share.addSourceButton, Copy.Sources.cancel, { model.answerSource(true) }, { model.answerSource(false) })
         }
         model.message?.let { AkiAlert(it.title, it.message, model::closeMessage) }
     }
 }
 
 private fun what(file: ShareOffered, size: String): String = when (file.kind) {
-    "book" -> "a book (${file.name}, $size)"
-    "comic" -> "a comic (${file.name}, $size)"
-    "card" -> "a series (${file.name.removeSuffix(".akidev.json")})"
-    else -> "a file (${file.name}, $size)"
+    "book" -> Copy.Share.whatBook(file.name, size)
+    "comic" -> Copy.Share.whatComic(file.name, size)
+    "card" -> Copy.Share.whatSeries(file.name.removeSuffix(".akidev.json"))
+    else -> Copy.Share.whatFile(file.name, size)
 }
 
 /** What the person is told before a source from another phone is added: it is code that runs on this phone. */
 private fun sourceMessage(card: ShareCard): String {
-    val languages = if (card.languages.isEmpty()) "" else " (${card.languages.joinToString(", ")})"
-    val adult = if (card.nsfw) " It is marked 18+." else ""
-    val from = card.repo?.let { " It comes from the repository $it." } ?: " Your friend added it by hand."
-    return "“${card.title}” is read from ${card.sourceName}$languages, which this phone does not have.$adult$from A source decides which sites this phone contacts. Add it only if you trust your friend."
+    val source = if (card.languages.isEmpty()) card.sourceName else Copy.Share.sourceWithLanguages(card.sourceName, card.languages.joinToString(", "))
+    val adult = if (card.nsfw) Copy.Share.markedAdult else null
+    val from = card.repo?.let { Copy.Share.fromRepository(it) } ?: Copy.Share.addedByHand
+    val details = listOfNotNull(adult, from).joinToString(" ")
+    return Copy.Share.sourceMessage(card.title, source, details)
 }
 
 /** The code the other phone scans, and who this phone is. */
@@ -136,14 +137,14 @@ private fun Receive(model: ShareModel, scan: () -> Unit, startNetwork: () -> Uni
         when {
             code != null -> {
                 QrCode(code)
-                AkiText(if (model.network != null) PRIVATE_HELP else "Ask them to scan this code, or choose Share on their phone.", tone = AkiTone.Muted, align = TextAlign.Center)
-                AkiText("Visible as ${model.alias}", AkiTextStyle.Caption, tone = AkiTone.Muted)
+                AkiText(if (model.network != null) Copy.Share.privateHelp else Copy.Share.askThemToScan, tone = AkiTone.Muted, align = TextAlign.Center)
+                AkiText(Copy.Share.visibleAs(model.alias), AkiTextStyle.Caption, tone = AkiTone.Muted)
             }
-            model.startup != Startup.Starting -> AkiText("Connect to Wi-Fi to receive.", tone = AkiTone.Muted, align = TextAlign.Center)
+            model.startup != Startup.Starting -> AkiText(Copy.Share.connectToWifiToReceive, tone = AkiTone.Muted, align = TextAlign.Center)
             else -> AkiSpinner()
         }
         if (model.startup != Startup.Starting) {
-            AkiButton("Scan a code", variant = AkiButtonVariant.Ghost, icon = "qr", onClick = scan)
+            AkiButton(Copy.Share.scanACode, variant = AkiButtonVariant.Ghost, icon = "qr", onClick = scan)
             NetworkButton(model, startNetwork)
         }
     }
@@ -153,13 +154,12 @@ private fun Receive(model: ShareModel, scan: () -> Unit, startNetwork: () -> Uni
 @Composable
 private fun NetworkButton(model: ShareModel, startNetwork: () -> Unit) {
     when {
-        model.making -> AkiSpinner(label = "Starting temporary Wi-Fi")
-        model.network != null -> AkiButton("Use shared Wi-Fi instead", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = model::endNetwork)
-        else -> AkiButton("Use a temporary Wi-Fi", variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = startNetwork)
+        model.making -> AkiSpinner(label = Copy.Share.startingWifi)
+        model.network != null -> AkiButton(Copy.Share.useSharedWifi, variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = model::endNetwork)
+        else -> AkiButton(Copy.Share.useTemporaryWifi, variant = AkiButtonVariant.Ghost, fullWidth = true, onClick = startNetwork)
     }
 }
 
-private const val PRIVATE_HELP = "Ask them to scan this. It makes a private Wi-Fi just for this send."
 
 /** Who to send to: the phones found, one tap each. With a temporary Wi-Fi up, its code instead: the phone that scans it is who gets the send. */
 @Composable
@@ -168,17 +168,17 @@ private fun Choose(model: ShareModel, scan: () -> Unit, startNetwork: () -> Unit
         val code = model.code
         if (model.network != null && code != null) {
             QrCode(code)
-            AkiText(PRIVATE_HELP, tone = AkiTone.Muted, align = TextAlign.Center)
+            AkiText(Copy.Share.privateHelp, tone = AkiTone.Muted, align = TextAlign.Center)
         } else if (model.peers.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AkiSpinner(label = null)
-                AkiText("Looking nearby…", tone = AkiTone.Muted)
-                if (model.startup == Startup.Lonely) AkiText("Cannot see their phone? Both phones need to be on the same Wi-Fi.", AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
+                AkiText(Copy.Share.lookingNearby, tone = AkiTone.Muted)
+                if (model.startup == Startup.Lonely) AkiText(Copy.Share.cannotSeePhone, AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
             }
         } else {
             for (peer in model.peers) PersonRow(peer, model.ready) { model.send(peer) }
         }
-        AkiButton("Scan their code", icon = "qr", fullWidth = true, onClick = scan)
+        AkiButton(Copy.Share.scanTheirCode, icon = "qr", fullWidth = true, onClick = scan)
         if (model.startup != Startup.Starting) NetworkButton(model, startNetwork)
     }
 }
@@ -194,15 +194,15 @@ private fun Scan(model: ShareModel, denied: Boolean) {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (denied) {
-            AkiText("Camera access is off. Allow it in Settings to scan a code.", tone = AkiTone.Muted, align = TextAlign.Center)
-            AkiButton("Open Settings", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small) {
+            AkiText(Copy.Share.cameraOff, tone = AkiTone.Muted, align = TextAlign.Center)
+            AkiButton(Copy.Share.openSettings, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small) {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
             }
         } else {
             QrScanner(model::codeScanned, Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(28.dp)))
             model.scanNote?.let { AkiText(it, AkiTextStyle.Caption, Modifier.semantics { liveRegion = LiveRegionMode.Assertive }, tone = AkiTone.Destructive, align = TextAlign.Center) }
         }
-        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = model::again)
+        AkiButton(Copy.Sources.cancel, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = model::again)
     }
 }
 
@@ -212,9 +212,9 @@ private fun Working(title: String, fraction: Double?, percent: Boolean, note: St
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (fraction == null) AkiSpinner(label = null)
         AkiText(title, AkiTextStyle.Heading, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, align = TextAlign.Center, isHeading = true)
-        if (fraction != null) AkiProgressBar(fraction, label = "Progress")
+        if (fraction != null) AkiProgressBar(fraction, label = Copy.Share.progress)
         if (fraction != null && percent) AkiText(NumberFormat.getPercentInstance().format(fraction), AkiTextStyle.Caption, tone = AkiTone.Muted, tabular = true)
-        AkiButton("Cancel", variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = cancel)
+        AkiButton(Copy.Sources.cancel, variant = AkiButtonVariant.Ghost, size = AkiButtonSize.Small, onClick = cancel)
         note?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted) }
     }
 }
@@ -242,28 +242,28 @@ fun CardSheet(pending: PendingCard, onDismiss: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            AkiText("Add “${card.title}”?", AkiTextStyle.Title, Modifier.semantics { heading() })
-            AkiText("Another phone shared this series. It is read from the source ${card.sourceName}, so only a link to it is copied.", AkiTextStyle.Body, tone = AkiTone.Muted)
+            AkiText(Copy.Share.addSeriesQuestion(card.title), AkiTextStyle.Title, Modifier.semantics { heading() })
+            AkiText(Copy.Share.anotherPhoneShared(card.sourceName), AkiTextStyle.Body, tone = AkiTone.Muted)
             AkiCard(padding = 4.dp) {
-                AkiRow(card.sourceName, subtitle = (card.languages.joinToString(", ").uppercase() + if (card.nsfw) " · 18+" else "").trimStart(' ', '·'))
+                AkiRow(card.sourceName, subtitle = if (!card.nsfw) card.languages.joinToString(", ").uppercase() else if (card.languages.isEmpty()) Copy.Share.adultTag else Copy.Sources.repositoryLanguagesAdult(card.languages.joinToString(", ").uppercase()))
             }
-            AkiText(card.repo?.let { "This phone does not have the source yet. It comes from $it." } ?: "This phone does not have the source yet. It comes with the series.", AkiTextStyle.Caption, tone = AkiTone.Muted)
-            AkiText("A source decides which sites this phone contacts. Add it only if you trust your friend.", AkiTextStyle.Caption, tone = AkiTone.Muted)
-            AkiButton("Add source and series", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) {
+            AkiText(card.repo?.let { Copy.Share.noSourceYetFrom(it) } ?: Copy.Share.noSourceYetWithSeries, AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(Copy.Share.sourceDecides, AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiButton(Copy.Share.addSourceAndSeries, variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large, fullWidth = true) {
                 if (adding) return@AkiButton
                 adding = true
                 scope.launch {
                     try {
                         app.engine.shareAddCard(pending.path)
                         app.refresh()
-                        app.notice = live.akidev.manga.app.Problem("Series added", "“${card.title}” is in your library.")
+                        app.notice = live.akidev.manga.app.Problem(Copy.Share.seriesAdded, Copy.Settings.fileAddedToLibrary(card.title))
                     } catch (failure: Exception) {
                         app.notice = describe(failure)
                     }
                     onDismiss()
                 }
             }
-            AkiButton("Cancel", fullWidth = true, onClick = onDismiss)
+            AkiButton(Copy.Sources.cancel, fullWidth = true, onClick = onDismiss)
         }
     }
 }

@@ -568,6 +568,85 @@ enum Copy {
         static let sortRandom = "Random"
         static func chapterCount(_ count: Int) -> String { count == 1 ? "\(count) chapter" : "\(count) chapters" }
     }
+    enum Share {
+        static let receive = "Receive"
+        static let send = "Send"
+        static let onlyAcceptFromKnown = "Only accept from someone you know."
+        static let accept = "Accept"
+        static let decline = "Decline"
+        static func addSourceQuestionIos(_ name: String) -> String { "Add the source \(name)?" }
+        static func addSourceQuestionAndroid(_ name: String) -> String { "Add the source “\(name)”?" }
+        static let addSourceButton = "Add source"
+        static let addSourceAndSeries = "Add source and series"
+        static let couldNotShare = "Could not share"
+        static let turnOnLocalNetwork = "Turn on Local Network for Akidev to see other phones."
+        static let openSettings = "Open Settings"
+        static let joiningWifi = "Joining their Wi-Fi…"
+        static func receivingFrom(_ name: String) -> String { "Receiving from \(name)" }
+        static func connectedWaiting(_ name: String) -> String { "Connected. Waiting for \(name) to send…" }
+        static let findingPhone = "Finding their phone…"
+        static let lookingNearby = "Looking nearby…"
+        static let cannotSeePhone = "Cannot see their phone? Both phones need to be on the same Wi-Fi."
+        static func sendToPeer(_ name: String) -> String { "Send to \(name)" }
+        static let scanTheirCode = "Scan their code"
+        static func waitingFor(_ name: String) -> String { "Waiting for \(name)…" }
+        static func sendingTo(_ name: String) -> String { "Sending to \(name)" }
+        static let keepAkidevOpen = "Keep Akidev open"
+        static func sentTo(_ name: String) -> String { "Sent to \(name)" }
+        static func peerDeclined(_ name: String) -> String { "\(name) declined." }
+        static func peerBusy(_ name: String) -> String { "\(name) is busy. Try again in a moment." }
+        static let done = "Done"
+        static let askThemToScan = "Ask them to scan this code, or choose Share on their phone."
+        static func visibleAs(_ name: String) -> String { "Visible as \(name)" }
+        static let connectToWifiToReceive = "Connect to Wi-Fi to receive."
+        static let scanACode = "Scan a code"
+        static let progress = "Progress"
+        static func wantsToSendYou(_ from: String, _ what: String) -> String { "\(from) wants to send you \(what)" }
+        static func whatBook(_ name: String, _ size: String) -> String { "a book (\(name), \(size))" }
+        static func whatComic(_ name: String, _ size: String) -> String { "a comic (\(name), \(size))" }
+        static func whatSeries(_ name: String) -> String { "a series (\(name))" }
+        static func whatFile(_ name: String, _ size: String) -> String { "a file (\(name), \(size))" }
+        static func sourceMessage(_ title: String, _ source: String, _ details: String) -> String { "“\(title)” is read from \(source), which this phone does not have. \(details) A source decides which sites this phone contacts. Add it only if you trust your friend." }
+        static func sourceWithLanguages(_ source: String, _ languages: String) -> String { "\(source) (\(languages))" }
+        static let markedAdult = "It is marked 18+."
+        static func fromRepository(_ repo: String) -> String { "It comes from the repository \(repo)." }
+        static let addedByHand = "Your friend added it by hand."
+        static let notAkidevCode = "That is not an Akidev code. Ask them to show the code again."
+        static let couldNotJoinWifiIos = "Could not join their Wi-Fi. Try again."
+        static let couldNotJoinWifiAndroid = "Could not join their Wi-Fi. Move the phones closer and try again."
+        static let couldNotReachPhoneWifi = "Could not reach that phone. Check that both phones are on the same Wi-Fi."
+        static let couldNotReachTryAgain = "Could not reach that phone. Try again."
+        static let turnWifiOnForBoth = "Could not reach that phone. Turn Wi-Fi on for both phones. It does not need to be connected to a network."
+        static let noSharedWifi = "That phone has no shared Wi-Fi with you. Choose “Use a temporary Wi-Fi” on this phone and ask them to scan your code."
+        static func sendingStopped(_ reason: String) -> String { "Sending stopped: \(reason)." }
+        static let couldNotAddTheSource = "Could not add the source"
+        static let sourceNeedsInternet = "This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
+        static let couldNotAddSourceOfflineIos = "Could not add the source. This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
+        static let couldNotStartWifi = "Could not start temporary Wi-Fi"
+        static let couldNotMakeCode = "This phone could not make a code for it. Try again."
+        static func allowPermission(_ permission: String) -> String { "Allow \(permission) for Akidev in the Android Settings app, then try again." }
+        static let nearbyDevices = "Nearby devices"
+        static let location = "Location"
+        static func gettingReady(_ name: String) -> String { "Getting “\(name)” ready…" }
+        static let startingWifi = "Starting temporary Wi-Fi"
+        static let useSharedWifi = "Use shared Wi-Fi instead"
+        static let useTemporaryWifi = "Use a temporary Wi-Fi"
+        static let privateHelp = "Ask them to scan this. It makes a private Wi-Fi just for this send."
+        static let cameraOff = "Camera access is off. Allow it in Settings to scan a code."
+        static let cannotStartWifi = "This phone could not start a temporary Wi-Fi. Use the same Wi-Fi on both phones, or turn on this phone’s hotspot and join it from the other one."
+        static let qrCode = "QR code"
+        static let cameraLooking = "Camera, looking for a code"
+        static func addSeriesQuestion(_ title: String) -> String { "Add “\(title)”?" }
+        static func anotherPhoneShared(_ source: String) -> String { "Another phone shared this series. It is read from the source \(source), so only a link to it is copied." }
+        static let adultTag = "18+"
+        static func noSourceYetFrom(_ repo: String) -> String { "This phone does not have the source yet. It comes from \(repo)." }
+        static let noSourceYetWithSeries = "This phone does not have the source yet. It comes with the series."
+        static let sourceDecides = "A source decides which sites this phone contacts. Add it only if you trust your friend."
+        static let seriesAdded = "Series added"
+        static let opensEpubAndCbz = "Akidev opens EPUB books and CBZ comics."
+        static let fileDamaged = "Check that the file is not damaged, then try opening it again."
+        static let addedToBooks = "Added to your books"
+    }
     enum Sources {
         static func installedCount(_ count: Int) -> String { count == 1 ? "\(count) source installed" : "\(count) sources installed" }
         static let installed = "Installed"

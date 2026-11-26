@@ -16,6 +16,7 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import live.akidev.manga.design.Copy
 
 /** A private Wi-Fi this phone made: its name, its password, and this phone's address on it. */
 class HotspotInfo(val ssid: String, val password: String, val address: String)
@@ -97,7 +98,7 @@ class Hotspot(private val context: Context) {
     }.getOrDefault(emptyList())
 
     private companion object {
-        const val CANNOT = "This phone could not start a temporary Wi-Fi. Use the same Wi-Fi on both phones, or turn on this phone’s hotspot and join it from the other one."
+        const val CANNOT = Copy.Share.cannotStartWifi
     }
 }
 
@@ -120,7 +121,7 @@ class WifiJoin(context: Context) {
             }
 
             override fun onUnavailable() {
-                if (go.isActive) go.resumeWithException(NetworkProblem("Could not join their Wi-Fi. Move the phones closer and try again."))
+                if (go.isActive) go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifiAndroid))
             }
         }
         callback = joining
@@ -128,7 +129,7 @@ class WifiJoin(context: Context) {
             // The time counts the person's tap on the system's "Connect" question too, so it is not short.
             connectivity.requestNetwork(request, joining, 60_000)
         } catch (failure: RuntimeException) {
-            go.resumeWithException(NetworkProblem("Could not join their Wi-Fi. Move the phones closer and try again."))
+            go.resumeWithException(NetworkProblem(Copy.Share.couldNotJoinWifiAndroid))
         }
         go.invokeOnCancellation { leave() }
     }

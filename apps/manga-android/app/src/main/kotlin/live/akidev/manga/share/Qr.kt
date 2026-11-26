@@ -41,6 +41,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import live.akidev.manga.design.Aki
 import kotlin.math.floor
 import java.util.concurrent.Executors
+import live.akidev.manga.design.Copy
 
 /** The squares of a QR code for [text], row by row; true is a dark one. */
 fun qrCells(text: String): List<BooleanArray> {
@@ -61,7 +62,7 @@ fun qrRead(brightness: ByteArray, rowWidth: Int, width: Int, height: Int): Strin
 fun QrCode(text: String) {
     val cells = remember(text) { qrCells(text) }
     val ink = Aki.colors.onPrimary
-    Box(Modifier.size(240.dp).background(Color.White, RoundedCornerShape(28.dp)).padding(18.dp).semantics { contentDescription = "QR code" }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(240.dp).background(Color.White, RoundedCornerShape(28.dp)).padding(18.dp).semantics { contentDescription = Copy.Share.qrCode }, contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(204.dp)) {
             // Whole pixels a square, so the edges are sharp; what is left over goes round the code.
             val cell = floor(size.width / cells.size)
@@ -89,7 +90,7 @@ fun QrScanner(onCode: (String) -> Unit, modifier: Modifier = Modifier) {
         }
     }
     AndroidView(
-        modifier = modifier.semantics { contentDescription = "Camera, looking for a code" },
+        modifier = modifier.semantics { contentDescription = Copy.Share.cameraLooking },
         factory = { context ->
             // A normal view, not a separate surface: the surface ignores the sheet's rounded corners and its slide.
             val view = PreviewView(context).apply {

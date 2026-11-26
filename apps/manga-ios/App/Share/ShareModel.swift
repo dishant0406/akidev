@@ -170,7 +170,7 @@ final class ShareModel {
             // Where the screen goes if this fails: the scanner stays open, unless a temporary Wi-Fi was joined.
             var back = Step.scanning
             guard let found = try? share.readCode(code: code) else {
-                codeNote = "That is not an Akidev code. Ask them to show the code again."
+                codeNote = Copy.Share.notAkidevCode
                 step = back
                 return
             }
@@ -178,7 +178,7 @@ final class ShareModel {
                 back = .choosing
                 step = .joining
                 do { try await WifiJoin.join(ssid: ssid, password: password) } catch {
-                    problem = "Could not join their Wi-Fi. Try again."
+                    problem = Copy.Share.couldNotJoinWifiIos
                     step = back
                     return
                 }
@@ -189,9 +189,9 @@ final class ShareModel {
             guard let peer = await reach(found, code: code, share: share) else {
                 if joined != nil {
                     endNetwork()
-                    problem = "Could not reach that phone. Check that both phones are on the same Wi-Fi."
+                    problem = Copy.Share.couldNotReachPhoneWifi
                 } else {
-                    codeNote = found.peer == nil ? "Could not reach that phone. Try again." : "Could not reach that phone. Turn Wi-Fi on for both phones. It does not need to be connected to a network."
+                    codeNote = found.peer == nil ? Copy.Share.couldNotReachTryAgain : Copy.Share.turnWifiOnForBoth
                 }
                 step = back
                 return
@@ -335,7 +335,7 @@ final class ShareModel {
         case .receiving: wasReceiving = true
         }
         incoming = .none
-        if wasReceiving, reason != "declined", reason != "stopped on this phone" { problem = "Sending stopped: \(reason)." }
+        if wasReceiving, reason != "declined", reason != "stopped on this phone" { problem = Copy.Share.sendingStopped(reason) }
     }
 
     /// Puts each arrived file where it belongs. A series from a source that is new here waits for a yes first.
@@ -363,10 +363,10 @@ final class ShareModel {
         switch file.kind {
         case "book":
             let title = try await Task.detached { try engine.importBook(path: file.path).title }.value
-            return "“\(title)” is in your library."
+            return Copy.Settings.fileAddedToLibrary(title)
         case "comic":
             _ = try await Task.detached { try engine.importFile(path: file.path) }.value
-            return "“\(file.name)” is in your library."
+            return Copy.Settings.fileAddedToLibrary(file.name)
         case "card":
             let card = try engine.shareReadCard(path: file.path)
             guard card.installed else {
@@ -374,7 +374,7 @@ final class ShareModel {
                 return nil
             }
             try await engine.shareAddCard(path: file.path)
-            return "“\(card.title)” is in your library."
+            return Copy.Settings.fileAddedToLibrary(card.title)
         default:
             return nil
         }
@@ -392,13 +392,13 @@ final class ShareModel {
             if accept {
                 do {
                     try await engine.shareAddCard(path: pending.path)
-                    added.append("“\(pending.card.title)” is in your library.")
+                    added.append(Copy.Settings.fileAddedToLibrary(pending.card.title))
                     app?.refresh()
                 } catch {
                     let reason = describe(error).message
                     if case MangaError.Offline = error {
                         // Nothing was added, and the card is kept: a source is downloaded, so this phone needs the internet.
-                        problem = "Could not add the source. This phone needs the internet to download it. Connect to Wi-Fi or mobile data, then add it again."
+                        problem = Copy.Share.couldNotAddSourceOfflineIos
                         retry = pending
                     } else {
                         problem = reason

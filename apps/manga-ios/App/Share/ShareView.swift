@@ -17,7 +17,7 @@ struct ShareView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            AkiHeader(title: item == nil ? "Receive" : "Send", subtitle: item?.title)
+            AkiHeader(title: item == nil ? Copy.Share.receive : Copy.Share.send, subtitle: item?.title)
             content
         }
         .padding(24)
@@ -25,9 +25,9 @@ struct ShareView: View {
         .task { await model.begin(app: app, item: item) }
         .onDisappear { model.end() }
         .onChange(of: model.codeNote) { if let note = model.codeNote { akiAnnounce(note) } }
-        .akiQuestion(askTitle, message: "Only accept from someone you know.", yes: "Accept", no: "Decline", isPresented: Binding(get: { model.asked != nil }, set: { _ in }), onYes: { model.answer(true) }, onNo: { model.answer(false) })
-        .akiQuestion("Add the source \(model.newSource?.card.sourceName ?? "")?", message: sourceMessage, yes: "Add source", no: "Cancel", isPresented: Binding(get: { model.newSource != nil }, set: { _ in }), onYes: { model.answerSource(true) }, onNo: { model.answerSource(false) })
-        .akiAlert("Could not share", message: model.problem, isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } }))
+        .akiQuestion(askTitle, message: Copy.Share.onlyAcceptFromKnown, yes: Copy.Share.accept, no: Copy.Share.decline, isPresented: Binding(get: { model.asked != nil }, set: { _ in }), onYes: { model.answer(true) }, onNo: { model.answer(false) })
+        .akiQuestion(Copy.Share.addSourceQuestionIos(model.newSource?.card.sourceName ?? ""), message: sourceMessage, yes: Copy.Share.addSourceButton, no: Copy.Sources.cancel, isPresented: Binding(get: { model.newSource != nil }, set: { _ in }), onYes: { model.answerSource(true) }, onNo: { model.answerSource(false) })
+        .akiAlert(Copy.Share.couldNotShare, message: model.problem, isPresented: Binding(get: { model.problem != nil }, set: { if !$0 { model.problem = nil } }))
     }
 
     @ViewBuilder private var content: some View {
@@ -35,34 +35,34 @@ struct ShareView: View {
             centered { AkiText(failure, .body, tone: .muted, align: .center) }.onAppear { akiAnnounce(failure) }
         } else if model.denied {
             centered {
-                AkiText("Turn on Local Network for Akidev to see other phones.", .body, tone: .muted, align: .center)
-                AkiButton("Open Settings", variant: .primary) { openSettings() }
+                AkiText(Copy.Share.turnOnLocalNetwork, .body, tone: .muted, align: .center)
+                AkiButton(Copy.Share.openSettings, variant: .primary) { openSettings() }
             }
         } else if case .joining = model.step {
             centered {
                 AkiSpinner()
-                AkiText("Joining their Wi-Fi…", .heading, align: .center)
+                AkiText(Copy.Share.joiningWifi, .heading, align: .center)
             }
         } else if case .sending(let peer, let outcome) = model.step {
             sendingState(peer, outcome)
         } else if case .receiving(_, let from, let fraction) = model.incoming {
             centered {
-                AkiText("Receiving from \(from)", .heading, align: .center)
+                AkiText(Copy.Share.receivingFrom(from), .heading, align: .center)
                 progressBar(fraction)
-                AkiButton("Cancel", variant: .ghost, size: .small) { model.stopReceiving() }
+                AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { model.stopReceiving() }
             }
         } else if let line = model.added.last {
             done(line)
         } else if case .connected(let name) = model.step {
             centered {
                 AkiSpinner()
-                AkiText("Connected. Waiting for \(name) to send…", .heading, lines: 3, align: .center)
-                AkiButton("Cancel", variant: .ghost, size: .small) { model.disconnect() }
+                AkiText(Copy.Share.connectedWaiting(name), .heading, lines: 3, align: .center)
+                AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { model.disconnect() }
             }
         } else if case .connecting = model.step {
             centered {
                 AkiSpinner()
-                AkiText("Finding their phone…", .heading, align: .center)
+                AkiText(Copy.Share.findingPhone, .heading, align: .center)
             }
         } else if case .scanning = model.step {
             scanner
@@ -80,8 +80,8 @@ struct ShareView: View {
             if model.peers.isEmpty {
                 centered {
                     AkiSpinner()
-                    AkiText("Looking nearby…", .body, tone: .muted)
-                    if model.looked { AkiText("Cannot see their phone? Both phones need to be on the same Wi-Fi.", .caption, tone: .muted, align: .center) }
+                    AkiText(Copy.Share.lookingNearby, .body, tone: .muted)
+                    if model.looked { AkiText(Copy.Share.cannotSeePhone, .caption, tone: .muted, align: .center) }
                 }
                 .frame(maxHeight: .infinity)
             } else {
@@ -92,13 +92,13 @@ struct ShareView: View {
                                 .contentShape(Rectangle())
                                 .onTapGesture { model.send(to: peer) }
                                 .accessibilityElement(children: .combine)
-                                .accessibilityLabel("Send to \(peer.alias)")
+                                .accessibilityLabel(Copy.Share.sendToPeer(peer.alias))
                                 .accessibilityAddTraits(.isButton)
                         }
                     }
                 }
             }
-            AkiButton("Scan their code", icon: "qr", fullWidth: true) { model.step = .scanning }
+            AkiButton(Copy.Share.scanTheirCode, icon: "qr", fullWidth: true) { model.step = .scanning }
         }
         .frame(maxHeight: .infinity)
     }
@@ -107,7 +107,7 @@ struct ShareView: View {
         VStack(spacing: 14) {
             AkiScanner { model.connect(code: $0) }
             if let note = model.codeNote { AkiText(note, .caption, tone: .destructive, align: .center) }
-            AkiButton("Cancel", variant: .ghost, size: .small) { model.step = .choosing; model.codeNote = nil }
+            AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { model.step = .choosing; model.codeNote = nil }
         }
         .frame(maxWidth: .infinity)
     }
@@ -117,21 +117,21 @@ struct ShareView: View {
         case .waiting:
             centered {
                 AkiSpinner()
-                AkiText("Waiting for \(peer.alias)…", .heading, align: .center)
-                AkiButton("Cancel", variant: .ghost, size: .small) { model.stopSending() }
+                AkiText(Copy.Share.waitingFor(peer.alias), .heading, align: .center)
+                AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { model.stopSending() }
             }
         case .sending(let fraction):
             centered {
-                AkiText("Sending to \(peer.alias)", .heading, align: .center)
+                AkiText(Copy.Share.sendingTo(peer.alias), .heading, align: .center)
                 progressBar(fraction)
                 AkiText(fraction.formatted(.percent.precision(.fractionLength(0))), .caption, tone: .muted, digits: true)
-                AkiButton("Cancel", variant: .ghost, size: .small) { model.stopSending() }
-                AkiText("Keep Akidev open", .caption, tone: .muted)
+                AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { model.stopSending() }
+                AkiText(Copy.Share.keepAkidevOpen, .caption, tone: .muted)
             }
         case .done:
-            done("Sent to \(peer.alias)")
-        case .declined: problem("\(peer.alias) declined.")
-        case .busy: problem("\(peer.alias) is busy. Try again in a moment.")
+            done(Copy.Share.sentTo(peer.alias))
+        case .declined: problem(Copy.Share.peerDeclined(peer.alias))
+        case .busy: problem(Copy.Share.peerBusy(peer.alias))
         case .failed(let message): problem(message)
         }
     }
@@ -139,8 +139,8 @@ struct ShareView: View {
     private func problem(_ line: String) -> some View {
         centered {
             AkiText(line, .heading, align: .center)
-            AkiButton("Try again", variant: .primary) { model.sendAgain() }
-            AkiButton("Cancel", variant: .ghost, size: .small) { dismiss() }
+            AkiButton(Copy.Home.tryAgain, variant: .primary) { model.sendAgain() }
+            AkiButton(Copy.Sources.cancel, variant: .ghost, size: .small) { dismiss() }
         }
         .onAppear { akiAnnounce(line) }
     }
@@ -149,7 +149,7 @@ struct ShareView: View {
         centered {
             AkiIcon("check", size: 44)
             AkiText(line, .heading, lines: 3, align: .center)
-            AkiButton("Done", variant: .primary) { dismiss() }
+            AkiButton(Copy.Share.done, variant: .primary) { dismiss() }
         }
         .onAppear { akiAnnounce(line) }
     }
@@ -160,12 +160,12 @@ struct ShareView: View {
         centered {
             if let text = model.code {
                 AkiQRCode(text: text)
-                AkiText("Ask them to scan this code, or choose Share on their phone.", .body, tone: .muted, align: .center)
-                AkiText("Visible as \(UIDevice.current.name)", .caption, tone: .muted)
+                AkiText(Copy.Share.askThemToScan, .body, tone: .muted, align: .center)
+                AkiText(Copy.Share.visibleAs(UIDevice.current.name), .caption, tone: .muted)
             } else {
-                AkiText("Connect to Wi-Fi to receive.", .body, tone: .muted, align: .center)
+                AkiText(Copy.Share.connectToWifiToReceive, .body, tone: .muted, align: .center)
             }
-            AkiButton("Scan a code", icon: "qr", variant: .ghost) { model.step = .scanning }
+            AkiButton(Copy.Share.scanACode, icon: "qr", variant: .ghost) { model.step = .scanning }
         }
     }
 
@@ -174,7 +174,7 @@ struct ShareView: View {
     private func progressBar(_ fraction: Double) -> some View {
         AkiProgressBar(fraction: fraction)
             .accessibilityElement()
-            .accessibilityLabel("Progress")
+            .accessibilityLabel(Copy.Share.progress)
             .accessibilityValue(fraction.formatted(.percent.precision(.fractionLength(0))))
     }
 
@@ -184,25 +184,26 @@ struct ShareView: View {
 
     private var askTitle: String {
         guard let asked = model.asked else { return "" }
-        return "\(asked.from) wants to send you \(asked.files.map(what).joined(separator: ", "))"
+        return Copy.Share.wantsToSendYou(asked.from, asked.files.map(what).joined(separator: ", "))
     }
 
     private func what(_ file: ShareOffered) -> String {
         let size = bookSize(file.size)
         switch file.kind {
-        case "book": return "a book (\(file.name), \(size))"
-        case "comic": return "a comic (\(file.name), \(size))"
-        case "card": return "a series (\(file.name.replacingOccurrences(of: ".akidev.json", with: "")))"
-        default: return "a file (\(file.name), \(size))"
+        case "book": return Copy.Share.whatBook(file.name, size)
+        case "comic": return Copy.Share.whatComic(file.name, size)
+        case "card": return Copy.Share.whatSeries(file.name.replacingOccurrences(of: ".akidev.json", with: ""))
+        default: return Copy.Share.whatFile(file.name, size)
         }
     }
 
     private var sourceMessage: String {
         guard let card = model.newSource?.card else { return "" }
-        let languages = card.languages.isEmpty ? "" : " (\(card.languages.joined(separator: ", ")))"
-        let adult = card.nsfw ? " It is marked 18+." : ""
-        let from = card.repo.map { " It comes from the repository \($0)." } ?? " Your friend added it by hand."
-        return "“\(card.title)” is read from \(card.sourceName)\(languages), which this phone does not have.\(adult)\(from) A source decides which sites this phone contacts. Add it only if you trust your friend."
+        let source = card.languages.isEmpty ? card.sourceName : Copy.Share.sourceWithLanguages(card.sourceName, card.languages.joined(separator: ", "))
+        let adult = card.nsfw ? Copy.Share.markedAdult : nil
+        let from = card.repo.map { Copy.Share.fromRepository($0) } ?? Copy.Share.addedByHand
+        let details = [adult, from].compactMap { $0 }.joined(separator: " ")
+        return Copy.Share.sourceMessage(card.title, source, details)
     }
 
     private func openSettings() {
