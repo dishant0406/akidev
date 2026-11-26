@@ -8,16 +8,16 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     /// The same, short enough for a row of three pills.
     var shortTitle: String {
         switch self {
-        case .strip: "Strip"
-        case .paged: "Paged"
-        case .rtl: "Right to left"
+        case .strip: Copy.Reader.modeStrip
+        case .paged: Copy.Reader.modePaged
+        case .rtl: Copy.Reader.modeRightToLeft
         }
     }
     var title: String {
         switch self {
-        case .strip: "Long strip"
-        case .paged: "Pages, left to right"
-        case .rtl: "Pages, right to left"
+        case .strip: Copy.Reader.modeLongStrip
+        case .paged: Copy.Reader.modePagedLeftToRight
+        case .rtl: Copy.Reader.modePagedRightToLeft
         }
     }
 }
@@ -113,13 +113,13 @@ final class ReaderModel {
     /// "Chapter 179 is missing from this source" when the chapter after this one skips ahead, else nil.
     func skippedNote(after id: String) -> String? {
         guard let this = chapter(id)?.number, let next = newer(than: id)?.number, let skipped = skippedChapters(from: this, to: next) else { return nil }
-        return skipped.count == 1 ? "Chapter \(skipped.lowerBound) is missing from this source" : "Chapters \(skipped.lowerBound)–\(skipped.upperBound) are missing from this source"
+        return skipped.count == 1 ? Copy.Reader.missingChapter(skipped.lowerBound) : Copy.Reader.missingChapters(skipped.lowerBound, skipped.upperBound)
     }
 
     func label(_ chapter: ChapterEntry) -> String {
         if let title = chapter.title { return title }
-        if let number = chapter.number { return "Chapter \(number.formatted(.number.precision(.fractionLength(0...2))))" }
-        return "Chapter"
+        if let number = chapter.number { return Copy.Home.chapterNumber(number.formatted(.number.precision(.fractionLength(0...2)))) }
+        return Copy.Home.chapter
     }
 
     var currentSegment: Segment? { segments.first { $0.chapterID == current } }
@@ -153,7 +153,7 @@ final class ReaderModel {
             latest = (chapterID, at, offset)
             prefetchNewer()
         } catch {
-            self.error = describe(error, "Could not load this chapter")
+            self.error = describe(error, Copy.Reader.couldNotLoadChapter)
         }
     }
 

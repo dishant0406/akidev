@@ -37,6 +37,7 @@ import live.akidev.manga.app.ReaderBackground
 import live.akidev.manga.app.ReadingMode
 import live.akidev.manga.app.shortDate
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 import live.akidev.manga.manga.chapterName
 import live.akidev.manga.manga.chaptersLabel
 import uniffi.akimanga.ChapterEntry
@@ -57,8 +58,8 @@ fun ReaderChaptersSheet(reader: ReaderModel, onOpen: (ChapterEntry) -> Unit, onD
     val list = rememberLazyListState(maxOf(chapters.indexOfFirst { it.id == reader.current } - 3, 0))
     AkiSheet(onDismiss, full = true) {
         Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            AkiText("Chapters", AkiTextStyle.Title, isHeading = true)
-            AkiText("${reader.ref.title} · ${chaptersLabel(chapters.size.toUInt())}", AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
+            AkiText(Copy.Series.chapters, AkiTextStyle.Title, isHeading = true)
+            AkiText(Copy.Home.titleAndDetail(reader.ref.title, chaptersLabel(chapters.size.toUInt()).toString()), AkiTextStyle.Caption, tone = AkiTone.Muted, lines = 1)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(chapters, key = { it.id }) { chapter -> ChapterRow(chapter, reading = chapter.id == reader.current, kept = chapter.id in kept) { onOpen(chapter) } }
@@ -72,7 +73,7 @@ private fun ChapterRow(chapter: ChapterEntry, reading: Boolean, kept: Boolean, o
     val tone = if (reading) AkiTone.OnPrimary else AkiTone.Text
     // The icons on the right say this to the eye; this says it to a screen reader.
     val state = listOfNotNull(
-        if (reading) "Reading now" else null, if (chapter.finished) "Read" else if (chapter.page != null) "In progress" else null, if (kept) "Downloaded" else null,
+        if (reading) Copy.Series.readingNow else null, if (chapter.finished) Copy.Series.read else if (chapter.page != null) Copy.Reader.inProgress else null, if (kept) Copy.Series.downloaded else null,
     ).joinToString(", ")
     AkiTap(onClick, Modifier.semantics { selected = reading; if (state.isNotEmpty()) stateDescription = state }) {
         Row(
@@ -108,19 +109,19 @@ fun ReaderSettingsSheet(reader: ReaderModel, onDismiss: () -> Unit) {
     var coverSet by remember { mutableStateOf<Boolean?>(null) }
     AkiSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            AkiText("Reader settings", AkiTextStyle.Title, isHeading = true)
-            Choice("Reading mode for this series") { AkiTabs(ReadingMode.entries.map { AkiChoice(it, it.shortTitle) }, reader.mode, { reader.changeMode(it) }) }
-            Choice("Auto-scroll speed") { AkiTabs(AutoScrollSpeed.entries.map { AkiChoice(it, it.title) }, prefs.autoScrollSpeed, { prefs.autoScrollSpeed = it }) }
-            Choice("Background") { AkiTabs(ReaderBackground.entries.map { AkiChoice(it, it.title) }, prefs.readerBackground, { prefs.readerBackground = it }) }
-            Choice("Orientation") { AkiTabs(OrientationLock.entries.map { AkiChoice(it, it.title) }, prefs.orientation, { prefs.orientation = it }) }
+            AkiText(Copy.Reader.readerSettings, AkiTextStyle.Title, isHeading = true)
+            Choice(Copy.Reader.readingModeForSeries) { AkiTabs(ReadingMode.entries.map { AkiChoice(it, it.shortTitle) }, reader.mode, { reader.changeMode(it) }) }
+            Choice(Copy.Reader.autoScrollSpeed) { AkiTabs(AutoScrollSpeed.entries.map { AkiChoice(it, it.title) }, prefs.autoScrollSpeed, { prefs.autoScrollSpeed = it }) }
+            Choice(Copy.Reader.background) { AkiTabs(ReaderBackground.entries.map { AkiChoice(it, it.title) }, prefs.readerBackground, { prefs.readerBackground = it }) }
+            Choice(Copy.Reader.orientation) { AkiTabs(OrientationLock.entries.map { AkiChoice(it, it.title) }, prefs.orientation, { prefs.orientation = it }) }
             AkiCard(padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    AkiSwitch("Swap tap sides", prefs.invertTaps, { prefs.invertTaps = it }, subtitle = "In paged reading, the left edge goes forward.")
-                    AkiSwitch("Keep the screen on", prefs.keepAwake, { prefs.keepAwake = it })
+                    AkiSwitch(Copy.Reader.swapTapSides, prefs.invertTaps, { prefs.invertTaps = it }, subtitle = Copy.Reader.swapTapSidesHint)
+                    AkiSwitch(Copy.Reader.keepScreenOn, prefs.keepAwake, { prefs.keepAwake = it })
                 }
             }
             AkiButton(
-                when (coverSet) { true -> "Cover changed"; false -> "Could not use this page as the cover"; null -> "Use this page as the cover" }, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, icon = "image", fullWidth = true,
+                when (coverSet) { true -> Copy.Reader.coverChanged; false -> Copy.Reader.couldNotUseCover; null -> Copy.Reader.useCoverPage }, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, icon = "image", fullWidth = true,
             ) { scope.launch { coverSet = reader.useCurrentPageAsCover(); app.refresh() } }
         }
     }

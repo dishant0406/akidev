@@ -134,6 +134,46 @@ enum Copy {
         static let finished = "Finished"
         static let reading = "Reading"
     }
+    enum Reader {
+        static let readerSettings = "Reader settings"
+        static let readingModeForSeries = "Reading mode for this series"
+        static let autoScrollSpeed = "Auto-scroll speed"
+        static let background = "Background"
+        static let orientation = "Orientation"
+        static let swapTapSides = "Swap tap sides"
+        static let swapTapSidesHint = "In paged reading, the left edge goes forward."
+        static let keepScreenOn = "Keep the screen on"
+        static let coverChanged = "Cover changed"
+        static let couldNotUseCover = "Could not use this page as the cover"
+        static let useCoverPage = "Use this page as the cover"
+        static let modeStrip = "Strip"
+        static let modePaged = "Paged"
+        static let modeRightToLeft = "Right to left"
+        static let modeLongStrip = "Long strip"
+        static let modePagedLeftToRight = "Pages, left to right"
+        static let modePagedRightToLeft = "Pages, right to left"
+        static func missingChapter(_ number: Int) -> String { "Chapter \(number) is missing from this source" }
+        static func missingChapters(_ from: Int, _ to: Int) -> String { "Chapters \(from)–\(to) are missing from this source" }
+        static let couldNotLoadChapter = "Could not load this chapter"
+        static func endOfChapter(_ name: String) -> String { "End of \(name)" }
+        static let genericChapter = "chapter"
+        static let nextChapterBelow = "Next chapter below"
+        static func nextChapterNamed(_ name: String) -> String { "Next: \(name)" }
+        static func nextChapterButton(_ name: String) -> String { "Next · \(name)" }
+        static let youAreUpToDate = "You are up to date"
+        static let backToSeries = "Back to the series"
+        static let showsChapterList = "Shows the chapter list"
+        static let startAutoScroll = "Start auto-scroll"
+        static let stopAutoScroll = "Stop auto-scroll"
+        static let previousChapter = "Previous chapter"
+        static let nextChapter = "Next chapter"
+        static func pageOfCount(_ number: Int, _ count: Int) -> String { "Page \(number) of \(count)" }
+        static let addBookmark = "Add bookmark"
+        static let bookmarkAdded = "Bookmark added"
+        static let bookmarkRemoved = "Bookmark removed"
+        static let showOrHideControls = "Show or hide controls"
+        static let inProgress = "In progress"
+    }
     enum Series {
         static let back = "Back"
         static let addToLibrary = "Add to library"

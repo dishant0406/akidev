@@ -24,7 +24,7 @@ struct ReaderView: View {
                 case .paged, .rtl: PagedReader(model: model, close: { dismiss() })
                 }
             } else if let error = model.error {
-                AkiEmptyState(title: error.title, message: error.message, action: ("Try again", { Task { await model.open(model.current, page: model.page, offset: 0) } }))
+                AkiEmptyState(title: error.title, message: error.message, action: (Copy.Home.tryAgain, { Task { await model.open(model.current, page: model.page, offset: 0) } }))
             }
         }
         // One loader for the whole opening: while the chapter's pages are fetched, and while the strip is put at your place.
@@ -56,7 +56,7 @@ struct ReaderView: View {
     private var topBar: some View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
-                AkiIconButton(symbol: "back", label: "Back", onMedia: true, scrim: Aki.scrimStrong) { dismiss() }
+                AkiIconButton(symbol: "back", label: Copy.Series.back, onMedia: true, scrim: Aki.scrimStrong) { dismiss() }
                 AkiTap(action: { sheet = .chapters }) {
                     VStack(alignment: .leading, spacing: 0) {
                         AkiText(model.ref.title, .captionStrong, tone: .onMedia, lines: 1)
@@ -66,12 +66,12 @@ struct ReaderView: View {
                     .akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
                 }
                 .accessibilityLabel([model.ref.title, model.chapter(model.current).map(model.label)].compactMap { $0 }.joined(separator: ", "))
-                .accessibilityHint("Shows the chapter list")
+                .accessibilityHint(Copy.Reader.showsChapterList)
                 Spacer(minLength: 0)
                 if model.mode == .strip {
-                    AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? "Stop auto-scroll" : "Start auto-scroll", onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
+                    AkiIconButton(symbol: model.autoScrolling ? "pause" : "play", label: model.autoScrolling ? Copy.Reader.stopAutoScroll : Copy.Reader.startAutoScroll, onMedia: true, scrim: Aki.scrimStrong) { model.autoScrolling.toggle() }
                 }
-                AkiIconButton(symbol: "sliders", label: "Reader settings", onMedia: true, scrim: Aki.scrimStrong) { sheet = .settings }
+                AkiIconButton(symbol: "sliders", label: Copy.Reader.readerSettings, onMedia: true, scrim: Aki.scrimStrong) { sheet = .settings }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -82,20 +82,20 @@ struct ReaderView: View {
         AkiGlassGroup(spacing: 12) {
             HStack(spacing: 12) {
                 if let older = model.older(than: model.current) {
-                    AkiIconButton(symbol: "previous", label: "Previous chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(older.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "previous", label: Copy.Reader.previousChapter, onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(older.id, page: 0, offset: 0) } }
                 }
-                AkiIconButton(symbol: "list", label: "Chapters", onMedia: true, scrim: Aki.scrimStrong) { sheet = .chapters }
+                AkiIconButton(symbol: "list", label: Copy.Series.chapters, onMedia: true, scrim: Aki.scrimStrong) { sheet = .chapters }
                 let count = model.currentSegment?.pages.images.count ?? 0
                 AkiText("\(min(model.page + 1, max(count, 1))) / \(count)", .caption, tone: .onMedia, digits: true)
-                    .accessibilityLabel("Page \(min(model.page + 1, max(count, 1))) of \(count)")
+                    .accessibilityLabel(Copy.Reader.pageOfCount(min(model.page + 1, max(count, 1)), count))
                     .padding(.horizontal, 18).padding(.vertical, 12).akiGlass(.capsule, tint: Aki.scrimStrong, interactive: false)
-                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? "Remove bookmark" : "Add bookmark", tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) {
+                AkiIconButton(symbol: model.isBookmarked ? "bookmark-solid" : "bookmark", label: model.isBookmarked ? Copy.Series.removeBookmarkIos : Copy.Reader.addBookmark, tint: model.isBookmarked ? Aki.primary : nil, onMedia: true, scrim: Aki.scrimStrong) {
                     model.toggleBookmark()
-                    akiAnnounce(model.isBookmarked ? "Bookmark added" : "Bookmark removed")
+                    akiAnnounce(model.isBookmarked ? Copy.Reader.bookmarkAdded : Copy.Reader.bookmarkRemoved)
                 }
                     .akiHaptic(trigger: model.isBookmarked)
                 if let newer = model.newer(than: model.current) {
-                    AkiIconButton(symbol: "next", label: "Next chapter", onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(newer.id, page: 0, offset: 0) } }
+                    AkiIconButton(symbol: "next", label: Copy.Reader.nextChapter, onMedia: true, scrim: Aki.scrimStrong) { Task { await model.open(newer.id, page: 0, offset: 0) } }
                 }
             }
         }
@@ -325,13 +325,13 @@ private struct StripRows: View {
         let next = model.newer(than: segment.chapterID)
         let note = model.skippedNote(after: segment.chapterID)
         return VStack(spacing: 10) {
-            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
+            AkiText(Copy.Reader.endOfChapter(model.chapter(segment.chapterID).map(model.label) ?? Copy.Reader.genericChapter), .eyebrow, tone: .onMedia)
             if let next {
-                AkiText(model.segments.contains { $0.chapterID == next.id } ? "Next chapter below" : "Next: \(model.label(next))", .caption, tone: .muted)
+                AkiText(model.segments.contains { $0.chapterID == next.id } ? Copy.Reader.nextChapterBelow : Copy.Reader.nextChapterNamed(model.label(next)), .caption, tone: .muted)
                 if let note { AkiText(note, .caption, tone: .muted) }
             } else {
-                AkiText("You are up to date", .title, tone: .onMedia).accessibilityAddTraits(.isHeader)
-                AkiButton("Back to the series") { dismiss() }.padding(.top, 6)
+                AkiText(Copy.Reader.youAreUpToDate, .title, tone: .onMedia).accessibilityAddTraits(.isHeader)
+                AkiButton(Copy.Reader.backToSeries) { dismiss() }.padding(.top, 6)
             }
         }
         .frame(width: width)
@@ -402,7 +402,7 @@ private struct PagedReader: View {
                 AkiText(error.title, .title, tone: .onMedia, align: .center)
                     .onAppear { akiAnnounce("\(error.title). \(error.message)") }
                 AkiText(error.message, .caption, tone: .muted, align: .center)
-                AkiButton("Try again", variant: .primary) { Task { await model.open(next.id, page: 0, offset: 0) } }
+                AkiButton(Copy.Home.tryAgain, variant: .primary) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {
                 AkiText(model.label(next), .eyebrow, tone: .onMedia)
                 AkiSpinner()
@@ -414,14 +414,14 @@ private struct PagedReader: View {
 
     private func endPage(_ segment: Segment) -> some View {
         VStack(spacing: 14) {
-            AkiText("End of \(model.chapter(segment.chapterID).map(model.label) ?? "chapter")", .eyebrow, tone: .onMedia)
+            AkiText(Copy.Reader.endOfChapter(model.chapter(segment.chapterID).map(model.label) ?? Copy.Reader.genericChapter), .eyebrow, tone: .onMedia)
             if let note = model.skippedNote(after: segment.chapterID) { AkiText(note, .caption, tone: .muted) }
             if let next = model.newer(than: segment.chapterID) {
-                AkiButton("Next · \(model.label(next))", variant: .primary, size: .large) { Task { await model.open(next.id, page: 0, offset: 0) } }
+                AkiButton(Copy.Reader.nextChapterButton(model.label(next)), variant: .primary, size: .large) { Task { await model.open(next.id, page: 0, offset: 0) } }
             } else {
-                AkiText("You are up to date", .title, tone: .onMedia)
+                AkiText(Copy.Reader.youAreUpToDate, .title, tone: .onMedia)
             }
-            AkiButton("Back to the series", action: close)
+            AkiButton(Copy.Reader.backToSeries, action: close)
         }
         .environment(\.layoutDirection, .leftToRight)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

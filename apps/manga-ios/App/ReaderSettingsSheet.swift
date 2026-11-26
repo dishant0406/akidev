@@ -11,33 +11,33 @@ struct ReaderSettingsSheet: View {
         @Bindable var prefs = app.prefs
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                AkiText("Reader settings", .title).accessibilityAddTraits(.isHeader)
-                choice("Reading mode for this series") {
+                AkiText(Copy.Reader.readerSettings, .title).accessibilityAddTraits(.isHeader)
+                choice(Copy.Reader.readingModeForSeries) {
                     AkiTabs(items: ReadingMode.allCases.map { ($0, $0.shortTitle) }, selection: Binding(get: { model.mode }, set: { model.setMode($0) }))
                 }
-                choice("Auto-scroll speed") {
+                choice(Copy.Reader.autoScrollSpeed) {
                     AkiTabs(items: AutoScrollSpeed.allCases.map { ($0, $0.title) }, selection: $prefs.autoScrollSpeed)
                 }
-                choice("Background") {
+                choice(Copy.Reader.background) {
                     AkiTabs(items: ReaderBackground.allCases.map { ($0, $0.title) }, selection: $prefs.readerBackground)
                 }
                 // An iPad turns with the person, and with Split View no app may turn it: only a phone has this choice.
                 if UIDevice.current.userInterfaceIdiom == .phone {
-                    choice("Orientation") {
+                    choice(Copy.Reader.orientation) {
                         AkiTabs(items: OrientationLock.allCases.map { ($0, $0.title) }, selection: $prefs.orientation)
                     }
                 }
                 AkiCard(padding: 16) {
                     VStack(spacing: 16) {
-                        AkiSwitch(title: "Swap tap sides", subtitle: "In paged reading, the left edge goes forward.", isOn: $prefs.invertTaps)
-                        AkiSwitch(title: "Keep the screen on", isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 || model.autoScrolling }))
+                        AkiSwitch(title: Copy.Reader.swapTapSides, subtitle: Copy.Reader.swapTapSidesHint, isOn: $prefs.invertTaps)
+                        AkiSwitch(title: Copy.Reader.keepScreenOn, isOn: Binding(get: { prefs.keepAwake }, set: { prefs.keepAwake = $0; UIApplication.shared.isIdleTimerDisabled = $0 || model.autoScrolling }))
                     }
                 }
-                AkiButton(coverSet == true ? "Cover changed" : coverSet == false ? "Could not use this page as the cover" : "Use this page as the cover", icon: "image", fullWidth: true) {
+                AkiButton(coverSet == true ? Copy.Reader.coverChanged : coverSet == false ? Copy.Reader.couldNotUseCover : Copy.Reader.useCoverPage, icon: "image", fullWidth: true) {
                     Task {
                         coverSet = await model.useCurrentPageAsCover()
                         app.refresh()
-                        akiAnnounce(coverSet == true ? "Cover changed" : "Could not use this page as the cover")
+                        akiAnnounce(coverSet == true ? Copy.Reader.coverChanged : Copy.Reader.couldNotUseCover)
                     }
                 }
             }

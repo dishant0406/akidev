@@ -42,6 +42,7 @@ import kotlinx.coroutines.delay
 import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 
 /** A row of the strip: a page, or the closing row after a chapter. */
 private sealed interface Row {
@@ -86,7 +87,7 @@ fun StripReader(reader: ReaderModel) {
             Modifier.fillMaxSize()
                 .graphicsLayer { alpha = shown; scaleX = live; scaleY = live }
                 .pointerInput(Unit) { detectTapGestures { reader.chrome = !reader.chrome } }
-                .semantics { onClick("Show or hide controls") { reader.chrome = !reader.chrome; true } }
+                .semantics { onClick(Copy.Reader.showOrHideControls) { reader.chrome = !reader.chrome; true } }
                 .pointerInput(Unit) { pinchToZoom(reader) { live = it } }
                 .horizontalScroll(rememberScrollState(), enabled = reader.zoom > 1f),
         ) {
@@ -95,7 +96,7 @@ fun StripReader(reader: ReaderModel) {
                     when (val row = rows[index]) {
                         is Row.Page -> AkiImage(
                             row.url, Modifier.fillMaxWidth(), row.headers, placeholder = reader.aspects[row.url]?.let { 1 / it } ?: reader.typicalHeightRatio,
-                            onAspect = { reader.noteAspect(it, row.url) }, pageNumber = row.index, description = "Page ${row.index + 1}",
+                            onAspect = { reader.noteAspect(it, row.url) }, pageNumber = row.index, description = Copy.Series.pageNumber(row.index + 1),
                         )
                         is Row.End -> ChapterEnd(reader, row.segment)
                     }
@@ -220,13 +221,13 @@ private fun ChapterEnd(reader: ReaderModel, segment: Segment) {
         Modifier.fillMaxWidth().heightIn(min = if (next == null) 220.dp else if (note == null) 96.dp else 124.dp).padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
     ) {
-        AkiText("End of ${reader.chapter(segment.chapterId)?.let { reader.label(it) } ?: "chapter"}", AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
+        AkiText(Copy.Reader.endOfChapter(reader.chapter(segment.chapterId)?.let { reader.label(it) } ?: Copy.Reader.genericChapter), AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
         if (next != null) {
-            AkiText(if (reader.segments.any { it.chapterId == next.id }) "Next chapter below" else "Next: ${reader.label(next)}", AkiTextStyle.Caption, tone = AkiTone.Muted)
+            AkiText(if (reader.segments.any { it.chapterId == next.id }) Copy.Reader.nextChapterBelow else Copy.Reader.nextChapterNamed(reader.label(next)), AkiTextStyle.Caption, tone = AkiTone.Muted)
             if (note != null) AkiText(note, AkiTextStyle.Caption, tone = AkiTone.Muted)
         } else {
-            AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
-            AkiButton("Back to the series", Modifier.padding(top = 6.dp)) { router.back() }
+            AkiText(Copy.Reader.youAreUpToDate, AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
+            AkiButton(Copy.Reader.backToSeries, Modifier.padding(top = 6.dp)) { router.back() }
         }
     }
 }

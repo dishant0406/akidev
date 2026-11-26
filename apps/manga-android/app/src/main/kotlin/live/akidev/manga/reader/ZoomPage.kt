@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import live.akidev.manga.design.AkiImageLoader
 import live.akidev.manga.design.AkiPagePlaceholder
+import live.akidev.manga.design.Copy
 
 /**
  * One page of the paged reader: the picture fitted to the screen, pinch to zoom up to 4×, double tap to zoom in on a point and out
@@ -47,7 +48,7 @@ fun ZoomPage(number: Int, url: String, headers: Map<String, String>, onTap: (Flo
     var attempt by remember { mutableStateOf(0) }
     var failed by remember { mutableStateOf(false) }
     var picture by remember(url) { mutableStateOf<Bitmap?>(null) }
-    BoxWithConstraints(Modifier.fillMaxSize().semantics { onClick("Show or hide controls") { onTap(0.5f); true } }) {
+    BoxWithConstraints(Modifier.fillMaxSize().semantics { onClick(Copy.Reader.showOrHideControls) { onTap(0.5f); true } }) {
         val widthPx = constraints.maxWidth
         LaunchedEffect(url, attempt) {
             failed = false
@@ -67,7 +68,7 @@ fun ZoomPage(number: Int, url: String, headers: Map<String, String>, onTap: (Flo
 @Composable
 private fun TallPage(picture: Bitmap, number: Int, onTap: (Float) -> Unit) {
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTap(it.x / size.width) } }.verticalScroll(rememberScrollState())) {
-        Image(picture.asImageBitmap(), "Page ${number + 1}", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
+        Image(picture.asImageBitmap(), Copy.Series.pageNumber(number + 1), Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth)
     }
 }
 
@@ -125,7 +126,7 @@ private fun ZoomablePicture(picture: Bitmap, number: Int, onTap: (Float) -> Unit
             },
     ) {
         Image(
-            picture.asImageBitmap(), "Page ${number + 1}",
+            picture.asImageBitmap(), Copy.Series.pageNumber(number + 1),
             Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
             contentScale = ContentScale.Fit,
         )

@@ -43,6 +43,7 @@ import live.akidev.manga.app.ReaderBackground
 import live.akidev.manga.app.ReaderRoute
 import live.akidev.manga.app.ReadingMode
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 
 /**
  * The reader: a long strip, or pages turned left to right or right to left, with pinch zoom. Chrome is glass and hides on tap. Where the
@@ -95,7 +96,7 @@ fun ReaderScreen(route: ReaderRoute) {
                     reader.screenHeightPx = view.height
                     if (reader.mode == ReadingMode.Strip) StripReader(reader) else PagedReader(reader)
                 } else if (error != null) {
-                    AkiEmptyState(error.title, error.message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, action = AkiAction("Try again") { scope.launch { reader.open(reader.current, reader.page, 0.0) } })
+                    AkiEmptyState(error.title, error.message, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, action = AkiAction(Copy.Home.tryAgain) { scope.launch { reader.open(reader.current, reader.page, 0.0) } })
                 }
             }
             // One loader for the whole opening: while the chapter's pages are fetched, and while the strip is put at your place.
@@ -127,12 +128,12 @@ private fun TopBar(reader: ReaderModel, onChapters: () -> Unit, onSettings: () -
     val router = LocalRouter.current
     val scrim = Aki.colors.scrimStrong
     AkiReaderTopBar {
-        AkiIconButton("back", "Back", onMedia = true, scrim = scrim) { router.back() }
-        AkiBarTitle(reader.ref.title, reader.chapter(reader.current)?.let { reader.label(it) }, "Chapters", onChapters, scrim)
+        AkiIconButton("back", Copy.Series.back, onMedia = true, scrim = scrim) { router.back() }
+        AkiBarTitle(reader.ref.title, reader.chapter(reader.current)?.let { reader.label(it) }, Copy.Series.chapters, onChapters, scrim)
         if (reader.mode == ReadingMode.Strip) {
-            AkiIconButton(if (reader.autoScrolling) "pause" else "play", if (reader.autoScrolling) "Stop auto-scroll" else "Start auto-scroll", onMedia = true, scrim = scrim) { reader.autoScrolling = !reader.autoScrolling }
+            AkiIconButton(if (reader.autoScrolling) "pause" else "play", if (reader.autoScrolling) Copy.Reader.stopAutoScroll else Copy.Reader.startAutoScroll, onMedia = true, scrim = scrim) { reader.autoScrolling = !reader.autoScrolling }
         }
-        AkiIconButton("sliders", "Reader settings", onMedia = true, scrim = scrim, onClick = onSettings)
+        AkiIconButton("sliders", Copy.Reader.readerSettings, onMedia = true, scrim = scrim, onClick = onSettings)
     }
 }
 
@@ -145,14 +146,14 @@ private fun BottomBar(reader: ReaderModel, onChapters: () -> Unit) {
         Modifier.fillMaxWidth().widthIn(max = 640.dp).navigationBarsPadding().padding(bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically,
     ) {
-        reader.older(reader.current)?.let { older -> AkiIconButton("previous", "Previous chapter", onMedia = true, scrim = scrim) { scope.launch { reader.open(older.id, 0, 0.0) } } }
-        AkiIconButton("list", "Chapters", onMedia = true, scrim = scrim, onClick = onChapters)
+        reader.older(reader.current)?.let { older -> AkiIconButton("previous", Copy.Reader.previousChapter, onMedia = true, scrim = scrim) { scope.launch { reader.open(older.id, 0, 0.0) } } }
+        AkiIconButton("list", Copy.Series.chapters, onMedia = true, scrim = scrim, onClick = onChapters)
         val shownPage = minOf(reader.page + 1, maxOf(count, 1))
-        AkiText("$shownPage / $count", AkiTextStyle.Caption, Modifier.semantics { contentDescription = "Page $shownPage of $count" }.akiGlass(AkiShapes.pill(44.dp), tint = scrim).padding(horizontal = 18.dp, vertical = 12.dp), tone = AkiTone.OnMedia, tabular = true)
+        AkiText("$shownPage / $count", AkiTextStyle.Caption, Modifier.semantics { contentDescription = Copy.Reader.pageOfCount(shownPage, count) }.akiGlass(AkiShapes.pill(44.dp), tint = scrim).padding(horizontal = 18.dp, vertical = 12.dp), tone = AkiTone.OnMedia, tabular = true)
         AkiIconButton(
-            if (reader.isBookmarked) "bookmark-solid" else "bookmark", if (reader.isBookmarked) "Remove bookmark" else "Add bookmark",
+            if (reader.isBookmarked) "bookmark-solid" else "bookmark", if (reader.isBookmarked) Copy.Series.removeBookmarkIos else Copy.Reader.addBookmark,
             tint = if (reader.isBookmarked) Aki.colors.primary else null, onMedia = true, scrim = scrim,
         ) { reader.toggleBookmark() }
-        reader.newer(reader.current)?.let { newer -> AkiIconButton("next", "Next chapter", onMedia = true, scrim = scrim) { scope.launch { reader.open(newer.id, 0, 0.0) } } }
+        reader.newer(reader.current)?.let { newer -> AkiIconButton("next", Copy.Reader.nextChapter, onMedia = true, scrim = scrim) { scope.launch { reader.open(newer.id, 0, 0.0) } } }
     }
 }

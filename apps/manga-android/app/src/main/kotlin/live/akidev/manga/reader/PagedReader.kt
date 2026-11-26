@@ -29,6 +29,7 @@ import live.akidev.manga.app.LocalApp
 import live.akidev.manga.app.LocalRouter
 import live.akidev.manga.app.ReadingMode
 import live.akidev.manga.design.*
+import live.akidev.manga.design.Copy
 
 /**
  * One page at a time, turned by swiping or by tapping the edges (the right edge goes on in left-to-right reading, the left edge in
@@ -100,7 +101,7 @@ private fun ContinuePage(reader: ReaderModel, next: uniffi.akimanga.ChapterEntry
             if (error != null) {
                 AkiText(error.title, AkiTextStyle.Title, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, tone = AkiTone.OnMedia)
                 AkiText(error.message, AkiTextStyle.Caption, tone = AkiTone.Muted, align = TextAlign.Center)
-                AkiButton("Try again", variant = AkiButtonVariant.Primary) { scope.launch { reader.open(next.id, 0, 0.0) } }
+                AkiButton(Copy.Home.tryAgain, variant = AkiButtonVariant.Primary) { scope.launch { reader.open(next.id, 0, 0.0) } }
             } else {
                 AkiText(reader.label(next), AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
                 AkiSpinner()
@@ -116,14 +117,14 @@ private fun EndPage(reader: ReaderModel, segment: Segment) {
     val next = reader.newer(segment.chapterId)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically)) {
-            AkiText("End of ${reader.chapter(segment.chapterId)?.let { reader.label(it) } ?: "chapter"}", AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
+            AkiText(Copy.Reader.endOfChapter(reader.chapter(segment.chapterId)?.let { reader.label(it) } ?: Copy.Reader.genericChapter), AkiTextStyle.Eyebrow, tone = AkiTone.OnMedia)
             reader.skippedNote(segment.chapterId)?.let { AkiText(it, AkiTextStyle.Caption, tone = AkiTone.Muted) }
             if (next != null) {
-                AkiButton("Next · ${reader.label(next)}", variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large) { scope.launch { reader.open(next.id, 0, 0.0) } }
+                AkiButton(Copy.Reader.nextChapterButton(reader.label(next)), variant = AkiButtonVariant.Primary, size = AkiButtonSize.Large) { scope.launch { reader.open(next.id, 0, 0.0) } }
             } else {
-                AkiText("You are up to date", AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
+                AkiText(Copy.Reader.youAreUpToDate, AkiTextStyle.Title, tone = AkiTone.OnMedia, isHeading = true)
             }
-            AkiButton("Back to the series") { router.back() }
+            AkiButton(Copy.Reader.backToSeries) { router.back() }
         }
     }
 }
