@@ -1,5 +1,7 @@
 # Repo structure plan
 
+Status (2026-11-26): steps 1 to 7 are done on the branch `repo-structure`, not merged. Step 8 (server deploy files) is not done. The desktop packaging files went to `apps/desktop/packaging/`, not `apps/desktop/assets/`, because the app already has an `assets/` folder.
+
 Goal: one clear home for each thing. A new developer must find any file by asking "which product is it for, and is it an app, a library, data, design or infra?" This is a plan. Nothing is moved yet.
 
 ## What the repo holds today

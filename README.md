@@ -14,12 +14,26 @@ Anime, series and films from one API, served as one site and one desktop app.
 | `tv.akidev.live` | Retired: redirects to `akidev.live/films` | `frontend` |
 | `api.akidev.live` | The REST API and the video | `api` |
 
+Akidev is two products in one repository: the streaming site and desktop app above, and **Aki Manga**, a manga and books app for iPhone and Android.
+
 | Directory | What it is | Port |
 | --- | --- | --- |
+| `apps/web/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. Also the phone app's landing page. | 3000 |
 | `apps/server/` | The API: a Rust binary, `akidev-server`. Catalogue from AniList, Cinemeta and TVMaze, releases from torrent indexers, video from a debrid CDN, a torrent swarm or the Internet Archive, converted for the browser only as far as it has to be. See [apps/server/API.md](apps/server/API.md). | 9000 |
+| `apps/desktop/` | The native desktop app, with the same backend built in. See [apps/desktop/README.md](apps/desktop/README.md). | |
+| `apps/manga-ios/` | Aki Manga for iPhone (Swift). See [apps/manga-ios/README.md](apps/manga-ios/README.md). | |
+| `apps/manga-android/` | Aki Manga for Android (Kotlin). See [apps/manga-android/README.md](apps/manga-android/README.md). | |
 | `crates/core/` | The library the server and the desktop app share: providers, indexers, ranking, the torrent engine. | |
-| `apps/web/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. | 3000 |
-| `apps/desktop/` | The native macOS app, with the same backend built in. See [apps/desktop/README.md](apps/desktop/README.md). | |
+| `crates/party/`, `crates/library/` | Watch parties, and the local library. | |
+| `crates/manga/`, `crates/manga-ffi/` | The manga and books engine, and the wrapper that both phone apps call. | |
+| `content/` | Data the apps read: `sources/` (the sources document and its publish scripts), `plugins/`, and `manga/` (what both phone apps share: icons, store listing, demo server, launch film). | |
+| `design/` | The design plan, the manga app's design, branding and screenshots. | |
+| `docs/` | `design.md` and `flow.md` (why, and how data moves), and `plans/` (written plans). | |
+| `release/`, `fastlane/` | Release scripts for the phone apps, and the Fastlane lanes they use. | |
+| `vendor/` | Copies of other people's crates, with a `PATCH.md` each. | |
+| `caddy/`, `scripts/`, `docker-compose.yml` | The server stack and its deploy scripts. | |
+
+The Rust workspace is at the repository root (`Cargo.toml`). Run `cargo` from the root.
 
 The server and the desktop app are built on **one library**, so there is one copy of every indexer,
 provider and ranking rule. A fix to how a release is found or ranked lands in both. This replaced
