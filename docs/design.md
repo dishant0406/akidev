@@ -991,3 +991,9 @@ This replaces how the TV used new definitions before (it swapped them in while t
 - Tested on the TV against a local server that served a fake release list and a 1.0.1 APK: the sign, the sentence, the permission step, the progress ("Downloading 35%"), Android's dialog, and the new version installed (version code 2). The real GitHub release was not made.
 
 **Two bugs this found.** A scroll wrapper on the Settings page swallowed the Down key from the bar (removed). While the key field was being edited, the Up key stayed in the field, so the remote could not leave upward (Up now moves on, like Down).
+
+## TV Settings: the key can be shown, and the notices come last (2026-11-27)
+
+The TorBox key field on the TV shows dots. A mistyped key was hard to find, so an eye button now sits beside the field. OK on it shows the key as text, and OK again hides it. It is a separate button, not part of the field, because the field keeps the Left and Right keys for its cursor while you edit. To reach the eye, leave the field first (Down, then Up, then Right).
+
+The notices (new sources, a new app version) moved below the result of the key check. Before, their empty slots left a big hole between the text and the field, and pushed the result line off the bottom of the screen, where it was cut. Now nothing sits between the text and the field, and a notice that appears later only moves things below it. The icons "eye" and "eye-off" come from Solar through `content/manga/fetch-icons.py --tv`.

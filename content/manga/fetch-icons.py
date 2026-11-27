@@ -29,10 +29,10 @@ ICONS = {
     "headphones": "headphones-round", "qr": "qr-code", "lock": "lock",
 }
 # The Android TV app (apps/tv-android) draws these. Names above are reused; the ones here exist only for the TV.
-TV_ONLY = {"film": "clapperboard", "tv": "tv", "info": "info-circle", "subtitles": "subtitles", "volume": "volume-loud"}
+TV_ONLY = {"film": "clapperboard", "tv": "tv", "info": "info-circle", "subtitles": "subtitles", "volume": "volume-loud", "eye": "eye", "eye-off": "eye-closed"}
 TV_USES = [
     "home", "film", "tv", "sparkles", "search", "settings", "play", "pause", "info", "subtitles", "volume", "next", "check", "close",
-    "warning", "refresh", "list", "back", "trash", "lock", "clock", "server", "download",
+    "warning", "refresh", "list", "back", "trash", "lock", "clock", "server", "download", "eye", "eye-off",
 ]
 # Drawn filled on the TV: a tab that is shown, the play button, and the marks that say something is done or wrong.
 TV_SOLID = {"home", "film", "tv", "sparkles", "search", "settings", "play", "check", "warning"}

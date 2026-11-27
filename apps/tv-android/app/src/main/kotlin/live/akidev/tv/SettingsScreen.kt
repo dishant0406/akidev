@@ -49,7 +49,37 @@ fun SettingsScreen(sourcesReady: Boolean, release: AppRelease?, onSaved: () -> U
     Column(Modifier.fillMaxSize().background(Ink.Canvas).padding(start = 48.dp, end = 48.dp, bottom = 48.dp, top = TopBarHeight + 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) { AkiIcon("settings-solid", size = 36.dp, tint = Ink.TextDim); Text("Settings", style = Type.Display) }
         Text("Your TorBox API key. It stays on this TV and is sent only to TorBox.", style = Type.Body)
-        // The notices (new sources, a new version of the app, a problem with an update): each has a slot of its own, so nothing below moves.
+        // The key is hidden as dots; the eye shows it, so a mistyped key can be seen and fixed.
+        var hidden by remember { mutableStateOf(true) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Field(typed, { typed = it }, "Paste or type the key", Modifier.width(720.dp), secret = hidden, icon = "lock")
+            AkiButton(if (hidden) "Show the key" else "Hide the key", Look.Text, icon = if (hidden) "eye" else "eye-off") { hidden = !hidden }
+        }
+        AkiButton("Save and check", Look.Primary, icon = "check-solid", labelAlways = true) {
+            status = "Checking"
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        checkKey(typed.trim())
+                        null
+                    } catch (e: Exception) {
+                        (e as? TvException.Failed)?.reason ?: e.message ?: "Something went wrong."
+                    }
+                }
+                status = when {
+                    result != null -> result
+                    !Key.set(context, typed) -> "This TV cannot keep the key safely, so it was not saved."
+                    else -> { onSaved(); "" }
+                }
+            }
+        }
+        if (hadKey) AkiButton("Remove the key from this TV", Look.Text, icon = "trash") { Key.clear(context); onSaved() }
+        // The result of the check has a slot of its own, so nothing below the button moves when it appears.
+        Box(Modifier.height(32.dp)) {
+            if (status == "Checking") Spinner(size = 28.dp)
+            else if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { AkiIcon("warning", tint = Ink.Danger); Text(status, style = Type.Body.copy(color = Ink.Danger), maxLines = 1) }
+        }
+        // The notices (new sources, a new version of the app, a problem with an update) come last, each in a slot of its own, so nothing above them moves when one shows up.
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Box(Modifier.height(28.dp)) {
             if (sourcesReady) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -76,31 +106,6 @@ fun SettingsScreen(sourcesReady: Boolean, release: AppRelease?, onSaved: () -> U
                 }
             }
         }
-        }
-        Field(typed, { typed = it }, "Paste or type the key", Modifier.width(720.dp), secret = true, icon = "lock")
-        AkiButton("Save and check", Look.Primary, icon = "check-solid", labelAlways = true) {
-            status = "Checking"
-            scope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    try {
-                        checkKey(typed.trim())
-                        null
-                    } catch (e: Exception) {
-                        (e as? TvException.Failed)?.reason ?: e.message ?: "Something went wrong."
-                    }
-                }
-                status = when {
-                    result != null -> result
-                    !Key.set(context, typed) -> "This TV cannot keep the key safely, so it was not saved."
-                    else -> { onSaved(); "" }
-                }
-            }
-        }
-        if (hadKey) AkiButton("Remove the key from this TV", Look.Text, icon = "trash") { Key.clear(context); onSaved() }
-        // The result of the check has a slot of its own, so nothing below the button moves when it appears.
-        Box(Modifier.height(32.dp)) {
-            if (status == "Checking") Spinner(size = 28.dp)
-            else if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { AkiIcon("warning", tint = Ink.Danger); Text(status, style = Type.Body.copy(color = Ink.Danger), maxLines = 1) }
         }
     }
 }

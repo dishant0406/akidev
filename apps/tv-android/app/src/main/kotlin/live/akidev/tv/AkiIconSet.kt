@@ -8,6 +8,8 @@ internal val akiIconSet: Map<String, Int> = mapOf(
     "clock" to R.drawable.aki_icon_clock,
     "close" to R.drawable.aki_icon_close,
     "download" to R.drawable.aki_icon_download,
+    "eye" to R.drawable.aki_icon_eye,
+    "eye-off" to R.drawable.aki_icon_eye_off,
     "film" to R.drawable.aki_icon_film,
     "film-solid" to R.drawable.aki_icon_film_solid,
     "home" to R.drawable.aki_icon_home,
