@@ -12,11 +12,13 @@ use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// An answer older than this is not shown while waiting for a new one: it is too old to be the
-/// thing a viewer expects to see.
-pub const SHOWN_UNTIL: Duration = Duration::from_secs(24 * 60 * 60);
+/// thing a viewer expects to see. A week: a TV that is opened now and then should still show its
+/// rows at once (they are refreshed in the background for the next start), not wait for the
+/// network as if it had never run.
+pub const SHOWN_UNTIL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// Files older than this are deleted when the app starts.
-const KEPT_FOR: Duration = Duration::from_secs(2 * 24 * 60 * 60);
+const KEPT_FOR: Duration = Duration::from_secs(8 * 24 * 60 * 60);
 
 static DIR: OnceLock<PathBuf> = OnceLock::new();
 

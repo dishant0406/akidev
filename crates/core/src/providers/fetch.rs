@@ -197,7 +197,7 @@ fn in_flight() -> &'static Mutex<HashMap<String, Shared<BoxFuture<'static, Answe
 /// short while only when it holds no rows at `rows`.
 ///
 /// With `keep` the answer is also kept on disk. One from an earlier run that is not older than
-/// a day is returned at once, and when it is past its `ttl` it is refreshed in the background
+/// a week is returned at once, and when it is past its `ttl` it is refreshed in the background
 /// for the next time.
 pub async fn get(
     provider: &str,
@@ -545,7 +545,7 @@ mod tests {
         super::disk::write_aged(
             &key,
             &json!({"rows":["kept"]}),
-            Duration::from_secs(30 * 3600),
+            Duration::from_secs(10 * 24 * 3600),
         );
         assert_eq!(
             ask(&stale_url, true).await.as_deref(),

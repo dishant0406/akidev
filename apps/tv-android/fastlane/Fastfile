@@ -1,0 +1,172 @@
+# Releases the Android TV app on GitHub (not on the Play Store). Run from apps/tv-android:
+#
+#   fastlane release                  # next patch version (the first release uses the version in app/build.gradle.kts)
+#   fastlane release bump:minor       # or bump:major, or version:1.4.0
+#   fastlane release dry_run:true     # builds and prints the notes, changes nothing, publishes nothing
+#   fastlane notes                    # only prints the next version and the notes
+#
+# What a release does: checks the branch is main and clean, works out the version, builds the engine and the app, runs the unit tests
+# and lint, checks the APK is signed with the upload key, commits the new version, pushes, and creates the GitHub release
+# `tv-android-vX.Y.Z` with the APK, its SHA-256 and the notes (the commits since the last release that touch the TV app or the engine).
+# The TV app looks for the newest release with that tag prefix and offers it in Settings.
+#
+# Needs: GITHUB_API_TOKEN (a token of the account that owns the repository, with "contents: write" on it; never the work account) and
+# the signing key in ~/.akidev-keys (see app/build.gradle.kts).
+
+default_platform(:android)
+
+REPOSITORY = "dishant0406/akidev"
+TAG_PREFIX = "tv-android-v"
+APP_ROOT = File.expand_path("..", __dir__)
+REPO_ROOT = File.expand_path("../../..", __dir__)
+GRADLE_FILE = File.join(APP_ROOT, "app", "build.gradle.kts")
+# What counts as a change of the TV app: the notes list only commits that touch these.
+TV_PATHS = %w[apps/tv-android crates/tv-ffi crates/core design/TV_PLAN.md].freeze
+# Same Java and certificates as the daily builds (see README).
+JAVA_HOME_DEFAULT = "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home".freeze
+
+def read_version
+  gradle = File.read(GRADLE_FILE)
+  [gradle[/versionName = "([^"]+)"/, 1], gradle[/versionCode = (\d+)/, 1].to_i]
+end
+
+def last_tag
+  sh("git -C #{REPO_ROOT} tag --list '#{TAG_PREFIX}*' --sort=-v:refname | head -n 1", log: false).strip
+end
+
+def version_of(tag)
+  tag.sub(TAG_PREFIX, "")
+end
+
+# "1.0" is read as 1.0.0.
+def triple(version)
+  parts = version.split(".").map(&:to_i)
+  parts << 0 while parts.size < 3
+  parts.first(3)
+end
+
+def next_version(options, current, tag)
+  return options[:version] if options[:version]
+  return triple(current).join(".") if tag.empty? && options[:bump].nil?
+  major, minor, patch = triple(tag.empty? ? current : version_of(tag))
+  case options[:bump] || "patch"
+  when "major" then [major + 1, 0, 0].join(".")
+  when "minor" then [major, minor + 1, 0].join(".")
+  when "patch" then [major, minor, patch + 1].join(".")
+  else UI.user_error!("bump must be patch, minor or major")
+  end
+end
+
+# One line for each commit since the last release that touches the TV app or the engine. Newest first.
+def release_notes(tag, version, sha256)
+  range = tag.empty? ? "" : "#{tag}..HEAD"
+  paths = TV_PATHS.join(" ")
+  subjects = sh("git -C #{REPO_ROOT} log #{range} --no-merges --pretty=format:%s -- #{paths}", log: false).split("\n").map(&:strip).reject(&:empty?)
+  changes = if tag.empty?
+    "- First release of the Android TV app."
+  elsif subjects.empty?
+    "- Small fixes."
+  else
+    subjects.first(40).map { |subject| "- #{subject}" }.join("\n")
+  end
+  <<~NOTES
+    ## What changed
+
+    #{changes}
+
+    ## Install
+
+    Open Settings in the app and press "Download and install", or install the APK yourself. It is signed with the same key as every earlier release, so it updates the app in place.
+
+    SHA-256: `#{sha256}`
+  NOTES
+end
+
+platform :android do
+  desc "Prints the next version and the release notes. Builds nothing."
+  lane :notes do |options|
+    current, = read_version
+    tag = last_tag
+    version = next_version(options, current, tag)
+    UI.message("Last release: #{tag.empty? ? 'none' : tag}. Next: #{version}")
+    puts release_notes(tag, version, "<sha256 of the APK>")
+  end
+
+  desc "Builds the app and publishes it as a GitHub release."
+  lane :release do |options|
+    dry_run = options[:dry_run] ? true : false
+    unless File.exist?(File.expand_path("~/.akidev-keys/keystore.properties"))
+      UI.user_error!("The signing key is missing (~/.akidev-keys/keystore.properties): an unsigned APK cannot update the installed app.")
+    end
+    token = ENV["GITHUB_API_TOKEN"].to_s
+    UI.user_error!("GITHUB_API_TOKEN is not set (a token of the account that owns #{REPOSITORY}).") if token.empty? && !dry_run
+
+    unless dry_run
+      ensure_git_branch(branch: options[:branch] || "main")
+      ensure_git_status_clean
+      sh("git -C #{REPO_ROOT} fetch --tags --quiet", log: false)
+    end
+
+    current, code = read_version
+    tag = last_tag
+    version = next_version(options, current, tag)
+    UI.user_error!("#{TAG_PREFIX}#{version} already exists.") if !dry_run && tag == "#{TAG_PREFIX}#{version}"
+    new_code = tag.empty? ? code : code + 1
+    UI.message("Releasing Akidev TV #{version} (version code #{new_code})#{dry_run ? ' as a dry run' : ''}")
+
+    original = File.read(GRADLE_FILE)
+    committed = false
+    begin
+      File.write(GRADLE_FILE, original.sub(/versionName = "[^"]+"/, %(versionName = "#{version}")).sub(/versionCode = \d+/, "versionCode = #{new_code}"))
+
+      java_home = ENV["JAVA_HOME"] || JAVA_HOME_DEFAULT
+      build = "cd #{APP_ROOT} && export JAVA_HOME='#{java_home}' && source ~/.gradle/aki-env.sh && "
+      sh("bash -c \"#{build}scripts/build-engine.sh\"")
+      sh("bash -c \"#{build}./gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease\"")
+
+      apk = File.join(APP_ROOT, "app", "build", "outputs", "apk", "release", "app-release.apk")
+      UI.user_error!("The APK was not built.") unless File.exist?(apk)
+      signer = Dir[File.join(ENV["ANDROID_HOME"] || "/opt/homebrew/share/android-commandlinetools", "build-tools", "*", "apksigner")].sort.last
+      if signer
+        sh("#{signer} verify --print-certs #{apk} | head -n 3", log: false)
+      else
+        UI.important("apksigner was not found: the signature was not checked.")
+      end
+
+      out = File.join(APP_ROOT, "build", "release")
+      FileUtils.mkdir_p(out)
+      named = File.join(out, "AkidevTV-#{version}.apk")
+      FileUtils.cp(apk, named)
+      sha256 = sh("shasum -a 256 #{named} | cut -d' ' -f1", log: false).strip
+      File.write("#{named}.sha256", "#{sha256}  AkidevTV-#{version}.apk\n")
+      body = release_notes(tag, version, sha256)
+      File.write(File.join(out, "notes-#{version}.md"), body)
+      UI.success("Built #{named} (#{(File.size(named) / 1_048_576.0).round(1)} MB)")
+      puts body
+
+      if dry_run
+        UI.important("Dry run: nothing was committed, pushed or published. The APK and the notes are in #{out}.")
+        next
+      end
+
+      sh("git -C #{REPO_ROOT} add #{GRADLE_FILE}")
+      sh("git -C #{REPO_ROOT} commit -m 'Release Akidev TV #{version}'")
+      committed = true
+      sh("git -C #{REPO_ROOT} push origin HEAD")
+      set_github_release(
+        repository_name: REPOSITORY,
+        api_token: token,
+        name: "Akidev TV #{version}",
+        tag_name: "#{TAG_PREFIX}#{version}",
+        description: body,
+        commitish: sh("git -C #{REPO_ROOT} rev-parse HEAD", log: false).strip,
+        is_draft: options[:draft] ? true : false,
+        upload_assets: [named, "#{named}.sha256"]
+      )
+      UI.success("Published https://github.com/#{REPOSITORY}/releases/tag/#{TAG_PREFIX}#{version}")
+    ensure
+      # The new version stays only in the commit above; a dry run or a failure before it puts the file back as it was.
+      File.write(GRADLE_FILE, original) unless committed
+    end
+  end
+end

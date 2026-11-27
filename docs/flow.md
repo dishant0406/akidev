@@ -263,3 +263,100 @@ Edge cases:
 6. Both release scripts run steps 4 and 5 first and stop if one fails.
 Text that comes from a source or a server, icon names, saved setting values and format patterns stay in code.
 
+
+## Watching on the Android TV app (2026-11-26)
+
+Files: `apps/tv-android/app/src/main/kotlin/live/akidev/tv/` (screens) and `crates/tv-ffi/src/lib.rs` (engine calls).
+
+1. **Start.** `MainActivity` calls `start(filesDir)`: it loads the saved sources document and keeps it fresh. `App` loads
+   the home rows with `home()` and shows `HomeScreen`. The Search button has the first focus.
+2. **Browse or search.** The remote moves focus. Search uses the TV's own keyboard; Down leaves the text field (`Field` in
+   `Components.kt`). A search runs when the viewer presses Search, not on every letter. The rows, the scroll position and the
+   search live in `App`, so Back returns to the same place.
+3. **Title.** OK on a poster opens `DetailScreen` (`detail(id)`). A film has a Play button. A series shows seasons and
+   episodes. An anime with only an episode count gets generated episode ids.
+4. **Play.** `PlayerScreen` shows "Finding a copy" while `find_stream(id, key)` runs: the plan (releases), `checkcached`
+   on TorBox, the account entry (`createtorrent` with `add_only_if_cached`, then `mylist`), the file choice
+   (`pick_for_identity`), then `requestdl`. Measured on the TV: 4 to 5 seconds. Each step writes one line to
+   `adb logcat -s AkiTV` with the time.
+5. **Watching.** ExoPlayer plays the link. OK pauses, Left and Right seek 10 seconds, Up or Down shows the bar for 3.5
+   seconds. Back returns to the title.
+
+**Edge cases and what the viewer sees.**
+- No key saved: Play opens Settings.
+- Wrong key: "Save and check" shows TorBox's message in red and does not save.
+- No releases, or TorBox holds none: a state card says why, with "Try again" and "Back".
+- The player fails (for example a codec the TV lacks): a state card with the error name.
+- The catalogues cannot load: "The catalogues did not load" with "Try again".
+- No poster, or it fails to load: the title name shows on the tile.
+
+**Not built.** Typing the key from a phone on a page of the TV (the Android TV Remote app on a phone can type into the TV's keyboard
+instead), a "Skip intro" button (no source of intro times), and a phone layout.
+
+## The TV home screen (2026-11-26)
+
+Files: `HomeScreen.kt` (hero, rows), `TopBar.kt` (bar, tabs), `MainActivity.kt` (tab and hero kept for Back).
+
+1. The first poster of the first row has the first focus. The hero shows that title.
+2. Left and Right move along a row. Each new poster becomes the hero (`onHero`). The backdrop and text cross-fade.
+3. Up from the posters goes to the hero buttons, then to the bar. OK on a tab (`Tab`) filters the rows by kind. The shown tab
+   has an amber line under it; the one the remote is on has the amber ring.
+4. Hero buttons: a film's Play starts the player at once (`onPlay`; with no key saved it opens Settings). More info and a
+   series' Episodes open the title page.
+5. Back from a title page returns to Home with the same tab, the same scroll position of the rows (`HomeMemory`: the list state of
+   every row) and the same search, because they live in `App`. The focus goes back to the card the remote was on (`HomeMemory.focused`);
+   if that card is no longer there, to the first one.
+6. Only that card gets the first focus, once. A row that scrolls back into view does not take the focus.
+7. The hero changes 220 ms after the remote stops on a card, not on every step (`HERO_DELAY_MS`).
+
+**Edge cases.** A tab with no rows shows "Nothing here yet." A title with no backdrop uses its poster. A title with no story
+shows no story line (the request failed or the catalogue has none). Rows that fail to load are left out, as before.
+
+**How the rows arrive (2026-11-27).** `MainActivity` asks `home_rows()` (names and kinds, from the definitions, no network) and makes
+one `Load` for each row. `loadHomeRows` calls `home_row(i)` for each, 3 at a time and in order, and puts each answer in its place.
+`homeRowsOf` turns that into what the screen shows: the rows from the first up to the first one with no answer yet (so a late row
+never pushes the others down), a quiet skeleton row under them while more are coming, and a failed row left out. With no row
+answered yet the screen shows its skeleton (hero and two rows). When every row failed it shows "The catalogues did not load" and
+"Try again" (which asks for all rows again). The first row has the first focus as soon as it is on screen. With a warm disk cache
+(answers up to a week old are shown at once and refreshed in the background) all rows are in within about 0.3 s.
+
+## Playing, resuming and finishing on the TV (2026-11-26)
+
+Files: `PlayerScreen.kt`, `TracksPanel.kt`, `History.kt`, `DetailScreen.kt`; `find_stream`, `subtitles` and `subtitle_file` in `crates/tv-ffi/src/lib.rs`.
+
+1. **Start.** A film's Play, a title page button, an episode card or a Continue watching card opens `PlayerScreen` with the title,
+   the id to play and a label ("Episode 3", none for a film). It calls `find_stream(id, key, failed)`.
+2. **Which copy.** Releases that TorBox holds, in the ranking order of core, except those in `failed`. Releases with DTS or TrueHD
+   sound go last: the TV has no decoder for them. `find_stream` returns the link and the release's hash.
+3. **Resume.** The player starts at the position saved in `History` for this id, or at the start when none is saved or it was seen
+   (past 90 %). The position is saved every 5 seconds while playing and when the player closes.
+4. **Controls.** OK pauses, Left and Right seek 10 seconds, Up shows the bar. Down shows the bar, then moves onto its buttons:
+   "Audio & subtitles" and (for an episode that has a next one) "Next episode". Up from the buttons goes back to the video. Back closes
+   the panel first, then leaves the player.
+5. **Audio and subtitles.** The panel lists the audio tracks of the file, then Off, the subtitle tracks of the file, then up to 12
+   from outside (`subtitles(id)`). Picking one from outside fetches it as WebVTT (`subtitle_file`), saves it in the cache and loads
+   the same video again at the same place with that subtitle. The first subtitle track in the language of the TV is picked at the start.
+6. **Next.** At the end of an episode the next one starts (the list of the title's episodes decides). At the end of a film or the last
+   episode the player closes. The finished episode is saved as seen, so Continue watching drops it.
+7. **A copy that does not play.** The player error shows a card with "Try another copy": the failed release's hash is added to
+   `failed` and `find_stream` is asked again.
+
+**What the viewer sees when something fails.**
+- No copy, or TorBox does not hold one: a card with the reason, "Try again" and "Back".
+- The file fails in the player: a card with the error name, "Try another copy" and "Back".
+- A subtitle cannot be loaded: a line "That subtitle could not be loaded." in the panel. Playing goes on.
+- The key cannot be stored safely on this TV: Settings says so and does not save it.
+- The history cannot be read (damaged): it is treated as empty.
+
+**Continue watching.** One card for each title, the one watched last, newest first, without what was seen. A card opens the player
+at the saved place. The title page's main button does the same, and for a series whose last episode was seen it offers the next one.
+
+## What the viewer sees while things load (2026-11-26)
+
+- **Start.** The top bar and shapes the size of the hero and two rows show at once; the rows replace the shapes without anything moving. On
+  the second launch on, the rows of the last run show straight away (kept on disk) and are refreshed in the background.
+- **Opening a title.** Its name, facts and picture show at once; story, button, seasons and episodes fill their slots when the page loads.
+  If it fails, the main button's slot shows "Try again" and the reason.
+- **Moving over the posters.** The hero changes after the remote rests for 220 ms. Its story is asked for after that, at most one every 2.1
+  seconds; if it cannot be had, the slot stays empty.
+- **A tab or row added to the definitions.** It appears within about 20 seconds of the new definitions being downloaded, without a new release.

@@ -1,0 +1,24 @@
+[package]
+name = "akidev-tv-ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "akitv"
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+# No default features: the torrent client (`streaming`) is for the desktop and the server.
+akidev-core = { path = "../core", default-features = false }
+anyhow.workspace = true
+# The TV has no system TLS library, so rustls (as core does on Android).
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+futures.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+uniffi = { version = "0.32", features = ["cli"] }

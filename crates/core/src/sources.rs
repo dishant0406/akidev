@@ -18,6 +18,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 
 /// The newest version of the definition format this build understands. It reads that and the ones
@@ -111,7 +112,6 @@ impl Sources {
     }
 
     /// The document's alias sources, or the built-in ones when it predates them.
-    #[cfg(feature = "streaming")]
     pub(crate) fn aliases_or_built_in(&self) -> &Aliases {
         if self.aliases.identity.is_empty() && self.aliases.catalogue.is_empty() {
             &built_in().aliases
@@ -642,13 +642,28 @@ async fn fetch_signed(feed: &str, key: &str) -> anyhow::Result<(Vec<u8>, String,
 /// when there is nothing newer there: nothing at all, or something that is not genuine, not readable or not
 /// newer than what is in use. Both are signed by the same key and published with one version number.
 async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> {
+    let hold = HOLD_UPDATES.load(Ordering::Relaxed).then_some(&WAITING);
+    refresh_holding(feed, key, dir, hold).await
+}
+
+/// `hold` is where to note the version of a newer document that is saved but not used by this run (the next start uses it); `None`
+/// uses it at once.
+async fn refresh_holding(
+    feed: &str,
+    key: &str,
+    dir: &Path,
+    hold: Option<&AtomicU64>,
+) -> anyhow::Result<u64> {
     let in_use = current();
+    // A copy that is already saved and waiting for the next start is not fetched and saved again.
+    let waiting = hold.map_or(0, |waiting| waiting.load(Ordering::Relaxed));
+    let fresh = |found: &Sources| newer(found, &in_use) && found.version > waiting;
     let (document, signature, sources) = match fetch_signed(&format!("{feed}/{FEED_V2}"), key).await
     {
-        Ok(found) if newer(&found.2, &in_use) => found,
+        Ok(found) if fresh(&found.2) => found,
         // A genuine schema 2 document that is not newer: the schema 1 feed may still be.
         Ok(_) => match fetch_signed(feed, key).await {
-            Ok(found) if newer(&found.2, &in_use) => found,
+            Ok(found) if fresh(&found.2) => found,
             _ => return Ok(in_use.version),
         },
         Err(error) => {
@@ -665,7 +680,7 @@ async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> 
                 );
             }
             let found = fetch_signed(feed, key).await?;
-            if !newer(&found.2, &in_use) {
+            if !fresh(&found.2) {
                 return Ok(in_use.version);
             }
             found
@@ -676,9 +691,30 @@ async fn refresh_from(feed: &str, key: &str, dir: &Path) -> anyhow::Result<u64> 
     std::fs::create_dir_all(dir)?;
     save(&dir.join(DOCUMENT), &document)?;
     save(&dir.join(SIGNATURE), signature.as_bytes())?;
+    if let Some(waiting) = hold {
+        // Stale while revalidating: this run keeps what it started with, the next start uses the new copy.
+        waiting.store(version, Ordering::Relaxed);
+        tracing::info!("[sources] version {version} saved, used from the next start");
+        return Ok(in_use.version);
+    }
     adopt(sources);
     tracing::info!("[sources] updated to version {version}");
     Ok(version)
+}
+
+static HOLD_UPDATES: AtomicBool = AtomicBool::new(false);
+static WAITING: AtomicU64 = AtomicU64::new(0);
+
+/// From now on a newer document that arrives is saved but not used by this run: the next start uses it. The screens then never change
+/// under the viewer, and `waiting_version` says when a newer copy is ready.
+pub fn apply_updates_at_next_start() {
+    HOLD_UPDATES.store(true, Ordering::Relaxed);
+}
+
+/// The version of a newer document that is saved and waits for the next start, if there is one.
+pub fn waiting_version() -> Option<u64> {
+    let waiting = WAITING.load(Ordering::Relaxed);
+    (waiting > current().version).then_some(waiting)
 }
 
 #[cfg(test)]
@@ -1243,6 +1279,32 @@ mod tests {
         let broken = nothing.replace("127.0.0.1", "127.0.0.1:1/nowhere");
         assert!(refresh_from(&broken, &key, &dir).await.is_err());
         assert_eq!(current().version, in_use + 400);
+
+        // Held for the next start: a newer document is saved and noted, but this run keeps what it has, and the same
+        // document is not fetched and saved again.
+        let waiting = AtomicU64::new(0);
+        let base = feeds(signed(at(600, 1, "udp://later.example:6")), None).await;
+        assert_eq!(
+            refresh_holding(&base, &key, &dir, Some(&waiting))
+                .await
+                .unwrap(),
+            in_use + 400
+        );
+        assert_eq!(current().trackers, ["udp://fallback.example:4"]);
+        assert_eq!(waiting.load(Ordering::Relaxed), in_use + 600);
+        assert!(
+            std::fs::read_to_string(dir.join(DOCUMENT))
+                .unwrap()
+                .contains("later.example")
+        );
+        std::fs::write(dir.join(DOCUMENT), "marker").unwrap();
+        refresh_holding(&base, &key, &dir, Some(&waiting))
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join(DOCUMENT)).unwrap(),
+            "marker"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

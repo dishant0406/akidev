@@ -12,13 +12,21 @@ use crate::releases::{
     parse_codec, parse_resolution, rank_movie_releases, rank_movie_releases_by, rank_releases,
     rank_releases_by, rank_series_releases_by, search_terms, series_search_terms,
 };
+#[cfg(feature = "streaming")]
+use crate::serve;
+#[cfg(feature = "streaming")]
 use crate::torrent::{Engine, StreamStats};
-use crate::{providers, serve, sources};
+use crate::{providers, sources};
+#[cfg(feature = "streaming")]
 use futures::StreamExt as _;
 use std::collections::{HashSet, VecDeque};
+#[cfg(feature = "streaming")]
 use std::net::SocketAddr;
+#[cfg(feature = "streaming")]
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+#[cfg(feature = "streaming")]
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Which file of which torrent is playing, for asking how its stream is going.
@@ -40,6 +48,7 @@ impl StreamId {
 }
 
 /// A candidate that has not found peers after this long is joined by the next one.
+#[cfg(feature = "streaming")]
 const STAGGER: Duration = Duration::from_secs(6);
 
 /// How many ranked releases a plan offers. More than a torrent is tried with, because a
@@ -127,6 +136,7 @@ impl FailureMemory {
 }
 
 /// How many of a plan's best releases the stream services are asked about.
+#[cfg(feature = "streaming")]
 const MOST_SERVICE_RELEASES: usize = 4;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +150,7 @@ pub enum Resolution {
     Unavailable { reason: String },
 }
 
+#[cfg(feature = "streaming")]
 pub struct Streamer {
     config: Mutex<Config>,
     failures: FailureMemory,
@@ -149,6 +160,7 @@ pub struct Streamer {
     token: String,
 }
 
+#[cfg(feature = "streaming")]
 impl Streamer {
     /// Starts the torrent engine, downloading under a directory it owns inside `dir`,
     /// and the localhost server the player reads from.
@@ -249,46 +261,8 @@ impl Streamer {
     /// The title and the ranked releases for one episode or film, before any is opened.
     /// The reason is for the viewer, and is the whole story when it is an `Err`.
     pub async fn plan(&self, id: &str) -> Result<Plan, String> {
-        if id.len() > 128 {
-            return Err("Unrecognised media id.".into());
-        }
         let config = self.config.lock().unwrap().clone();
-        let Some(parsed) = media_id::parse(id) else {
-            return Err("Unrecognised media id.".into());
-        };
-        // A title without an episode is a detail page. A film is the exception: it has
-        // no episode by definition.
-        if parsed.kind.shape() != Shape::Movie && parsed.episode.is_none() {
-            return Err("No episode was requested.".into());
-        }
-        let started = Instant::now();
-        let Some(mut detail) = providers::detail(&parsed.key()).await else {
-            return Err("Unknown title.".into());
-        };
-        Self::validate_request(id, &detail)?;
-        let detail_took = started.elapsed();
-        let (terms, ranked, extra, source_reports, live) =
-            find_releases(&config, &parsed, &mut detail).await;
-        tracing::info!(
-            "[stream] {id}: title after {detail_took:?}, releases after {:?} more: {} playable, {} others",
-            started.elapsed().saturating_sub(detail_took),
-            ranked.len(),
-            extra.len()
-        );
-        Ok(Plan {
-            id: id.to_string(),
-            parsed,
-            detail: detail.clone(),
-            terms,
-            source_reports,
-            ranked,
-            extra,
-            live: live.map(|results| PlanLive {
-                identity: PlanIdentity::new(id, &detail),
-                results,
-                excluded: HashSet::new(),
-            }),
-        })
+        plan(&config, id).await
     }
 
     /// Races the best releases of a plan and returns the first that is ready. The rest are
@@ -381,6 +355,51 @@ impl Streamer {
     }
 }
 
+/// The title and the ranked releases for one episode or film, before any is opened.
+/// The reason is for the viewer, and is the whole story when it is an `Err`.
+/// It needs no torrent engine, so an app that only plays links from a stream service (the TV) uses it alone.
+pub async fn plan(config: &Config, id: &str) -> Result<Plan, String> {
+    if id.len() > 128 {
+        return Err("Unrecognised media id.".into());
+    }
+    let Some(parsed) = media_id::parse(id) else {
+        return Err("Unrecognised media id.".into());
+    };
+    // A title without an episode is a detail page. A film is the exception: it has
+    // no episode by definition.
+    if parsed.kind.shape() != Shape::Movie && parsed.episode.is_none() {
+        return Err("No episode was requested.".into());
+    }
+    let started = Instant::now();
+    let Some(mut detail) = providers::detail(&parsed.key()).await else {
+        return Err("Unknown title.".into());
+    };
+    validate_request_at(id, &detail, crate::calendar::now_ms())?;
+    let detail_took = started.elapsed();
+    let (terms, ranked, extra, source_reports, live) =
+        find_releases(config, &parsed, &mut detail).await;
+    tracing::info!(
+        "[stream] {id}: title after {detail_took:?}, releases after {:?} more: {} playable, {} others",
+        started.elapsed().saturating_sub(detail_took),
+        ranked.len(),
+        extra.len()
+    );
+    Ok(Plan {
+        id: id.to_string(),
+        parsed,
+        detail: detail.clone(),
+        terms,
+        source_reports,
+        ranked,
+        extra,
+        live: live.map(|results| PlanLive {
+            identity: PlanIdentity::new(id, &detail),
+            results,
+            excluded: HashSet::new(),
+        }),
+    })
+}
+
 /// What is known about one episode or film before any torrent is opened.
 #[derive(Debug, Clone)]
 pub struct Plan {
@@ -431,6 +450,7 @@ impl PlanIdentity {
 
 /// One orchestrator for initial and late candidates. All attempts are owned by this
 /// future: success, deadline and caller cancellation drop every losing open.
+#[cfg(feature = "streaming")]
 async fn race_plan<T, F, Fut>(
     plan: &Plan,
     memory: &FailureMemory,
@@ -532,6 +552,7 @@ fn candidates(ranked: &[Release]) -> Vec<&Release> {
 
 /// Asks `services` about the best few releases of `plan`, and says where to play the first link. A service that
 /// needs a key and has none in `config` is left alone.
+#[cfg(feature = "streaming")]
 async fn from_services_in(
     services: &[crate::services::ServiceDef],
     config: &Config,
@@ -584,6 +605,7 @@ async fn from_services_in(
     None
 }
 
+#[cfg(feature = "streaming")]
 fn unavailable(reason: &str) -> Resolution {
     Resolution::Unavailable {
         reason: reason.to_string(),
@@ -1259,7 +1281,7 @@ impl Plan {
 
     /// Rechecks public/mutable plans at delivery, including the parsed identity.
     pub fn validate_request(&self) -> Result<(), String> {
-        let parsed = Streamer::validate_request(&self.id, &self.detail)?;
+        let parsed = validate_request_at(&self.id, &self.detail, crate::calendar::now_ms())?;
         if parsed != self.parsed {
             return Err("Unrecognised media id.".into());
         }

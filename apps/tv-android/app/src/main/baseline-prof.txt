@@ -1,0 +1,25 @@
+# Baseline profile: the methods and classes the system compiles ahead of time, so the TV's three slow cores do not spend the first
+# minutes of every start compiling them while the viewer scrolls (measured on the TV: rows on screen 1.0 s -> 0.7 s, janky frames
+# 6.9% -> 0.8%). Written with wildcards for what the app uses all the time: the app, its engine bindings, Compose, the image loader,
+# the network and the player. H = hot, S = used at start, P = used after start.
+HSPLlive/akidev/tv/**;->**(**)**
+HSPLuniffi/**;->**(**)**
+HSPLandroidx/compose/**;->**(**)**
+HSPLandroidx/tv/**;->**(**)**
+HSPLandroidx/activity/**;->**(**)**
+HSPLandroidx/lifecycle/**;->**(**)**
+HSPLandroidx/core/**;->**(**)**
+HSPLandroidx/media3/**;->**(**)**
+HSPLcoil3/**;->**(**)**
+HSPLokhttp3/**;->**(**)**
+HSPLokio/**;->**(**)**
+HSPLcom/sun/jna/**;->**(**)**
+HSPLkotlin/**;->**(**)**
+HSPLkotlinx/coroutines/**;->**(**)**
+Llive/akidev/tv/**;
+Luniffi/**;
+Landroidx/compose/**;
+Landroidx/tv/**;
+Lcoil3/**;
+Lokhttp3/**;
+Lokio/**;

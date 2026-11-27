@@ -24,7 +24,6 @@ pub mod search;
 pub mod serve;
 pub mod services;
 pub mod sources;
-#[cfg(feature = "streaming")]
 pub mod stream;
 pub mod subtitles;
 pub mod template;

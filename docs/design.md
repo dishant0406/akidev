@@ -690,3 +690,304 @@ Settings (`contentFooterNoSwitch` and `contentFooterWithSwitch`: Android has a s
 font credit (`aboutFontCredit`). A few places in the code still compare against English text (`said.endsWith("is in your library.")` in `AppModel.kt`,
 `contains("could not reach")` in `ShareModel.kt`): they break silently if that copy changes.
 
+
+## The Android TV app (2026-11-26)
+
+**Chosen.** A new app, `apps/tv-android` (Kotlin, Compose for TV, Media3 ExoPlayer), with its own small Rust crate,
+`crates/tv-ffi` (library `akitv`), over `akidev-core`. It is the streaming product on a TV, and nothing from the manga
+crates is in it. The Rust engine runs inside the app: there is no server to run. The viewer types their TorBox key in
+Settings. The key stays in the app's private storage and goes only to TorBox. The engine asks TorBox for a link and the
+player reads the link directly, so nothing is written to the disk.
+
+**Why.** The first TV we tested (KTC Lumio Vision) is Android 14 but 32-bit only (`armeabi-v7a`). The Rust core builds for
+it with no change, so the same search, catalogue and ranking code runs on the TV. The screens are new because the desktop
+screens are gpui and cannot run on Android. They follow `design/DESIGN_PLAN.md`: same colours, same fonts (Shippori
+Mincho for titles, Hanken Grotesk for the rest), amber only for focus and progress.
+
+**Turned down.**
+- Turning on the `streaming` feature of core for Android. It pulls in `librqbit`, which needs OpenSSL, and it would put a
+  torrent engine on the TV that we never start. Instead `stream.rs` was split: `plan` (title to ranked releases) is now a
+  free function that works without the engine, and only the engine parts stay behind `streaming`.
+- Moving `apps/server/src/sources/debrid.rs` into core now. The TV has a small TorBox client of its own
+  (`crates/tv-ffi/src/torbox.rs`). It copies the server's order of steps. Two copies is the price. Merging them is the
+  next clean-up.
+- A server on the viewer's computer. It would need the computer to be on.
+
+**Trade-offs.**
+- Only releases TorBox already holds are played (`add_only_if_cached`). A title that is not cached shows "TorBox does not
+  hold a copy of this yet."
+- The TV tries the releases the other apps hold back (HEVC, AV1) after the usual ones, because its chip decodes them.
+  It has no DTS or TrueHD decoder, so a release with only those can play without sound. Not handled yet.
+- The link carries the key, so it is asked for again on each play, never stored, and the Rust crate never logs it.
+- A debug build (and only a debug build) reads `files/torbox.key` once so a test can set the key. A viewer types it in Settings.
+
+## The TV home: top bar and a hero that follows focus (2026-11-26)
+
+**Chosen.** Home has a glass pill bar on top (Home, Films, Series, Anime in the middle; Search and Settings at the right) and
+one hero that shows the title the remote is on: backdrop, name, a line of facts, two lines of story, and the buttons. A film
+has Play (warm white) and More info. A series or anime has one button, Episodes, because it cannot play without an episode.
+The tabs filter the home rows by kind (each row carries its kind), so they make no new network call. The story is not in the
+catalogue lists, so the hero asks for the title's page 0.4 seconds after the remote rests on it.
+
+**Why.** Netflix and Apple TV use a top bar and it gives the rows the full width. A hero that follows focus (Plex, Stremio
+Kai) means one big picture always names the title you are on, so the poster names under the tiles are gone. Research and
+sources are in `design/TV_PLAN.md`.
+
+**Turned down.** A left icon rail (Hotstar, MovieBox): it takes width from every row. A "Play" button on a series that
+secretly opens the title page: it says one thing and does another.
+
+**Trade-offs.**
+- The image loader (`MainActivity`) allows 16 downloads per host. The default is 5, and all posters and backdrops come from one
+  host, so the hero's backdrop waited about 30 seconds behind the posters on the TV. Now it takes about 1.5 seconds.
+- Each focus change can start one story request after 0.4 seconds. Fast scrolling does not.
+- The hero is a fixed 204 dp tall, so on a 540 dp screen the first row is fully visible and the second row's title peeks in.
+
+## The TV player, history and key storage (2026-11-26)
+
+**Chosen.**
+- **Key.** Encrypted with AES-GCM using a key kept in the Android Keystore (`Key.kt`), in the app's private storage. If a TV cannot do
+  that, Settings says so and the key is not saved. Nothing falls back to plain text.
+- **History.** One JSON list in private storage (`History.kt`), at most 300 entries, one per film or episode. Past 90 % counts as seen.
+  Continue watching is derived from it (one card per title). No database: it is small and read as a whole.
+- **Player.** Media3 ExoPlayer with our own overlay. Audio tracks and subtitle tracks use its track selection. A subtitle from outside
+  the file is fetched by core as WebVTT, saved in the cache and added by loading the same video again at the same place.
+- **A copy that fails.** "Try another copy" asks the engine again with the failed release's hash in a `skip` list. The list lives only
+  as long as the screen.
+- **DTS and TrueHD.** Releases with only those sound go last in the list, because the TV has no decoder for them (checked: the decoder
+  list of the Lumio Vision has AC3, EAC3 and AC4 but not DTS or TrueHD).
+- **Release build.** R8 shrinks it (11 MB). JNA and the generated `uniffi` classes are kept by name because they are found by
+  reflection. It is signed with the same upload key as the manga app when `~/.akidev-keys` exists.
+
+**Turned down.**
+- A pairing page so a phone can type the key: a small web server in the app for a job the Android TV Remote app already does.
+- Plain `SharedPreferences` for the key: private to the app, but readable on a rooted TV or a backup. Backups are off, yet the
+  encrypted form costs about 40 lines.
+- Showing the file name or the release name in the player: it would be the one place a link or a release title could reach a screen.
+
+**Trade-offs.**
+- Picking a subtitle from outside restarts the stream for a moment (same place).
+- Subtitles use a fixed look (white, black edge, the app's font, 22 sp), not the TV's caption setting: the TV's own style made the
+  text unreadable in a test.
+- The preferred subtitle language is the TV's language. The viewer's choice is not remembered between plays.
+
+## Icons first, text only when the icon is not enough (2026-11-26)
+
+**Chosen.** The same Solar icon set as the phone apps, written to the TV by `content/manga/fetch-icons.py --tv` (30 icons, the list
+`TV_USES`; the phone apps' icons are not touched by that option). The top bar is only icons. The name of one opens beside it while the
+remote is on it. The shown tab has the filled icon and the amber line. Buttons are icons too: Play, More info, Search, Back, Try again,
+the subtitles and next-episode buttons in the player. A text stays where it carries information the icon cannot (the episode and the time
+on the Play button, an episode name, the story). A spinner (the refresh icon, turning) says "working", a warning icon heads every
+failure card, a check icon marks the chosen track and a seen episode.
+
+**Why.** A TV is read from a sofa: an icon is read faster than a word, and the text of every button took room from the pictures.
+
+**Trade-off.** An icon alone must be understood. Where it is not (the list icon for Episodes, the check for "Save and check") the text
+stays (`labelAlways`).
+
+## Why the TV app was slow, and what fixed it (2026-11-26)
+
+Measured on the KTC Lumio Vision (3 weak CPU cores, a PowerVR BXE-4-32 graphics chip, a 4K panel fed 1080p) with a release build and
+`apps/tv-android/scripts/bench.sh`. The system's own frame numbers (`dumpsys gfxinfo`) and a system trace (Perfetto) pointed to the cause;
+each guess was tried on its own and kept only if the number moved.
+
+| What | Before | After |
+|---|---|---|
+| Median frame while scrolling Home | 61 ms | 14 ms |
+| Frames that missed their time | 47 % | 20 % |
+| 90th percentile frame | 93 ms | 34 ms |
+| Home rows on screen (second launch on) | 2.1 to 4.7 s | 0.92 to 1.03 s |
+| First frame after launch | 410 ms | 420 to 490 ms (the same) |
+| Find a copy after pressing Play | 5.4 s | 3.1 s |
+
+**The big one: two full-screen fades.** The picture behind the hero had two gradients as large as the screen, one over the other, blended
+in every frame. On this graphics chip that alone took a frame from 10 ms to 61 ms (tested by switching each part off: no backdrop 10 ms,
+picture alone 11 ms, fades alone 61 ms; the rows and the posters made no difference). The fade is now one small picture (96 by 54 pixels,
+made once) stretched over the screen: the same look at 14 ms.
+
+**Catalogue answers kept on disk.** Core already could (`providers::keep_answers_in`, the desktop and the server use it) but the TV
+never turned it on, so each launch waited for ten rows from the network (1.5 to 4 s). Now the second launch shows the rows of the first
+in about 290 ms and refreshes them in the background. The very first launch still takes about 3.4 s.
+
+**The search for releases starts when the title page opens** (`prepare_stream`), so it is answered (core keeps it) when Play is pressed:
+from 1.5 to 2.6 s to about 0.5 s.
+
+**Tried and not kept.** Fading between two backdrops (no gain when removed), holding the hero back until the remote rests (kept for
+the picture churn, but no gain in the number), replacing the TV library's `Surface` with a plain box (57 ms against 65: kept, it is
+simpler and cheaper), compiling the app ahead of time (950 to 760 ms to rows on screen, so a baseline profile would gain at most
+about 190 ms: not worth a profile project), starting to play after 1 s buffered instead of 2.5 s (no gain; the network varied more).
+
+**Not solved: the start of the video.** After the copy is found, the player needs 10 to 12 more seconds to show the first picture. A
+trace of the bytes shows about 3 s with no data (opening the connection on the TV), then about 40 MB read before it is ready, at about
+5 MB/s: the big files carry a lot to read before the first picture. It is the same for the first test on this TV, so it is not new.
+Ideas not tried: the OkHttp data source with a connection opened early, and preferring releases with smaller headers.
+
+**The TV's accessibility service** ("Home button" of the TV maker) is switched on for every app, so Compose keeps its accessibility
+tree in step on every frame (about 10 % of the main thread). That is the TV's setting.
+
+## Nothing moves: fixed places for everything (2026-11-26)
+
+**Chosen.** Every screen gives each thing a place of fixed size, and what is still loading is drawn as a quiet shape in that place.
+- **Home.** The hero has four slots of fixed height (name 50 dp, facts 22, story two lines 52, buttons 48). A title with no story or no
+  facts leaves the slot empty and the buttons stay where they are. While the rows load, the screen shows the real top bar and shapes
+  with the size of the hero and of two rows (`HomeScreen`, `placeholder`), not a card that is replaced later.
+- **Title page.** It opens at once with the name, the facts and the picture of the card the viewer opened (`Screen.Detail` carries the
+  `Title`). Story (4 lines), main button, seasons and episodes each have a slot of fixed size with a shape in it until the page has loaded.
+- **Buttons and the bar.** A button with an icon never grows. Its name floats in a small tip under (or over) it while the remote is on
+  it (`Tip`, drawn over the screen and taking no room). Before, the label opened inside the button and pushed its neighbours aside, which
+  was the sudden jump when moving the cursor. The shown tab is the bright filled icon; the underline is gone.
+- **Text lines.** Every text style has a fixed line height (`Theme.kt`), so a line takes the same room whatever it says; the skeleton
+  and the real text are the same height.
+- **Search and Settings.** The message line (searching, nothing found, failed, key check) has its own slot.
+- **Motion.** Pictures fade in when they arrive, the hero text cross-fades in its fixed slot, the tip fades and scales in, the player's bars
+  fade, and its panel slides in from the right. None of these changes any size.
+
+**Turned down.** Letting a label grow inside the button but reserving its width: it wastes room beside every icon.
+
+## Pictures and stories that did not appear (2026-11-26)
+
+**Cause (stories).** The home lists carry no story, so the hero asked for the title's page each time the remote rested on a card. AniList
+answers 30 requests a minute; scrolling an anime row used more, and the refused answers left the story empty for some titles. The desktop
+asks only for the title that is open. Now `Story.of` asks for one at a time, at least 2.1 s apart, and keeps the answers.
+
+**Pictures.** A fresh run loaded every picture on the TV, so the failures need a condition. Three guards: the image client has longer
+timeouts (15 s connect, 30 s read) and asks again once after 1.5 s (`RetryOnce`); a backdrop that cannot be loaded shows the poster instead;
+a tile that cannot load shows the title's name.
+
+## The TV follows the same definitions as the web and the desktop (2026-11-26)
+
+The TV already used the same live signed document (`sources::keep_fresh` downloads it at start and every 6 hours, as the desktop and the
+server do). What was fixed here: the tabs were four fixed ones, and the screens were asked for once at start, so a tab or row someone added
+to the definitions did not show until the next launch. Now the tabs come from the definitions (`tabs()`: their order and names; an unknown
+kind gets a neutral icon) and the app checks `sources_version()` every 20 seconds; when newer definitions have been downloaded it asks for the
+rows again.
+
+## The start of the video (2026-11-26)
+
+Measured on the TV: a film is ready 3 to 4 s after the player starts, an anime fansub release 9 to 10 s (it has to read a lot of embedded
+data before the first picture; about 40 MB at about 5 MB/s). So the player is not slow in itself: the file is. Using the OkHttp data source
+for the video (the same client family as the pictures) cut about 1.3 s. Starting to play after 1 s of buffer instead of 2.5 s gave nothing.
+Not tried: preferring releases with smaller headers.
+
+## Why pictures were slow: a dead IPv6 address (2026-11-26)
+
+Timed on the TV (a log of each picture's time and where it came from): pictures from `images.metahub.space` and `live.metahub.space` took
+15.5 seconds each, and 15 seconds was the connect timeout of the image client. The host gives an IPv6 address that does not work on this
+kind of home network, and the client waited the whole timeout on it before trying the IPv4 one (then the retry was instant). Now the
+clients try IPv4 addresses first and wait at most 8 seconds (`HttpClient`, for the pictures and the video).
+
+| Picture | Before | After |
+|---|---|---|
+| metahub poster, from the network | 15.5 s | 0.6 s |
+| AniList poster, from the network | 1.6 s | 0.25 s |
+| First poster on screen, cold start | 9.8 s | 3.1 s |
+
+## Motion (2026-11-26)
+
+Taking out the buttons that grew in place (to stop layout jumps) had taken most of the motion with them, and tabs and screens simply cut.
+Now: a screen that opens slides in a little from the right while the old one fades, and Back reverses it (`AnimatedContent` in
+`MainActivity`); switching tab cross-fades the hero and rows while the bar stays; a highlight glides under the shown tab and its
+icon cross-fades from the outline to the filled one; the focus ring fades in and out and the grow is a soft spring; shapes fade into the
+rows, the story, the button and the episodes when they arrive; the player's bars fade and its panel slides in. All of it is fades, slides
+and scale: none changes the size of anything. The TV's own animation setting (here 0.5, set by the maker) halves every Compose animation, so screens and tabs felt like cuts
+(a tab change measured 0.27 s against 0.37 s at 1.0 by recording the screen). `Motion.kt` divides each duration by that factor, so
+the times written in code are the times people see; a setting of 0 still turns animation off. All curves are ease-out
+(`0.2, 0, 0, 1`) with no bounce, and a press scales to 0.97. Pictures from `http://` addresses are upgraded to `https://`
+(`UpgradeToHttps`); new providers need no new APK as long as their pictures are served over HTTPS.
+
+## One bar for every place (2026-11-26)
+
+Search and Settings used to be screens pushed over Home, so the bar vanished and going there was a cut. Now the bar lists the tabs,
+then Search and Settings, in one pill, and it stays on screen. Picking one swaps the first screen of the stack (`pick` in
+`MainActivity`), which cross-fades (340 ms in, 200 ms out) while the highlight glides to the new icon. Back on Search or Settings goes
+to Home; Back on Home leaves. The bar is hidden on deeper screens (title page, player). Three fixes came with it: the floating `Tip`
+had been widening its button while shown (so icons next to it shifted 20 dp; it now takes no room), the highlight is `Ink.Line` so it
+can be seen, and after a pick the focus is put back on the chosen icon (swapping the screen had thrown it to Home). The search field
+and the key field no longer grab focus by themselves: press Down from the bar.
+
+The list on Home now keeps 48 dp under the row the remote is on (`roomBelow` in `Components.kt`, used for each row in `HomeScreen`). Before, a focused row only scrolled until its cards touched the bottom edge, so at the end of the list they looked cut off. `contentPadding` could not fix it, because scrolling to a focused card ignores it.
+
+## Home: no buttons in the hero, rows move one at a time (2026-11-27)
+
+Why the buttons went: pressing OK on a card already opens it, so "Episodes", "Play" and "More info" repeated what OK does. The hero now only names what is in focus: title, facts, two lines of story. That follows the shots on Dribbble and the Apple skill (the picture sets the mood, nothing extra on screen, one lit element: the focused card). Because the hero is 56 dp shorter, the list gets more room. The title also has more width (it was cut with "..." at 640 dp) and a little tighter letter spacing (-0.5 sp), as large text should have.
+
+Rows now move by whole rows. When the remote lands on a card, the list scrolls until that card's row stands at the top, title included, and the next row's title peeks in below it. Before, the list scrolled only until the card touched the screen edge, so a row title was cut at the top and cards were cut at the bottom. How: `RowAtTop` (a `BringIntoViewSpec`) lines up the top of what is asked for with the top of the list, and `wholeRowInView` makes each row ask for its whole height, not just the card. Inside a row the old rule stays (`LeastToShow`). Tried first and dropped: calling `animateScrollToItem` from the card, because Compose's own scroll-to-focus cancelled it. The list has 96 dp of space at its end so the last row can also reach the top.
+
+## Title page and player, same rules (2026-11-27)
+
+These two screens had not been reviewed against the Dribbble shots, the Apple skill, better-ui and better-layout. Fixed:
+
+- Title page: the title has the whole width (a long name was cut at 640 dp; the story keeps 640 dp for a readable line). The main button always shows its words ("Play", "Episode 3 · 12:40"), not just an icon. Only the main button is filled: the season buttons were filled too, so two things looked like "the" button. Seasons now show only when there is more than one (outlined = chosen, plain = not), and a heading "Episodes" always shows. An episode card says "EPISODE" over its number, so it no longer looks like an empty box.
+- Player panel: each group has a heading with words ("AUDIO", "SUBTITLES"), not only an icon. The choice in use has an amber tick and a raised background; before, it was a filled white bar, which fought with the focus ring. Subtitles from outside show only their language (a second one in the same language gets a number), not the release's file name. The time under the bar is brighter, for contrast over the picture.
+- Not changed: the player bars and the pause icon (already quiet), and episode pictures (the catalogues give none, so the cards stay text only).
+
+## Choosing the source in the player (2026-11-27)
+
+Before, the app picked one copy by itself and the viewer could only press "Try another copy" after a failure. Now the player's panel (button "Options") has a third section, SOURCE, under Audio and Subtitles. Each line is what tells copies apart: "1080p  ·  H.264  ·  1.7 GB" (and "No sound on this TV" for DTS or TrueHD copies); two that look alike get a number. The copy in use has the amber tick.
+
+How: `sources(id, key)` in `crates/tv-ffi/src/lib.rs` runs the same steps as `find_stream` (the releases, then which ones TorBox holds and that have a file for this film or episode) and returns up to 10, best first. `find_stream_of(id, key, hash)` plays exactly one of them. The steps they share are in `candidates()` and `Candidates::has_file()`. The list is asked for only when the panel opens (it costs calls to TorBox, about 1 to 1.6 s), and only once per film or episode. Picking one saves the place, finds that copy, and the player starts again from the saved place (about 3 s to a link, then the video's own start). Subtitles from outside are now at most 6 lines, so the source section is not far below them.
+
+## Speed, second pass (2026-11-27)
+
+Measured on the TV (release build, `apps/tv-android/scripts/bench.sh`), before and after each change. The point: find what really costs time, change that, and keep a change only if the number moves.
+
+| What | Before | After | Change |
+|---|---|---|---|
+| Warm start: first frame | 465 ms | 335 ms | baseline profile |
+| Warm start: rows on screen | 1,020 ms | 550 ms | baseline profile |
+| Cold start (no cache): first row on screen | 3.5 to 4.1 s | 1.5 to 2.0 s | rows one by one, first 3 first |
+| Scrolling: janky frames | 6.9% (p99 125 ms) | about 2.2% (p99 55 to 65 ms) | baseline profile |
+| Java heap, after 8 rounds of scrolling | 8 to 13 MB, no growth | same | (no leak found) |
+
+**Baseline profile (the biggest one).** The TV has three slow cores. Without a profile the system compiles the app's code while the viewer uses it (the trace showed the JIT thread using 515 ms of CPU in the first seconds, and "lock contention on the JIT code cache" inside slow frames). `app/src/main/baseline-prof.txt` lists what to compile ahead of time: the app, the engine bindings, Compose, the image loader, the network and the player. Play applies it at install. A copy put on the TV with adb applies it on the first run, and the system compiles it later, so after `adb install` run once: `adb shell cmd package compile -m speed-profile -f live.akidev.tv`. (Compiling everything with `-m speed` gave the same gain, so the profile reaches the limit.)
+
+**Home rows one by one.** Before, `home()` fetched all 10 rows (200 titles) together and showed nothing until the slowest was back. Now `home_rows()` gives the names from the definitions at once and `home_row(i)` gives one row. The app asks 3 at a time, in order, and a row is shown only when every row before it has an answer, so a late row never pushes the others down. Skeleton rows show for the rest. A failed row is left out; all failed shows the "Try again" card.
+
+**Old content shows at once.** The disk cache showed an answer only if it was under 24 hours old; past that, a start waited for the network as if the cache were empty. It now shows answers up to a week old and refreshes them in the background (they are fresh at the next start), and files are kept 8 days.
+
+**Looked at and not a problem, or not worth it.**
+- Memory: after scrolling, graphics memory is 170 to 200 MB (about 90 MB are the window's buffers, the rest the system's GPU texture cache, which it frees when memory is short; it peaked at 290 MB and fell back to 205 MB). Capping Coil's picture cache to 16 MB, storing posters at 2 bytes a pixel and decoding backdrops at about half size each changed nothing measurable, so none of them was kept.
+- Garbage collection: 34 runs in 8 rounds of scrolling, the longest pause 95 microseconds.
+- Cinemeta answers through a redirect (the first host answers 307 to another), which doubles the time of those requests (0.54 s against 0.27 s). The address is in the signed definitions and the target has another path layout, so it is left for the definitions' owner. Its catalogues also hold 50 titles with descriptions and cast (up to 111 KB) and there is no way to ask for fewer; the app uses 20.
+
+## Search results (2026-11-27)
+
+The TV keyboard closes itself when its search key is pressed (the app has no code that hides it). So the first result takes the focus when results arrive (`PosterCard(autofocus = ...)` in `SearchScreen.kt`) and the viewer can browse with the D-pad at once. The grid runs to the bottom of the screen with its own space at the end, and a poster with its name under it asks the list to scroll 56 dp past it (`roomForName` in `Components.kt`), so the last row's names are not cut off.
+
+## Suggestions while typing (2026-11-27)
+
+Like the desktop's search palette (250 ms pause, the newest word wins), but words only: after 450 ms without typing, and from 3 letters, the app asks `search()` for the word and shows up to 6 names in a row under the field (`SearchScreen.kt`, `MainActivity.kt`). The results grid does not change while typing; it changes when the viewer sends the search. OK on a suggestion puts it in the field and searches for it. The row shows only while the field differs from the last search, and it sits above the TV keyboard (which covers the lower half of the screen), in the same 48 dp slot as the messages, so nothing moves.
+
+**Why not in the keyboard's own suggestion strip.** The suggestion strip belongs to the keyboard app and shows what its own dictionary offers (on this TV: "Frier, Frieren, Friers"). Android has no call for an app to add words to it. The only ways in are an Autofill service or a system spell-checker service: both are chosen by the viewer for the whole TV (not per app), the first is for saved logins and addresses, and TV keyboards do not draw inline autofill suggestions. So the app draws its own row.
+
+## Definitions: stale while revalidating (2026-11-27)
+
+This replaces how the TV used new definitions before (it swapped them in while the app ran and reloaded the rows, polling every 20 s).
+
+- **At launch** the app uses the definitions it has: the copy saved by an earlier run (checked again against the signature), or else the built-in one. It does not wait for the network, and the tabs and rows never change under the viewer.
+- **In the background** it asks `sources.akidev.live` at once, again every 6 hours, and again when the app comes back to the screen (not more than once a minute: `check_definitions`). A copy is used only if its signature is valid, its version is higher and it passes `validate` (unchanged). With `apply_updates_at_next_start()` (called by the TV's `start`) such a copy is only saved, and noted in `waiting_version()`. The same copy is not fetched again.
+- **At the next launch** `load_saved` finds it and uses it.
+- **The sign.** `definitions_waiting()` turns true when a copy is saved. The app then shows a small amber dot on the Settings icon, and Settings says "New sources are ready. They apply the next time the app opens." The app reads this every 5 s until it is true (a number in memory, no network). Nothing else changes on screen.
+- The other apps (desktop, web, server) are not changed: they still use a new copy at once, because only the TV calls `apply_updates_at_next_start()`.
+- The built-in copy stays as the safety net for a first start with no network (and for the tests of the other apps). It is the same copy the build downloads from the sources repository, so it is not edited by hand. Everything you add to the published sources reaches an installed TV without a release: it is fetched and saved, and used at the next start.
+
+## Search field and the keyboard (2026-11-27)
+
+- **The keyboard opens only on OK.** A text field takes the focus and opens the TV keyboard in one step, so the keyboard opened by itself whenever the remote passed over the field (for example going Up from the suggestions to the bar). `Field` in `Components.kt` is now two things: at rest a plain box (same look, ring when the remote is on it) and, after OK, the real text field with the keyboard. When the remote moves away it rests again. The suggestion row and the results still hold the remote as before. Going Up from a suggestion still passes over the field (now with the keyboard shut) on the way to the bar.
+- **Typing no longer stutters while suggestions load.** The keyboard is another app on the same three slow cores. The engine now has 2 worker threads at a lower priority (nice 10, `lower_priority` in `crates/tv-ffi/src/lib.rs`), the suggestion call itself runs at background priority, and the pause before asking is 600 ms (was 450). Checked: the engine threads show nice 10 against -10 for the main thread. The stutter itself was not measured (no number for the keyboard), only judged by hand.
+
+## Releasing the TV app and updating it from GitHub (2026-11-27)
+
+**Making a release.** `fastlane release` (run in `apps/tv-android`, see `fastlane/Fastfile`). It checks the branch is `main` and clean, works out the version (the first release uses the version in `app/build.gradle.kts`; later ones bump the last `tv-android-v*` tag: `bump:patch` by default, or `bump:minor`, `bump:major`, `version:1.4.0`), builds the engine and the app, runs the unit tests and lint, checks the APK is signed, writes the new version into `build.gradle.kts`, commits it ("Release Akidev TV X"), pushes, and creates the GitHub release `tv-android-vX.Y.Z` with `AkidevTV-X.Y.Z.apk`, its SHA-256 and the notes. The notes are the subjects of the commits since the last release that touch `apps/tv-android`, `crates/tv-ffi`, `crates/core` or `design/TV_PLAN.md`. `fastlane release dry_run:true` does everything except commit, push and publish (it builds the APK and prints the notes); `fastlane notes` only prints the next version and the notes; `draft:true` makes the release a draft.
+- Needs `GITHUB_API_TOKEN`: a token of the account that owns the repository (`dishant0406`) with contents write on it. Not `gh auth token`: `gh` here is logged in as the work account.
+- Tags are `tv-android-v...` because the repository already has `desktop-mac-v...` and `desktop-windows-v...`.
+- The version code goes up by one each release (Android refuses an update that does not have a higher one).
+
+**Why GitHub releases for the check.** The repository is public, so the TV reads `api.github.com/repos/dishant0406/akidev/releases` with no token and no extra service (60 requests an hour per address; the app asks at most every 30 minutes). A private repository would need a token inside the app, so it would need another place for a small JSON file (the sources feed could carry one). `UPDATE_URL` in `app/build.gradle.kts` says where; tests can point it elsewhere with `-PupdateUrl`.
+
+**In the app** (`Updates.kt`, `SettingsScreen.kt`, `MainActivity.kt`). Like the sources: the answer of the last check is read at once at the start, and the check runs in the background at the start and when the app comes back to the screen. The newest published release whose tag starts with `tv-android-v` and that holds an APK counts. When it is newer than the installed version, the amber dot shows on Settings (the same dot as for new sources) and Settings shows "Version X is ready." with "Download and install". The button streams the APK into Android's installer (`PackageInstaller` session), so no APK file is kept on the TV (there is nothing to delete afterwards), checks the SHA-256 when GitHub gives one, and Android shows its own "Do you want to update this app?" with Update and Cancel (Cancel has the focus: press Left, then OK). Android installs it only when it is signed with the same key as the installed app, so nothing else can replace the app.
+- The first time, Android must allow this app to "Install unknown apps". The button opens that screen (Akidev TV is selected: press OK, then Back) and says "Allow this app to install updates, then press the button again."
+- After the update Android closes the app and the TV shows its home screen: the viewer opens the app again. Opening it by itself is blocked (Android 14 logs "Background activity launch blocked", tried with a `MY_PACKAGE_REPLACED` receiver and removed); the only way round is the "display over other apps" permission, which asks more of the viewer than it saves.
+- Problems (download failed, damaged file, the installer's own message) show in place of the sentence, with the button to try again.
+- Tested on the TV against a local server that served a fake release list and a 1.0.1 APK: the sign, the sentence, the permission step, the progress ("Downloading 35%"), Android's dialog, and the new version installed (version code 2). The real GitHub release was not made.
+
+**Two bugs this found.** A scroll wrapper on the Settings page swallowed the Down key from the bar (removed). While the key field was being edited, the Up key stayed in the field, so the remote could not leave upward (Up now moves on, like Down).
