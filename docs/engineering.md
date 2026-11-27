@@ -1,0 +1,582 @@
+<p align="center">
+  <img src="../design/branding/akidev-icon.svg" alt="Akidev" width="128">
+</p>
+
+<h1 align="center">Akidev: how it works</h1>
+
+The engineering notes for Akidev: the site, the API, the desktop app, how video reaches a player, how titles are ranked, and how to build, deploy and run it. For what Akidev is and how to get it, see the [README](../README.md).
+
+| Hostname | What it serves | Container |
+| --- | --- | --- |
+| `akidev.live` | The site: Home, Anime, Series and Films | `frontend` |
+| `app.akidev.live` | The phone app's landing page (no site around it) | `frontend` |
+| `anime.akidev.live` | Retired: redirects to `akidev.live/anime` | `frontend` |
+| `tv.akidev.live` | Retired: redirects to `akidev.live/films` | `frontend` |
+| `api.akidev.live` | The REST API and the video | `api` |
+
+Akidev is two products in one repository: the streaming site and desktop app above, and **Aki Manga**, a manga and books app for iPhone and Android.
+
+| Directory | What it is | Port |
+| --- | --- | --- |
+| `apps/web/` | Next.js app (App Router, TypeScript). One build, one container, every hostname. Also the phone app's landing page. | 3000 |
+| `apps/server/` | The API: a Rust binary, `akidev-server`. Catalogue from AniList, Cinemeta and TVMaze, releases from torrent indexers, video from a debrid CDN, a torrent swarm or the Internet Archive, converted for the browser only as far as it has to be. See [apps/server/API.md](../apps/server/API.md). | 9000 |
+| `apps/desktop/` | The native desktop app, with the same backend built in. See [apps/desktop/README.md](../apps/desktop/README.md). | |
+| `apps/manga-ios/` | Aki Manga for iPhone (Swift). See [apps/manga-ios/README.md](../apps/manga-ios/README.md). | |
+| `apps/manga-android/` | Aki Manga for Android (Kotlin). See [apps/manga-android/README.md](../apps/manga-android/README.md). | |
+| `apps/tv-android/` | Akidev for Android TV (Kotlin), with the engine in `crates/tv-ffi`. See [apps/tv-android/README.md](../apps/tv-android/README.md). | |
+| `crates/core/` | The library the server and the desktop app share: providers, indexers, ranking, the torrent engine. | |
+| `crates/party/`, `crates/library/` | Watch parties, and the local library. | |
+| `crates/manga/`, `crates/manga-ffi/` | The manga and books engine, and the wrapper that both phone apps call. | |
+| `content/` | Data the apps read: `sources/` (the sources document and its publish scripts), `plugins/`, and `manga/` (what both phone apps share: icons, store listing, demo server, launch film). | |
+| `design/` | The design plan, the manga app's design, branding and screenshots. | |
+| `docs/` | `design.md` and `flow.md` (why, and how data moves), and `plans/` (written plans). | |
+| `release/`, `fastlane/` | Release scripts for the phone apps, and the Fastlane lanes they use. | |
+| `vendor/` | Copies of other people's crates, with a `PATCH.md` each. | |
+| `caddy/`, `scripts/`, `docker-compose.yml` | The server stack and its deploy scripts. | |
+
+The Rust workspace is at the repository root (`Cargo.toml`). Run `cargo` from the root.
+
+The server and the desktop app are built on **one library**, so there is one copy of every indexer,
+provider and ranking rule. A fix to how a release is found or ranked lands in both. This replaced
+a Node API that duplicated all of it.
+
+The frontend's UI began as a derivative of [Kitsune](https://github.com/Dovakiin0/Kitsune)
+(MIT) and has since been redesigned to match the desktop app; see
+[ATTRIBUTION.md](../ATTRIBUTION.md).
+
+## One site, and two retired hostnames
+
+There is **one frontend image and one frontend container**, and one site: Home, Anime,
+Series and Films tabs over the same catalogue the desktop app shows, with the same design
+(`apps/web/src/constants/site.ts` holds the catalogues, sorts and genres).
+
+`anime.akidev.live` and `tv.akidev.live` are retired. The middleware
+(`apps/web/src/middleware.ts`) redirects them with a 308 to `/anime` and `/films` on
+the bare zone, and keeps the path for anything deeper, so old title and watch links work.
+They still have to reach the container, so their DNS records stay and Caddy serves them.
+
+## Content types
+
+Every media id is self-describing, which is what lets one API and one set of routes
+serve three catalogues:
+
+```
+anime-16498-ep1     an anime, episode 1
+series-169-s1e5     a series, season 1 episode 5
+movie-tt27548557    a film, no episode
+series-169          a title, for a detail page
+```
+
+The type is part of the id because the ids come from different providers and would
+otherwise collide - TVMaze's show 1 and YTS's film 1 are different titles. It also
+means the watch page knows what it is looking at from the URL alone.
+
+The provider's own id is alphanumeric rather than digits-only because providers do not
+agree on a form: AniList and TVMaze use numbers, Cinemeta uses IMDb ids
+(`tt27548557`). `crates/core/src/media_id.rs` and `apps/web/src/lib/media-id.ts`
+must agree.
+
+## Adding a provider or an indexer
+
+Both are *data*, not code: signed JSON definitions that the engine in `crates/core` follows, so a
+change to what is asked of an upstream does not need a release. They are in the [akidev-sources](https://github.com/dishant0406/akidev-sources) repo;
+see [the akidev-sources repo](https://github.com/dishant0406/akidev-sources) for the format and for how they are
+signed and published. The server and the app both load the signed copy from
+`https://sources.akidev.live` and keep the last good one on disk.
+
+**Torrentio is already one of the indexers.** For a film or series with an IMDb id,
+`sources.json` (in the akidev-sources repo) asks its Stremio addon once and reads each result's validated
+`infoHash`, optional `fileIdx`, file name and optional size. For anime, the bundled Anime Kitsu
+metadata provider maps an AniList id to a Kitsu episode only when its episode number exactly matches
+the requested one; Torrentio is then asked for that Kitsu episode. Kitsu movies use Torrentio's
+`/stream/movie/<id>` route without an episode suffix, while series use `/stream/series/<id>:<episode>`.
+A missing or mismatched mapping skips Torrentio rather than substituting another episode. Kitsu
+supplies metadata, never streams.
+
+Those releases use exactly the same identity checks, swarm playback and debrid cache checks as every
+other indexer's results: the desktop joins the swarm on the viewer's device; the website's server
+joins it or relays a cached TorBox file. Distinct `(infoHash, fileIdx)` rows remain distinct choices,
+and the selected file is checked against the requested title, season and episode again after torrent
+or debrid metadata arrives. Stremio's local client is what joins the swarm there, so copying an addon
+response without this delivery layer would not itself play anything. A configured addon's direct URL
+is not accepted either: it may hold a debrid credential. Only its validated torrent hash enters the
+shared pipeline.
+
+A stream source is different: it is code, because where the bytes come from is a different
+mechanism each time (`apps/server/src/sources/` for debrid and the Internet Archive, and the
+torrent engine in `crates/core`). `STREAM_SOURCES` lists them in order of preference: `debrid`
+serves from a CDN cache, `torrent` joins a swarm and relays, `archive-org` returns a direct HTTPS
+URL. A source that is not usable - `debrid` without an API key - is skipped rather than failing
+the request, and `GET /health` reports what is configured.
+
+## How a row and a search are ordered
+
+Two rules worth knowing, because both were bugs and both are easy to reintroduce.
+
+**A "newest" row means released, not announced.** AniList reports a null date for a
+title that has not come out and sorts it first under its date sort, and Cinemeta's
+date-ordered catalogue leads with announcements. Each provider's definition therefore bounds its
+own date sort: AniList excludes unreleased and undated titles, and Cinemeta drops a title
+whose exact release date is in the future. A provider that cannot do this has no
+`recent` sort offered for it, rather than a sort that quietly returns the wrong thing.
+
+Cinemeta's date catalogue is also not contiguously ordered upstream - measured, its
+first page mixes 2020, 2025 and 2026 and its second repeats rows from its first - so
+that row is read as a window and sorted and paged here. Paging it upstream produced six
+duplicate rows across two pages.
+
+**A search spans every catalogue.** A title is addressed by a provider-specific id, so
+`GET /v1/search` asks anime, series and films and interleaves the answers (`akidev_core::search`).
+Searching one catalogue would silently hide a third of the site: "Breaking Bad" is a series and
+"Dangal" is a film. Results whose title starts with the term are moved ahead of fuzzy matches,
+because TVMaze's own search returned "D.N.Angel" above "Dangal".
+
+## How a video reaches the browser
+
+`POST /v1/play` finds a source and answers with a URL. Between the file and the URL, the server
+reads the file's header (`ffprobe`, through the same reader the player will use, since a torrent's
+file on disk is sparse until its pieces arrive) and takes the **lightest** delivery that works, in
+this order (`apps/server/src/media.rs`):
+
+1. **Direct.** An MP4 with H.264 and AAC or MP3 is sent as it is, with range support. No work at
+   all.
+2. **Copy.** Anything else with video a browser can decode is repackaged as HLS segments with the
+   video copied untouched, so the picture is bit for bit the source. The work is I/O.
+3. **Audio only.** The audio is copied too when it is AAC, and becomes stereo AAC otherwise (FLAC,
+   DTS and AC-3 do not play everywhere): a few percent of one core.
+4. **Re-encode**, only for video a browser cannot decode: 10-bit H.264, HEVC on a browser that lacks
+   it (the page says whether it has it), AV1, MPEG-4 part 2. CRF 22 `veryfast` at no more than 720p,
+   at low priority, on two threads, and **one at a time**: a second is told the server is busy.
+
+Releases that need a re-encode (10-bit, HEVC) or that are too big to download faster than they play
+(a REMUX, or an episode over 3GB) are tried last, so most plays never reach step 4.
+
+A conversion runs a bounded distance ahead of the viewer (a quarter of an hour for a copy, one
+minute for an encode), so an episode that is abandoned halfway is not downloaded or written to the
+end. The lead is counted in bytes against the viewer's position, which does not lag the way counting
+finished segments does. Sessions are limited (four at once), shared between viewers of the same file,
+destroyed after half an hour idle and counted against the disk budget, oldest first.
+
+This replaced a single live fragmented MP4, which could not be played on iOS at all: iOS requires a
+media source to answer a byte-range request with a real `206` and a length, and a stream still
+being produced has neither.
+
+## Watch parties
+
+A party plays the same film, episode or track on every device in it, and keeps them in step: what
+the host plays, guests play, and a guest can pause, play and seek for everyone. The host and the
+guests can be the desktop app or the website, in any mix.
+
+The host is a device, not this server. A guest connects straight to it with WebRTC, and only what
+to play and where travels (a media id and a position); every device finds its own stream, so the
+host's connection carries a few hundred bytes a second. `api.akidev.live` is only the meeting point
+(`/v1/party`, in `apps/server/API.md`): it passes the first message each way so two devices on
+different networks can find each other, keeps a party in memory until its host stops asking for
+guests, and never sees what is played. The messages and the rules that keep a guest in step are in
+`crates/party/PROTOCOL.md`; the app has them in `crates/party`, the site in
+`apps/web/src/lib/party`.
+
+Most connections go direct. Some networks (strict NATs, some mobile and corporate ones) cannot, and
+those guests need a TURN relay, or they cannot join. The relay is Cloudflare's Realtime TURN: make a
+key with `cf realtime turn keys create --name akidev-party`, and set its `uid` as `CF_TURN_KEY_ID` and
+its `secret` as `CF_TURN_TOKEN` (GitHub secrets; the deploy passes them on). The server asks Cloudflare
+for a login that works for six hours, reuses it for half an hour, and hands it to each device with the
+STUN servers. A party sends a few kilobytes a second, so the relay's cost (free for the first 1,000 GB
+a month, then $0.05 a GB) is nothing at this size. Without the key, or if Cloudflare does not answer,
+devices get the public STUN servers only (`STUN_URLS`) and the ones behind strict networks cannot join.
+
+## Why it is fast
+
+Measured from a browser in Mumbai against the server in Virginia, where a trip to the server costs
+half a second to a second whatever it carries. Almost everything below is about not making that
+trip, or not waiting for it.
+
+- **Pages arrive with their data in them.** Home, the catalogues and a title are rendered on the
+  server with the API's answer in the page, over the internal network, so the first paint does not
+  wait for the scripts to arrive and then for a request of their own. A move between pages inside an
+  open browser does not ask for that data again: the router's request is answered at once
+  (`isClientNavigation` in `apps/web/src/lib/api-server.ts`) and the page appears in place and
+  fills in. A link that has been hovered, and the four tabs, are fetched ahead.
+- **There is no page loader.** The old full-height spinner replaced the whole page while the server
+  worked, which on a title that was not cached took five seconds and shifted the layout under the
+  viewer. The page now stays where it is until the new one is there, and the new one has skeletons
+  of its own shape.
+- **Pictures are resized once and kept.** `/v1/img` makes a WebP of a poster or banner at the width
+  asked for, keeps it on disk (the `torrent-cache` volume, so a deploy keeps them) and answers with an
+  immutable file. A page draws the pictures of the tiles on screen and a little past it, and the rest
+  as a row is scrolled, which took the home page from 3MB of pictures to 1MB. The site's own image
+  optimiser was dropped: it answers `Vary: Accept`, which Cloudflare will not keep.
+- **Cloudflare keeps what is the same for everyone** (`scripts/cloudflare-cache.sh`): pages for half
+  a minute, pictures for a month, catalogue and title answers for as long as the API says. Smart
+  Tiered Cache is on, so a data centre asks a nearby one before it asks the server. The API sends no
+  `Vary: Origin` for this reason: the edge ignores it, and a copy made for a request without an
+  Origin header would reach the page with no CORS headers.
+- **Less script.** The watch page's 312KB became 134KB by loading hls.js only for a stream that needs
+  it, and search loads when it is first opened.
+
+Scrolling was already smooth (a frame every 17ms with the CPU slowed four times), so nothing there
+was changed.
+
+## Known limitations
+
+**A film is found by title, and a title is ambiguous.** Release names carry a bare
+number for both the sequel ("Dhamaal 4", "Stree 2") and the year ("Singham Again 2024"),
+so a film is identified by title *and* year, and the year decides which of several
+same-titled releases is served. The film gate therefore keys on an explicit `SxxExx` or
+a season token to tell a series episode from a film.
+
+**Bollywood coverage is thinner than Hollywood's, for a real reason.** Not every film
+has a torrent. The catalogue can list a title the indexers have nothing for, and the
+watch page then says so honestly rather than showing a broken player. That is the
+ceiling of a torrent-based source layer, and no indexer change raises it.
+
+**Seeking in a converted episode is limited to what has been converted.** HLS can only seek within
+the segments that exist, so the seek bar grows as the episode is converted, and a long jump ahead
+waits for the conversion to get there. A resume deep into an episode tells the server where to
+start, so it runs that far at once. A direct MP4 seeks anywhere.
+
+**Regional and Indian series are released as season packs, not episodes.** A pack names
+the season instead of the episode ("Gyaarah Gyaarah S01 [1080p ...]", "Panchayat S02
+Complete ..."), and three separate things had to be true before one could be served:
+
+- The search has to ask for it. knaben requires every word of a term to match, so
+  "Mirzapur S01E01" returns 0 hits where "Mirzapur S01" returns 15 and "Mirzapur"
+  returns 100. `series_search_terms` therefore emits the season form and the bare title
+  after the episode forms, so the episode-specific terms still decide the ordering
+  whenever they return anything.
+- The ranking has to admit it. A pack is a *collection*, and `is_batch` correctly says
+  so, so packs are offered as a separate last-resort group behind both a release that
+  names the episode and a single-file fallback.
+- Its season has to be checked. `parse_season` reads `SxxExx`, a bare `Sxx` and `Season N`, and a
+  file naming a different season is refused outright. For anime, whose episode ids are a flat count
+  with no season, only a first-season pack is admitted: "Shippuden S02" holds episodes
+  33-53 but names its files 01-21, so reading file 01 out of it would serve episode 33
+  as episode 1.
+
+`torrents-csv` is the indexer that makes these findable at all - it returned 4 rows
+(best 71 seeders) for "Gyaarah Gyaarah" where knaben, eztv, nyaa and subsplease each
+returned nothing. It is searched by title alone, because the endpoint matches a query as
+a whole phrase and has no episode syntax. It also has **no category field and no
+safe-search** - a query for "porn" returns adult rows - so its own term-relevance gate
+is the only filter, and it is deliberately stricter than the downstream one.
+
+**The Pirate Bay is reached through knaben, not directly.** knaben is a meta-search that
+aggregates The Pirate Bay, YTS, 1337x and Nyaa, and its rows carry the tracker they came
+from. Measured head-to-head on Indian films it returned a superset of a direct Pirate Bay
+mirror with far higher seeder counts (Dhamaal 4: 18 hits at 216 seeders versus 3 at 22),
+and the mirror's only unique rows had zero seeders. `apibay` - the Pirate Bay JSON API -
+is defined but disabled: from a datacenter IP it answers 403 with a Cloudflare JS
+challenge. A proxy does not fix that, because the challenge follows the IP rather than
+the request. It works from a residential IP.
+
+## A title with an apostrophe, and the Internet Archive fallback
+
+Two independent problems made a title like "India's Got Latent" unfindable, and either
+one alone was enough to produce "no source found".
+
+**The apostrophe was destroyed before the search.** Title normalisation rewrites every
+non-alphanumeric character to a space, so the title became "india s got latent" - a
+string that matches nothing, because real releases are named "Indias Got Latent". The
+damage was two-sided: the same normalisation rejected correct releases at the relevance
+gate, so even a release that *was* found was thrown away. Titles are now matched in all
+three spellings (`title_variants`), and all three are searched. Measured against archive.org, each
+spelling returns a *different* set of items, so the union is what finds the episodes.
+
+**No torrent indexer held the title at all.** knaben, torrents-csv, eztv, nyaa and
+subsplease each returned nothing. `archive-org` is a last-resort stream source for exactly this
+case. It is not a torrent index and not a debrid service: the Internet Archive stores the file and
+serves its own browser-playable h264 MP4 derivative over plain HTTPS with real byte-range support,
+so the bytes go straight from archive.org to the viewer. It is listed last in `STREAM_SOURCES`.
+
+Its gate refuses to guess. A search for a show also returns news clips and reviews about
+it, and a clip holds exactly one video file naming no episode - so "the item has one
+video, so it must be the episode" served a 650MB news package as S2E5. Acceptance now
+requires catalogue-relative item/file identity, explicit requested episode evidence and agreeing
+season evidence when a season is requested; named files cannot inherit a contradictory title.
+Samples, commentary, reviews, short clips and unknown-duration candidates are rejected. A known
+catalogue runtime constrains duration to 65–150%; without one, the minimum is five minutes.
+The production Archive lookup also passes the catalogue film year and rejects conflicting explicit
+film years; unknown year remains separate evidence, not a verified year match.
+
+Archive requests use only the administrator-pinned origin and reject redirects, even legitimate
+Archive CDN redirects. Before returning a direct URL, the server reads at most 8 MiB of the media
+head with validated range/length semantics and runs local `ffprobe` restricted to its stdin pipe.
+It requires a decoded video frame, bounded dimensions, known probed duration and duration agreement.
+This is an actual media-head check, **not full-file integrity or full playback verification**. A
+valid file whose index is outside the head, whose bounded probe fails, or whose URL redirects is
+unavailable rather than accepted on metadata alone.
+
+## Source reliability: implemented scope and limits
+
+Release `seeders` is nullable end to end: `null` means unknown, `0` an observed upstream zero.
+Positive reports lead bounded torrent trials, then unknown, then observed zero; none guarantees a
+live swarm. Hash duplicates carry ordered, unique `sources` provenance while retaining the first
+`source` label. Counts are merged by maximum, not addition or confidence voting.
+
+Successful per-indexer answers are cached for ten minutes, genuine empty answers for sixty seconds;
+HTTP/parse/timeout/local-admission failures are not cached as healthy empty answers. Partial searches
+retain failed/pending counts internally. The web play query makes unavailable answers immediately
+stale rather than hiding a recovering source for ten minutes, without automatic retry.
+
+Core indexer admission is global to the process: 96 new request producers and 24 HTTP exchanges,
+including hedges. Cache hits/coalesced waiters need no new producer. Catalogue aliases and known
+film year constrain release and actual-file gates; contradictory title/year/episode/season evidence
+and extras are rejected. Torrent readiness requires the complete bounded head range, not any bytes.
+The server admits four resolve tasks and divides its post-plan remaining budget across the stream
+sources still to try. Retries/media preparation share the source deadline. Pinned releases never
+substitute another hash or fall back to Archive, and skip exclusions remain in force.
+
+These are local implementation facts, not a measured live success rate. The historical
+[Torrential research](plans/TORRENTIAL_RESEARCH.md) is a revision-pinned static review with
+future adoption hypotheses, not a report that every recommendation shipped. The separate
+[implementation status and verification limits](plans/SOURCE_RELIABILITY_PLAN.md) distinguish
+current controls from follow-up experiments. No new dependencies, secrets or configuration are
+required for this reliability scope.
+
+## Requirements
+
+- Rust (stable) for the server, and `ffmpeg` and `ffprobe` on `PATH`: they inspect video and convert it
+- Node 22+ for the site
+
+## Setup
+
+```bash
+npm install                                    # the site
+cp apps/web/.env.example apps/web/.env
+```
+
+The server reads its settings from the environment and every one has a default that suits a small
+server: see `apps/server/src/config.rs` for the list (`PORT`, `PUBLIC_URL`, `CORS_ORIGINS`,
+`CACHE_DIR`, `STREAM_SOURCES`, `TORBOX_API_KEY`, `MAX_TORRENTS`, `MAX_CACHE_BYTES`,
+`MAX_HLS_SESSIONS`, `MAX_VIDEO_TRANSCODES`, ...).
+
+## Running
+
+```bash
+npm run dev:api  # the server on :9000
+npm run dev      # the site on :3000 (start the server first)
+```
+
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev:api` | The server |
+| `npm run dev` | The site, with automatic restart |
+| `npm test` | The site's tests, then the server's and the library's |
+| `npm run lint` | Frontend ESLint |
+| `npm run build` | Frontend production build |
+
+## Deployment
+
+One server runs the site and the API. Three containers, defined in `docker-compose.yml`:
+
+| Container | Role |
+| --- | --- |
+| `caddy` | The only public entry (ports 80 and 443): TLS, and routing by hostname |
+| `api` | The REST API and the video (`:9000`, internal only) |
+| `frontend` | Next.js, the site (`:3000`, internal only) |
+
+`caddy/Caddyfile` routes by hostname: `app.akidev.live`, `anime.akidev.live`, `tv.akidev.live` and `akidev.live` go
+to `frontend` (the two retired hosts so it can redirect them, and `app.` because the middleware shows the landing page there), `api.akidev.live` goes to the API,
+and `stream.akidev.live` goes to the API's video routes only. The browser loads the API directly.
+Caddy gets and renews its own Let's Encrypt certificates, kept in the `caddy-data` volume.
+Nothing else publishes a port.
+
+Cloudflare sits in front of the site and the API as a proxy: its cache (the rules in
+`scripts/cloudflare-cache.sh`) and attack protection, free. There is no tunnel. Caddy trusts the
+visitor address Cloudflare sends only from Cloudflare's own address ranges, so a caller going
+around Cloudflare straight to the server cannot pretend to be someone else. Those ranges are
+copied into the Caddyfile; refresh them from cloudflare.com/ips if Cloudflare changes them.
+
+### The video host
+
+Video is what costs money: about 5 Mbps, so an hour of watching is about 2.25 GB, and the
+reference server's 4 TB a month is about 1,800 hours. Cloudflare's free plan is not meant for
+streaming video, so the video skips it. The API hands out video URLs on `stream.akidev.live`
+(`STREAM_URL`), a DNS-only record that points straight at this server, and `caddy` passes `/s/*`
+to the API. Every other path on that host is a 404.
+
+What this costs: the server's address is public (it has to be, for that record), so it can be
+attacked directly. Only ports 80 and 443 are open, and the API is not reachable on any other
+port. A visitor can also be capped to `MAX_STREAM_BYTES_PER_DAY` of web video a day; the desktop
+app plays on the user's own machine and costs the server nothing.
+
+### Why not Cloudflare Workers or Containers
+
+The server needs raw TCP/UDP sockets for torrent peers, `ffmpeg` on `PATH`, a writable
+disk for the torrent cache, and a process that lives for the length of an episode.
+Workers and Pages provide none of those. Cloudflare Containers would technically
+work but requires the Workers Paid plan, and its request-scoped model fits a
+20-minute video stream poorly. Cloudflare's job here is DNS and the cache.
+
+### One-time setup
+
+1. **Create the server.** Any 2 vCPU / 4GB box with an 80GB disk is enough. The
+   reference deployment is an **AWS Lightsail `medium_3_0`** (4GB RAM / 2 vCPU /
+   80GB SSD / 4TB transfer, ~$24/month) in `us-east-1`, created with:
+
+   ```bash
+   aws lightsail create-key-pair --key-pair-name akidev-lightsail --region us-east-1
+   aws lightsail create-instances --region us-east-1 \
+     --instance-names konflix --availability-zone us-east-1a \
+     --blueprint-id ubuntu_24_04 --bundle-id medium_3_0 \
+     --key-pair-name akidev-lightsail
+   aws lightsail allocate-static-ip --static-ip-name konflix-ip --region us-east-1
+   aws lightsail attach-static-ip --static-ip-name konflix-ip \
+     --instance-name konflix --region us-east-1
+   # Open SSH, and 80 and 443 for the video host.
+   aws lightsail put-instance-public-ports --region us-east-1 --instance-name konflix \
+     --port-infos '[{"fromPort":22,"toPort":22,"protocol":"tcp","cidrs":["0.0.0.0/0"]},{"fromPort":80,"toPort":80,"protocol":"tcp","cidrs":["0.0.0.0/0"]},{"fromPort":443,"toPort":443,"protocol":"tcp","cidrs":["0.0.0.0/0"]}]'
+   ```
+
+   Ubuntu 24.04 or Debian 12. **Attach a static IP** — without one, a stop/start
+   changes the address and `DEPLOY_HOST` silently points at nothing.
+
+2. **Provision it.** From this repository. Cloud images give you an unprivileged user
+   with `sudo` rather than a root login, hence the `sudo -E`:
+
+   ```bash
+   ssh -i ~/.ssh/akidev_lightsail ubuntu@SERVER_IP 'sudo bash -s' < scripts/setup-server.sh
+   ```
+
+   This installs Docker, creates a `akidev` deploy user, restricts the firewall to
+   SSH, 80 and 443, and raises the open-file limit for concurrent streams. Re-running is safe.
+
+3. **Point DNS at the server.**
+
+   ```bash
+   cf auth login                                  # if not already authenticated
+   SERVER_IP=<server ip> ./scripts/cloudflare.sh  # every hostname, and TLS mode full
+   ```
+
+   The site and the API are proxied, `stream.` is not. A hostname answers with Cloudflare's 525
+   error for about two minutes until Caddy has its certificate, so do this before the site is
+   announced. Caddy asks for the certificate once the record points at the server (port 80 must
+   be open). When moving a live hostname, use `ONLY=<hostname>` and wait for it to answer before
+   the next.
+
+   Then set the `STREAM_URL` repository variable to `https://stream.akidev.live`, and deploy.
+   `curl -sI https://stream.akidev.live/s/x` answering 400 means the certificate and the route work.
+   Until `STREAM_URL` is set the video is served from the API's own host, through Cloudflare.
+
+4. **Create an SSH key for deploys** and authorise it on the server:
+
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/konflix_deploy -C akidev-deploy
+   ssh -i ~/.ssh/akidev_lightsail ubuntu@SERVER_IP \
+     "DEPLOY_PUBLIC_KEY='$(cat ~/.ssh/konflix_deploy.pub)' sudo -E bash -s" \
+     < scripts/setup-server.sh
+   ```
+
+5. **Add the repository secrets and variables** (Settings → Secrets and variables →
+   Actions):
+
+   | Kind | Name | Value |
+   | --- | --- | --- |
+   | Secret | `DEPLOY_HOST` | server IP |
+   | Secret | `DEPLOY_USER` | `akidev` |
+   | Secret | `DEPLOY_SSH_KEY` | contents of `~/.ssh/konflix_deploy` |
+   | Secret | `DEPLOY_PORT` | `22` (optional) |
+   | Secret | `TORBOX_API_KEY` | from torbox.app (optional) |
+   | Secret | `CF_TURN_KEY_ID`, `CF_TURN_TOKEN` | a Cloudflare Realtime TURN key, the relay for watch parties (optional) |
+   | Variable | `PUBLIC_URL` | `https://api.akidev.live` |
+   | Variable | `NEXT_PUBLIC_API_URL` | `https://api.akidev.live` |
+   | Variable | `FRONTEND_URL` | `https://akidev.live` |
+
+   Secrets are write-only; nobody can read them back out.
+
+6. **Deploy.** Push to `main`, or run the **Deploy** workflow from the Actions tab.
+
+### How a deploy works
+
+> **Names on the server.** The compose project (`konflix`), the image names, the checkout at
+> `/opt/konflix` and the `konflix` deploy user were created before the project became Akidev, and
+> they still are what the running server uses. Renaming them is a migration of the host, not a
+> change to this repository, so they are left alone.
+
+`.github/workflows/deploy.yml` runs in four jobs:
+
+1. **verify** runs the frontend's tests, lint, type check and build, then the server's `cargo fmt`,
+   `clippy` and tests (with ffmpeg installed, so the conversion path is really exercised).
+2. **build-server** compiles `akidev-server` inside `rust:1-bookworm`, the Debian release the
+   runtime image is based on, so it links the libc and OpenSSL it will run against. It then starts
+   the binary once, so one that cannot run is found there.
+3. **deploy** copies the commit to `/opt/konflix`, puts the binary in `apps/server/dist/`,
+   renders `.env.deploy` from the repository secrets and runs `scripts/deploy.sh` over SSH.
+4. The same job then verifies through Cloudflare.
+
+The server is built in CI and not on the host because a release build needs gigabytes of memory
+for minutes, and the host is a 4GB box that is also serving. The api image only unpacks a 20MB
+binary and installs ffmpeg. The frontend image is still built on the host. The script waits for
+both to report healthy, prints the live configuration, and only then prunes the old images. A
+failed build leaves the previous revision running.
+
+The binary is built for x86-64, which is what the reference server is; `scripts/deploy.sh` refuses
+to run on any other architecture with a message saying so.
+
+The verification goes through Cloudflare, and through the video host once `STREAM_URL` is set, so a
+broken DNS record, certificate or Caddy fails the deploy rather than passing silently. It checks the health endpoint, the site and the two redirects, the catalogue and
+title routes, and then finds real sources: an anime episode (and fetches its first bytes), a series
+episode out of a season pack, a title only the id-searched indexer can find, and a later season
+that must *not* resolve to the wrong one.
+
+### Shipping source-reliability changes
+
+Production website rollout must include **both the API/server and frontend** from the same tested
+revision: shared-core fixes ship in the compiled `akidev-server`, and nullable-health/play-cache
+contract changes ship in the Next.js frontend. The existing **Deploy** workflow
+(`.github/workflows/deploy.yml`) targets the `production` environment and waits on verify and
+build-server before deployment; dispatching it is a remote deployment, not a local verification.
+Keep existing credentials/settings; this scope requires no new secrets, dependencies or config.
+
+The desktop embeds the core, so a website deploy does not update installed apps. Use the existing
+**Release desktop** workflow (`.github/workflows/release-desktop.yml`) to publish a new workspace
+version for the intended macOS/Windows platforms through their existing build/sign/publish jobs.
+Consumers of `crates/library` likewise need a rebuilt/released artifact containing the new core;
+signed source definitions cannot deliver library/code fixes. The workflow creates version commits
+and platform tags, so release execution is a separate authorized step, not part of a docs edit.
+
+After rollout, verify website and native/library paths separately with authorized media and current
+source definitions. Check response contracts, selected filename/episode, actual head/probe/first
+frame, cancellation/load and sustained playback. Existing smoke routes or `available: true` alone
+cannot establish improved reliability. No deploy, release, live-feed inspection or live playback is
+claimed by the documentation update.
+
+### Operating it
+```bash
+cd /opt/konflix
+docker compose ps                      # what is running
+docker compose logs -f api             # follow the API
+docker compose restart api             # restart one service
+
+# The api port is not published to the host, so /health is read from the frontend container, which
+# sits on the same network (the api image has no shell tools beyond its own binary).
+docker compose exec frontend node -e \
+  "fetch('http://api:9000/health').then(r=>r.json()).then(h=>console.log(h))"
+```
+
+The torrent downloads and the converted video live in the `torrent-cache` volume, capped by
+`MAX_CACHE_BYTES` together. It is scratch data, emptied at every start: deleting it costs nothing
+but a re-download.
+
+### When debrid playback stops working
+
+The debrid provider rotates its CDN domain, and `DEBRID_CDN_HOSTS` allowlists it. A
+rotation makes every debrid playback fail even though the API key is fine, and the server falls
+back to the torrent relay.
+
+The API log names the rejected host:
+
+```
+[debrid] refused a link outside DEBRID_CDN_HOSTS: host=nexus-144.enam.tb-cdn.io.
+```
+
+Copy that domain into `DEBRID_CDN_HOSTS` in `.env.deploy` and restart the API — no
+rebuild needed. This is the only setting that has needed changing in production.
+
+### Secrets
+
+No secret is committed. `.env.deploy` is rendered on the server from GitHub secrets by
+the workflow, is gitignored, and is written with mode `600`. Locally, the server reads its
+settings from the environment (see `apps/server/src/config.rs`).

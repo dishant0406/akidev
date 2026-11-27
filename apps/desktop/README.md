@@ -44,7 +44,7 @@ title you finish drops out of "Continue watching".
 The host is a device (this app, or a browser tab), not a server. Guests connect straight to it
 with WebRTC, and only what to play and where travels: every device finds its own stream. The API
 at `api.akidev.live` is just the meeting point where the first message each way is passed, and a
-relay (Cloudflare's, see the root README) carries the connection for the networks that block direct
+relay (Cloudflare's, see [docs/engineering.md](../../docs/engineering.md)) carries the connection for the networks that block direct
 ones. The messages, and the rules that keep a guest in step, are in
 [`crates/party/PROTOCOL.md`](../../crates/party/PROTOCOL.md); the meeting point's routes are in
 [`apps/server/API.md`](../server/API.md).
@@ -118,7 +118,7 @@ needs and mpv does not (HLS conversion, ffprobe, the debrid source, the Internet
 ## The server
 
 `apps/server/` is `akidev-server`, a REST API over `core` with the video delivery a browser needs. It
-is deployed with the site; see the root README. Run it with `cargo run -p akidev-server` from this
+is deployed with the site; see [docs/engineering.md](../../docs/engineering.md). Run it with `cargo run -p akidev-server` from this
 directory. [`apps/server/API.md`](../server/API.md) lists the routes and `apps/server/src/config.rs` the settings,
 and `cargo test -p akidev-server` runs its tests (they use `ffmpeg` and `ffprobe`, and say so and
 pass when those are missing).
