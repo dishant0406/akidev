@@ -8,7 +8,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="Akidev TV"
+        android:label="Akidev"
         android:icon="@drawable/icon"
         android:banner="@drawable/banner"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
