@@ -1,6 +1,8 @@
 package live.akidev.tv
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -46,8 +48,32 @@ fun SettingsScreen(sourcesReady: Boolean, release: AppRelease?, onSaved: () -> U
     var status by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().background(Ink.Canvas).padding(start = 48.dp, end = 48.dp, bottom = 48.dp, top = TopBarHeight + 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().background(Ink.Canvas).verticalScroll(rememberScrollState()).padding(start = 48.dp, end = 48.dp, bottom = 48.dp, top = TopBarHeight + 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) { AkiIcon("settings-solid", size = 36.dp, tint = Ink.TextDim); Text("Settings", style = Type.Display) }
+        // The notices (new sources, a new version of the app, a problem with an update) come first, right under the title, so they are never pushed off the bottom of the screen. A notice takes room only while it shows.
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (sourcesReady) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(9.dp).background(Ink.Accent, CircleShape))
+                Text("New sources are ready. They apply the next time the app opens.", style = Type.Body.copy(color = Ink.Text), maxLines = 1)
+            }
+            // The app's own update: the button, then the progress in its place.
+            var progress by remember { mutableStateOf<Float?>(null) }
+            val problem by Updates.problem.collectAsState()
+            var refused by remember { mutableStateOf<String?>(null) }
+            if (release != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // A problem with the update takes the place of the sentence (the button stays, to try again).
+                val trouble = refused ?: problem
+                if (trouble != null) AkiIcon("warning", tint = Ink.Danger) else Box(Modifier.size(9.dp).background(Ink.Accent, CircleShape))
+                Text(trouble ?: "Version ${release.version} is ready.", style = Type.Body.copy(color = if (trouble != null) Ink.Danger else Ink.Text), maxLines = 1, modifier = Modifier.widthIn(max = 640.dp))
+                AkiButton(progress?.let { "Downloading ${(it * 100).toInt()}%" } ?: "Download and install", Look.Secondary, icon = "download", labelAlways = true) {
+                    if (progress == null) scope.launch {
+                        progress = 0f
+                        refused = Updates.install(context, release) { progress = it }
+                        progress = null
+                    }
+                }
+            }
+        }
         Text("Your TorBox API key. It stays on this TV and is sent only to TorBox.", style = Type.Body)
         // The key is hidden as dots; the eye shows it, so a mistyped key can be seen and fixed.
         var hidden by remember { mutableStateOf(true) }
@@ -78,34 +104,6 @@ fun SettingsScreen(sourcesReady: Boolean, release: AppRelease?, onSaved: () -> U
         Box(Modifier.height(32.dp)) {
             if (status == "Checking") Spinner(size = 28.dp)
             else if (status.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { AkiIcon("warning", tint = Ink.Danger); Text(status, style = Type.Body.copy(color = Ink.Danger), maxLines = 1) }
-        }
-        // The notices (new sources, a new version of the app, a problem with an update) come last, each in a slot of its own, so nothing above them moves when one shows up.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.height(28.dp)) {
-            if (sourcesReady) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.size(9.dp).background(Ink.Accent, CircleShape))
-                Text("New sources are ready. They apply the next time the app opens.", style = Type.Body.copy(color = Ink.Text), maxLines = 1)
-            }
-        }
-        // The app's own update: the button, then the progress in its place.
-        var progress by remember { mutableStateOf<Float?>(null) }
-        val problem by Updates.problem.collectAsState()
-        var refused by remember { mutableStateOf<String?>(null) }
-        Box(Modifier.height(52.dp)) {
-            if (release != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                // A problem with the update takes the place of the sentence (the button stays, to try again).
-                val trouble = refused ?: problem
-                if (trouble != null) AkiIcon("warning", tint = Ink.Danger) else Box(Modifier.size(9.dp).background(Ink.Accent, CircleShape))
-                Text(trouble ?: "Version ${release.version} is ready.", style = Type.Body.copy(color = if (trouble != null) Ink.Danger else Ink.Text), maxLines = 1, modifier = Modifier.widthIn(max = 640.dp))
-                AkiButton(progress?.let { "Downloading ${(it * 100).toInt()}%" } ?: "Download and install", Look.Secondary, icon = "download", labelAlways = true) {
-                    if (progress == null) scope.launch {
-                        progress = 0f
-                        refused = Updates.install(context, release) { progress = it }
-                        progress = null
-                    }
-                }
-            }
-        }
         }
     }
 }
