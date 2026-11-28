@@ -13,8 +13,8 @@ android {
         applicationId = "live.akidev.tv"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
         // Where the app looks for newer releases of itself (the releases `fastlane release` makes); tests can point it elsewhere with -PupdateUrl.
         buildConfigField("String", "UPDATE_URL", "\"${project.findProperty("updateUrl") ?: "https://api.github.com/repos/dishant0406/akidev/releases?per_page=20"}\"")
         // Both CPU types the engine is built for. Many TVs are 32-bit only.
