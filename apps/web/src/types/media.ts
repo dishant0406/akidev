@@ -14,6 +14,10 @@ export interface Media {
   banner: string | null;
   description: string | null;
   format: string | null;
+  /** When the title first came out: "YYYY-MM-DD", "YYYY-MM" or "YYYY". */
+  release_date: string | null;
+  /** For a title that is not out yet, the words to show: "Coming 27 January 2027". Null when it is out. */
+  coming_soon: string | null;
   year: number | null;
   episodes: number | null;
   runtime_minutes: number | null;

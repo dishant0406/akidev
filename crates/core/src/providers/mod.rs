@@ -405,6 +405,8 @@ mod tests {
             popularity: 0,
             genres: vec![],
             is_adult: false,
+            next_episode: None,
+            release_date: None,
         };
         Page {
             results: vec![media; count],

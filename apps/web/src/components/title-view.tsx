@@ -62,19 +62,22 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
 
   const resume = recent.find((entry) => entry.media.id === key);
   const first = firstPlayable(key, data);
-  const play = resume
-    ? { id: resume.episodeId, label: "Resume" }
-    : first
-      ? { id: first, label: "Play" }
-      : null;
+  const coming = media.coming_soon;
+  const play = coming
+    ? null
+    : resume
+      ? { id: resume.episodeId, label: "Resume" }
+      : first
+        ? { id: first, label: "Play" }
+        : null;
 
   const trailer = trailerRef?.site.toLowerCase() === "youtube" ? trailerRef.id : null;
 
   const facts = [
-    media.year,
+    coming ? null : media.year,
     formatLabel(media.format),
     media.runtime_minutes ? `${media.runtime_minutes} min` : null,
-    statusLabel(media.status),
+    coming ? null : statusLabel(media.status),
     !isFilm && count > 0 ? `${count} episodes` : null,
   ]
     .filter((part) => part !== null && part !== undefined && part !== "")
@@ -116,7 +119,12 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
                 {play.label}
               </Button>
             )}
-            <AppDownload id={play?.id ?? key} />
+            {coming && (
+              <Button disabled className="col-span-2">
+                {coming}
+              </Button>
+            )}
+            {!coming && <AppDownload id={play?.id ?? key} />}
             {trailer && (
               <a
                 href={`https://www.youtube.com/watch?v=${trailer}`}
@@ -132,7 +140,7 @@ export default function TitleView({ id: key, initial }: { id: string; initial?: 
         </div>
       </section>
 
-      <Episodes titleKey={key} count={count} list={episodes} currentId={resume?.episodeId} />
+      {!coming && <Episodes titleKey={key} count={count} list={episodes} currentId={resume?.episodeId} />}
 
       {people.length > 0 && (
         <section className="gutter flex flex-col gap-4 pt-10">

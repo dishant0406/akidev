@@ -257,6 +257,9 @@ pub struct Media {
     pub banner: Option<String>,
     pub description: Option<String>,
     pub format: Option<String>,
+    /// When the title first came out: "YYYY-MM-DD", "YYYY-MM" or "YYYY", as exact as the provider is.
+    #[serde(default)]
+    pub release_date: Option<String>,
     pub year: Option<i32>,
     /// Total episodes, when the provider reports one.
     pub episodes: Option<u32>,
@@ -267,6 +270,35 @@ pub struct Media {
     pub popularity: i64,
     pub genres: Vec<String>,
     pub is_adult: bool,
+    /// The number of the next episode to air, for a show still airing. Every episode before it is out; it and the ones after it are not.
+    #[serde(default)]
+    pub next_episode: Option<u32>,
+}
+
+impl Media {
+    /// For a title that is not out yet, when it comes: "Coming 27 January 2027", or "Coming soon"
+    /// when the provider only says that it is not released. `None` for a title that is out. A full
+    /// date that has passed means out, whatever the status says: a status can be a day stale.
+    pub fn coming_soon(&self, now_ms: i64) -> Option<String> {
+        match self.release_date.as_deref() {
+            Some(date) if crate::calendar::is_upcoming(date, now_ms) => {
+                Some(format!("Coming {}", crate::calendar::long_date(date)))
+            }
+            Some(date) if date.len() == 10 => None,
+            _ if self.status.as_deref() == Some("NOT_YET_RELEASED") => Some("Coming soon".into()),
+            _ => None,
+        }
+    }
+
+    /// The release date in words when the title came out in the last 120 days: a title this new
+    /// can have no source yet (a film still in cinemas). Needs a full date.
+    pub fn recently_out(&self, now_ms: i64) -> Option<String> {
+        let date = self.release_date.as_deref()?;
+        let age = now_ms - crate::calendar::parse_date_ms(date)?;
+        (0..120 * crate::calendar::DAY_MS)
+            .contains(&age)
+            .then(|| crate::calendar::long_date(date))
+    }
 }
 
 #[derive(Debug, Clone, Default)]

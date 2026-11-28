@@ -115,8 +115,11 @@ impl Render for TitlePage {
         let media = &detail.media;
 
         let art = media.banner.clone().or_else(|| media.poster.clone());
+        // A title that is not out yet: no Play, no Download and no episodes, only when it comes.
+        let coming = media.coming_soon(akidev_core::calendar::now_ms());
+        let out = coming.is_none();
         let facts = [
-            media.year.map(|y| y.to_string()),
+            media.year.filter(|_| out).map(|y| y.to_string()),
             media
                 .format
                 .as_deref()
@@ -125,6 +128,7 @@ impl Render for TitlePage {
             media
                 .status
                 .as_ref()
+                .filter(|_| out)
                 .map(|s| crate::design::state::sentence(&s.replace('_', " "))),
             media
                 .episodes
@@ -140,10 +144,11 @@ impl Render for TitlePage {
             .find(|entry| entry.media.id == media.id)
             .map(|entry| entry.episode_id.clone());
         let play = match started {
+            _ if !out => None,
             Some(id) => Some((id, "Resume")),
             None => first_playable(detail).map(|id| (id, "Play")),
         };
-        let film = media.kind.shape() == Shape::Movie;
+        let film = out && media.kind.shape() == Shape::Movie;
         let trailer = detail
             .trailer
             .as_ref()
@@ -259,6 +264,7 @@ impl Render for TitlePage {
                                     move |_, _, cx| navigate(Route::Watch { id: id.clone() }, cx),
                                 )
                             }))
+                            .children(coming.map(coming_label))
                             .children(film.then(|| {
                                 let id = media.id.clone();
                                 secondary_button(
@@ -286,12 +292,26 @@ impl Render for TitlePage {
         div()
             .pb_16()
             .child(hero)
-            .children(self.episodes.clone())
+            .children(self.episodes.clone().filter(|_| out))
             .children(cast(&detail.cast))
             .children(self.related.clone())
             .children(self.recommended.clone())
             .into_any_element()
     }
+}
+
+/// Where Play would be for a title that is not out yet: the shape of a button, but it does nothing.
+fn coming_label(text: String) -> Div {
+    div()
+        .flex_none()
+        .px_5()
+        .py_2p5()
+        .rounded(px(crate::design::tokens::radius::BUTTON))
+        .bg(color(TEXT).opacity(WASH_2))
+        .text_color(color(TEXT_DIM))
+        .text_size(px(14.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(text)
 }
 
 fn cast(people: &[Person]) -> Option<Div> {

@@ -360,3 +360,68 @@ at the saved place. The title page's main button does the same, and for a series
 - **Moving over the posters.** The hero changes after the remote rests for 220 ms. Its story is asked for after that, at most one every 2.1
   seconds; if it cannot be had, the slot stays empty.
 - **A tab or row added to the definitions.** It appears within about 20 seconds of the new definitions being downloaded, without a new release.
+
+## Episodes, View all and Filters on the TV (2026-11-27)
+
+- **Opening a title.** The page asks the engine for the title (`detail`). Each episode comes with `released` and its air date. Episodes not out are dimmed with a clock and a date, and the header reads "N of M out". If the answer of an earlier visit is in memory, it shows at once.
+- **Play from the title page.** The main button plays the episode last watched (or the next one after a finished episode, or the first), but only among the episodes that are out. If none is out yet, the slot says "No episode has aired yet." OK on a card that is not out does nothing. The player's Next button skips episodes that are not out.
+- **Back from the player.** The title page returns with the season, the scroll of the episodes and the focus on the episode that was played. If the viewer pressed the main button instead, the focus returns to the main button. Back from the title page itself clears this memory.
+- **A row on Home.** The last card is "View all". OK opens Browse for that row's catalogue, sort and genre. Back returns to the row, on the "View all" card.
+- **The Filters button.** Next to the top bar, only on the first screen of Home and the catalogue tabs. From Settings press Right. OK opens Browse for the current tab (all catalogues on Home).
+- **Browse.** The first page loads (a spinner, or "The list did not load" with Try again). Sort buttons and genre buttons re-load page 1 and keep the remote on the button. OK on a poster opens the title. At the end of the grid, "Show more" loads the next page (the label says "Loading" meanwhile). If that fails, the reason shows beside the button and pressing it again tries again. "Nothing matches these filters." shows for an empty list. Back returns to the same poster, in the same scroll.
+- **Edge cases.** A title on two pages shows once. A filter with no titles shows the message above, and the buttons stay. An anime whose provider gives no total shows only the episodes that are out.
+
+## Browse on the TV, as it works now (2026-11-28)
+
+This replaces the "View all and Filters" steps of 2026-11-27 where they differ. The data side is the same (`browse` and `browse_options` in `crates/tv-ffi/src/lib.rs`). Only the screen changed (`BrowseScreen.kt`, `TopBar.kt`, `MainActivity.kt`).
+
+**Getting there.**
+1. On any first screen, the top bar has a Browse icon (a grid). `pick` in `MainActivity.kt` sees that index and pushes `Screen.Browse`. On a tab it is the list of that tab. On Home, Search or Settings it is all catalogues.
+2. Or press OK on the "View all" card at the end of a row. That opens the list of the row's catalogue, with the row's order and genre already chosen. The heading is the catalogue name, not the row name.
+3. The first poster has the focus.
+
+**Changing the order.**
+1. Press Up from the first row of posters. The focus goes to the bar.
+2. Move Left or Right. The name of each order floats under its icon.
+3. Press OK. `state.sort` changes, the highlight glides, the list loads again, and the focus stays on the icon. The words at the right change too.
+
+**Choosing a genre.**
+1. Move to the last icon of the bar (Genre) and press OK. The panel fades in over the right side and the list behind dims. The focus is on the genre that is chosen now ("All genres" the first time).
+2. Up and Down move in the list. Left and Right do nothing: the remote cannot leave the panel while it is open (`focusProperties` in `GenrePanel`).
+3. OK picks a genre. The panel closes, the focus goes back to the Genre icon, and the list loads again. The Genre icon gets an amber dot when a genre is chosen.
+4. Back closes the panel without a change. A second Back leaves Browse.
+
+**Show more.**
+1. Go down past the last row. A line says how many titles are shown, and under it is the "Show more" button.
+2. Press OK. The button reads "Loading" and stays where it is.
+3. The new titles come in above the button. The focus jumps to the first new one (`jumpTo` in `BrowseScreen`), because the button itself has moved down, out of sight.
+4. When there is nothing more, only the line with the count is left.
+
+**Edge cases.**
+- No title for a genre: a state card says "Nothing here" and tells you to choose another genre from the bar. The bar is still there.
+- The first page fails: a state card with "Try again".
+- "Show more" fails: the reason shows in red under the button, and the button still works.
+- The filters fail to load: a state card, and no bar (there is nothing to put in it).
+- Back from a title: same poster, same scroll, same order and genre. The genre panel is always closed after a return, because its open flag lives in the screen and not in `BrowseState`.
+- In a panel (the genres here, or audio, subtitles and source in the player): the line that has the focus when the panel opens takes it once. Scrolling the list never moves the focus on its own.
+
+
+## A title that is not out yet, and one that is too new (2026-11-28)
+
+1. **The date is read.** A catalogue answers with a row. `card::media` (`crates/core/src/providers/card.rs`) reads `release_date` with the card's mapping from `sources.json`. AniList: the `date` expression over `startDate`, then the year. Cinemeta: the date part of `released`, then the year of `releaseInfo`. TVMaze: `premiered`. YTS: `year`.
+2. **Is it out?** `Media::coming_soon` (`crates/core/src/model.rs`) answers with words ("Coming 27 January 2027", "Coming October 2027", "Coming 2027", "Coming soon") or nothing.
+3. **The website.** The server puts the words in `coming_soon` on each card (`MediaOut` in `apps/server/src/dto.rs`). `facts()` in `apps/web/src/lib/media.ts` shows them in place of the year on tiles, the hero and the search palette. `playHref` in `apps/web/src/components/tile.tsx` sends a film that is not out to its title page. `apps/web/src/components/title-view.tsx` shows the words as a disabled button where Play would be, and leaves out the app download button and the episode list.
+4. **The desktop app.** `apps/desktop/src/tile.rs` and `hero.rs` do the same for cards. `apps/desktop/src/title.rs` shows the words in a quiet box where Play would be (`coming_label`), with no Download button and no episode list.
+5. **The TV.** `title_of` and `detail` in `crates/tv-ffi/src/lib.rs` fill `Title.coming_soon`, give a film no `play_id`, and mark every episode `released: false`. `DetailScreen.kt` shows a clock and the words in the main button's slot, and in the facts line.
+6. **Someone plays it anyway** (an old link, a watch party, a direct call). `validate_request_at` in `crates/core/src/stream.rs` refuses before any search. The viewer sees the usual "Nothing playable yet" card with "This title is not out yet. Coming 27 January 2027."
+
+Edge cases:
+
+- No date and no status: the title counts as out. Nothing changes for it.
+- A year only, and it is this year: out. We cannot know better.
+- Status `NOT_YET_RELEASED` with only a year or a month that has started: still not out, and the words are "Coming soon".
+- Status `NOT_YET_RELEASED` with a full date that has passed: out. The date wins, because a status can be a day stale.
+- A date that does not read ("soon", a timestamp): not upcoming. It is ignored.
+- A title that came out in the last 120 days and has no source: the search runs as normal, and the reason ends with "This title came out on 20 November 2026, so it can be too new to have a source." (`Plan::with_too_new_note`, used when nothing is listed and when what was found did not play). When providers failed to answer, the older "could not be reached" messages win, because that is the real cause.
+- An app older than this change ignores `release_date` in `sources.json` and works as before.
+- On the TV, a film that is not out has nothing to press on its page. Back should return to the list. This was not checked on a TV or an emulator, and the desktop screens were only compiled, not looked at.

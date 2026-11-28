@@ -15,6 +15,10 @@ pub struct MediaOut {
     pub banner: Option<String>,
     pub description: Option<String>,
     pub format: Option<String>,
+    /// When the title first came out: "YYYY-MM-DD", "YYYY-MM" or "YYYY".
+    pub release_date: Option<String>,
+    /// For a title that is not out yet, the words to show: "Coming 27 January 2027".
+    pub coming_soon: Option<String>,
     pub year: Option<i32>,
     pub episodes: Option<u32>,
     pub runtime_minutes: Option<u32>,
@@ -35,6 +39,8 @@ impl From<&Media> for MediaOut {
             banner: media.banner.clone(),
             description: media.description.clone(),
             format: media.format.clone(),
+            release_date: media.release_date.clone(),
+            coming_soon: media.coming_soon(akidev_core::calendar::now_ms()),
             year: media.year,
             episodes: media.episodes,
             runtime_minutes: media.runtime_minutes,
@@ -140,6 +146,8 @@ mod tests {
             popularity: 5,
             genres: vec!["Action".into()],
             is_adult: false,
+            next_episode: None,
+            release_date: None,
         };
         let json = serde_json::to_value(MediaOut::from(&media)).unwrap();
         let mut keys: Vec<&str> = json
@@ -153,6 +161,7 @@ mod tests {
             keys,
             [
                 "banner",
+                "coming_soon",
                 "description",
                 "episodes",
                 "format",
@@ -162,6 +171,7 @@ mod tests {
                 "kind",
                 "popularity",
                 "poster",
+                "release_date",
                 "runtime_minutes",
                 "score",
                 "status",

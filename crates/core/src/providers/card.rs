@@ -26,6 +26,7 @@ pub fn media(map: &MediaMap, row: Row) -> Option<Media> {
         banner: text(&map.banner),
         description: text(&map.description),
         format: text(&map.format),
+        release_date: text(&map.release_date),
         year: whole(&map.year).map(|year| year as i32),
         episodes: whole(&map.episodes).map(|count| count as u32),
         runtime_minutes: whole(&map.runtime_minutes).map(|minutes| minutes as u32),
@@ -38,6 +39,7 @@ pub fn media(map: &MediaMap, row: Row) -> Option<Media> {
             .map(|e| evaluate_list(e, row))
             .unwrap_or_default(),
         is_adult: text(&map.adult).is_some_and(|flag| flag == "true"),
+        next_episode: whole(&map.next_episode).map(|number| number as u32),
     })
 }
 

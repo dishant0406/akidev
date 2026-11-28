@@ -18,10 +18,12 @@ pub fn poster_tile(key: &str, media: &Media, resume: Option<(f32, Route)>) -> St
     let title_route = Route::Title {
         id: media.id.clone(),
     };
-    // A film plays straight away. A show needs its episode list first, so it opens the title.
+    let coming = media.coming_soon(akidev_core::calendar::now_ms());
+    // A film plays straight away. A show needs its episode list first, so it opens the title. So
+    // does a film that is not out yet.
     let play_route = match &resume {
         Some((_, route)) => route.clone(),
-        None if media.kind.shape() == Shape::Movie => Route::Watch {
+        None if media.kind.shape() == Shape::Movie && coming.is_none() => Route::Watch {
             id: media.id.clone(),
         },
         None => title_route.clone(),
@@ -50,7 +52,7 @@ pub fn poster_tile(key: &str, media: &Media, resume: Option<(f32, Route)>) -> St
     };
 
     let facts = [
-        media.year.map(|y| y.to_string()),
+        coming.or_else(|| media.year.map(|y| y.to_string())),
         media
             .format
             .as_deref()

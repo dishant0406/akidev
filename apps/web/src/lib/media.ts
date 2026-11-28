@@ -27,10 +27,10 @@ export function formatLabel(format: string | null | undefined): string | null {
   return word.length <= 3 ? word.toUpperCase() : word[0].toUpperCase() + word.slice(1);
 }
 
-/** "2026 · TV · ★ 75%": the quiet facts under a title. */
+/** "2026 · TV · ★ 75%": the quiet facts under a title. A title that is not out yet says when it comes, not its year. */
 export function facts(card: Card): string[] {
   return [
-    card.year ? String(card.year) : null,
+    card.coming_soon ?? (card.year ? String(card.year) : null),
     formatLabel(card.format),
     card.score ? `★ ${card.score}%` : null,
   ].filter((part): part is string => Boolean(part));

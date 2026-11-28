@@ -57,6 +57,13 @@ pub enum Operation {
     MagnetSize(Box<Expression>),
     /// The first four digits in a text, as a year ("2008–2013" is 2008).
     Year(Box<Expression>),
+    /// A date from its parts, as exact as they allow: "2027-01-09", "2027-01" with no day, "2027"
+    /// with no month. Nothing with no year.
+    Date {
+        year: Box<Expression>,
+        month: Box<Expression>,
+        day: Box<Expression>,
+    },
     /// The first number in a text ("143 min" is 143).
     Minutes(Box<Expression>),
     /// A number times `by`, rounded: a rating out of 10 as a score out of 100.
@@ -127,6 +134,11 @@ impl Operation {
             | Operation::Minutes(from)
             | Operation::Positive(from)
             | Operation::PlainText(from) => from.check()?,
+            Operation::Date { year, month, day } => {
+                year.check()?;
+                month.check()?;
+                day.check()?;
+            }
             Operation::Scale { from, .. }
             | Operation::Add { from, .. }
             | Operation::Map { from, .. } => from.check()?,
@@ -747,10 +759,16 @@ pub struct MediaMap {
     pub format: Option<Expression>,
     #[serde(default)]
     pub status: Option<Expression>,
+    /// When the title first came out: "YYYY-MM-DD", "YYYY-MM" or "YYYY".
+    #[serde(default)]
+    pub release_date: Option<Expression>,
     #[serde(default)]
     pub year: Option<Expression>,
     #[serde(default)]
     pub episodes: Option<Expression>,
+    /// The number of the next episode to air, for a show still airing.
+    #[serde(default)]
+    pub next_episode: Option<Expression>,
     #[serde(default)]
     pub runtime_minutes: Option<Expression>,
     /// Out of 100.
@@ -774,8 +792,10 @@ impl MediaMap {
             &self.description,
             &self.format,
             &self.status,
+            &self.release_date,
             &self.year,
             &self.episodes,
+            &self.next_episode,
             &self.runtime_minutes,
             &self.score,
             &self.popularity,

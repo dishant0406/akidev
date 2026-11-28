@@ -163,6 +163,84 @@ fn an_airing_show_counts_the_episodes_already_aired() {
 }
 
 #[test]
+fn an_airing_show_knows_the_next_episode_to_air() {
+    let next = |value: Value| media("anilist", Kind::Anime, &value).unwrap().next_episode;
+    assert_eq!(
+        next(json!({ "id": 1, "episodes": 12, "nextAiringEpisode": { "episode": 6 } })),
+        Some(6)
+    );
+    assert_eq!(
+        next(json!({ "id": 1, "episodes": 12, "nextAiringEpisode": null })),
+        None
+    );
+    assert_eq!(next(json!({ "id": 1 })), None);
+}
+
+#[test]
+fn every_catalogue_reads_a_release_date_as_exact_as_it_has() {
+    let date = |id: &str, kind: Kind, value: Value| media(id, kind, &value).unwrap().release_date;
+    let anilist = |start: Value, season: Value| {
+        date(
+            "anilist",
+            Kind::Anime,
+            json!({ "id": 1, "startDate": start, "seasonYear": season }),
+        )
+    };
+    assert_eq!(
+        anilist(json!({ "year": 2027, "month": 1, "day": 9 }), json!(2027)).as_deref(),
+        Some("2027-01-09")
+    );
+    assert_eq!(
+        anilist(
+            json!({ "year": 2027, "month": 10, "day": null }),
+            json!(null)
+        )
+        .as_deref(),
+        Some("2027-10")
+    );
+    assert_eq!(
+        anilist(
+            json!({ "year": 2027, "month": null, "day": null }),
+            json!(null)
+        )
+        .as_deref(),
+        Some("2027")
+    );
+    assert_eq!(
+        anilist(
+            json!({ "year": null, "month": null, "day": null }),
+            json!(2027)
+        )
+        .as_deref(),
+        Some("2027")
+    );
+    assert_eq!(anilist(json!(null), json!(null)), None);
+
+    let cinemeta = |value: Value| date("cinemeta", Kind::Movie, value);
+    assert_eq!(
+        cinemeta(
+            json!({ "id": "tt1", "released": "1994-10-14T00:00:00.000Z", "releaseInfo": "1994" })
+        )
+        .as_deref(),
+        Some("1994-10-14")
+    );
+    assert_eq!(
+        cinemeta(json!({ "id": "tt1", "releaseInfo": "2008\u{2013}2013" })).as_deref(),
+        Some("2008")
+    );
+    assert_eq!(cinemeta(json!({ "id": "tt1" })), None);
+
+    let tvmaze = date(
+        "tvmaze",
+        Kind::Series,
+        json!({ "id": 1, "premiered": "2008-01-20" }),
+    );
+    assert_eq!(tvmaze.as_deref(), Some("2008-01-20"));
+    let yts = date("yts", Kind::Movie, json!({ "id": 1, "year": 2026 }));
+    assert_eq!(yts.as_deref(), Some("2026"));
+}
+
+#[test]
 fn an_anilist_page_drops_rows_without_a_cover_and_knows_if_there_is_more() {
     let mut bare = bocchi();
     bare["coverImage"] = json!({ "extraLarge": null, "large": null });

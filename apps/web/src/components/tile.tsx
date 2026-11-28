@@ -22,9 +22,9 @@ const RESTS_FOR = 100;
 export const TILE_WIDTH = 176;
 export const TILE_GAP = 12;
 
-/** A film plays straight away. A show needs its episode list first, so it opens the title. */
+/** A film plays straight away. A show needs its episode list first, so it opens the title. So does a film that is not out yet. */
 export function playHref(card: Card): string {
-  return card.kind === "movie" ? watchPath(card.id, card.id) : titlePath(card.id);
+  return card.kind === "movie" && !card.coming_soon ? watchPath(card.id, card.id) : titlePath(card.id);
 }
 
 /**

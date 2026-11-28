@@ -223,6 +223,21 @@ fn operate(operation: &Operation, row: Row) -> Option<String> {
             size_from_magnet(&evaluate(from, row)?).map(|size| size.to_string())
         }
         Operation::Year(from) => first_year(&evaluate(from, row)?).map(|year| year.to_string()),
+        Operation::Date { year, month, day } => {
+            let part = |expression: &Expression, most: u32| {
+                evaluate(expression, row)
+                    .and_then(|text| text.trim().parse::<u32>().ok())
+                    .filter(|number| (1..=most).contains(number))
+            };
+            let year = part(year, 9999)?;
+            let Some(month) = part(month, 12) else {
+                return Some(format!("{year:04}"));
+            };
+            Some(match part(day, 31) {
+                Some(day) => format!("{year:04}-{month:02}-{day:02}"),
+                None => format!("{year:04}-{month:02}"),
+            })
+        }
         Operation::Minutes(from) => {
             let text = evaluate(from, row)?;
             let start = text.find(|c: char| c.is_ascii_digit())?;
@@ -456,6 +471,29 @@ mod tests {
             Some("2008")
         );
         assert_eq!(eval(json!({ "minutes": "missing" }), &value), None);
+    }
+
+    #[test]
+    fn a_date_is_as_exact_as_its_parts_allow() {
+        let date = json!({ "date": { "year": "y", "month": "m", "day": "d" } });
+        let read = |value: Value| eval(date.clone(), &value);
+        assert_eq!(
+            read(json!({ "y": 2027, "m": 1, "d": 9 })).as_deref(),
+            Some("2027-01-09")
+        );
+        assert_eq!(
+            read(json!({ "y": 2027, "m": 10, "d": null })).as_deref(),
+            Some("2027-10")
+        );
+        assert_eq!(
+            read(json!({ "y": 2027, "m": null, "d": 9 })).as_deref(),
+            Some("2027")
+        );
+        assert_eq!(
+            read(json!({ "y": 2027, "m": 13, "d": 9 })).as_deref(),
+            Some("2027")
+        );
+        assert_eq!(read(json!({ "y": null, "m": 1, "d": 9 })), None);
     }
 
     #[test]

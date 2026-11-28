@@ -64,6 +64,59 @@ pub fn parse_date_ms(text: &str) -> Option<i64> {
     Some(days_from_civil(year, month, day) * DAY_MS)
 }
 
+/// Whether a "YYYY-MM-DD" air date is a real date on a day after today (in UTC). A missing, odd or invalid date is not in the future.
+pub fn is_future_date(text: &str, now_ms: i64) -> bool {
+    let Some(date_ms) = parse_date_ms(text) else {
+        return false;
+    };
+    // Reject only real Gregorian dates: `parse_date_ms` normalises invalid days.
+    let (year, month, day) = civil_from_ms(date_ms);
+    text.starts_with(&format!("{year:04}-{month:02}-{day:02}"))
+        && date_ms.div_euclid(DAY_MS) > now_ms.div_euclid(DAY_MS)
+}
+
+/// Whether a release date ("YYYY-MM-DD", "YYYY-MM" or "YYYY") is after today (in UTC). A month or a
+/// year is in the future only when all of it is. Any other text is not in the future.
+pub fn is_upcoming(date: &str, now_ms: i64) -> bool {
+    let (year, month, day) = civil_from_ms(now_ms);
+    let today = format!("{year:04}-{month:02}-{day:02}");
+    let shaped = matches!(date.len(), 4 | 7 | 10)
+        && date
+            .bytes()
+            .zip(today.bytes())
+            .all(|(have, want)| have.is_ascii_digit() == want.is_ascii_digit());
+    shaped && date > &today[..date.len()]
+}
+
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// A release date in words: "27 January 2027", "January 2027" or "2027". Other text comes back as it is.
+pub fn long_date(date: &str) -> String {
+    let mut parts = date.split('-').map(|part| part.parse::<usize>().ok());
+    let (year, month, day) = (parts.next(), parts.next(), parts.next());
+    let month = month
+        .flatten()
+        .and_then(|month| MONTHS.get(month.wrapping_sub(1)));
+    match (year.flatten(), month, day.flatten()) {
+        (Some(year), Some(month), Some(day)) => format!("{day} {month} {year}"),
+        (Some(year), Some(month), None) => format!("{month} {year}"),
+        _ => date.to_string(),
+    }
+}
+
 /// The first run of four digits in a text, as a year: "2008", "2008–2013" and "(2019)" all give
 /// their first year.
 pub fn first_year(text: &str) -> Option<i64> {
@@ -85,6 +138,38 @@ mod tests {
         assert_eq!(parse_date_ms("2026-10-13T05:00:00.000Z"), Some(ms));
         assert_eq!(parse_date_ms("2026-13-01"), None);
         assert_eq!(parse_date_ms("soon"), None);
+    }
+
+    #[test]
+    fn only_a_real_date_after_today_is_in_the_future() {
+        let today = parse_date_ms("2026-10-13").unwrap() + 3_600_000;
+        assert!(is_future_date("2026-10-14", today));
+        assert!(!is_future_date("2026-10-13", today));
+        assert!(!is_future_date("2025-01-01", today));
+        assert!(!is_future_date("2026-02-31", today));
+        assert!(!is_future_date("soon", today));
+    }
+
+    #[test]
+    fn a_release_date_is_upcoming_only_when_all_of_it_is_after_today() {
+        let today = parse_date_ms("2026-11-28").unwrap() + 3_600_000;
+        assert!(is_upcoming("2026-11-29", today));
+        assert!(!is_upcoming("2026-11-28", today));
+        assert!(!is_upcoming("2026-11-20", today));
+        assert!(is_upcoming("2026-12", today));
+        assert!(!is_upcoming("2026-11", today));
+        assert!(is_upcoming("2027", today));
+        assert!(!is_upcoming("2026", today));
+        assert!(!is_upcoming("soon", today));
+        assert!(!is_upcoming("2027-01-27T00:00:00.000Z", today));
+    }
+
+    #[test]
+    fn a_release_date_reads_in_words() {
+        assert_eq!(long_date("2027-01-09"), "9 January 2027");
+        assert_eq!(long_date("2027-10"), "October 2027");
+        assert_eq!(long_date("2027"), "2027");
+        assert_eq!(long_date("soon"), "soon");
     }
 
     #[test]

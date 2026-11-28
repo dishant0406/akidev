@@ -997,3 +997,80 @@ This replaces how the TV used new definitions before (it swapped them in while t
 The TorBox key field on the TV shows dots. A mistyped key was hard to find, so an eye button now sits beside the field. OK on it shows the key as text, and OK again hides it. It is a separate button, not part of the field, because the field keeps the Left and Right keys for its cursor while you edit. To reach the eye, leave the field first (Down, then Up, then Right).
 
 The notices (new sources, a new app version) moved below the result of the key check. Before, their empty slots left a big hole between the text and the field, and pushed the result line off the bottom of the screen, where it was cut. Now nothing sits between the text and the field, and a notice that appears later only moves things below it. The icons "eye" and "eye-off" come from Solar through `content/manga/fetch-icons.py --tv`.
+
+## TV: View all, filters, episodes that are not out yet, and a calmer focus (2026-11-27)
+
+Five things the owner saw on the TV, fixed together because they share the same few files.
+
+**Episodes: out or not.** Before, every episode looked playable, even ones that had not aired, and play failed for them. Now each episode has a `released` flag, worked out in Rust (`detail` in `crates/tv-ffi/src/lib.rs`), so the cards, the main button and the player's Next button all agree. The rule: an episode is out unless its air date is a real date after today, or (for an anime still airing) its number is the next one to air or later. A card that is not out is dimmed, shows a clock with its date ("4 DEC", or "SOON" when the date is not known), and OK does nothing. The header says "13 of 25 out" when some are not. The main button and Next skip them, and never pick them. The date rule moved from `stream.rs` into `calendar::is_future_date`, so the card and `find_stream` cannot disagree. `stream.rs` also refuses an anime episode from the next one on ("This episode has not aired yet.").
+- **Why a new field on `Media`.** AniList gives the total episodes and, separately, the next episode to air. The old mapping folded them into one number, so the app could not tell which were out. `Media.next_episode` carries the second one (`#[serde(default)]`, so the cache on disk and old documents still read). It is mapped from `nextAiringEpisode.episode` by a new `next_episode` line in the anilist card of `sources.json`. An anime with no total (only the next episode known) still lists just the episodes that are out, as before, so nothing shows as "not out" there.
+- **Publish order.** The new line must be in the published `sources.json` before the TV can use it from the network. An app with the old document just shows every episode as out, as before. Nothing breaks. Old apps ignore the unknown line (the structs do not reject unknown fields).
+- **Alternative left out:** listing only the aired episodes for every anime. It hides the future episodes instead of marking them, and changes the count shown on every card.
+
+**Back from the player lands where you were.** The title page used to leave the screen when the player opened, so its episode row started again at the beginning and the main button took the focus. Like the home rows, the app now keeps a `DetailState` for each title page that is on the way back (`DetailMemory` in `DetailScreen.kt`): the episodes' scroll, the season, and the episode the remote was on. The last answer for the title is kept too, so the row has its items at once and keeps its scroll while the page asks again. When you leave the title page for good, its memory is dropped, so the next visit starts at the top.
+
+**The focus ring is not cut off.** The focused card grows 5 %, and the row clips what grows past its edge. The row scrolled the least that showed the card, which left the card flush with the edge, so its ring was cut. `LeastToShow` now keeps a 12 dp margin (`rememberLeastToShow`), and the search grid and the season buttons got room at their edges. Checked on the TV: the card at the right edge of a row shows its whole ring. Before this it was cut.
+
+**View all, and Filters.** The last card of every home row is "View all". It opens `BrowseScreen.kt`: the heading, the sort buttons (Popular, Trending, ...), a genre row, a grid of six, and a "Show more" button under the last title, like the website. It starts with the row's own kind, sort and genre. A "Filters" button next to the top bar (Right from Settings) opens the same screen for the current tab, or for all three catalogues on Home. Several decisions:
+- **One screen for both**, and the sorts and genres come from the definitions (`browse_options`), as on the website, so nothing is written in Kotlin.
+- **All catalogues together** is the same merge the server does (`interleave` over each kind's page), in `browse` in `lib.rs`.
+- **The screen keeps its own state** (`BrowseState`, inside the `Screen.Browse` on the stack): the filters, the pages loaded, the scroll and the title the remote was on. Back from a title lands on the same poster. A title that comes on two pages shows once (the order shifts between asks, and a repeated key would crash the list).
+- **"Show more" stays in place while the next page loads** (its label says "Loading"). First it was swapped for a spinner, and the remote lost its focus and jumped to the sort row.
+- **A filter change keeps the remote on the button** you pressed. Only the first visit puts the remote on the first poster.
+- **Bug found while testing:** `titles.first()` on an empty list crashed the app when a genre was picked, because the grid's list can run before the screen switches to its loading view. It uses `firstOrNull` now.
+- New Solar icons for this: "filters" and "more" (`content/manga/fetch-icons.py --tv`).
+
+## TV: Browse uses the same bar as the rest of the app (2026-11-28)
+
+The first Browse screen had two rows of text buttons (the orders, then the genres) and a square Filters button next to the top bar. It worked, but it looked like a different app. The owner said so. So it was drawn again.
+
+**What was chosen.** Browse now has the same glass pill at the top as Home. Basically it is `TopBar` used a second time (`TopBar.kt`), with other items: one icon for each way to order the list (fire for Popular, a small chart for Trending, a star for Top rated, a calendar for Newest, the sort arrows for A-Z), then one Genre icon. The chosen order has the filled icon and the highlight glides to it, as a tab does. The name floats under the icon the remote is on.
+
+**Why icons for the orders but a panel for the genres.** There are five orders and they are fixed, so each can have an icon (`sortIcon`, with a plain list icon for one a plugin brings). There are about twenty genres and they come from the definitions, so they cannot have icons. The Genre icon opens a panel at the right. It is the panel the player uses for audio and subtitles (`PanelLine` in `TracksPanel.kt`): a list, with an amber tick on the chosen one. An amber dot on the Genre icon says a genre is chosen, because amber is for state.
+
+**The words stay.** Icons alone do not say what is chosen when the remote is down in the grid. So the right end of the band says it in two small lines, for example "TOP RATED" and "FANTASY". The left end says the catalogue ("Series", or "Browse" for all of them). The heading no longer copies the row name: "Trending Anime" was wrong the moment you picked Popular.
+
+**Show more looks like the website.** Under the last title there is a hairline with "30 SHOWN" in the middle, then the "Show more" button, centred, with a down arrow. The website and the desktop app draw it the same way (`design/shots/web-load-more-after.jpg`). It is still a button you press, not an endless list, because that is what the owner asked for.
+
+**Browse is in the main bar.** The square Filters button is gone. The main pill has a Browse icon (a grid) between the tabs and Search. It opens the list of the tab that is shown. From Home, Search or Settings it opens all catalogues. It does not become the "shown" tab: it opens a screen on top, and Back returns.
+
+**Alternatives rejected.**
+- A left rail of filters (Plex does this). We have no rail anywhere, and the design plan chose the top pill.
+- Genre chips in a second row. That was the first build, and it is what looked bad: a long row of text that scrolls sideways.
+- A poster-size "Show more" card as the last cell. It would look like the "View all" card, but the owner asked for the website's pattern.
+
+**What it cost.** `TopBar` got three small options: `badge` (which item has the dot), `actions` (items that open something and are not "shown"), and `requesters` (so a screen can give the focus back to an item). `Heading` and `Line` of the player panel are now `PanelHeading` and `PanelLine`, shared.
+
+**References looked at (Dribbble, Behance, Google Images, 2026-11-28).** tabii TV (Behance): text tabs and a list at the side, nothing else on the control line. Clipsee Android TV case study (Behance): a side panel with one tick for a single choice, and tabs in place of filter chips. Plex library view (Plex Support): one control line over the grid, and a list with ticks for sort and filter. "Movie Streaming App, Dark Mode Filter UI" (Dribbble, phone): genres as a group of their own, apart from sort. Entertainment Dashboard by Terabit (Dribbble): the filter is one icon beside the tabs. Vision Stream Smart TV (Dribbble): a single top line of navigation over the rows.
+
+**Also fixed.** On a title page the season buttons (S1, S2...) were cut at the top and the bottom. The row was 48 dp and the buttons need 56 dp since they got room to grow. It is 56 dp now.
+
+**The panel no longer pulls the remote back up (2026-11-28).** In the player panel (audio, subtitles, source), going down the list sometimes threw the focus back to the top. The reason: the first line asked for the focus every time it was made, and a lazy list makes a line again each time it scrolls back into view. Now the panel remembers that the focus was placed (`placed` in `TracksPanel`), and the first line asks only once, when the panel opens. The genre panel of Browse has the same rule. Checked in the player on the TV: 12 lines down, 8 up and 5 down again, and the focus stayed on the line the remote was on.
+
+
+## Release dates and "Coming soon" (2026-11-28)
+
+A viewer opened a film that was in the catalogue and got "no source". The app could not say why, because a card only had a year. Now every card has a real date, and the app uses it in three places.
+
+**Chosen.** `Media` has a new field, `release_date` (`crates/core/src/model.rs`). It is text: `2027-01-09`, `2027-10` or `2027`, as exact as the catalogue is. Each provider card in `sources.json` (akidev-sources repo, version 52) maps it. AniList gives the date in three parts, so there is a new expression, `date`, that joins them (`Operation::Date` in `crates/core/src/definition.rs`, worked out in `crates/core/src/expression.rs`).
+
+- **Why text and not a number.** Half of the upcoming anime on AniList have only a year, or a year and a month. A number would force us to invent a day. Text keeps what the catalogue really knows.
+- **Why `date` gives a shorter date instead of nothing.** With no day it gives `2027-10`, with no month `2027`. "Coming October 2027" is more useful than no date at all.
+
+**One rule for "not out yet", in core.** `Media::coming_soon(now)` returns the words to show, or `None` when the title is out. A title is not out when its `release_date` is after today (`calendar::is_upcoming`: a month or a year counts only when all of it is in the future), or when its status is `NOT_YET_RELEASED` (then the words are "Coming soon", because we have no date to trust). A full date that has passed always means out, even with that status: a stale status must not block a title on its release day. All three apps ask this one function, so they cannot disagree.
+
+- The server sends the words as `coming_soon` on every card (`apps/server/src/dto.rs`), next to the raw `release_date`. The website only draws them. **Why:** the website would otherwise need its own date maths, and the server and the browser could land on different days.
+- The TV bridge does the same on `Title` (`crates/tv-ffi/src/lib.rs`).
+- The desktop app calls `coming_soon` itself, because it has core inside it.
+- **Rejected:** each app comparing dates on its own. Three copies of one rule, in three languages.
+
+**What a title that is not out does.** Play is refused in core (`validate_request_at` in `crates/core/src/stream.rs`): "This title is not out yet. Coming 27 January 2027." So no app can start a search for it, even from an old link. On the screens: the card's facts line shows the words in place of the year, Play is replaced by the words, a film's poster opens the title page and not the player, and the episode list is hidden (web, desktop) or dimmed (TV, where `released` is false for every episode).
+
+**The film that started this.** It was not "coming soon". It opened in Japanese cinemas eight days before, so its date was in the past, and no copy exists until the home release. No catalogue we use knows a home release date. So there is a second, softer rule: `Media::recently_out(now)` is true for 120 days after a full release date. When nothing plays for such a title, `Plan::with_too_new_note` adds one sentence to the reason: "… This title came out on 20 November 2026, so it can be too new to have a source." It is added when no release is listed, and also when releases were found but none played. The second case is the real one for this film: the search finds two torrents of the game with the same name.
+
+- **Why 120 days.** A film usually reaches home release two to four months after cinemas. It is a guess, in one constant.
+- **Trade-off.** The message is only a hint. An old film with a wrong date, or a new series that really has no source, gets the same words.
+- **Trade-off.** Kitsu dates are in UTC and can be one day early. Kitsu is only the mapper card, so no screen shows its date.
+- **Trade-off.** Days are counted in UTC, like the episode air dates. Near midnight a title can turn "out" a few hours early or late for a viewer.
+- **Trade-off.** The website gets the words from the server, and the answers are cached: a title page for 15 minutes and a list for 5 minutes, and each can be served stale for one more hour while it refreshes. So on release day the page can say "Coming" for a short time after midnight UTC. Play itself is never stale: core checks the date on each request.
+- **Not done.** The catalogue lists still hide most upcoming titles (`drop` rules with `after_today` in `sources.json`, and the AniList `recent` sort). An upcoming title is found by search, by a link, or in a related row.

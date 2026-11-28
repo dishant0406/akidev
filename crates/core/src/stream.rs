@@ -500,7 +500,7 @@ where
             return Err(if attempted.is_empty() {
                 plan.no_sources_reason().into()
             } else {
-                "Found releases, but none could be played.".into()
+                plan.with_too_new_note("Found releases, but none could be played.")
             });
         }
         tokio::select! {
@@ -620,6 +620,9 @@ fn validate_request_at(id: &str, detail: &Detail, now_ms: i64) -> Result<MediaId
     if parsed.kind != detail.media.kind || parsed.key() != detail.media.id {
         return Err("Unknown title.".into());
     }
+    if let Some(coming) = detail.media.coming_soon(now_ms) {
+        return Err(format!("This title is not out yet. {coming}."));
+    }
     if parsed.kind.shape() == Shape::Movie {
         return Ok(parsed);
     }
@@ -652,18 +655,13 @@ fn validate_request_at(id: &str, detail: &Detail, now_ms: i64) -> Result<MediaId
     {
         return Err("This episode does not exist.".into());
     }
-    if let Some(date) = episode.and_then(|episode| episode.airdate.as_deref())
-        && let Some(airdate) = crate::calendar::parse_date_ms(date)
+    if episode
+        .and_then(|episode| episode.airdate.as_deref())
+        .is_some_and(|date| crate::calendar::is_future_date(date, now_ms))
+        // An airing anime: the episodes from the next one on are not out yet.
+        || detail.media.next_episode.is_some_and(|next| number >= next)
     {
-        // Reject only real Gregorian dates: the helper normalises invalid days.
-        let (year, month, day) = crate::calendar::civil_from_ms(airdate);
-        let valid_date = format!("{year:04}-{month:02}-{day:02}");
-        if date.starts_with(&valid_date)
-            && airdate.div_euclid(crate::calendar::DAY_MS)
-                > now_ms.div_euclid(crate::calendar::DAY_MS)
-        {
-            return Err("This episode has not aired yet.".into());
-        }
+        return Err("This episode has not aired yet.".into());
     }
     Ok(parsed)
 }
@@ -1344,22 +1342,39 @@ impl Plan {
             .collect()
     }
 
-    pub fn no_sources_reason(&self) -> &'static str {
+    pub fn no_sources_reason(&self) -> String {
         if !self.source_reports.is_empty()
             && self
                 .source_reports
                 .iter()
                 .all(|report| report.answered == 0)
         {
-            "Source providers could not be reached. Try again shortly."
+            "Source providers could not be reached. Try again shortly.".into()
         } else if self
             .source_reports
             .iter()
             .any(|report| report.failed > 0 || report.pending > 0)
         {
-            "No matching source found in the providers that answered. Some providers are unavailable; try again shortly."
+            "No matching source found in the providers that answered. Some providers are unavailable; try again shortly.".into()
         } else {
-            "No matching source is currently listed for this episode or film."
+            self.with_too_new_note(
+                "No matching source is currently listed for this episode or film.",
+            )
+        }
+    }
+
+    /// A reason that nothing played, with a note added for a title that came out in the last 120
+    /// days: it can be too new to have a real source (a film still in cinemas). A reason that
+    /// already has the note is left as it is.
+    pub fn with_too_new_note(&self, reason: &str) -> String {
+        let Some(date) = self.detail.media.recently_out(crate::calendar::now_ms()) else {
+            return reason.to_string();
+        };
+        let note = format!("This title came out on {date}, so it can be too new to have a source.");
+        if reason.ends_with(&note) {
+            reason.to_string()
+        } else {
+            format!("{reason} {note}")
         }
     }
 
@@ -2401,6 +2416,8 @@ mod tests {
                     popularity: 0,
                     genres: Vec::new(),
                     is_adult: false,
+                    next_episode: None,
+                    release_date: None,
                 },
                 studios: Vec::new(),
                 trailer: None,
@@ -2503,6 +2520,81 @@ mod tests {
         detail.media.kind = Kind::Movie;
         detail.media.id = "movie-1".into();
         assert!(Streamer::validate_request("movie-1", &detail).is_ok());
+    }
+
+    #[test]
+    fn a_title_that_is_not_out_yet_cannot_be_played() {
+        let mut detail = plan_with(Vec::new(), Vec::new()).detail;
+        let today = crate::calendar::parse_date_ms("2026-11-28").unwrap();
+        detail.media.kind = Kind::Movie;
+        detail.media.id = "movie-1".into();
+        for (date, status, error) in [
+            (
+                Some("2027-01-27"),
+                None,
+                Some("This title is not out yet. Coming 27 January 2027."),
+            ),
+            (
+                Some("2027"),
+                None,
+                Some("This title is not out yet. Coming 2027."),
+            ),
+            (
+                Some("2026"),
+                Some("NOT_YET_RELEASED"),
+                Some("This title is not out yet. Coming soon."),
+            ),
+            (
+                None,
+                Some("NOT_YET_RELEASED"),
+                Some("This title is not out yet. Coming soon."),
+            ),
+            (Some("2026-11-20"), Some("FINISHED"), None),
+            (Some("2026-11-20"), Some("NOT_YET_RELEASED"), None),
+            (Some("2026"), None, None),
+            (None, None, None),
+        ] {
+            detail.media.release_date = date.map(str::to_string);
+            detail.media.status = status.map(str::to_string);
+            assert_eq!(
+                validate_request_at("movie-1", &detail, today)
+                    .err()
+                    .as_deref(),
+                error,
+                "{date:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_too_new_note_is_added_once_and_only_to_a_new_title() {
+        let mut plan = plan_with(Vec::new(), Vec::new());
+        assert_eq!(plan.with_too_new_note("Nothing played."), "Nothing played.");
+        let (year, month, day) = crate::calendar::civil_from_ms(crate::calendar::now_ms());
+        plan.detail.media.release_date = Some(format!("{year:04}-{month:02}-{day:02}"));
+        let noted = plan.with_too_new_note("Nothing played.");
+        assert!(
+            noted.starts_with("Nothing played. This title came out on "),
+            "{noted}"
+        );
+        assert_eq!(plan.with_too_new_note(&noted), noted);
+    }
+
+    #[test]
+    fn only_a_title_out_in_the_last_120_days_is_too_new_for_a_source() {
+        let mut media = plan_with(Vec::new(), Vec::new()).detail.media;
+        let today = crate::calendar::parse_date_ms("2026-11-28").unwrap();
+        for (date, recent) in [
+            ("2026-11-20", Some("20 November 2026")),
+            ("2026-11-28", Some("28 November 2026")),
+            ("2026-07-01", None),
+            ("2026-11-29", None),
+            ("2026-11", None),
+            ("2026", None),
+        ] {
+            media.release_date = Some(date.into());
+            assert_eq!(media.recently_out(today).as_deref(), recent, "{date}");
+        }
     }
 
     #[test]

@@ -812,10 +812,13 @@ impl Player {
         }
         // The last reason is from the source that got furthest: a source is only asked when the
         // ones before it declined.
+        let reason = reasons.pop();
         Outcome::Unavailable(
-            reasons
-                .pop()
-                .unwrap_or_else(|| "No stream source could serve this episode.".into()),
+            search.plan.with_too_new_note(
+                reason
+                    .as_deref()
+                    .unwrap_or("No stream source could serve this episode."),
+            ),
         )
     }
 
@@ -1102,6 +1105,8 @@ mod tests {
             popularity: 0,
             genres: vec![],
             is_adult: false,
+            next_episode: None,
+            release_date: None,
         };
         ReleasePlan {
             id: "series-1-s1e1".into(),

@@ -90,9 +90,10 @@ impl Render for Hero {
             .iter()
             .find(|entry| entry.media.id == media.id)
             .map(|entry| entry.episode_id.clone());
+        let coming = media.coming_soon(akidev_core::calendar::now_ms());
         let play_route = match resume {
             Some(id) => Route::Watch { id },
-            None if media.kind.shape() == Shape::Movie => Route::Watch {
+            None if media.kind.shape() == Shape::Movie && coming.is_none() => Route::Watch {
                 id: media.id.clone(),
             },
             None => Route::Title {
@@ -103,7 +104,7 @@ impl Render for Hero {
             id: media.id.clone(),
         };
         let facts = [
-            media.year.map(|y| y.to_string()),
+            coming.or_else(|| media.year.map(|y| y.to_string())),
             media
                 .format
                 .as_deref()

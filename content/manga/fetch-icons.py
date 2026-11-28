@@ -29,13 +29,14 @@ ICONS = {
     "headphones": "headphones-round", "qr": "qr-code", "lock": "lock",
 }
 # The Android TV app (apps/tv-android) draws these. Names above are reused; the ones here exist only for the TV.
-TV_ONLY = {"film": "clapperboard", "tv": "tv", "info": "info-circle", "subtitles": "subtitles", "volume": "volume-loud", "eye": "eye", "eye-off": "eye-closed"}
+TV_ONLY = {"film": "clapperboard", "tv": "tv", "info": "info-circle", "subtitles": "subtitles", "volume": "volume-loud", "eye": "eye", "eye-off": "eye-closed", "filters": "filter", "more": "alt-arrow-right", "fire": "fire", "star": "star", "trend": "graph-up", "calendar": "calendar", "grid": "widget"}
 TV_USES = [
     "home", "film", "tv", "sparkles", "search", "settings", "play", "pause", "info", "subtitles", "volume", "next", "check", "close",
-    "warning", "refresh", "list", "back", "trash", "lock", "clock", "server", "download", "eye", "eye-off",
+    "warning", "refresh", "list", "back", "trash", "lock", "clock", "server", "download", "eye", "eye-off", "filters", "more",
+    "fire", "star", "trend", "calendar", "order", "grid", "down",
 ]
 # Drawn filled on the TV: a tab that is shown, the play button, and the marks that say something is done or wrong.
-TV_SOLID = {"home", "film", "tv", "sparkles", "search", "settings", "play", "check", "warning"}
+TV_SOLID = {"home", "film", "tv", "sparkles", "search", "settings", "play", "check", "warning", "fire", "star", "trend", "calendar", "order"}
 STYLES = {"": "linear", "-solid": "bold"}
 # Only these are drawn filled somewhere (a selected tab, a saved bookmark, a read tick, ...); the rest get no bold copy, which
 # keeps the app smaller. Add a name here when the app starts to use "<name>-solid".

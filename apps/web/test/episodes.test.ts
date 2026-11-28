@@ -24,6 +24,8 @@ function media(overrides: Partial<Media>): Media {
     popularity: 0,
     genres: [],
     is_adult: false,
+    release_date: null,
+    coming_soon: null,
     ...overrides,
   };
 }

@@ -2531,6 +2531,8 @@ mod tests {
                     popularity: 0,
                     genres: Vec::new(),
                     is_adult: false,
+                    next_episode: None,
+                    release_date: None,
                 },
                 studios: Vec::new(),
                 trailer: None,

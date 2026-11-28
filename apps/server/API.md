@@ -267,7 +267,8 @@ connections cannot join; everything else works. The server says so in its log wh
 ```json
 { "id": "anime-16498", "kind": "anime", "title": "Attack on Titan",
   "poster": "https://...", "banner": "https://...", "description": "...",
-  "format": "TV", "year": 2013, "episodes": 25, "runtime_minutes": 24,
+  "format": "TV", "release_date": "2013-04-07", "coming_soon": null,
+  "year": 2013, "episodes": 25, "runtime_minutes": 24,
   "status": "FINISHED", "score": 85, "popularity": 123456,
   "genres": ["Action", "Drama"], "is_adult": false }
 ```
@@ -275,3 +276,9 @@ connections cannot join; everything else works. The server says so in its log wh
 `kind` is `anime`, `series` or `movie`. `score` is 0 to 100. Every field except `id`, `kind`,
 `title`, `genres`, `popularity` and `is_adult` may be `null`. `status` is a provider's own word
 (`FINISHED`, `RELEASING`, `Ended`, ...), so treat it as display text.
+
+`release_date` is when the title first came out, as exact as the catalogue is: `YYYY-MM-DD`,
+`YYYY-MM` or `YYYY`. `coming_soon` is `null` for a title that is out. For a title that is not out
+yet it holds the words to show, such as `Coming 27 January 2027` or `Coming soon`. Such a title
+cannot be played: `POST /v1/play` answers `available: false` with the reason
+`This title is not out yet. Coming 27 January 2027.`
