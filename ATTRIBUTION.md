@@ -53,7 +53,17 @@ Anime metadata comes from **AniList** (https://anilist.co) by default, and from
 
 ## Fonts
 
-Both apps set their text in two open fonts, each under the SIL Open Font License 1.1: **Hanken Grotesk**
-(Hanken Design Co.) for the interface and **Shippori Mincho** (FONTWORKS Inc.) for titles. The
-copies in the repository are subsets (Latin letters, punctuation and 秋 for Shippori Mincho) made
-with fonttools, in `apps/web/src/assets/fonts/` and `apps/desktop/assets/fonts/`.
+The apps set their text in two open fonts, each under the SIL Open Font License 1.1 (the license
+texts are in `licenses/`): **Allo** (Josh Puckett, built on Inter by the Inter Project Authors) for the
+interface and **Katagami Serif** (the Katagami Project Authors, version 1.5, also built on Inter) for
+titles. The copies in the repository are subsets made with fonttools: Latin letters, Latin-1, the few
+Latin Extended-A letters that real titles use (the macrons of romaji, œ, š, ž, ł), common punctuation
+and the star of the score, with the layout features kerning, ligatures and tabular numbers. The website
+has one variable file for each (weights 400 to 600, Allo's optical size fixed at 14) in
+`apps/web/src/assets/fonts/`. The desktop app (`apps/desktop/assets/fonts/`) and the TV app
+(`apps/tv-android/app/src/main/res/font/`) have static files: Allo at 400, 500 and 600, Katagami Serif
+at 400 and 600. Each static file has its own name, so a text system can tell the weights apart.
+
+To make them again, take the variable fonts from the Allo and Katagami downloads, subset them with
+`fontTools.subset` to the characters above (no hinting), cut the axes with
+`fontTools.varLib.instancer`, and write the woff2 (website) or set the weight and the names (static).

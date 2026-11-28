@@ -21,13 +21,13 @@ object Ink {
 }
 
 private val Title = FontFamily(
-    Font(R.font.shippori_regular, FontWeight.Normal),
-    Font(R.font.shippori_semibold, FontWeight.SemiBold),
+    Font(R.font.katagami_serif_regular, FontWeight.Normal),
+    Font(R.font.katagami_serif_semibold, FontWeight.SemiBold),
 )
 private val Ui = FontFamily(
-    Font(R.font.hanken_regular, FontWeight.Normal),
-    Font(R.font.hanken_medium, FontWeight.Medium),
-    Font(R.font.hanken_semibold, FontWeight.SemiBold),
+    Font(R.font.allo_regular, FontWeight.Normal),
+    Font(R.font.allo_medium, FontWeight.Medium),
+    Font(R.font.allo_semibold, FontWeight.SemiBold),
 )
 
 /** Sizes are for a TV seen from a sofa: nothing below 16 sp. Every style has a fixed line height, so a line takes the same room whatever it says. */

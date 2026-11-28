@@ -49,10 +49,10 @@ pub const TILE_HEIGHT: f32 = 264.;
 pub const RANK_WIDTH: f32 = 80.;
 pub const RANK_SIZE: f32 = 72.;
 
-/// Font families. The interface face is the theme's own (`font.family` in `assets/theme.json`);
-/// titles use the mincho, in regular or semibold.
+/// Font families. The interface face is the theme's own (`font.family` in `assets/theme.json`, Allo);
+/// titles use Katagami Serif, in regular or semibold.
 pub mod font {
-    pub const TITLE: &str = "Shippori Mincho";
+    pub const TITLE: &str = "Katagami Serif";
 }
 
 /// One corner radius scale, in pixels: badges, buttons, tiles and panels, popups.

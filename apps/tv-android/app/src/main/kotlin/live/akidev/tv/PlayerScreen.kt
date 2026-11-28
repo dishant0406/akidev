@@ -301,7 +301,7 @@ private fun Playing(
                     // Our own caption look, not the TV's setting or the file's styles: white with a black edge, in the app's font.
                     subtitleView?.setApplyEmbeddedStyles(false)
                     subtitleView?.setApplyEmbeddedFontSizes(false)
-                    subtitleView?.setStyle(CaptionStyleCompat(android.graphics.Color.WHITE, android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK, ResourcesCompat.getFont(it, R.font.hanken_medium)))
+                    subtitleView?.setStyle(CaptionStyleCompat(android.graphics.Color.WHITE, android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_OUTLINE, android.graphics.Color.BLACK, ResourcesCompat.getFont(it, R.font.allo_medium)))
                     subtitleView?.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 22f)
                 }
             },

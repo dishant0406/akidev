@@ -1131,3 +1131,31 @@ On the TV, moving back to the first card of a Top 10 row scrolled the row until 
 **How it was found and checked.** The user saw it on the TV. On the emulator at the TV's size, the same keys (right four times, left four times) cut the "1" on the old build and show it in full on the fixed one. My first test after the Top 10 change missed it, because it went back only to card 5 and 6, never to card 1.
 
 **Desktop: the number is as tall as the poster (2026-11-28).** The first desktop version drew the Top 10 number at the foot of the whole tile, so it sat beside the name under the poster, and the name touched it. The number box is now exactly as tall as the poster (`TILE_HEIGHT`), so the number sits level with the foot of the poster. The website does the same. Checked by running the desktop app and looking at the window: the first time I saw the desktop screens.
+
+## New fonts: Allo for the interface, Katagami Serif for titles (2026-11-28)
+
+The owner gave two font families to use everywhere: **Allo** first and **Katagami** second. All three apps (website, desktop, TV) now use them. They replace Hanken Grotesk and Shippori Mincho. The manga apps are a separate product and are not changed.
+
+**Chosen.** Allo is the interface face, the role Hanken Grotesk had. Katagami Serif is the title face, the role Shippori Mincho had. Katagami is a family (Sans, Serif, Text, Round, Mono), and I picked Serif because the titles were already a serif, the design plan wants a display serif for titles only, and a serif next to Allo gives the contrast the plan asks for. If a different Katagami cut is wanted, it is one file and one name in each app.
+
+**Made small.** The source files are 350 KB (Allo) and 7 MB each (Katagami, because it carries Japanese). So each app keeps a subset: Latin letters, Latin-1, the handful of Latin Extended-A letters real titles use (the macrons of romaji like Tōkyō, œ, š, ž, ł), common punctuation and the score star. Kerning, ligatures and tabular numbers stay. Hinting, the contextual alternates meant for code-style text, and the combining-mark rules are dropped.
+
+- **Website:** one variable woff2 for each, weights 400 to 600 only (the UI uses 400, 500 and 600, never bold or italic). Allo's optical size is fixed at 14. Together 55 KB, against 98 KB before (`allo-wght.woff2` 29.9 KB, `katagami-serif-wght.woff2` 25.4 KB). One title file replaces two, and the title font now has a serif fallback sized to match, so a title does not jump when the font arrives.
+- **Desktop and TV:** static files, Allo at 400, 500 and 600 and Katagami Serif at 400 and 600, 205 KB together against 313 KB before. Optical size is fixed at 14, so the three apps draw the same letters.
+
+**A bug the new files fixed.** The old desktop files for Medium and SemiBold all carried the name "Hanken Grotesk Regular". The text system skips a font whose internal name it already has, so only the Regular file was ever used, and the weights the code asked for were not drawn. Each new static file has its own name (RIBBI naming: the family in name 16, the weight in 17, a unique PostScript name). On the desktop the weights now show: the active tab and the section titles are really semibold. The text looks a little bolder than before, because it is what the code always asked for.
+
+**Rejected.**
+
+- *Katagami Sans or Text for titles.* It would put two sans faces side by side.
+- *One variable file in the desktop and TV apps.* Variable fonts need extra handling in the desktop text system and in Compose, and the static files are smaller than the variable one for three weights.
+- *Keeping all of Latin Extended-A.* It costs about 12 KB per file for letters almost no title uses. Other letters fall back to the system font, as they did before.
+- *Keeping the 秋 mark in the title font.* The mark is only mentioned in the design plan, no screen draws it, and Katagami Serif has no 秋.
+
+**Trade-offs.**
+
+- Allo's outlines have twice the points of Hanken's, so Allo is the heavier of the two (about 42 KB a weight against 31 KB).
+- Characters outside the subset (Polish ą, Czech č, Turkish ş, Vietnamese, Japanese) fall back to the system font, as before. Allo covers more of them, so a fuller subset is one change to the build.
+- Katagami's number shapes look like plain lining numbers. The big Top 10 numbers are a little plainer than they were.
+- On the TV every line sits about 12 px higher than before, because the new fonts have different line metrics. Layout is stable and nothing is cut off.
+- The license (SIL OFL 1.1) texts are in `licenses/`, and `ATTRIBUTION.md` says how to make the subsets again.
