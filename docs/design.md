@@ -1121,3 +1121,11 @@ Release 1.0.3 made the TV Settings page scroll, so that the update row could not
 The title page of the TV already said "Coming 9 January 2027" in place of Play. The facts line of the home hero still showed the year, so the website, the desktop app and the title page said one thing and the home hero another. Now `facts` in `HomeScreen.kt` uses `Title.comingSoon` in place of the year, as `detailFacts` does.
 
 **Why this changes little today.** The catalogues drop upcoming titles from their lists on purpose, so no home row holds one right now (I asked the local server for every row). The words show when a row does hold such a title, for example a "popular" row that gets one from AniList. A unit test (`LogicTest`) covers the three cases: a title that is out, one with a date, one with only "Coming soon".
+
+## The Top 10 number is never cut off on the TV (2026-11-28)
+
+On the TV, moving back to the first card of a Top 10 row scrolled the row until the poster was clear of the left edge, and the big number to its left went off the screen: only a sliver of the "1" showed. The cause: the scroll rule (`LeastToShow`) keeps the card that has the focus in view, and the number is not part of that card. The number is a separate text beside the poster.
+
+**Chosen.** `RankedCard` tells the scroll rule that the poster belongs with its number (`withItsNumber` in `Components.kt`: the area the poster asks to show starts at the number's edge). It is the same idea as `roomForName`, which makes room for the name under a poster. **Rejected:** a larger margin for every row (it changes plain rows too), and a number drawn inside the poster (it would cover the picture).
+
+**How it was found and checked.** The user saw it on the TV. On the emulator at the TV's size, the same keys (right four times, left four times) cut the "1" on the old build and show it in full on the fixed one. My first test after the Top 10 change missed it, because it went back only to card 5 and 6, never to card 1.

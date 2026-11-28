@@ -209,7 +209,7 @@ fun PosterCard(title: Title, showName: Boolean = true, autofocus: Boolean = fals
 /** A card of a "Top 10" row: its place as a big number, then the poster. */
 @Composable
 fun RankedCard(rank: Int, title: Title, autofocus: Boolean = false, onFocus: () -> Unit = {}, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.withItsNumber(), verticalAlignment = Alignment.Bottom) {
         // 10 has two digits, so it gets more room than 1 to 9.
         Text(rank.toString(), style = Type.Rank, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.width(if (rank < 10) 64.dp else 112.dp))
         PosterCard(title, showName = false, autofocus = autofocus, onFocus = onFocus, onClick = onClick)
@@ -394,6 +394,12 @@ fun rememberLeastToShow(): LeastToShow {
     val margin = with(LocalDensity.current) { 12.dp.toPx() }
     return remember(margin) { LeastToShow(margin) }
 }
+
+/** The number sits left of the poster, and only the poster takes the focus. So the poster asks to be scrolled into view from the number's edge, and the number is never cut off. */
+private fun Modifier.withItsNumber(): Modifier = bringIntoViewResponder(object : BringIntoViewResponder {
+    override fun calculateRectForParent(localRect: Rect) = localRect.copy(left = 0f)
+    override suspend fun bringChildIntoView(localRect: () -> Rect?) {}
+})
 
 /** The poster asks to be scrolled into view with 56 dp more below it, for the name that sits there (8 dp gap and a line of text). */
 @Composable
