@@ -1,8 +1,6 @@
 package live.akidev.tv
 
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -48,7 +46,7 @@ fun SettingsScreen(sourcesReady: Boolean, release: AppRelease?, onSaved: () -> U
     var status by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().background(Ink.Canvas).verticalScroll(rememberScrollState()).padding(start = 48.dp, end = 48.dp, bottom = 48.dp, top = TopBarHeight + 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().background(Ink.Canvas).padding(start = 48.dp, end = 48.dp, bottom = 48.dp, top = TopBarHeight + 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) { AkiIcon("settings-solid", size = 36.dp, tint = Ink.TextDim); Text("Settings", style = Type.Display) }
         // The notices (new sources, a new version of the app, a problem with an update) come first, right under the title, so they are never pushed off the bottom of the screen. A notice takes room only while it shows.
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1105,3 +1105,13 @@ The home page felt cluttered. It had ten rows, every row the same shape, and the
 - The row names are data, so a name change is a publish and not a release.
 - **Rollout order matters.** The server reads a new sources document without a deploy, but only a server that has this change cuts a ranked row to ten and sends `style`. So deploy the server first, and publish version 53 after. Publish first and the website shows "Top 10" over 24 plain tiles until the deploy ends.
 - An old desktop app or TV app (before this change) shows a ranked row as a plain row of up to 24 titles, because it does not know `style`. The website is not affected: the server cuts the row.
+
+## TV Settings has no scroll (2026-11-28)
+
+Release 1.0.3 made the TV Settings page scroll, so that the update row could not fall off the bottom. It broke the remote: pressing Down from the top bar did nothing, so "Download and install" could not be reached. A scroll container takes the focus search for itself, and the search stops at the container instead of going to the buttons inside. Home, Browse and Search have no such container around their buttons, which is why they worked.
+
+**Chosen.** The page does not scroll. The two notices stay at the top (right under the title), where they are always on the screen, and each takes room only while it shows. At 1920 by 1080 and 320 dpi (540 dp tall) the page fits with the update row and a saved key.
+
+**Trade-off.** With both notices, a saved key and an error line all at once, the last line can touch the bottom edge. It is rare, and every button is still reachable. A page that must scroll later needs its own focus handling, and a test on a real remote.
+
+**How it was checked.** On the TV emulator at the real TV's size: Down from the Settings tab lands on "Download and install", Down again on the key field, again on "Save and check", and Up goes back to the bar. The same steps on the 1.0.3 build stopped at the bar.
