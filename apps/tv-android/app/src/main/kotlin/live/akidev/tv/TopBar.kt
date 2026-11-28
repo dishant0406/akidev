@@ -52,13 +52,31 @@ fun tabIcon(kind: String) = when (kind) {
 /** Home first, then a tab for each one the catalogue definitions list. */
 fun barTabs(fromDefinitions: List<uniffi.akitv.TabInfo>) = listOf(BarTab("Home", "home", null)) + fromDefinitions.map { BarTab(it.label, tabIcon(it.kind), it.kind) }
 
+/** The icon of a way to order a list: the ones every build has, and a neutral one for any other. */
+fun sortIcon(sort: String) = when (sort) {
+    "trending" -> "trend"
+    "popularity" -> "fire"
+    "score" -> "star"
+    "recent" -> "calendar"
+    "title" -> "order"
+    else -> "list"
+}
+
 /**
- * The glass pill at the top, with every place of the app as an icon of one fixed size: the tabs, then Search and Settings. The shown
- * one has the filled, bright icon, and the name of the one the remote is on floats under it (so nothing moves).
+ * The glass pill at the top, with every choice as an icon of one fixed size: on the first screens the tabs, then Search and Settings;
+ * on a full list, the ways to order it and the genres. The shown one has the filled, bright icon, and the name of the one the remote
+ * is on floats under it (so nothing moves). `badge` puts the amber dot on one item. The `actions` open something on top instead of
+ * being shown, so the bar does not take the focus back after them.
  */
 @Composable
-fun TopBar(items: List<BarTab>, selected: Int, onPick: (Int) -> Unit, badgeOnLast: Boolean = false) {
-    val requesters = remember(items.size) { List(items.size) { FocusRequester() } }
+fun TopBar(
+    items: List<BarTab>,
+    selected: Int,
+    onPick: (Int) -> Unit,
+    badge: Int? = null,
+    actions: Set<Int> = emptySet(),
+    requesters: List<FocusRequester> = remember(items.size) { List(items.size) { FocusRequester() } },
+) {
     val scope = rememberCoroutineScope()
     Box(Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.background(Ink.Canvas.copy(alpha = 0.7f), Pill).border(1.dp, Ink.Line, Pill).padding(horizontal = 8.dp, vertical = 6.dp)) {
@@ -67,10 +85,10 @@ fun TopBar(items: List<BarTab>, selected: Int, onPick: (Int) -> Unit, badgeOnLas
             Box(Modifier.offset(x = glide).size(ItemWidth, 44.dp).background(Ink.Line, Pill))
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 items.forEachIndexed { index, item ->
-                    BarItem(item.icon, item.label, index == selected, requesters[index], badge = badgeOnLast && index == items.lastIndex) {
+                    BarItem(item.icon, item.label, index == selected, requesters[index], badge = index == badge) {
                         onPick(index)
                         // Swapping the screen below takes the focus away from the bar; a moment later it is put back on the item just chosen.
-                        scope.launch { repeat(3) { withFrameNanos { } }; requesters[index].requestFocus() }
+                        if (index !in actions) scope.launch { repeat(3) { withFrameNanos { } }; requesters[index].requestFocus() }
                     }
                 }
             }
@@ -88,7 +106,8 @@ private fun BarItem(icon: String, label: String, selected: Boolean, requester: F
             // The outline icon turns into the filled one, and its colour warms up, as the tab is shown.
             val tint by animateColorAsState(if (selected || focused) Ink.Text else Ink.TextFaint, Motion.go(240), label = "tint")
             Crossfade(selected, Modifier.align(Alignment.Center).graphicsLayer { scaleX = scale; scaleY = scale }, Motion.go(240), label = "fill") { filled ->
-                AkiIcon(if (filled) "$icon-solid" else icon, tint = tint)
+                // Not every icon has a filled copy: without one, the outline stays.
+                AkiIcon(if (filled && "$icon-solid" in akiIconSet) "$icon-solid" else icon, tint = tint)
             }
         }
         // A small amber dot: the one quiet sign that something is waiting here (amber is for state).

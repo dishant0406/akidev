@@ -1,4 +1,9 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package live.akidev.tv
+
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.runtime.CompositionLocalProvider
 
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.widthIn
@@ -65,10 +70,10 @@ fun SearchScreen(
                 }
             }
         }
-        LazyVerticalGrid(
+        CompositionLocalProvider(LocalBringIntoViewSpec provides rememberLeastToShow()) { LazyVerticalGrid(
             columns = GridCells.Adaptive(Poster.width),
             // The grid runs to the bottom of the screen and keeps its own space at the end, so rows are not cut off by a hard edge.
-            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 48.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -76,7 +81,7 @@ fun SearchScreen(
             // When the results arrive the focus goes to the first one: the TV keyboard closes itself on its search key, and the viewer can browse at once.
             // When the results arrive the focus goes to the first one: the TV keyboard closes itself on its search key, and the viewer can browse at once.
             items(found, key = { it.id }) { title -> PosterCard(title, autofocus = title.id == found.first().id) { onOpen(title) } }
-        }
+        } }
     }
 }
 

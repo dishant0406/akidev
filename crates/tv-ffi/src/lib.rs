@@ -7,7 +7,7 @@ mod torbox;
 use akidev_core::config::Config;
 use akidev_core::media_id;
 use akidev_core::model::Release;
-use akidev_core::model::{Filters, Kind, Media, Shape};
+use akidev_core::model::{Filters, Kind, Media, Shape, Sort};
 use akidev_core::releases::{Codec, VideoFile, parse_codec, parse_resolution, pick_for_identity};
 use akidev_core::{providers, search as catalogue_search, sources, stream, subtitles};
 use std::path::PathBuf;
@@ -40,6 +40,8 @@ pub struct Title {
     pub banner: Option<String>,
     pub description: Option<String>,
     pub genres: Vec<String>,
+    /// For a title that is not out yet, the words to show: "Coming 27 January 2027". It cannot be played.
+    pub coming_soon: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -47,6 +49,9 @@ pub struct Row {
     pub name: String,
     /// `movie`, `series` or `anime` (or a kind a plugin brought), for the tabs of the home screen.
     pub kind: String,
+    /// How the row is ordered and which genre it holds, so "View all" opens the same list in full.
+    pub sort: String,
+    pub genre: Option<String>,
     pub titles: Vec<Title>,
 }
 
@@ -57,11 +62,17 @@ pub struct Episode {
     pub season: Option<u32>,
     pub number: u32,
     pub name: Option<String>,
+    /// "2008-02-10", when the provider knows it.
+    pub airdate: Option<String>,
+    /// False for an episode that has not aired yet: it cannot be played.
+    pub released: bool,
 }
 
 #[derive(uniffi::Record)]
 pub struct Detail {
     pub title: Title,
+    /// The provider's word for it ("RELEASING", "FINISHED"), as the catalogue gives it.
+    pub status: Option<String>,
     pub runtime_minutes: Option<u32>,
     /// What to play for a film; for a series, play one of `episodes`.
     pub play_id: Option<String>,
@@ -209,6 +220,7 @@ pub fn check_definitions() {
 
 fn title_of(media: Media) -> Title {
     Title {
+        coming_soon: media.coming_soon(akidev_core::calendar::now_ms()),
         id: media.id,
         name: media.title,
         year: media.year,
@@ -296,8 +308,92 @@ pub fn home_row(index: u32) -> Result<Row, TvError> {
     Ok(Row {
         name: row.title.clone(),
         kind: row.kind.as_str().to_string(),
+        sort: row.sort.as_str().to_string(),
+        genre: row.genre.clone(),
         titles: page.results.into_iter().map(title_of).collect(),
     })
+}
+
+/// How many titles one page of "View all" holds.
+const BROWSE_PAGE: u32 = 30;
+
+/// One page of a full list, and whether another page follows.
+#[derive(uniffi::Record)]
+pub struct Browse {
+    pub titles: Vec<Title>,
+    pub more: bool,
+}
+
+/// A page of one catalogue (`kind` set), or of all of them together (`kind` empty), as the website's browse pages do.
+#[uniffi::export]
+pub fn browse(
+    kind: Option<String>,
+    sort: String,
+    genre: Option<String>,
+    page: u32,
+) -> Result<Browse, TvError> {
+    let kinds = match kind.as_deref() {
+        None => sources::screens().kinds(),
+        Some(word) => {
+            vec![Kind::parse(word).ok_or_else(|| failed("That catalogue is not known."))?]
+        }
+    };
+    let filters = Filters {
+        sort: Some(Sort::parse(&sort).ok_or_else(|| failed("That order is not known."))?),
+        genre: genre.filter(|genre| !genre.is_empty()),
+        page: page.max(1),
+        per_page: BROWSE_PAGE,
+        ..Default::default()
+    };
+    let answers = runtime().block_on(futures::future::join_all(kinds.iter().map(|&kind| {
+        let filters = filters.clone();
+        async move { providers::list(kind, &filters).await }
+    })));
+    let answered: Vec<_> = answers.into_iter().filter_map(Result::ok).collect();
+    if answered.is_empty() {
+        return Err(failed("No catalogue answered."));
+    }
+    let more = answered.iter().any(|page| page.has_next);
+    let merged = catalogue_search::interleave(
+        answered.into_iter().map(|page| page.results).collect(),
+        usize::MAX,
+    );
+    Ok(Browse {
+        titles: merged.into_iter().map(title_of).collect(),
+        more,
+    })
+}
+
+/// One way to order a list.
+#[derive(uniffi::Record)]
+pub struct SortInfo {
+    pub sort: String,
+    pub label: String,
+}
+
+/// What the filters of "View all" offer: the orders, and the genres of one catalogue (or of all, when `kind` is empty).
+#[derive(uniffi::Record)]
+pub struct BrowseOptions {
+    pub sorts: Vec<SortInfo>,
+    pub genres: Vec<String>,
+}
+
+#[uniffi::export]
+pub fn browse_options(kind: Option<String>) -> BrowseOptions {
+    let screens = sources::screens();
+    BrowseOptions {
+        sorts: screens
+            .sorts
+            .iter()
+            .map(|option| SortInfo {
+                sort: option.sort.as_str().to_string(),
+                label: option.label.clone(),
+            })
+            .collect(),
+        genres: screens
+            .genres(kind.as_deref().and_then(Kind::parse))
+            .to_vec(),
+    }
 }
 
 /// Looks a title up in the catalogues of the app (films, series and anime).
@@ -316,14 +412,24 @@ pub fn detail(id: String) -> Result<Detail, TvError> {
         .block_on(providers::detail(&id))
         .ok_or_else(|| failed("That title is not in the catalogue."))?;
     let media = detail.media;
+    let now = akidev_core::calendar::now_ms();
+    let coming = media.coming_soon(now).is_some();
+    // Out when the title is, the air date is not in the future, and (for a show still airing) the number is before the next one to air.
+    let is_out = |number: u32, airdate: Option<&str>| {
+        !coming
+            && !airdate.is_some_and(|date| akidev_core::calendar::is_future_date(date, now))
+            && !media.next_episode.is_some_and(|next| number >= next)
+    };
     let mut episodes: Vec<Episode> = detail
         .episodes
         .into_iter()
         .map(|e| Episode {
+            released: is_out(e.number, e.airdate.as_deref()),
             id: e.id,
             season: e.season,
             number: e.number,
             name: e.name,
+            airdate: e.airdate,
         })
         .collect();
     // An anime whose provider gives only a count: the ids follow a pattern.
@@ -337,11 +443,14 @@ pub fn detail(id: String) -> Result<Detail, TvError> {
                 season: None,
                 number,
                 name: None,
+                airdate: None,
+                released: is_out(number, None),
             })
             .collect();
     }
-    let play_id = (media.kind.shape() == Shape::Movie).then(|| media.id.clone());
+    let play_id = (!coming && media.kind.shape() == Shape::Movie).then(|| media.id.clone());
     Ok(Detail {
+        status: media.status.clone(),
         runtime_minutes: media.runtime_minutes,
         play_id,
         episodes,

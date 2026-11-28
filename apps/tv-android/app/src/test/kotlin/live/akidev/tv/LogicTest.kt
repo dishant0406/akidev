@@ -82,7 +82,7 @@ class LogicTest {
         assertEquals("https://img.example.com/a.jpg", httpsOf("https://img.example.com/a.jpg"))
     }
 
-    private fun row(name: String) = uniffi.akitv.Row(name, "movie", emptyList())
+    private fun row(name: String) = uniffi.akitv.Row(name, "movie", "popularity", null, emptyList())
 
     @Test
     fun rows_show_in_order_and_only_after_the_rows_before_them_have_an_answer() {
@@ -132,5 +132,25 @@ class LogicTest {
         assertEquals("abc", picked.sha256)
         assertEquals(123L, picked.size)
         assertNull(Updates.pick("[" + release("desktop-mac-v1.0.0") + "]"))
+    }
+
+    @Test
+    fun an_air_date_reads_as_a_day_and_a_month() {
+        assertEquals("4 DEC", airDay("2026-12-04"))
+        assertEquals("10 FEB", airDay("2008-02-10T00:00:00Z"))
+        assertNull(airDay(null))
+        assertNull(airDay("soon"))
+        assertNull(airDay("2026-13-04"))
+    }
+
+    @Test
+    fun a_row_keeps_the_card_clear_of_its_edge() {
+        val rule = LeastToShow(margin = 24f)
+        // Already in view with room to spare: no scroll.
+        assertEquals(0f, rule.calculateScrollDistance(offset = 100f, size = 256f, containerSize = 1000f), 0f)
+        // Flush with the right edge: it moves 24 px in, so the card that grows still shows in full.
+        assertEquals(24f, rule.calculateScrollDistance(offset = 744f, size = 256f, containerSize = 1000f), 0f)
+        // Past the left edge: it moves in by the distance and the margin.
+        assertEquals(-124f, rule.calculateScrollDistance(offset = -100f, size = 256f, containerSize = 1000f), 0f)
     }
 }

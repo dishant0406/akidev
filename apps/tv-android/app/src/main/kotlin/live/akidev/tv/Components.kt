@@ -366,13 +366,23 @@ class RowAtTop(private val top: Float) : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = offset - top
 }
 
-/** The rule inside a row, sideways: scroll the least that shows the card in full. */
-object LeastToShow : BringIntoViewSpec {
+/**
+ * The rule inside a row, sideways: scroll the least that shows the card in full, with `margin` to spare. A focused card grows a little
+ * (and has a ring), and the row clips what grows past its edge: without the margin the card at the edge was cut off.
+ */
+class LeastToShow(private val margin: Float) : BringIntoViewSpec {
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float) = when {
-        offset < 0f -> offset
-        offset + size > containerSize -> offset + size - containerSize
+        offset < margin -> offset - margin
+        offset + size > containerSize - margin -> offset + size - containerSize + margin
         else -> 0f
     }
+}
+
+/** The margin a row keeps beside the focused card: more than the card grows (5 %) and the ring. */
+@Composable
+fun rememberLeastToShow(): LeastToShow {
+    val margin = with(LocalDensity.current) { 12.dp.toPx() }
+    return remember(margin) { LeastToShow(margin) }
 }
 
 /** The poster asks to be scrolled into view with 56 dp more below it, for the name that sits there (8 dp gap and a line of text). */

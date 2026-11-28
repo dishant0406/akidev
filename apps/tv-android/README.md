@@ -8,7 +8,8 @@ It is not on the Play Store. Each version is a GitHub release, and the app updat
 
 - **Home, Anime, Series, Films.** Rows of posters under one hero that follows the poster you are on. A "Continue watching" row brings you back to what you started.
 - **Search.** Suggestions appear while you type. The TV keyboard opens only when you press OK on the field.
-- **Title page.** Story, episodes as wide cards, and a Play button that resumes where you stopped.
+- **Browse.** The Browse icon in the top bar opens the full list of the tab you are on, and so does the last card of each row. There the top bar holds the ways to order the list as icons, and a Genre icon that opens the list of genres. "Show more" is under the last title.
+- **Title page.** Story, episodes as wide cards (episodes that have not aired are dimmed and show their date), and a Play button that resumes where you stopped.
 - **Player.** Pick the source, the audio and the subtitles from one panel. The next episode is one press away.
 - **Settings.** Enter your TorBox key (an eye button shows or hides it) and install app updates.
 

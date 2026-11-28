@@ -15,6 +15,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -53,6 +56,8 @@ sealed interface Screen {
     data object Search : Screen
     data object Settings : Screen
     data class Detail(val title: Title) : Screen
+    /** The whole list of a catalogue; `state` keeps its filters, titles and scroll while another screen is on top. */
+    data class Browse(val target: BrowseTarget, val state: BrowseState = BrowseState(target)) : Screen
     /** `label` is "Episode 3" for an episode and null for a film. */
     data class Play(val title: Title, val playId: String, val label: String?) : Screen
 }
@@ -100,7 +105,13 @@ private fun App() {
     val scope = rememberCoroutineScope()
     val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
     val key = remember { mutableStateOf(Key.get(context)) }
-    fun back() { stack.removeAt(stack.lastIndex) }
+    // Kept here, like the home rows: Back from the player lands on the same episode of a title page, in the same scroll.
+    val detailMemory = remember { DetailMemory() }
+    fun back() {
+        // Leaving a title page for good: its kept scroll goes, so the next visit starts at the top.
+        (stack.last() as? Screen.Detail)?.let { detailMemory.forget(it.title.id) }
+        stack.removeAt(stack.lastIndex)
+    }
 
     // Kept here, not inside the screens, so Back returns to the same rows, scroll position and search.
     var homeTries by remember { mutableIntStateOf(0) }
@@ -131,14 +142,20 @@ private fun App() {
     val rows = homeRowsOf(rowStates)
     LaunchedEffect(rows is Load.Done) { if (rows is Load.Done) Perf.once("home rows on screen") }
     val homeMemory = remember { HomeMemory() }
-    // The bar lists the tabs, then Search and Settings. Picking one swaps the first screen of the stack (it cross-fades) and keeps the bar.
-    val barItems = remember(tabs) { tabs + BarTab("Search", "search", null) + BarTab("Settings", "settings", null) }
+    // The bar lists the tabs, then Browse, Search and Settings. Picking a tab, Search or Settings swaps the first screen of the stack (it
+    // cross-fades) and keeps the bar. Browse opens the whole list on top: of the tab that is shown, or of every catalogue.
+    val barItems = remember(tabs) { tabs + BarTab("Browse", "grid", null) + BarTab("Search", "search", null) + BarTab("Settings", "settings", null) }
     var barIndex by remember { mutableIntStateOf(0) }
     val picked = barIndex.coerceIn(0, barItems.lastIndex)
     val tab = tabs[picked.coerceAtMost(tabs.lastIndex)]
     fun pick(index: Int) {
+        if (index == tabs.size) {
+            val shown = tabs.getOrNull(barIndex)
+            stack.add(Screen.Browse(BrowseTarget(shown?.takeIf { it.kind != null }?.label ?: "Browse", shown?.kind, null, null)))
+            return
+        }
         barIndex = index
-        stack[0] = when (index) { tabs.size -> Screen.Search; tabs.size + 1 -> Screen.Settings; else -> Screen.Home }
+        stack[0] = when (index) { tabs.size + 1 -> Screen.Search; tabs.size + 2 -> Screen.Settings; else -> Screen.Home }
     }
     // Back on Search or Settings returns to Home; Back on Home leaves the app.
     BackHandler(enabled = stack.size > 1 || stack[0] != Screen.Home) { if (stack.size > 1) back() else pick(0) }
@@ -195,14 +212,17 @@ private fun App() {
             watched = watched,
             onRetry = { homeTries++ },
             onOpen = { stack.add(Screen.Detail(it)) },
+            // The list is named after its catalogue, not after the row: the viewer can change the order there.
+            onViewAll = { stack.add(Screen.Browse(it.copy(heading = tabs.firstOrNull { tab -> tab.kind == it.kind }?.label ?: "Browse"))) },
             onResume = { play(it.asTitle(), it.playId, it.label) },
         )
+        is Screen.Browse -> BrowseScreen(screen.target, screen.state, onOpen = { stack.add(Screen.Detail(it)) })
         Screen.Search -> SearchScreen(
             typed, { typed = it }, asked, { asked = typed.trim(); searches++ }, results, (suggestions as? Load.Done)?.value.orEmpty(),
             onPick = { name -> typed = name; asked = name; searches++ }, onOpen = { stack.add(Screen.Detail(it)) },
         )
         Screen.Settings -> SettingsScreen(sourcesReady, appRelease, onSaved = { key.value = Key.get(context); if (stack.size > 1) back() else pick(0) })
-        is Screen.Detail -> DetailScreen(screen.title, watched, onPlay = ::play)
+        is Screen.Detail -> DetailScreen(screen.title, watched, detailMemory, onPlay = ::play)
         is Screen.Play -> PlayerScreen(
             screen.title, screen.playId, screen.label, key.value,
             onNext = { next -> stack[stack.lastIndex] = Screen.Play(screen.title, next.id, next.label()) },
@@ -210,6 +230,6 @@ private fun App() {
         )
     }
     }
-    AnimatedVisibility(stack.size == 1, enter = fadeIn(Motion.go(320, delay = 80)), exit = fadeOut(Motion.go(200))) { TopBar(barItems, picked, ::pick, badgeOnLast = updateReady) }
+    AnimatedVisibility(stack.size == 1, enter = fadeIn(Motion.go(320, delay = 80)), exit = fadeOut(Motion.go(200))) { TopBar(barItems, picked, ::pick, badge = barItems.lastIndex.takeIf { updateReady }, actions = setOf(tabs.size)) }
     }
 }

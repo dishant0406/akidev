@@ -95,6 +95,7 @@ fun HomeScreen(
     tab: BarTab,
     onRetry: () -> Unit,
     onOpen: (Title) -> Unit,
+    onViewAll: (BrowseTarget) -> Unit,
     watched: List<Watched>,
     onResume: (Watched) -> Unit,
 ) {
@@ -113,7 +114,7 @@ fun HomeScreen(
                 repeat(2) { SkeletonRow() }
             }
             FAILED -> StateCard("The catalogues did not load", (rows as? Load.Failed)?.reason, icon = "warning") { AkiButton("Try again", Look.Primary, icon = "refresh", autofocus = true) { onRetry() } }
-            else -> (rows as? Load.Done)?.value?.let { Loaded(it.rows, it.more, memory, tab, onOpen, watched, onResume) }
+            else -> (rows as? Load.Done)?.value?.let { Loaded(it.rows, it.more, memory, tab, onOpen, onViewAll, watched, onResume) }
         }
         }
     }
@@ -136,12 +137,13 @@ private fun Loaded(
     memory: HomeMemory,
     tab: BarTab,
     onOpen: (Title) -> Unit,
+    onViewAll: (BrowseTarget) -> Unit,
     watched: List<Watched>,
     onResume: (Watched) -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
         // Switching tab cross-fades the hero and the rows (the bar stays), instead of cutting from one to the other.
-        Crossfade(targetState = tab, animationSpec = Motion.go(340), label = "tab") { shownTab -> TabContent(all, more, shownTab, memory, onOpen, watched, onResume) }
+        Crossfade(targetState = tab, animationSpec = Motion.go(340), label = "tab") { shownTab -> TabContent(all, more, shownTab, memory, onOpen, onViewAll, watched, onResume) }
     }
 }
 
@@ -153,6 +155,7 @@ private fun TabContent(
     tab: BarTab,
     memory: HomeMemory,
     onOpen: (Title) -> Unit,
+    onViewAll: (BrowseTarget) -> Unit,
     watched: List<Watched>,
     onResume: (Watched) -> Unit,
 ) {
@@ -162,7 +165,7 @@ private fun TabContent(
     val keepWatching = if (tab.kind == null) watched.continueWatching() else emptyList()
     val first = keepWatching.firstOrNull()?.asTitle() ?: shown.firstOrNull()?.titles?.firstOrNull()
     // The card that gets the first focus: the one the remote was on when the viewer left (if it is still here), else the first.
-    val keys = keepWatching.map { "continue/${it.titleId}" } + shown.flatMap { row -> row.titles.map { "${row.name}/${it.id}" } }
+    val keys = keepWatching.map { "continue/${it.titleId}" } + shown.flatMap { row -> row.titles.map { "${row.name}/${it.id}" } + "${row.name}/all" }
     val wanted = memory.focused?.takeIf { it in keys } ?: keys.firstOrNull()
     // `onHero` only writes `heroFocus`; only the hero reads `heroShown`. So moving the remote does not compose this screen again.
     val heroFocus = remember(tab) { mutableStateOf<Title?>(null) }
@@ -171,6 +174,7 @@ private fun TabContent(
     val onHero = remember(heroFocus) { { title: Title -> heroFocus.value = title } }
 
     val listState = memory.rows.getOrPut("list/${tab.label}") { LazyListState() }
+    val sideways = rememberLeastToShow()
 
     HeroBackdrop(heroShown, first)
     Column(Modifier.fillMaxSize()) {
@@ -188,7 +192,7 @@ private fun TabContent(
             if (tab.kind == null && keepWatching.isNotEmpty()) item(key = "continue") {
                 Column(Modifier.wholeRowInView(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Continue watching", style = Type.RowTitle, modifier = Modifier.padding(start = 8.dp))
-                    CompositionLocalProvider(LocalBringIntoViewSpec provides LeastToShow) {
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
                         LazyRow(state = memory.rows.getOrPut("${tab.label}/continue") { LazyListState() }, horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
                             items(keepWatching, key = { it.titleId }) { entry ->
                                 val key = "continue/${entry.titleId}"
@@ -202,11 +206,16 @@ private fun TabContent(
             items(shown, key = { it.name }) { row ->
                 Column(Modifier.wholeRowInView(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(row.name, style = Type.RowTitle, modifier = Modifier.padding(start = 8.dp))
-                    CompositionLocalProvider(LocalBringIntoViewSpec provides LeastToShow) {
+                    CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
                         LazyRow(state = memory.rows.getOrPut("${tab.label}/${row.name}") { LazyListState() }, horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
                             items(row.titles, key = { it.id }) { title ->
                                 val key = "${row.name}/${title.id}"
                                 PosterCard(title, showName = false, autofocus = !focusPlaced && key == wanted, onFocus = { focusPlaced = true; memory.focused = key; onHero(title) }) { onOpen(title) }
+                            }
+                            // The end of the row: the whole list, with the row's own order and genre to start from.
+                            item(key = "all") {
+                                val key = "${row.name}/all"
+                                ViewAllCard(autofocus = !focusPlaced && key == wanted, onFocus = { focusPlaced = true; memory.focused = key }) { onViewAll(BrowseTarget(row.name, row.kind, row.sort, row.genre)) }
                             }
                         }
                     }
@@ -242,6 +251,19 @@ private fun Hero(shown: State<Title?>, first: Title?) {
     }
 }
 
+/** The last card of a row: opens the whole list. Same size as a poster. */
+@Composable
+private fun ViewAllCard(autofocus: Boolean, onFocus: () -> Unit, onClick: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    if (autofocus) LaunchedEffect(Unit) { focus.requestFocus() }
+    Focusable(onClick, RoundedCornerShape(12.dp), Ink.Surface, Modifier.size(Poster.width, Poster.height).focusRequester(focus).onFocusChanged { if (it.isFocused) onFocus() }) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically)) {
+            AkiIcon("more", size = 32.dp, tint = Ink.Text)
+            Text("View all", style = Type.Label, maxLines = 1)
+        }
+    }
+}
+
 /** A wide card for something half watched: the picture, the name, and how much is left. */
 @Composable
 private fun ContinueCard(entry: Watched, autofocus: Boolean, onFocus: () -> Unit, onClick: () -> Unit) {
@@ -265,7 +287,7 @@ private fun ContinueCard(entry: Watched, autofocus: Boolean, onFocus: () -> Unit
 }
 
 /** What the hero needs of something watched, which keeps only a little about its title. */
-fun Watched.asTitle() = Title(titleId, title, null, poster, null, banner, null, emptyList())
+fun Watched.asTitle() = Title(titleId, title, null, poster, null, banner, null, emptyList(), null)
 
 /** "2010  ·  ADVENTURE, SCI-FI  ·  88%" in the small capitals of the design plan. */
 fun facts(title: Title): String =

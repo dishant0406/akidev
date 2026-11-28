@@ -346,7 +346,7 @@ private fun Playing(
 private fun rememberNextEpisode(titleId: String, playId: String, label: String?): Episode? {
     val loaded by rememberLoad("episodes", titleId, label) { if (label == null) emptyList() else detail(titleId).episodes }
     val episodes = (loaded as? Load.Done)?.value ?: return null
-    return nextEpisode(episodes.sortedWith(compareBy({ it.season ?: 1u }, { it.number })).map { it.id }, playId)?.let { id -> episodes.first { it.id == id } }
+    return nextEpisode(episodes.filter { it.released }.sortedWith(compareBy({ it.season ?: 1u }, { it.number })).map { it.id }, playId)?.let { id -> episodes.first { it.id == id } }
 }
 
 /** The id after `playId` in `ids`, or null. */

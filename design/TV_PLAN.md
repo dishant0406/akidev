@@ -86,3 +86,10 @@ Disney+ Hotstar improved UX (TV and phone), OTF Exclusive: Disney+ Hotstar new U
 Stremio Kai (r/StremioAddons), Ultra TV (open-source IPTV player), ZEE5 TV and VR concept (Dribbble), ZEE5 on smart TV
 (Cashify), Netflix redesign (NYT, The Verge, MacRumors), Apple TV app featured row (9to5Mac), Netflix player and Screen Lock
 (Mashable, TechWiser), Prime Video X-Ray, Skip Intro (Applicaster docs).
+
+## Browse (2026-11-28)
+
+The full list of a catalogue uses the same top pill, with the orders as icons and one Genre icon that opens a side panel. The
+reasons and the references are in `docs/design.md` ("TV: Browse uses the same bar as the rest of the app"). Before and after:
+`design/shots/tv-browse-before.png`, `tv-browse-after.png`, `tv-browse-genres-after.png`, `tv-browse-show-more-after.png`.
+
