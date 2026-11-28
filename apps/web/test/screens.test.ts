@@ -58,6 +58,12 @@ test("every home row is for a catalogue that has a tab", () => {
   }
 });
 
+test("the home page has a ranked row for each catalogue, and the other rows have no style", () => {
+  const ranked = screens.home.filter((row) => row.style === "ranked");
+  assert.deepEqual(ranked.map((row) => row.kind).sort(), ["anime", "movie", "series"]);
+  assert.ok(screens.home.every((row) => row.style === undefined || row.style === "ranked"));
+});
+
 test("the label over a title comes from its tab, and is empty when the screens are missing", () => {
   assert.equal(tagFor(screens, "movie"), "FILM");
   assert.equal(tagFor(screens, "anime"), "ANIME");

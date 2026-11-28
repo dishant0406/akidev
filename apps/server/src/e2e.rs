@@ -803,7 +803,9 @@ async fn the_screens_route_sends_the_tabs_sorts_genres_and_home_rows() {
     assert_eq!(slugs, ["anime", "series", "films"]);
     assert_eq!(screens["sorts"][0]["sort"], "popularity");
     assert_eq!(screens["home"].as_array().unwrap().len(), 10);
-    assert_eq!(screens["home"][7]["genre"], "Action");
+    assert_eq!(screens["home"][6]["genre"], "Action");
+    assert_eq!(screens["home"][0]["style"], "ranked");
+    assert!(screens["home"][1].get("style").is_none());
     assert_eq!(screens["genres"]["anime"][7], "Mahou Shoujo");
     assert!(screens["genres"]["all"].is_array());
 }

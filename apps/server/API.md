@@ -32,10 +32,11 @@ genre is a publish and not a deploy.
 { "tabs":   [{ "kind": "anime", "slug": "anime", "label": "Anime" }],
   "sorts":  [{ "sort": "popularity", "label": "Popular" }],
   "genres": { "anime": ["Action"], "series": [], "movie": [], "all": [] },
-  "home":   [{ "title": "Trending Anime", "kind": "anime", "sort": "trending", "genre": "Action" }] }
+  "home":   [{ "title": "Top 10 anime now", "kind": "anime", "sort": "trending", "style": "ranked" }] }
 ```
 
-`genres.all` is for the page that shows every catalogue. A row's `genre` is optional. The first sort is
+`genres.all` is for the page that shows every catalogue. A row's `genre` is optional. A row's `style` is
+optional too: `ranked` is a "Top 10" with a big number beside each title, and a plain row has no `style`. The first sort is
 the one a catalogue opens on. Kept by the edge for 5 minutes, like a catalogue.
 
 ## `GET /v1/home`
@@ -44,8 +45,10 @@ The whole home page in one request. Its rows are the `home` rows of `/v1/screens
 
 ```json
 { "featured": [Media],
-  "rows": [{ "title": "Trending Anime", "kind": "anime", "items": [Media] }] }
+  "rows": [{ "title": "Top 10 anime now", "kind": "anime", "style": "ranked", "items": [Media] }] }
 ```
+
+A `ranked` row has at most 10 `items`, best first. A plain row has no `style` key.
 
 `featured` is the front of each catalogue interleaved, only titles with a `banner`, at most 9.
 A row whose provider failed has `items: []`; the page leaves it out.

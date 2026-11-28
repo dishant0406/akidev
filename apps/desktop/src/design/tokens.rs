@@ -45,6 +45,9 @@ pub mod size {
 /// Poster tile, 2:3.
 pub const TILE_WIDTH: f32 = 176.;
 pub const TILE_HEIGHT: f32 = 264.;
+/// The room a ranked row gives the big number beside each tile, and the size of that number.
+pub const RANK_WIDTH: f32 = 80.;
+pub const RANK_SIZE: f32 = 72.;
 
 /// Font families. The interface face is the theme's own (`font.family` in `assets/theme.json`);
 /// titles use the mincho, in regular or semibold.

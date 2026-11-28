@@ -2,12 +2,16 @@
 
 use crate::design::button::icon_button;
 use crate::design::state::{error_state, section_title, skeleton};
-use crate::design::tokens::{CANVAS, GUTTER, TEXT, TILE_HEIGHT, TILE_WIDTH, WASH_2, color, radius};
+use crate::design::tokens::{
+    CANVAS, GUTTER, RANK_SIZE, RANK_WIDTH, TEXT, TEXT_FAINT, TILE_HEIGHT, TILE_WIDTH, WASH_2,
+    color, font, radius,
+};
 use crate::progress::Entry;
 use crate::route::Route;
 use crate::tile::poster_tile;
 use akidev_core::model::{Filters, Kind, Media};
 use akidev_core::providers;
+use akidev_core::screens::RowStyle;
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -28,6 +32,8 @@ pub struct RowSpec {
     pub kind: Kind,
     /// The provider the row draws from alone. Absent: the kind's chain answers.
     pub provider: Option<String>,
+    /// A ranked row shows ten titles, each with its place as a big number.
+    pub style: RowStyle,
     pub filters: Filters,
 }
 
@@ -98,6 +104,13 @@ impl MediaRow {
         row
     }
 
+    /// How the row is drawn: a row built from a list of titles is always plain.
+    fn style(&self) -> RowStyle {
+        self.spec
+            .as_ref()
+            .map_or(RowStyle::Poster, |spec| spec.style)
+    }
+
     fn fetch(&mut self, cx: &mut Context<Self>) {
         let Some(RowSpec {
             kind,
@@ -115,7 +128,10 @@ impl MediaRow {
             async move { providers::list_row(kind, provider.as_deref(), &filters).await },
             |row, page, cx| {
                 row.items = match page {
-                    Ok(page) => Items::Loaded(page.results),
+                    Ok(mut page) => {
+                        row.style().trim(&mut page.results);
+                        Items::Loaded(page.results)
+                    }
                     Err(_) => Items::Failed,
                 };
                 cx.notify();
@@ -182,9 +198,9 @@ impl MediaRow {
 }
 
 /// Which tiles of a row of `count` to build, as `first..last`: the ones in view and a couple
-/// either side. `scrolled` is how far the row is scrolled, `viewport` how wide it shows.
-fn tiles_to_build(scrolled: f32, viewport: f32, count: usize) -> (usize, usize) {
-    let stride = TILE_WIDTH + TILE_GAP;
+/// either side. `scrolled` is how far the row is scrolled, `viewport` how wide it shows, and
+/// `stride` how far apart two tiles start.
+fn tiles_to_build(scrolled: f32, viewport: f32, count: usize, stride: f32) -> (usize, usize) {
     let first = (((scrolled - GUTTER) / stride).floor() as i64 - OVERSCAN).max(0) as usize;
     let last = ((((scrolled + viewport - GUTTER) / stride).ceil() as i64) + OVERSCAN)
         .clamp(0, count as i64) as usize;
@@ -196,6 +212,27 @@ fn tiles_to_build(scrolled: f32, viewport: f32, count: usize) -> (usize, usize) 
 /// A row not drawn yet has no height, and is built to find out how tall it is.
 fn near_the_screen(top: f32, height: f32, screen: f32) -> bool {
     height <= 0. || (top < screen * 1.4 && top + height > -screen * 0.4)
+}
+
+/// A tile of a "Top 10" row: its place as a big number, then the poster.
+fn ranked_tile(rank: usize, tile: impl IntoElement) -> Div {
+    div()
+        .flex()
+        .flex_none()
+        .items_end()
+        .child(
+            div()
+                .w(px(RANK_WIDTH))
+                .flex()
+                .justify_end()
+                .font_family(font::TITLE)
+                .text_size(px(RANK_SIZE))
+                .font_weight(FontWeight::SEMIBOLD)
+                .line_height(px(RANK_SIZE * 0.8))
+                .text_color(color(TEXT_FAINT))
+                .child(rank.to_string()),
+        )
+        .child(tile)
 }
 
 impl Render for MediaRow {
@@ -261,13 +298,18 @@ impl Render for MediaRow {
                 // Only the tiles in view, and a couple either side, are built: a row is 24
                 // tiles wide, and drawing every one of them on every frame is what made
                 // scrolling heavy. Spacers stand in for the rest, so the row keeps its width.
-                let stride = TILE_WIDTH + TILE_GAP;
+                let ranked = self.style() == RowStyle::Ranked;
+                let stride = TILE_WIDTH + TILE_GAP + if ranked { RANK_WIDTH } else { 0. };
                 let viewport = match self.scroll.bounds().size.width {
                     width if width > px(0.) => width,
                     _ => window.viewport_size().width,
                 };
-                let (first, last) =
-                    tiles_to_build(f32::from(-offset).max(0.), f32::from(viewport), items.len());
+                let (first, last) = tiles_to_build(
+                    f32::from(-offset).max(0.),
+                    f32::from(viewport),
+                    items.len(),
+                    stride,
+                );
                 let spacer = |tiles: usize| {
                     (tiles > 0).then(|| div().flex_none().w(px(tiles as f32 * stride - TILE_GAP)))
                 };
@@ -282,11 +324,16 @@ impl Render for MediaRow {
                     .children(spacer(first))
                     .children(items.iter().enumerate().skip(first).take(last - first).map(
                         |(index, media)| {
-                            poster_tile(
+                            let tile = poster_tile(
                                 &format!("{}-{index}", self.title),
                                 media,
                                 self.resume.get(index).cloned(),
-                            )
+                            );
+                            if ranked {
+                                ranked_tile(index + 1, tile).into_any_element()
+                            } else {
+                                tile.into_any_element()
+                            }
                         },
                     ))
                     .children(spacer(items.len() - last));
@@ -331,32 +378,41 @@ impl Render for MediaRow {
 #[cfg(test)]
 mod tests {
     // Not `super::*`: that would bring in gpui's own `test` attribute in place of the standard one.
-    use super::{TILE_GAP, TILE_WIDTH, near_the_screen, tiles_to_build};
+    use super::{RANK_WIDTH, TILE_GAP, TILE_WIDTH, near_the_screen, tiles_to_build};
+
+    const STRIDE: f32 = TILE_WIDTH + TILE_GAP;
 
     #[test]
     fn a_row_at_rest_builds_the_tiles_in_view_and_a_couple_more() {
         // A 1360 pixel row shows about seven 176 pixel tiles after the margin.
-        assert_eq!(tiles_to_build(0., 1360., 24), (0, 10));
+        assert_eq!(tiles_to_build(0., 1360., 24, STRIDE), (0, 10));
     }
 
     #[test]
     fn the_tiles_follow_the_scroll() {
-        let (first, last) = tiles_to_build(2000., 1360., 24);
+        let (first, last) = tiles_to_build(2000., 1360., 24, STRIDE);
         assert_eq!((first, last), (8, 20));
         // Scrolled to the end, the range stops at the last tile and is never empty-ended.
         let end = 24. * (TILE_WIDTH + TILE_GAP);
-        let (first, last) = tiles_to_build(end, 1360., 24);
+        let (first, last) = tiles_to_build(end, 1360., 24, STRIDE);
         assert_eq!(last, 24);
         assert!(first <= last);
     }
 
     #[test]
     fn a_short_or_empty_row_builds_what_it_has() {
-        assert_eq!(tiles_to_build(0., 1360., 0), (0, 0));
-        assert_eq!(tiles_to_build(0., 1360., 3), (0, 3));
+        assert_eq!(tiles_to_build(0., 1360., 0, STRIDE), (0, 0));
+        assert_eq!(tiles_to_build(0., 1360., 3, STRIDE), (0, 3));
         // A row scrolled further than it is long builds nothing, rather than a negative range.
-        let (first, last) = tiles_to_build(99999., 1360., 3);
+        let (first, last) = tiles_to_build(99999., 1360., 3, STRIDE);
         assert!(first <= last && last <= 3);
+    }
+
+    #[test]
+    fn a_ranked_row_has_wider_steps_so_it_builds_fewer_tiles_in_view() {
+        let (_, plain) = tiles_to_build(0., 1360., 24, STRIDE);
+        let (_, ranked) = tiles_to_build(0., 1360., 24, STRIDE + RANK_WIDTH);
+        assert!(ranked < plain);
     }
 
     #[test]

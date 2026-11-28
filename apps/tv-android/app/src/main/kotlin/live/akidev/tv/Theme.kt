@@ -37,5 +37,7 @@ object Type {
     val RowTitle = TextStyle(fontFamily = Title, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 32.sp, color = Ink.Text)
     val Body = TextStyle(fontFamily = Ui, fontWeight = FontWeight.Normal, fontSize = 18.sp, lineHeight = 26.sp, color = Ink.TextDim)
     val Label = TextStyle(fontFamily = Ui, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 24.sp, color = Ink.Text)
+    /** The big number of a "Top 10" card. Faint, so the poster beside it is what the eye lands on. */
+    val Rank = TextStyle(fontFamily = Title, fontWeight = FontWeight.SemiBold, fontSize = 96.sp, lineHeight = 104.sp, letterSpacing = (-4).sp, color = Ink.TextFaint)
     val Meta = TextStyle(fontFamily = Ui, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 22.sp, letterSpacing = 1.sp, color = Ink.TextFaint)
 }

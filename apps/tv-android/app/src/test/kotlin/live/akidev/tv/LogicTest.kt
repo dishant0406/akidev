@@ -82,7 +82,7 @@ class LogicTest {
         assertEquals("https://img.example.com/a.jpg", httpsOf("https://img.example.com/a.jpg"))
     }
 
-    private fun row(name: String) = uniffi.akitv.Row(name, "movie", "popularity", null, emptyList())
+    private fun row(name: String) = uniffi.akitv.Row(name, "movie", "popularity", null, false, emptyList())
 
     @Test
     fun rows_show_in_order_and_only_after_the_rows_before_them_have_an_answer() {

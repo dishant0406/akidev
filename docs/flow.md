@@ -425,3 +425,29 @@ Edge cases:
 - A title that came out in the last 120 days and has no source: the search runs as normal, and the reason ends with "This title came out on 20 November 2026, so it can be too new to have a source." (`Plan::with_too_new_note`, used when nothing is listed and when what was found did not play). When providers failed to answer, the older "could not be reached" messages win, because that is the real cause.
 - An app older than this change ignores `release_date` in `sources.json` and works as before.
 - On the TV, a film that is not out has nothing to press on its page. Back should return to the list. This was not checked on a TV or an emulator, and the desktop screens were only compiled, not looked at.
+
+## The home page rows and the "Top 10" rows (2026-11-28)
+
+Basically: the sources document lists the rows, every app draws them, and a row with `"style": "ranked"` gets a big number beside each of its first ten titles.
+
+**The path of a row.**
+
+1. `screens.home` in the sources document lists the rows: title, kind, sort, optional genre, optional `style`. Core reads it into `HomeRow` (`crates/core/src/screens.rs`). A `style` value other than `ranked` makes core refuse the whole document, and the app keeps the one it had.
+2. The server (`home` in `apps/server/src/api.rs`) asks the catalogues for each row, cuts a ranked row to ten with `RowStyle::trim`, and sends `style` only on ranked rows. The website reads it in `home-view.tsx` and gives it to `MediaRow` (`row.tsx`) as `ranked`.
+3. The TV bridge (`home_row` in `crates/tv-ffi/src/lib.rs`) does the same and sets `ranked` on the row. `HomeScreen.kt` draws a ranked row with `RankedCard` and a plain row with `PosterCard`.
+4. The desktop app builds a `RowSpec` with the style (`home.rs`), trims the list when it arrives (`MediaRow::fetch`) and draws `ranked_tile` (`row.rs`).
+
+**Order on the page.** Continue watching (only when the viewer has something half watched), then the rows of the document in order. The three tabs show only the rows of their own kind, so the Anime tab starts with "Top 10 anime now".
+
+**What the viewer sees when something is wrong.**
+
+- A catalogue does not answer for a row: the row is left out (web, desktop and TV). On the website and the desktop app a failed row shows "Couldn't load this row" with a retry.
+- A ranked row has fewer than ten titles: it shows the numbers it has, 1 to the last.
+- An old app reads version 53: it ignores `style`, so it shows "Top 10 anime now" as a plain row of up to 24 titles, with no numbers. The name says "Top 10" over more than ten titles. The website is not affected, because the server cuts the row. It is the price of keeping old apps working.
+- A title in a ranked row has no poster: its name shows in the poster's place, and the number stays.
+
+**Edge cases.**
+
+- Rank 10 has two digits. The website and the desktop app give every number the same room, so "10" is smaller than they might like. The TV gives "10" extra room.
+- On the TV the "View all" card still ends a ranked row and opens the full list in the row's own order.
+- Not checked: the desktop screens were compiled and unit tested, but I did not see them on a screen.

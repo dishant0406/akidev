@@ -122,6 +122,8 @@ export type PlayResult =
 export interface HomeRow {
   title: string;
   kind: Kind;
+  /** `ranked` is a "Top 10": a big number beside each title. A plain row has none. */
+  style?: "ranked";
   /** Empty when the row's provider failed; the page leaves such a row out. */
   items: Media[];
 }
@@ -132,7 +134,7 @@ export interface Screens {
   sorts: { sort: string; label: string }[];
   /** By kind name, and `all` for the page that shows every catalogue. */
   genres: Record<string, string[]>;
-  home: { title: string; kind: Kind; sort: string; genre?: string }[];
+  home: { title: string; kind: Kind; sort: string; genre?: string; style?: "ranked" }[];
   /** The credits: the footer line and the names the privacy page lists. */
   about: { attribution: string; catalogues: string[]; subtitles: string[] };
 }

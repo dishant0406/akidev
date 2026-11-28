@@ -4,6 +4,7 @@
 //! a title is known by, the IMDb id), so the API stays small and the library stays free to change.
 
 use akidev_core::model::{Detail, Episode, Kind, Media, Person, Trailer};
+use akidev_core::screens::{HomeRow, RowStyle};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,7 +68,22 @@ pub struct PageOut {
 pub struct RowOut {
     pub title: String,
     pub kind: Kind,
+    #[serde(skip_serializing_if = "RowStyle::is_poster")]
+    pub style: RowStyle,
     pub items: Vec<MediaOut>,
+}
+
+impl RowOut {
+    /// A row of the home page as the apps get it: a ranked row keeps its first ten titles.
+    pub fn of(row: &HomeRow, mut titles: Vec<Media>) -> RowOut {
+        row.style.trim(&mut titles);
+        RowOut {
+            title: row.title.clone(),
+            kind: row.kind,
+            style: row.style,
+            items: media_list(&titles),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -127,9 +143,8 @@ pub struct Ready {
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_media_json_has_the_fields_the_contract_names_and_no_more() {
-        let media = Media {
+    fn a_title() -> Media {
+        Media {
             id: "anime-1".into(),
             kind: Kind::Anime,
             title: "T".into(),
@@ -148,7 +163,33 @@ mod tests {
             is_adult: false,
             next_episode: None,
             release_date: None,
+        }
+    }
+
+    #[test]
+    fn a_ranked_home_row_keeps_ten_titles_and_says_so_and_a_plain_row_keeps_all() {
+        let row = |style| HomeRow {
+            title: "Row".into(),
+            kind: Kind::Anime,
+            sort: akidev_core::model::Sort::Trending,
+            genre: None,
+            style,
+            provider: None,
         };
+        let twenty_four = || vec![a_title(); 24];
+        let ranked =
+            serde_json::to_value(RowOut::of(&row(RowStyle::Ranked), twenty_four())).unwrap();
+        assert_eq!(ranked["items"].as_array().unwrap().len(), 10);
+        assert_eq!(ranked["style"], "ranked");
+        let plain =
+            serde_json::to_value(RowOut::of(&row(RowStyle::Poster), twenty_four())).unwrap();
+        assert_eq!(plain["items"].as_array().unwrap().len(), 24);
+        assert!(plain.get("style").is_none());
+    }
+
+    #[test]
+    fn the_media_json_has_the_fields_the_contract_names_and_no_more() {
+        let media = a_title();
         let json = serde_json::to_value(MediaOut::from(&media)).unwrap();
         let mut keys: Vec<&str> = json
             .as_object()

@@ -82,7 +82,8 @@ title card**: ink-black frame, one warm ember colour, quiet serif titles, tiny t
    retry; source panel rows redesigned as a table-like list (resolution, size, seeders as quiet columns,
    "Instant" as an amber word); empty and error states for search, browse, music, party.
 5. **Screens**, one at a time, web and desktop together so they never drift: title page (billboard +
-   metadata), home rows (fewer, larger, 16:9 for continue watching), browse filters, player chrome, party panel,
+   metadata), home rows (fewer, larger, 16:9 for continue watching; a "Top 10" row has a big faint number
+   beside each poster, in the dim text colour and never amber, the same on web, desktop and TV), browse filters, player chrome, party panel,
    music, settings, command palette.
 6. **Review pass with the detector** (`npx impeccable detect` on the web app) and a screenshot sweep of every
    screen and state at 3 widths before each release.

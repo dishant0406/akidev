@@ -337,11 +337,7 @@ async fn home(
             .await
             .map(|page| page.results)
             .unwrap_or_default();
-        RowOut {
-            title: row.title.clone(),
-            kind: row.kind,
-            items: media_list(&items),
-        }
+        RowOut::of(row, items)
     }));
     let (featured, rows) = futures::future::join(featured, rows).await;
     // The banner draws from the front of each catalogue, so it features all three, and only

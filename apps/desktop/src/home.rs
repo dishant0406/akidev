@@ -36,6 +36,7 @@ fn specs(home: Vec<HomeRow>) -> Vec<RowSpec> {
             title: row.title,
             kind: row.kind,
             provider: row.provider,
+            style: row.style,
             filters: Filters {
                 sort: Some(row.sort),
                 genre: row.genre,

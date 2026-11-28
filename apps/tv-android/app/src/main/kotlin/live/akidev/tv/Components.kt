@@ -206,6 +206,16 @@ fun PosterCard(title: Title, showName: Boolean = true, autofocus: Boolean = fals
     }
 }
 
+/** A card of a "Top 10" row: its place as a big number, then the poster. */
+@Composable
+fun RankedCard(rank: Int, title: Title, autofocus: Boolean = false, onFocus: () -> Unit = {}, onClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        // 10 has two digits, so it gets more room than 1 to 9.
+        Text(rank.toString(), style = Type.Rank, maxLines = 1, softWrap = false, textAlign = TextAlign.End, modifier = Modifier.width(if (rank < 10) 64.dp else 112.dp))
+        PosterCard(title, showName = false, autofocus = autofocus, onFocus = onFocus, onClick = onClick)
+    }
+}
+
 object Poster {
     val width = 128.dp
     val height = 192.dp

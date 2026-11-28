@@ -14,6 +14,8 @@ const FIRST_DRAWN = 10;
 /** How far past the visible part of a row pictures are drawn, so they are there as it arrives. */
 const AHEAD_PX = 480;
 const TILE_STRIDE = TILE_WIDTH + TILE_GAP;
+/** The room a ranked row gives the number beside each tile. */
+const RANK_WIDTH = 80;
 
 export interface ResumeFor {
   fraction: number;
@@ -29,6 +31,7 @@ export default function MediaRow({
   onRetry,
   resume,
   eager,
+  ranked,
 }: {
   title: string;
   items: Card[];
@@ -39,6 +42,8 @@ export default function MediaRow({
   resume?: (ResumeFor | undefined)[];
   /** A row that is on screen when the page opens. The others draw their pictures when scrolled near. */
   eager?: boolean;
+  /** A "Top 10": the first ten tiles get their place as a big number beside them. */
+  ranked?: boolean;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -70,9 +75,10 @@ export default function MediaRow({
       left: element.scrollLeft > 4,
       right: element.scrollLeft < element.scrollWidth - element.clientWidth - 4,
     });
-    const reached = Math.ceil((element.scrollLeft + element.clientWidth + AHEAD_PX) / TILE_STRIDE);
+    const stride = ranked ? TILE_STRIDE + RANK_WIDTH : TILE_STRIDE;
+    const reached = Math.ceil((element.scrollLeft + element.clientWidth + AHEAD_PX) / stride);
     setDrawn((current) => Math.max(current, reached));
-  }, []);
+  }, [ranked]);
 
   useEffect(() => {
     measure();
@@ -107,9 +113,23 @@ export default function MediaRow({
             onScroll={measure}
             className="no-scrollbar gutter -my-3 flex gap-3 overflow-x-auto overscroll-x-contain scroll-smooth py-3"
           >
-            {items.map((card, index) => (
-              <Tile key={card.id} card={card} resume={resume?.[index]} drawn={near && index < drawn} />
-            ))}
+            {items.map((card, index) =>
+              ranked ? (
+                <div key={card.id} role="group" aria-label={`Number ${index + 1}`} className="flex shrink-0 items-start">
+                  {/* As tall as the poster, so the number sits level with the foot of the poster and not of its caption. */}
+                  <span
+                    aria-hidden
+                    style={{ width: RANK_WIDTH }}
+                    className="flex h-[210px] shrink-0 items-end justify-end font-title text-[72px] font-semibold leading-[0.8] tracking-[-0.06em] text-faint sm:h-[264px]"
+                  >
+                    {index + 1}
+                  </span>
+                  <Tile card={card} drawn={near && index < drawn} />
+                </div>
+              ) : (
+                <Tile key={card.id} card={card} resume={resume?.[index]} drawn={near && index < drawn} />
+              ),
+            )}
           </div>
           <Edge side="left" visible={edges.left} onClick={() => page(-1)} />
           <Edge side="right" visible={edges.right} onClick={() => page(1)} />

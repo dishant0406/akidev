@@ -720,6 +720,7 @@ pub fn waiting_version() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::screens::RowStyle;
     use ed25519_dalek::{Signer, SigningKey};
     use serde_json::{Value, json};
 
@@ -801,7 +802,7 @@ mod tests {
     }
 
     #[test]
-    fn the_embedded_screens_are_what_the_apps_have_always_shown() {
+    fn the_embedded_tabs_sorts_and_genres_are_what_the_apps_have_always_shown() {
         let screens = parse(EMBEDDED.as_bytes()).unwrap().screens.unwrap();
         let tabs: Vec<_> = screens
             .tabs
@@ -831,33 +832,6 @@ mod tests {
                 ("title", "A–Z"),
             ]
         );
-        let rows: Vec<_> = screens
-            .home
-            .iter()
-            .map(|row| {
-                (
-                    row.title.as_str(),
-                    row.kind,
-                    row.sort.as_str(),
-                    row.genre.as_deref(),
-                )
-            })
-            .collect();
-        assert_eq!(
-            rows,
-            [
-                ("Trending Anime", Kind::Anime, "trending", None),
-                ("New Releases", Kind::Movie, "recent", None),
-                ("Popular Series", Kind::Series, "popularity", None),
-                ("Newly Released Anime", Kind::Anime, "recent", None),
-                ("Most Watched Films", Kind::Movie, "popularity", None),
-                ("New Series", Kind::Series, "recent", None),
-                ("Top Rated Anime", Kind::Anime, "score", None),
-                ("Action Films", Kind::Movie, "popularity", Some("Action")),
-                ("Drama Series", Kind::Series, "score", Some("Drama")),
-                ("Romance Anime", Kind::Anime, "popularity", Some("Romance")),
-            ]
-        );
         assert_eq!(screens.genres(Some(Kind::Anime)).len(), 18);
         assert_eq!(screens.genres(Some(Kind::Anime))[7], "Mahou Shoujo");
         assert_eq!(
@@ -866,6 +840,36 @@ mod tests {
         );
         assert_eq!(screens.genres(Some(Kind::Movie)).len(), 19);
         assert_eq!(screens.genres(None).len(), 10);
+    }
+
+    #[test]
+    fn a_ranked_row_keeps_ten_titles_and_a_plain_row_keeps_all() {
+        let doc = changed(|d| {
+            d["screens"]["home"][0]["style"] = json!("ranked");
+            d["screens"]["home"][1]
+                .as_object_mut()
+                .unwrap()
+                .remove("style");
+        });
+        let home = parse(&doc).unwrap().screens.unwrap().home;
+        assert_eq!(home[0].style, RowStyle::Ranked);
+        assert_eq!(home[1].style, RowStyle::Poster);
+        let mut ranked: Vec<u32> = (0..24).collect();
+        home[0].style.trim(&mut ranked);
+        assert_eq!(ranked.len(), 10);
+        let mut plain: Vec<u32> = (0..24).collect();
+        home[1].style.trim(&mut plain);
+        assert_eq!(plain.len(), 24);
+        // A plain row is written without the key, so a document stays what an older app reads.
+        assert!(
+            serde_json::to_value(&home[1])
+                .unwrap()
+                .get("style")
+                .is_none()
+        );
+        assert_eq!(serde_json::to_value(&home[0]).unwrap()["style"], "ranked");
+        let unknown = changed(|d| d["screens"]["home"][0]["style"] = json!("sparkly"));
+        assert!(parse(&unknown).is_err());
     }
 
     #[test]

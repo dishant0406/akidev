@@ -34,7 +34,7 @@ export default function HomeView({ initial }: { initial?: HomeResponse }) {
 
       {home.loading
         ? loadingTitles.map((title) => <MediaRow key={title} title={title} items={[]} loading />)
-        : home.rows.map((row, index) => <MediaRow key={row.title} title={row.title} items={row.items} eager={index < 2} />)}
+        : home.rows.map((row, index) => <MediaRow key={row.title} title={row.title} items={row.items} eager={index < 2} ranked={row.style === "ranked"} />)}
     </div>
   );
 }

@@ -9,6 +9,7 @@ use akidev_core::media_id;
 use akidev_core::model::Release;
 use akidev_core::model::{Filters, Kind, Media, Shape, Sort};
 use akidev_core::releases::{Codec, VideoFile, parse_codec, parse_resolution, pick_for_identity};
+use akidev_core::screens::RowStyle;
 use akidev_core::{providers, search as catalogue_search, sources, stream, subtitles};
 use std::path::PathBuf;
 use std::sync::{Once, OnceLock};
@@ -52,6 +53,8 @@ pub struct Row {
     /// How the row is ordered and which genre it holds, so "View all" opens the same list in full.
     pub sort: String,
     pub genre: Option<String>,
+    /// A "Top 10": the screen draws a big number beside each title.
+    pub ranked: bool,
     pub titles: Vec<Title>,
 }
 
@@ -302,15 +305,18 @@ pub fn home_row(index: u32) -> Result<Row, TvError> {
             &filters,
         ))
         .map_err(failed)?;
-    if page.results.is_empty() {
+    let mut results = page.results;
+    if results.is_empty() {
         return Err(failed("This row has no titles."));
     }
+    row.style.trim(&mut results);
     Ok(Row {
         name: row.title.clone(),
         kind: row.kind.as_str().to_string(),
         sort: row.sort.as_str().to_string(),
         genre: row.genre.clone(),
-        titles: page.results.into_iter().map(title_of).collect(),
+        ranked: row.style == RowStyle::Ranked,
+        titles: results.into_iter().map(title_of).collect(),
     })
 }
 

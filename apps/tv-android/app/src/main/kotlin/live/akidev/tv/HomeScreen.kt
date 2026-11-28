@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -208,9 +209,12 @@ private fun TabContent(
                     Text(row.name, style = Type.RowTitle, modifier = Modifier.padding(start = 8.dp))
                     CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
                         LazyRow(state = memory.rows.getOrPut("${tab.label}/${row.name}") { LazyListState() }, horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)) {
-                            items(row.titles, key = { it.id }) { title ->
+                            itemsIndexed(row.titles, key = { _, title -> title.id }) { index, title ->
                                 val key = "${row.name}/${title.id}"
-                                PosterCard(title, showName = false, autofocus = !focusPlaced && key == wanted, onFocus = { focusPlaced = true; memory.focused = key; onHero(title) }) { onOpen(title) }
+                                val autofocus = !focusPlaced && key == wanted
+                                val onFocus = { focusPlaced = true; memory.focused = key; onHero(title) }
+                                if (row.ranked) RankedCard(index + 1, title, autofocus, onFocus) { onOpen(title) }
+                                else PosterCard(title, showName = false, autofocus = autofocus, onFocus = onFocus) { onOpen(title) }
                             }
                             // The end of the row: the whole list, with the row's own order and genre to start from.
                             item(key = "all") {

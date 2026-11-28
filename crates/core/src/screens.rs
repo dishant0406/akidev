@@ -57,6 +57,32 @@ pub struct SortOption {
     pub label: String,
 }
 
+/// How many titles a ranked row shows.
+pub const RANKED_LEN: usize = 10;
+
+/// How a home row is drawn. An app that does not know a style leaves out the key and draws a plain row.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RowStyle {
+    #[default]
+    Poster,
+    /// A "Top 10": a big number beside each of the first ten titles.
+    Ranked,
+}
+
+impl RowStyle {
+    pub fn is_poster(&self) -> bool {
+        *self == RowStyle::Poster
+    }
+
+    /// Cuts the titles of a ranked row to the ones it shows.
+    pub fn trim<T>(&self, titles: &mut Vec<T>) {
+        if *self == RowStyle::Ranked {
+            titles.truncate(RANKED_LEN);
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HomeRow {
     pub title: String,
@@ -64,6 +90,8 @@ pub struct HomeRow {
     pub sort: Sort,
     #[serde(default)]
     pub genre: Option<String>,
+    #[serde(default, skip_serializing_if = "RowStyle::is_poster")]
+    pub style: RowStyle,
     /// The provider the row draws from alone. Absent: the kind's chain answers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,

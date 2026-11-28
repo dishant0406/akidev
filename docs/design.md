@@ -1074,3 +1074,34 @@ A viewer opened a film that was in the catalogue and got "no source". The app co
 - **Trade-off.** Days are counted in UTC, like the episode air dates. Near midnight a title can turn "out" a few hours early or late for a viewer.
 - **Trade-off.** The website gets the words from the server, and the answers are cached: a title page for 15 minutes and a list for 5 minutes, and each can be served stale for one more hour while it refreshes. So on release day the page can say "Coming" for a short time after midnight UTC. Play itself is never stale: core checks the date on each request.
 - **Not done.** The catalogue lists still hide most upcoming titles (`drop` rules with `after_today` in `sources.json`, and the AniList `recent` sort). An upcoming title is found by search, by a link, or in a related row.
+
+## The home page: a fixed order, and "Top 10" rows (2026-11-28)
+
+The home page felt cluttered. It had ten rows, every row the same shape, and the type changed on every row: anime, film, series, anime, film... A viewer could not learn where to look.
+
+**What I looked at first.** Netflix, Prime Video, JioHotstar, ZEE5, Apple TV, and Google's own TV design rules. Three things were the same everywhere. Each row has one idea. The personal row ("Continue watching") comes first. And one row type looks different from the rest: Netflix has "Top 10" with big numbers. Netflix also moved the facts of a title from the top of the screen to under the tile, because eyes had to travel ("gymnastics", in their own words). Our TV home already does the safe version of that: the focused row always sits right under the title facts, so I kept it.
+
+**Chosen.** Rows keep one kind each, and they alternate between two looks.
+
+- Core has a new row key, `style` (`RowStyle` in `crates/core/src/screens.rs`). `ranked` is a "Top 10": the first ten titles (`RANKED_LEN`), each with a big number beside the poster. No `style` means a plain row.
+- The order is in the sources document, version 53: Top 10 anime now, New films, Top 10 series, New anime, Top 10 films, New series, then the genre rows (Action films, Romance anime, Drama series), then Top rated anime. Rows are named for what they hold, in one pattern.
+- Every app draws a ranked row the same way: the server sends `style` and cuts to ten (`RowStyle::trim`, used by the server, the TV bridge and the desktop app), the website and the desktop app draw the number beside the tile, and the TV has `RankedCard`.
+
+**Why a `style` key and not a new kind of row.** An old app ignores a key it does not know, so it draws a ranked row as a plain row and still works. Old apps refuse the whole document for a value they do not know. So I did not add a new sort value, and I checked version 53 with the checkers of `desktop-mac-v0.1.27`, `desktop-mac-v0.1.36`, `desktop-mac-v0.1.37`, `tv-android-v1.0.0` and `tv-android-v1.0.3`. All accept it.
+
+**Why one kind per row.** Netflix's own Top 10 rows are split by type ("Top 10 Movies", "Top 10 TV Shows"). A row that mixes anime, series and films also needs the engine to merge three catalogues, and each has its own idea of "popular". One kind per row needs no new code in the engine, and it keeps each tab (Anime, Series, Films) full: the tab shows the rows of its own kind.
+
+**Rejected.**
+
+- *The Netflix growing tile* (the tile grows in place and plays a preview). It is a big change, it needs video in the tile, and our design plan says the app should not be a Netflix copy.
+- *A "Coming soon" row.* The catalogues hide upcoming titles on purpose (`drop` rules in `sources.json`). A row for them needs a new sort, and a new sort value would make every old app refuse the document. It needs its own plan.
+- *A "Because you watched" row.* It needs a similar-titles source we do not have for every kind.
+
+**Trade-offs.**
+
+- The numbers on the website and the desktop app share one width (80 px) so the row has no uneven steps, and "10" is drawn smaller than the TV's number so it fits. The TV gives "10" extra room, because its list does not need equal steps.
+- Number sizes are fixed: they do not grow with a very large system font.
+- "Top 10 films" and "Top 10 series" are "popular", not "today": Cinemeta has no daily chart. Only anime is "now", because AniList has a real trending sort. The names say so.
+- The row names are data, so a name change is a publish and not a release.
+- **Rollout order matters.** The server reads a new sources document without a deploy, but only a server that has this change cuts a ranked row to ten and sends `style`. So deploy the server first, and publish version 53 after. Publish first and the website shows "Top 10" over 24 plain tiles until the deploy ends.
+- An old desktop app or TV app (before this change) shows a ranked row as a plain row of up to 24 titles, because it does not know `style`. The website is not affected: the server cuts the row.
