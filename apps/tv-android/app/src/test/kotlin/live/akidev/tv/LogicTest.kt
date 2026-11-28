@@ -153,4 +153,14 @@ class LogicTest {
         // Past the left edge: it moves in by the distance and the margin.
         assertEquals(-124f, rule.calculateScrollDistance(offset = -100f, size = 256f, containerSize = 1000f), 0f)
     }
+
+    @Test
+    fun the_facts_line_says_when_a_title_comes_and_the_year_once_it_is_out() {
+        val out = uniffi.akitv.Title("a", "A", 2020, null, 85u, null, null, listOf("Drama"), null)
+        assertEquals("2020  ·  DRAMA  ·  85%", facts(out))
+        val coming = out.copy(year = null, comingSoon = "Coming 9 January 2027")
+        assertEquals("COMING 9 JANUARY 2027  ·  DRAMA  ·  85%", facts(coming))
+        // Not out and with no date at all: still the words, not a missing year.
+        assertEquals("COMING SOON  ·  DRAMA  ·  85%", facts(coming.copy(comingSoon = "Coming soon")))
+    }
 }

@@ -293,10 +293,10 @@ private fun ContinueCard(entry: Watched, autofocus: Boolean, onFocus: () -> Unit
 /** What the hero needs of something watched, which keeps only a little about its title. */
 fun Watched.asTitle() = Title(titleId, title, null, poster, null, banner, null, emptyList(), null)
 
-/** "2010  ·  ADVENTURE, SCI-FI  ·  88%" in the small capitals of the design plan. */
+/** "2010  ·  ADVENTURE, SCI-FI  ·  88%" in the small capitals of the design plan. A title that is not out says when it comes in place of the year. */
 fun facts(title: Title): String =
     listOfNotNull(
-        title.year?.toString(),
+        title.comingSoon ?: title.year?.toString(),
         title.genres.take(3).joinToString(", ").ifEmpty { null },
         title.score?.let { "$it%" },
     ).joinToString("  ·  ").uppercase()

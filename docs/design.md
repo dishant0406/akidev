@@ -1115,3 +1115,9 @@ Release 1.0.3 made the TV Settings page scroll, so that the update row could not
 **Trade-off.** With both notices, a saved key and an error line all at once, the last line can touch the bottom edge. It is rare, and every button is still reachable. A page that must scroll later needs its own focus handling, and a test on a real remote.
 
 **How it was checked.** On the TV emulator at the real TV's size: Down from the Settings tab lands on "Download and install", Down again on the key field, again on "Save and check", and Up goes back to the bar. The same steps on the 1.0.3 build stopped at the bar.
+
+## The TV home hero says when a title comes (2026-11-28)
+
+The title page of the TV already said "Coming 9 January 2027" in place of Play. The facts line of the home hero still showed the year, so the website, the desktop app and the title page said one thing and the home hero another. Now `facts` in `HomeScreen.kt` uses `Title.comingSoon` in place of the year, as `detailFacts` does.
+
+**Why this changes little today.** The catalogues drop upcoming titles from their lists on purpose, so no home row holds one right now (I asked the local server for every row). The words show when a row does hold such a title, for example a "popular" row that gets one from AniList. A unit test (`LogicTest`) covers the three cases: a title that is out, one with a date, one with only "Coming soon".
