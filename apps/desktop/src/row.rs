@@ -214,16 +214,19 @@ fn near_the_screen(top: f32, height: f32, screen: f32) -> bool {
     height <= 0. || (top < screen * 1.4 && top + height > -screen * 0.4)
 }
 
-/// A tile of a "Top 10" row: its place as a big number, then the poster.
+/// A tile of a "Top 10" row: its place as a big number, then the poster. The number is as tall as
+/// the poster, so it sits level with the foot of the poster and not of the name under it.
 fn ranked_tile(rank: usize, tile: impl IntoElement) -> Div {
     div()
         .flex()
         .flex_none()
-        .items_end()
+        .items_start()
         .child(
             div()
                 .w(px(RANK_WIDTH))
+                .h(px(TILE_HEIGHT))
                 .flex()
+                .items_end()
                 .justify_end()
                 .font_family(font::TITLE)
                 .text_size(px(RANK_SIZE))
