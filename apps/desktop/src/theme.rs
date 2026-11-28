@@ -5,7 +5,7 @@ use gpui_kit::component::theme::{Theme, ThemeMode, ThemeSet};
 use std::rc::Rc;
 
 /// The interface face and the title face, kept small: Allo in the three weights the screens use and
-/// Katagami Serif in two for titles (Latin letters, the accents real titles use and punctuation
+/// Katagami Sans in two for titles (Latin letters, the accents real titles use and punctuation
 /// only). Each weight is its own file with its own name, so the text system can tell them apart. Both
 /// are SIL Open Font License. Every font the UI draws is named in `design::tokens::font`.
 pub fn fonts(cx: &mut App) {
@@ -14,8 +14,8 @@ pub fn fonts(cx: &mut App) {
         &include_bytes!("../assets/fonts/Allo-Regular.ttf")[..],
         &include_bytes!("../assets/fonts/Allo-Medium.ttf")[..],
         &include_bytes!("../assets/fonts/Allo-SemiBold.ttf")[..],
-        &include_bytes!("../assets/fonts/KatagamiSerif-Regular.ttf")[..],
-        &include_bytes!("../assets/fonts/KatagamiSerif-SemiBold.ttf")[..],
+        &include_bytes!("../assets/fonts/KatagamiSans-Regular.ttf")[..],
+        &include_bytes!("../assets/fonts/KatagamiSans-SemiBold.ttf")[..],
     ];
     if let Err(error) = cx
         .text_system()

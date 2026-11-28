@@ -21,8 +21,8 @@ object Ink {
 }
 
 private val Title = FontFamily(
-    Font(R.font.katagami_serif_regular, FontWeight.Normal),
-    Font(R.font.katagami_serif_semibold, FontWeight.SemiBold),
+    Font(R.font.katagami_sans_regular, FontWeight.Normal),
+    Font(R.font.katagami_sans_semibold, FontWeight.SemiBold),
 )
 private val Ui = FontFamily(
     Font(R.font.allo_regular, FontWeight.Normal),

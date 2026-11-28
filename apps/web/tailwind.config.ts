@@ -30,7 +30,7 @@ const config: Config = {
 			borderRadius: { sm: "4px", DEFAULT: "4px", md: "8px", lg: "12px", xl: "16px", "2xl": "16px" },
 			fontFamily: {
 				sans: ["var(--font-app)", "system-ui", "sans-serif"],
-				title: ["var(--font-title)", "Georgia", "serif"],
+				title: ["var(--font-title)", "system-ui", "sans-serif"],
 			},
 			// Apple's default spring-like curve: quick out, soft settle, no overshoot.
 			transitionTimingFunction: { spring: "cubic-bezier(0.32,0.72,0,1)" },

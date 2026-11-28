@@ -1,7 +1,7 @@
 # Akidev TV: what other TV apps do, and what we take
 
 Research for the Android TV app (`apps/tv-android`). It follows `design/DESIGN_PLAN.md` (warm ink palette, amber only for
-state, Katagami Serif for titles and Allo for the rest, translucent chrome).
+state, Katagami Sans for titles and Allo for the rest, translucent chrome).
 
 **Built 2026-11-26:** all four steps of the order of work below (the top pill bar and hero, Continue watching, the title
 page with wide episode cards, and the player with Audio & subtitles and Next episode), in `TopBar.kt`, `HomeScreen.kt`,
@@ -48,7 +48,7 @@ Audio & Subtitles, Next Episode. A "Skip Intro" pill appears at the bottom right
 1. **Top glass pill bar, not a left rail.** It gives rows the full width, matches the desktop's translucent chrome, and
    both Netflix and Apple use it. Items: Home, Films, Series, Anime, Search, Settings. The selected item gets the
    amber hairline (our rule: amber is for the active tab), not a white pill.
-2. **One hero that follows focus.** Move over a poster and the backdrop, the title (Katagami Serif, billboard size), the
+2. **One hero that follows focus.** Move over a poster and the backdrop, the title (Katagami Sans, billboard size), the
    tracked-capital metadata line and two lines of story change. The hero fades left into the canvas as it does now.
    `Media.banner` already carries the picture. This is the single biggest step up from today.
 3. **Two buttons in the hero:** primary Play (warm white), secondary glass "More info". No "+" and no extra icons.
