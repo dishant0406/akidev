@@ -498,7 +498,7 @@ where
         }
         if pending.is_empty() && (!room && live.is_none() || attempted.len() == OFFERED) {
             return Err(if attempted.is_empty() {
-                plan.no_sources_reason().into()
+                plan.no_sources_reason()
             } else {
                 plan.with_too_new_note("Found releases, but none could be played.")
             });
@@ -1448,12 +1448,14 @@ impl Plan {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "streaming")]
     async fn late_plan(
         title: &str,
     ) -> (Plan, Arc<tokio::sync::Notify>, tokio::task::JoinHandle<()>) {
         late_plan_hash(title, &"b".repeat(40)).await
     }
 
+    #[cfg(feature = "streaming")]
     async fn late_plan_hash(
         title: &str,
         hash: &str,
@@ -1530,6 +1532,7 @@ mod tests {
         (plan, gate, server)
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn late_indexer_candidate_delivers_bytes_from_a_loopback_swarm() {
         use librqbit::{
@@ -1639,6 +1642,7 @@ mod tests {
         seeder.stop().await;
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn late_exact_source_wins_after_initial_failure_without_retrying_hash() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -1670,6 +1674,7 @@ mod tests {
         server.abort();
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn late_source_races_while_initial_attempt_is_still_pending() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -1706,6 +1711,7 @@ mod tests {
         server.abort();
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn wrong_late_title_episode_season_year_and_mutated_catalog_are_rejected() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -1735,6 +1741,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn pinning_and_repeated_exclusions_cannot_substitute_late_hashes() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -1764,6 +1771,7 @@ mod tests {
         server.abort();
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn progressive_race_enforces_total_trial_and_concurrent_open_caps() {
         use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1801,6 +1809,7 @@ mod tests {
         assert_eq!(active.load(Ordering::SeqCst), 0);
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn late_wait_respects_deadline_and_can_be_cancelled_then_resumed() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -1848,6 +1857,7 @@ mod tests {
         pending_server.abort();
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn a_finished_late_tail_returns_file_scoped_rows_even_when_the_initial_snapshot_is_empty()
     {
@@ -1886,6 +1896,7 @@ mod tests {
             sources: vec!["test".into()],
         }
     }
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn file_scoped_rows_survive_alias_merges_and_are_raced_separately() {
         let mut first_file = release("Show S01E01 1080p x264", 5);
@@ -1928,6 +1939,7 @@ mod tests {
         assert_eq!(result.unwrap().0.file_idx, Some(1));
     }
 
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn late_file_rows_and_explicitly_pinned_uncommon_rows_keep_their_identity() {
         let _guard = crate::indexers::tests::NETWORK_TEST.lock().await;
@@ -2456,6 +2468,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "streaming")]
     #[test]
     fn public_request_validation_rejects_invalid_identity_and_episode_bounds() {
         let mut plan = plan_with(Vec::new(), Vec::new());
@@ -2485,6 +2498,7 @@ mod tests {
         assert!(Streamer::validate_request("series-1-s1e1", &plan.detail).is_err());
     }
 
+    #[cfg(feature = "streaming")]
     #[test]
     fn series_catalogue_rejects_missing_pairs_but_accepts_supported_specials() {
         let mut detail = plan_with(Vec::new(), Vec::new()).detail;
@@ -2501,6 +2515,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "streaming")]
     #[test]
     fn unknown_counts_and_incomplete_metadata_do_not_invent_limits() {
         let mut detail = plan_with(Vec::new(), Vec::new()).detail;

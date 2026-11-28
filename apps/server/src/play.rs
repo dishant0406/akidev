@@ -580,7 +580,7 @@ impl Player {
                 .iter()
                 .any(|report| report.failed > 0 || report.pending > 0)
         {
-            return Err(plan.no_sources_reason().into());
+            return Err(plan.no_sources_reason());
         }
         let held = match &self.debrid {
             Some(debrid) => {
@@ -808,7 +808,7 @@ impl Player {
         // are true but describe the fallbacks, not the actual problem. The reason names the first
         // term, because that is what a person would search for by hand to check.
         if search.plan.ranked.is_empty() {
-            return Outcome::Unavailable(search.plan.no_sources_reason().into());
+            return Outcome::Unavailable(search.plan.no_sources_reason());
         }
         // The last reason is from the source that got furthest: a source is only asked when the
         // ones before it declined.
